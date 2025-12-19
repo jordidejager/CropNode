@@ -18,16 +18,16 @@ export default function PerceelHistoriePage() {
 
   useEffect(() => {
     async function loadHistory() {
-      if (!db) return;
+      if (!db) return; // Wacht tot db beschikbaar is
       setLoading(true);
       const fetchedEntries = await getParcelHistoryEntries(db);
       setHistoryEntries(fetchedEntries);
       setLoading(false);
     }
     loadHistory();
-  }, [db]);
+  }, [db]); // Voeg db toe als dependency
 
-  if (loading) {
+  if (loading || !db) { // Wacht ook tot db beschikbaar is voordat je iets rendert
     return (
       <div className="space-y-4">
         <Skeleton className="h-24 w-full" />

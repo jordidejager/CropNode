@@ -24,8 +24,7 @@ const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | '
 
 export function InvoerInterface() {
   const { db } = useFirebase();
-  const initialState: FormState = { message: '', errors: {} };
-  const [state, formAction] = useActionState(processSprayEntry, initialState);
+  const [state, formAction] = useActionState(processSprayEntry, { message: '', errors: {} });
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   
@@ -36,12 +35,15 @@ export function InvoerInterface() {
   const [isEditing, setIsEditing] = useState(false);
   const [editableEntry, setEditableEntry] = useState<LogbookEntry | null>(null);
   const [allProducts, setAllProducts] = useState<string[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProducts() {
         if (!db) return;
+        setProductsLoading(true);
         const products = await getProducts(db);
         setAllProducts(products);
+        setProductsLoading(false);
     }
     fetchProducts();
   }, [db]);
@@ -142,6 +144,15 @@ export function InvoerInterface() {
   const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
   const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
   
+  if (!db || productsLoading) {
+      return (
+          <div className="w-full max-w-3xl mx-auto flex flex-col h-full items-center justify-center">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="mt-4 text-muted-foreground">Databaseverbinding wordt gemaakt...</p>
+          </div>
+      );
+  }
+
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col h-full">
       <div className="flex-grow flex flex-col items-center justify-center">

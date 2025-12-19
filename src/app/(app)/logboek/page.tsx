@@ -15,14 +15,14 @@ export default function LogboekPage() {
 
   useEffect(() => {
     async function loadEntries() {
-      if (!db) return;
+      if (!db) return; // Wacht tot db beschikbaar is
       setLoading(true);
       const fetchedEntries = await getLogbookEntries(db);
       setEntries(fetchedEntries);
       setLoading(false);
     }
     loadEntries();
-  }, [db]);
+  }, [db]); // Voeg db toe als dependency
 
   return (
     <Card>
