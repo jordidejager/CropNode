@@ -14,7 +14,7 @@ import { getProducts } from '@/lib/store';
 import type { LogbookEntry, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
-import { useFirebase } from '@/firebase/client-provider';
+import { db } from '@/firebase/client';
 
 const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | 'secondary' | 'destructive'> = {
   'Akkoord': 'default',
@@ -23,7 +23,6 @@ const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | '
 };
 
 export function InvoerInterface() {
-  const { db } = useFirebase();
   const [state, formAction] = useActionState(processSprayEntry, { message: '', errors: {} });
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -39,14 +38,13 @@ export function InvoerInterface() {
 
   useEffect(() => {
     async function fetchProducts() {
-        if (!db) return;
         setProductsLoading(true);
         const products = await getProducts(db);
         setAllProducts(products);
         setProductsLoading(false);
     }
     fetchProducts();
-  }, [db]);
+  }, []);
 
   const handleFormSubmit = (formData: FormData) => {
     startFormTransition(() => {
@@ -144,7 +142,7 @@ export function InvoerInterface() {
   const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
   const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
   
-  if (!db || productsLoading) {
+  if (productsLoading) {
       return (
           <div className="w-full max-w-3xl mx-auto flex flex-col h-full items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
