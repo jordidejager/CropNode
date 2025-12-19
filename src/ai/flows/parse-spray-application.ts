@@ -16,6 +16,7 @@ const ParseSprayApplicationInputSchema = z.object({
     .string()
     .describe('Natural language input describing the spray application.'),
   plots: z.string().describe('A JSON string of available plots with their id, name, crop and variety.'),
+  products: z.string().describe('A JSON string of available product names.'),
 });
 export type ParseSprayApplicationInput = z.infer<typeof ParseSprayApplicationInputSchema>;
 
@@ -41,40 +42,46 @@ const prompt = ai.definePrompt({
   output: {schema: ParseSprayApplicationOutputSchema},
   prompt: `You are an AI assistant designed to parse spray application details from natural language input.
 
-  The user will provide a natural language input describing a spray application and a JSON string of available plots.
-  You must extract the following information from the input and return ONLY the plot IDs.
+  The user will provide:
+  1. A natural language input describing a spray application.
+  2. A JSON string of available plots.
+  3. A JSON string of available products.
 
+  You must extract the following information:
   - plots: An array of plot IDs identified from the user input. If the input refers to all plots of a certain type (e.g., 'alle conference'), you must resolve these to their specific plot IDs using the provided plots data.
-  - products: An array of objects, where each object contains the product, dosage, and unit for each spray material mentioned.
+  - products: An array of objects for each spray material. For each product, find the best match from the available products list, correcting for case and spelling mistakes. The product name in the output MUST EXACTLY match a name from the provided products list.
 
   Example Input 1:
   Natural Language Input: "Vandaag alle conference gespoten met 1,5 kg captan"
   Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"},{\\"id\\":\\"P-1003\\",\\"name\\":\\"Conference blok 1\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"}]"
+  Products: "[\\"Captan\\", \\"Regalis Plus\\", \\"Ureum\\"]"
 
   Example Output 1:
   {
     "plots": ["P-1001", "P-1003"],
     "products": [
-      { "product": "captan", "dosage": 1.5, "unit": "kg" }
+      { "product": "Captan", "dosage": 1.5, "unit": "kg" }
     ]
   }
   
   Example Input 2:
   Natural Language Input: "Vandaag alle peren met 2 kg ureum en 1,5 kg captan"
   Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"}]"
+  Products: "[\\"Captan\\", \\"Regalis Plus\\", \\"Ureum\\"]"
 
   Example Output 2:
   {
     "plots": ["P-1001"],
     "products": [
-      { "product": "ureum", "dosage": 2, "unit": "kg" },
-      { "product": "captan", "dosage": 1.5, "unit": "kg" }
+      { "product": "Ureum", "dosage": 2, "unit": "kg" },
+      { "product": "Captan", "dosage": 1.5, "unit": "kg" }
     ]
   }
 
   Here is the information for the current spray application:
   Natural Language Input: {{{naturalLanguageInput}}}
   Plots: {{{plots}}}
+  Products: {{{products}}}
 
   Output:
   `,

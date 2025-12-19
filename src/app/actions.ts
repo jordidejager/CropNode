@@ -21,12 +21,16 @@ export type FormState = {
 
 async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
+  const allProducts = getProducts();
+
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(plotDataForPrompt),
+    products: JSON.stringify(allProducts),
   });
 
-  const allProducts = getProducts();
+  // Ensure newly parsed products are added to the list if they are not already there.
+  // This can happen if the AI finds a product that is not in the initial list for some reason.
   parsedDataFromAI.products.forEach(p => {
     if (p.product && !allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
       addProduct(p.product);
@@ -78,28 +82,38 @@ export async function processSprayEntry(
     // 2. Validate
     let validationMessage = '';
     let isValid = true;
+    const validationMessages: string[] = [];
 
-    const cropsInSelection = new Set(finalParsedData.plots.map(parcelId => {
+
+    const cropsInSelection = [...new Set(finalParsedData.plots.map(parcelId => {
         return parcels.find(p => p.id === parcelId)?.crop;
-    }).filter(Boolean));
+    }).filter(Boolean))];
+
 
     for (const crop of cropsInSelection) {
       for (const productEntry of finalParsedData.products) {
         const rule = middelMatrix.find(m => 
           m.product.toLowerCase() === productEntry.product.toLowerCase() && 
-          m.crop === crop
+          m.crop.toLowerCase() === crop.toLowerCase()
         );
 
         if (!rule) {
           isValid = false;
-          validationMessage += `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
+          const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
+          if (!validationMessages.includes(msg)) {
+            validationMessages.push(msg);
+          }
         } else if (productEntry.dosage > rule.maxDosage) {
           isValid = false;
-          validationMessage += `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}. `;
+          const msg = `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
+           if (!validationMessages.includes(msg)) {
+            validationMessages.push(msg);
+          }
         }
       }
-      if (!isValid) break; 
     }
+    
+    validationMessage = validationMessages.join(' ');
 
 
     // 3. Create Logbook and History entries
