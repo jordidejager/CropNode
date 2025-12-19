@@ -42,14 +42,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarMenu>
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <ActivePath href={item.href} passHref>
-                  <Link href={item.href}>
+                <Link href={item.href} passHref>
+                  <ActivePath href={item.href}>
                     <SidebarMenuButton>
                       <item.icon />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
-                  </Link>
-                </ActivePath>
+                  </ActivePath>
+                </Link>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
