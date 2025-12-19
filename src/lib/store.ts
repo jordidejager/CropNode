@@ -1,67 +1,60 @@
+import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc } from 'firebase/firestore';
+import { db } from '@/firebase/client'; // Zorg ervoor dat dit pad correct is
 import type { LogbookEntry, ParcelHistoryEntry } from './types';
+import { middelMatrix } from './data';
 
-// Simple in-memory store
-let logbookEntries: LogbookEntry[] = [];
-let parcelHistoryEntries: ParcelHistoryEntry[] = [];
-let products: string[] = ['Captan', 'Regalis Plus', 'Zwavel', 'Koper', 'Ureum'];
-let historyIdCounter = 0;
+const LOGBOOK_COLLECTION = 'logbook';
+const HISTORY_COLLECTION = 'parcelHistory';
+const PRODUCTS_COLLECTION = 'products';
 
-// Initialize with some demo data
-const initialLog: LogbookEntry = {
-    id: 1,
-    rawInput: "Gisteren alle Elstar gespoten met 1.8kg Captan.",
-    status: 'Akkoord',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    parsedData: {
-        plots: ["P-1002", "P-2001"],
-        products: [{ product: "Captan", dosage: 1.8, unit: "kg"}],
-    }
-};
 
-const initialHistory: ParcelHistoryEntry[] = [
-    { id: 1, logId: 1, parcelId: 'P-1002', parcelName: 'Achter huis', crop: 'Appel', variety: 'Elstar', product: 'Captan', dosage: 1.8, unit: 'kg', date: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-    { id: 2, logId: 1, parcelId: 'P-2001', parcelName: 'Elstar jong', crop: 'Appel', variety: 'Elstar', product: 'Captan', dosage: 1.8, unit: 'kg', date: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-];
+export async function getLogbookEntries(): Promise<LogbookEntry[]> {
+  if (!db) return [];
+  const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('timestamp', 'desc'));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LogbookEntry));
+}
 
-if (process.env.NODE_ENV !== 'production') {
-    if (logbookEntries.length === 0) {
-        logbookEntries.push(initialLog);
-    }
-    if (parcelHistoryEntries.length === 0) {
-        parcelHistoryEntries.push(...initialHistory);
-        historyIdCounter = initialHistory.length;
-    }
+export async function addLogbookEntry(entry: Omit<LogbookEntry, 'id'>): Promise<LogbookEntry> {
+  if (!db) throw new Error("Database not initialized");
+  const docRef = await addDoc(collection(db, LOGBOOK_COLLECTION), entry);
+  return { id: docRef.id, ...entry };
+}
+
+export async function updateLogbookEntry(entry: LogbookEntry): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    const { id, ...data } = entry;
+    const docRef = doc(db, LOGBOOK_COLLECTION, id);
+    await writeBatch(db).set(docRef, data).commit();
 }
 
 
-export function getLogbookEntries(): LogbookEntry[] {
-  return [...logbookEntries].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+export async function getParcelHistoryEntries(): Promise<ParcelHistoryEntry[]> {
+  if (!db) return [];
+  const q = query(collection(db, HISTORY_COLLECTION), orderBy('date', 'desc'));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ParcelHistoryEntry));
 }
 
-export function addLogbookEntry(entry: LogbookEntry) {
-  const existingIndex = logbookEntries.findIndex(e => e.id === entry.id);
-  if (existingIndex > -1) {
-    logbookEntries[existingIndex] = entry;
-  } else {
-    logbookEntries.unshift(entry);
-  }
+export async function addParcelHistoryEntries(entries: Omit<ParcelHistoryEntry, 'id'>[]) {
+  if (!db) throw new Error("Database not initialized");
+  const batch = writeBatch(db);
+  entries.forEach(entry => {
+    const docRef = doc(collection(db, HISTORY_COLLECTION));
+    batch.set(docRef, entry);
+  });
+  await batch.commit();
 }
 
-export function getParcelHistoryEntries(): ParcelHistoryEntry[] {
-  return [...parcelHistoryEntries].sort((a, b) => b.date.getTime() - a.date.getTime());
+export async function getProducts(): Promise<string[]> {
+    // For now, we get them from the middelMatrix, but this could be a separate collection
+    return [...new Set(middelMatrix.map(m => m.product))];
 }
 
-export function addParcelHistoryEntries(entries: Omit<ParcelHistoryEntry, 'id'>[]) {
-  const newEntries = entries.map(e => ({ ...e, id: ++historyIdCounter, ...e }));
-  parcelHistoryEntries.unshift(...newEntries);
-}
-
-export function getProducts(): string[] {
-    return [...new Set(products)];
-}
-
-export function addProduct(product: string) {
-    if (!products.find(p => p.toLowerCase() === product.toLowerCase())) {
-        products.push(product);
+export async function addProduct(product: string) {
+    // This is a placeholder. In a real app, you might want to add new products to a 'products' collection.
+    // For now, we check if it's in the middelMatrix. If not, it's "new" but not persisted anywhere separately.
+    if (!middelMatrix.find(p => p.product.toLowerCase() === product.toLowerCase())) {
+        console.log(`New product "${product}" used. Consider adding it to the middelMatrix.`);
     }
 }

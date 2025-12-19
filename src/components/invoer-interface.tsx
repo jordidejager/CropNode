@@ -34,6 +34,15 @@ export function InvoerInterface() {
   const [showResult, setShowResult] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editableEntry, setEditableEntry] = useState<LogbookEntry | null>(null);
+  const [allProducts, setAllProducts] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchProducts() {
+        const products = await getProducts();
+        setAllProducts(products);
+    }
+    fetchProducts();
+  }, []);
 
   const handleFormSubmit = (formData: FormData) => {
     startFormTransition(() => {
@@ -128,7 +137,6 @@ export function InvoerInterface() {
     }
   };
 
-  const allDBProducts = getProducts();
   const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
   const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
   
@@ -176,7 +184,7 @@ export function InvoerInterface() {
                         isEditing ? (
                             <div className="space-y-6">
                                 <EditProducts
-                                    allProducts={allDBProducts}
+                                    allProducts={allProducts}
                                     selectedProducts={displayProducts}
                                     onProductsChange={handleProductsChange}
                                 />

@@ -28,7 +28,7 @@ export type ParsedSprayData = {
 }
 
 export type LogbookEntry = {
-  id: number;
+  id: string; // Firestore ID
   rawInput: string;
   status: LogStatus;
   timestamp: Date;
@@ -37,8 +37,8 @@ export type LogbookEntry = {
 };
 
 export type ParcelHistoryEntry = {
-  id: number;
-  logId: number;
+  id: string; // Firestore ID
+  logId: string;
   parcelId: string;
   parcelName: string;
   crop: string;

@@ -1,19 +1,44 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { getLogbookEntries } from '@/lib/store';
 import { LogbookTable } from '@/components/logbook-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
-export const dynamic = 'force-dynamic';
+import type { LogbookEntry } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function LogboekPage() {
-  const entries = getLogbookEntries();
+  const [entries, setEntries] = useState<LogbookEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadEntries() {
+      setLoading(true);
+      const fetchedEntries = await getLogbookEntries();
+      setEntries(fetchedEntries);
+      setLoading(false);
+    }
+    loadEntries();
+  }, []);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Volledig Logboek</CardTitle>
-        <CardDescription>Alle {entries.length} regels, met de nieuwste bovenaan.</CardDescription>
+        <CardDescription>
+          {loading ? 'Laden...' : `Totaal ${entries.length} regels, met de nieuwste bovenaan.`}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <LogbookTable entries={entries} />
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : (
+          <LogbookTable entries={entries} />
+        )}
       </CardContent>
     </Card>
   );

@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parcels, middelMatrix } from '@/lib/data';
-import { addLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
 import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData, ProductEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 
@@ -20,54 +20,57 @@ export type FormState = {
 };
 
 function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, validationMessage: string } {
-  const validationMessages: string[] = [];
-  const uniqueCrops = [...new Set(
-    parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
-  )];
+    const validationMessages: string[] = [];
+    const uniqueCrops = [...new Set(
+        parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
+    )];
 
-  for (const productEntry of parsedData.products) {
-    for (const crop of uniqueCrops) {
-      const rule = middelMatrix.find(m => 
-        m.product.toLowerCase() === productEntry.product.toLowerCase() && 
-        m.crop.toLowerCase() === crop.toLowerCase()
-      );
+    for (const productEntry of parsedData.products) {
+        for (const crop of uniqueCrops) {
+            const rule = middelMatrix.find(m =>
+                m.product.toLowerCase() === productEntry.product.toLowerCase() &&
+                m.crop.toLowerCase() === crop.toLowerCase()
+            );
 
-      if (!rule) {
-        const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
-        if (!validationMessages.includes(msg)) {
-          validationMessages.push(msg);
+            if (!rule) {
+                const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
+                if (!validationMessages.includes(msg)) {
+                    validationMessages.push(msg);
+                }
+            } else if (productEntry.dosage > rule.maxDosage) {
+                const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
+                if (!validationMessages.includes(msg)) {
+                    validationMessages.push(msg);
+                }
+            }
         }
-      } else if (productEntry.dosage > rule.maxDosage) {
-        const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
-        if (!validationMessages.includes(msg)) {
-          validationMessages.push(msg);
-        }
-      }
     }
-  }
-    
-  return {
-    isValid: validationMessages.length === 0,
-    validationMessage: validationMessages.join(' ')
-  };
+
+    return {
+        isValid: validationMessages.length === 0,
+        validationMessage: validationMessages.join(' ')
+    };
 }
 
+
 async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
-  const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
-  const allProducts = getProducts();
+  const allProducts = await getProducts();
 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
-    plots: JSON.stringify(plotDataForPrompt),
+    plots: JSON.stringify(parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
     products: JSON.stringify(allProducts),
   });
 
   // Ensure newly parsed products are added to the list if they are not already there.
-  parsedDataFromAI.products.forEach(p => {
-    if (p.product && !allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
-      addProduct(p.product);
-    }
-  });
+  for (const p of parsedDataFromAI.products) {
+      if (p.product) {
+          const products = await getProducts();
+          if (!products.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
+              await addProduct(p.product);
+          }
+      }
+  }
   
   return {
     plots: parsedDataFromAI.plots || [],
@@ -92,7 +95,6 @@ export async function processSprayEntry(
   }
   
   const { rawInput } = validatedFields.data;
-  const newLogId = Date.now();
 
   try {
     const finalParsedData = await getFinalParsedData(rawInput);
@@ -106,8 +108,7 @@ export async function processSprayEntry(
     
     const { isValid, validationMessage } = validateSprayData(finalParsedData);
 
-    const newEntry: LogbookEntry = {
-      id: newLogId,
+    const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: isValid ? 'Akkoord' : 'Te Controleren',
       timestamp: new Date(),
@@ -115,7 +116,7 @@ export async function processSprayEntry(
       validationMessage: validationMessage.trim() || undefined,
     };
 
-    addLogbookEntry(newEntry);
+    const newEntry = await addLogbookEntry(newEntryData);
 
     // If valid, also add to parcel history immediately
     if (isValid) {
@@ -133,7 +134,7 @@ export async function processSprayEntry(
           date: new Date(newEntry.timestamp),
         }));
       });
-      addParcelHistoryEntries(historyEntries.flat());
+      await addParcelHistoryEntries(historyEntries.flat());
     }
     
     revalidatePath('/');
@@ -146,14 +147,13 @@ export async function processSprayEntry(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Onbekende fout van AI.';
-    const errorEntry: LogbookEntry = {
-      id: newLogId,
+    const errorEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: 'Fout',
       timestamp: new Date(),
       validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
-    addLogbookEntry(errorEntry);
+    const errorEntry = await addLogbookEntry(errorEntryData);
     revalidatePath('/');
     revalidatePath('/logboek');
 
@@ -188,7 +188,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     }
 
 
-    addLogbookEntry(updatedEntry);
+    await updateLogbookEntry(updatedEntry);
 
     // Add to parcel history ONLY when status is 'Akkoord'
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
@@ -207,8 +207,8 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
             }));
         });
         // This should probably remove old entries for this logId and add new ones, but for now we just add.
-        // A more robust solution would handle updates.
-        addParcelHistoryEntries(historyEntries.flat());
+        // A more robust solution would handle updates. For now we assume this is the final state.
+        await addParcelHistoryEntries(historyEntries.flat());
     }
 
     revalidatePath('/');
