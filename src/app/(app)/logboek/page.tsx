@@ -6,7 +6,7 @@ import { LogbookTable } from '@/components/logbook-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { LogbookEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useFirebase } from '@/firebase/client-provider';
+import { useFirebase } from '@/firebase/provider';
 
 export default function LogboekPage() {
   const { db } = useFirebase();

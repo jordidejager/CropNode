@@ -14,7 +14,7 @@ import { getProducts } from '@/lib/store';
 import type { LogbookEntry, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
-import { useFirebase } from '@/firebase/client-provider';
+import { useFirebase } from '@/firebase/provider';
 
 const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | 'secondary' | 'destructive'> = {
   'Akkoord': 'default',

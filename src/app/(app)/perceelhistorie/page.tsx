@@ -6,7 +6,7 @@ import { parcels } from '@/lib/data';
 import { HistoryDashboard } from '@/components/history-dashboard';
 import type { ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useFirebase } from '@/firebase/client-provider';
+import { useFirebase } from '@/firebase/provider';
 
 export default function PerceelHistoriePage() {
   const { db } = useFirebase();
