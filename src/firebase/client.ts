@@ -15,12 +15,22 @@ const firebaseConfig = {
 let app: FirebaseApp;
 let db: Firestore;
 
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
+function getFirebase() {
+    if (getApps().length === 0) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApp();
+    }
+
+    db = getFirestore(app);
+    
+    return { app, db };
 }
 
-db = getFirestore(app);
 
-export { app, db };
+// We call it here to initialize on the first load.
+const { app: initializedApp, db: initializedDb } = getFirebase();
+app = initializedApp;
+db = initializedDb;
+
+export { app, db, getFirebase };

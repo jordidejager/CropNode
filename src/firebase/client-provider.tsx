@@ -2,8 +2,14 @@
 
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
-import React, { ReactNode, createContext, useContext } from 'react';
-import { app, db } from './client';
+import React, {
+  ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
+import { getFirebase } from './client';
 
 interface FirebaseContextType {
   app: FirebaseApp | null;
@@ -16,18 +22,18 @@ const FirebaseContext = createContext<FirebaseContextType>({
 });
 
 export function FirebaseProvider({ children }: { children: ReactNode }) {
-  // This is a bit of a trick to make sure the firebase object is available on the client side
-  // but doesn't cause hydration issues.
-  let firebaseApp: FirebaseApp;
-  let firestore: Firestore;
+  const [firebase, setFirebase] = useState<FirebaseContextType>({
+    app: null,
+    db: null,
+  });
 
-  if (typeof window !== 'undefined') {
-    firebaseApp = app;
-    firestore = db;
-  }
+  useEffect(() => {
+    const { app, db } = getFirebase();
+    setFirebase({ app, db });
+  }, []);
 
   return (
-    <FirebaseContext.Provider value={{ app: firebaseApp!, db: firestore! }}>
+    <FirebaseContext.Provider value={firebase}>
       {children}
     </FirebaseContext.Provider>
   );
