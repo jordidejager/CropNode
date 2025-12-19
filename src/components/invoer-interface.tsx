@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { cn } from '@/lib/utils';
 import { Check, Pencil, X, AlertTriangle } from 'lucide-react';
 import { parcels, middelMatrix } from '@/lib/data';
-import type { LogbookEntry, ParsedSprayData, Parcel, Middel } from '@/lib/types';
+import type { LogbookEntry, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
 
@@ -56,21 +56,25 @@ export function InvoerInterface() {
 
   const startEditing = () => {
     if (state.entry) {
-        // Initialize editableEntry with a single product if parsedData exists
-        const initialProducts = state.entry.parsedData ? [{
-            product: state.entry.parsedData.product,
-            dosage: state.entry.parsedData.dosage,
-            unit: state.entry.parsedData.unit,
-        }] : [];
+        // Ensure editableEntry.parsedData exists and has a products array
+        if (state.entry.parsedData) {
+             const initialProducts: ProductEntry[] = 
+                'products' in state.entry.parsedData && state.entry.parsedData.products 
+                    ? state.entry.parsedData.products 
+                    : ('product' in state.entry.parsedData ? [{
+                        product: state.entry.parsedData.product,
+                        dosage: state.entry.parsedData.dosage,
+                        unit: state.entry.parsedData.unit,
+                    }] : []);
 
-        setEditableEntry({
-            ...state.entry,
-            parsedData: {
-                plots: state.entry.parsedData?.plots || [],
-                // This is now an array to support multiple products
-                products: initialProducts
-            }
-        });
+            setEditableEntry({
+                ...state.entry,
+                parsedData: {
+                    plots: state.entry.parsedData.plots || [],
+                    products: initialProducts
+                }
+            });
+        }
         setIsEditing(true);
     }
   };
@@ -103,28 +107,42 @@ export function InvoerInterface() {
   const entryToDisplay = isEditing ? editableEntry : state.entry;
 
   const handleParcelsChange = (selectedIds: string[]) => {
-    if (editableEntry) {
+    if (editableEntry && editableEntry.parsedData) {
         setEditableEntry({
             ...editableEntry,
             parsedData: {
-                ...editableEntry.parsedData!,
+                ...editableEntry.parsedData,
                 plots: selectedIds,
             }
         });
     }
   };
 
-  const handleProductsChange = (products: { product: string; dosage: number; unit: string; }[]) => {
-    if (editableEntry) {
+  const handleProductsChange = (products: ProductEntry[]) => {
+    if (editableEntry && editableEntry.parsedData) {
         setEditableEntry({
             ...editableEntry,
             parsedData: {
-                ...editableEntry.parsedData!,
+                ...editableEntry.parsedData,
                 products: products,
             }
         });
     }
   };
+
+  const getDisplayProducts = () => {
+    if (!entryToDisplay?.parsedData) return [];
+    if ('products' in entryToDisplay.parsedData && entryToDisplay.parsedData.products) {
+        return entryToDisplay.parsedData.products;
+    }
+    if ('product' in entryToDisplay.parsedData) {
+        return [{ product: entryToDisplay.parsedData.product, dosage: entryToDisplay.parsedData.dosage, unit: entryToDisplay.parsedData.unit }];
+    }
+    return [];
+  }
+
+  const displayProducts = getDisplayProducts();
+  const allUniqueProducts = [...new Set(middelMatrix.map(m => m.product))];
 
 
   return (
@@ -156,22 +174,29 @@ export function InvoerInterface() {
                 {entryToDisplay.parsedData ? (
                     isEditing ? (
                         <div className="space-y-6">
-                            <EditParcels 
-                                allParcels={parcels} 
-                                selectedParcelIds={entryToDisplay.parsedData.plots}
-                                onSelectionChange={handleParcelsChange}
-                            />
                             <EditProducts
-                                allProducts={middelMatrix.map(m => m.product)}
-                                selectedProducts={('products' in entryToDisplay.parsedData ? entryToDisplay.parsedData.products : [{product: entryToDisplay.parsedData.product, dosage: entryToDisplay.parsedData.dosage, unit: entryToDisplay.parsedData.unit}]) || []}
+                                allProducts={allUniqueProducts}
+                                selectedProducts={displayProducts}
                                 onProductsChange={handleProductsChange}
+                            />
+                             <EditParcels 
+                                allParcels={parcels} 
+                                selectedParcelIds={entryToDisplay.parsedData.plots || []}
+                                onSelectionChange={handleParcelsChange}
                             />
                         </div>
                     ) : (
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><strong className="font-semibold">Product:</strong> {entryToDisplay.parsedData.product}</div>
-                        <div><strong className="font-semibold">Dosering:</strong> {entryToDisplay.parsedData.dosage} {entryToDisplay.parsedData.unit}</div>
-                        <div className="col-span-2"><strong className="font-semibold">Percelen:</strong> {getParcelNames(entryToDisplay.parsedData.plots)}</div>
+                    <div className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm">
+                        {displayProducts.map((p, i) => (
+                           <div key={i} className="contents">
+                                <div className="font-semibold">Middel {displayProducts.length > 1 ? i+1 : ''}:</div>
+                                <div>{p.product}</div>
+                                <div className="font-semibold">Dosering:</div>
+                                <div>{p.dosage} {p.unit}</div>
+                           </div>
+                        ))}
+                        <div className="col-span-1 font-semibold">Percelen:</div>
+                        <div className="col-span-1">{getParcelNames(entryToDisplay.parsedData.plots)}</div>
                     </div>
                     )
                 ): (

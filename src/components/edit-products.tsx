@@ -20,7 +20,7 @@ export function EditProducts({ allProducts, selectedProducts, onProductsChange }
     if (field === 'dosage') {
       newProducts[index] = { ...newProducts[index], [field]: Number(value) };
     } else {
-      newProducts[index] = { ...newProducts[index], [field]: value };
+      newProducts[index] = { ...newProducts[index], [field]: value as string };
     }
     onProductsChange(newProducts);
   };
