@@ -1,6 +1,6 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useFormState } from 'react-dom';
 import { processSprayEntry, updateAndConfirmEntry, type FormState } from '@/app/actions';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -73,6 +73,12 @@ export function InvoerInterface() {
       setIsEditing(true);
     }
   };
+  
+  useEffect(() => {
+    if (state.entry) {
+      setEditableEntry(JSON.parse(JSON.stringify(state.entry)));
+    }
+  }, [state.entry]);
 
   useEffect(() => {
     if (state.message && showResult && !isProcessing) {
@@ -87,7 +93,6 @@ export function InvoerInterface() {
             title: 'Analyse voltooid',
             description: `Status: ${state.entry.status}. ${state.entry.validationMessage || ''}`,
         });
-        setEditableEntry(JSON.parse(JSON.stringify(state.entry)));
       }
     }
   }, [state, toast, showResult, isProcessing]);
@@ -123,11 +128,10 @@ export function InvoerInterface() {
     }
   };
 
-  const currentEntry = editableEntry || state.entry;
-  const displayProducts = currentEntry?.parsedData?.products || [];
-  const displayPlots = currentEntry?.parsedData?.plots || [];
   const allDBProducts = getProducts();
-
+  const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
+  const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
+  
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col h-full">
       <div className="flex-grow flex flex-col items-center justify-center">
