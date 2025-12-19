@@ -1,4 +1,3 @@
-// src/app/actions.ts
 'use server';
 
 import { z } from 'zod';
@@ -40,15 +39,13 @@ export async function processSprayEntry(
 
   try {
     // 1. Parse with AI
+    const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
     const parsedData: ParsedSprayData = await parseSprayApplication({
       naturalLanguageInput: rawInput,
-      plots: parcels.map(p => `${p.variety} ${p.name} (${p.id})`),
+      plots: JSON.stringify(plotDataForPrompt),
     });
 
-    // Resolve plot names to IDs from AI output
-    const resolvedPlotIds = parcels
-        .filter(p => parsedData.plots.some(pp => pp.includes(p.id)))
-        .map(p => p.id);
+    const resolvedPlotIds = parsedData.plots;
 
     if (resolvedPlotIds.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");

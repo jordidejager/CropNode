@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
 import { Check, Pencil, X, AlertTriangle } from 'lucide-react';
+import { parcels } from '@/lib/data';
 
 const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | 'secondary' | 'destructive'> = {
   'Akkoord': 'default',
@@ -52,6 +53,10 @@ export function InvoerInterface() {
     }
   }, [state, toast, showResult]);
 
+  const getParcelNames = (plotIds: string[] = []) => {
+    return plotIds.map(id => parcels.find(p => p.id === id)?.name || id).join(', ');
+  }
+
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col h-full">
       <div className="flex-grow flex flex-col items-center justify-center">
@@ -80,7 +85,7 @@ export function InvoerInterface() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div><strong className="font-semibold">Product:</strong> {state.entry.parsedData.product}</div>
                         <div><strong className="font-semibold">Dosering:</strong> {state.entry.parsedData.dosage} {state.entry.parsedData.unit}</div>
-                        <div className="col-span-2"><strong className="font-semibold">Percelen:</strong> {state.entry.parsedData.plots.join(', ')}</div>
+                        <div className="col-span-2"><strong className="font-semibold">Percelen:</strong> {getParcelNames(state.entry.parsedData.plots)}</div>
                     </div>
                 ): (
                     <div className="text-muted-foreground">Geen data om weer te geven.</div>
