@@ -6,14 +6,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, ArrowUp } from 'lucide-react';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-      {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-      Verwerk Invoer
+    <Button type="submit" size="icon" disabled={pending} className="absolute top-1/2 right-3 -translate-y-1/2">
+      {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+      <span className="sr-only">Verwerk Invoer</span>
     </Button>
   );
 }
@@ -23,6 +23,7 @@ export function InvoerForm() {
   const [state, dispatch] = useFormState(processSprayEntry, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (state.message) { // Only show toast if a message is returned
@@ -42,23 +43,33 @@ export function InvoerForm() {
 
     if (state.entry?.status && state.entry.status !== 'Fout') {
       formRef.current?.reset();
+      if(textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     }
   }, [state, toast]);
 
+  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
+
   return (
-    <form ref={formRef} action={dispatch} className="space-y-4">
+    <form ref={formRef} action={dispatch} className="relative">
       <Textarea
+        ref={textareaRef}
         name="rawInput"
         placeholder="Vandaag alle conference gespoten met 1,5 kg captan..."
-        rows={4}
+        rows={1}
         required
+        onInput={handleInput}
         aria-label="Nieuwe bespuiting invoer"
+        className="pr-12 resize-none text-base"
       />
-      {state.errors?.rawInput && <p className="text-sm font-medium text-destructive">{state.errors.rawInput}</p>}
+      {state.errors?.rawInput && <p className="text-sm font-medium text-destructive mt-2">{state.errors.rawInput}</p>}
       
-      <div className="flex justify-end">
-        <SubmitButton />
-      </div>
+      <SubmitButton />
     </form>
   );
 }
