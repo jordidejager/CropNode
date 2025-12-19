@@ -1,15 +1,15 @@
 'use client';
 
 import { useFormState } from 'react-dom';
-import { processSprayEntry, type FormState } from '@/app/actions';
-import { useEffect, useRef, useState } from 'react';
+import { processSprayEntry, updateAndConfirmEntry, type FormState } from '@/app/actions';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { InvoerForm } from './invoer-form';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
-import { Check, Pencil, X, AlertTriangle } from 'lucide-react';
+import { Check, Pencil, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { parcels } from '@/lib/data';
 import { getProducts } from '@/lib/store';
 import type { LogbookEntry, ProductEntry } from '@/lib/types';
@@ -27,6 +27,8 @@ export function InvoerInterface() {
   const [state, dispatch] = useFormState(processSprayEntry, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
+  const [isConfirming, startConfirmTransition] = useTransition();
+
 
   const [showResult, setShowResult] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -36,7 +38,12 @@ export function InvoerInterface() {
     dispatch(formData);
     setShowResult(true);
     setIsEditing(false); // Reset editing state on new submission
-    formRef.current?.reset();
+    setEditableEntry(null); // Reset editable entry
+    const textarea = formRef.current?.querySelector('textarea');
+    if (textarea) {
+        textarea.value = '';
+        textarea.style.height = 'auto';
+    }
   }
   
   const resetInterface = () => {
@@ -46,40 +53,42 @@ export function InvoerInterface() {
   }
 
   const handleConfirm = () => {
-    // Here you would typically call a server action to save the final `editableEntry`
-    // For now, we just show a toast and reset.
-    toast({
-      title: 'Opgeslagen!',
-      description: 'De bespuiting is definitief opgeslagen in het logboek.',
+    if (!editableEntry) return;
+
+    startConfirmTransition(async () => {
+        const result = await updateAndConfirmEntry(editableEntry);
+        if (result.message) {
+            toast({
+                title: 'Opgeslagen!',
+                description: result.message,
+            });
+        }
+        resetInterface();
     });
-    resetInterface();
   }
 
   const startEditing = () => {
     if (state.entry) {
-      // Ensure editableEntry is set up with the data from the latest form state
-      setEditableEntry(state.entry);
+      setEditableEntry(JSON.parse(JSON.stringify(state.entry))); // Deep copy
       setIsEditing(true);
     }
   };
 
-
   useEffect(() => {
-    if (state.message && showResult) { // Only show toast if a message is returned
-      if (state.entry?.status === 'Fout') {
+    if (state.message && showResult && state.entry) {
+      if (state.entry.status === 'Fout') {
         toast({
             variant: 'destructive',
             title: 'Fout bij verwerking',
             description: state.entry.validationMessage || 'De AI kon de invoer niet analyseren.',
         });
-      } else if (state.entry) {
+      } else {
         toast({
             title: 'Analyse voltooid',
             description: `Status: ${state.entry.status}. ${state.entry.validationMessage || ''}`,
         });
-        // Set initial state for editing
-        setEditableEntry(state.entry);
       }
+      setEditableEntry(JSON.parse(JSON.stringify(state.entry)));
     }
   }, [state, toast, showResult]);
 
@@ -114,7 +123,10 @@ export function InvoerInterface() {
     }
   };
 
-  const displayProducts = entryToDisplay?.parsedData?.products || [];
+  // Use editableEntry for the components that need it, fall back to state.entry
+  const currentEntry = editableEntry || state.entry;
+  const displayProducts = currentEntry?.parsedData?.products || [];
+  const displayPlots = currentEntry?.parsedData?.plots || [];
   const allDBProducts = getProducts();
 
 
@@ -154,7 +166,7 @@ export function InvoerInterface() {
                             />
                              <EditParcels 
                                 allParcels={parcels} 
-                                selectedParcelIds={entryToDisplay.parsedData.plots || []}
+                                selectedParcelIds={displayPlots}
                                 onSelectionChange={handleParcelsChange}
                             />
                         </div>
@@ -186,19 +198,29 @@ export function InvoerInterface() {
                 )}
             </CardContent>
             <CardFooter className="gap-2 justify-end">
-                <Button variant="ghost" onClick={resetInterface}><X className="mr-2"/> Annuleren</Button>
-                {isEditing ? (
-                  <Button onClick={() => setIsEditing(false)}><Check className="mr-2"/> Opslaan</Button>
-                ) : (
-                  <Button variant="outline" onClick={startEditing}><Pencil className="mr-2"/> Aanpassen</Button>
-                )}
-                <Button onClick={handleConfirm} disabled={isEditing}><Check className="mr-2"/> Bevestigen</Button>
+                 {entryToDisplay.status !== 'Fout' && (
+                    <>
+                        <Button variant="ghost" onClick={resetInterface}><X className="mr-2"/> Annuleren</Button>
+                        {isEditing ? (
+                          <Button onClick={() => setIsEditing(false)}><Check className="mr-2"/> Opslaan</Button>
+                        ) : (
+                          <Button variant="outline" onClick={startEditing}><Pencil className="mr-2"/> Aanpassen</Button>
+                        )}
+                        <Button onClick={handleConfirm} disabled={isEditing || isConfirming}>
+                            {isConfirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2"/>}
+                            Bevestigen
+                        </Button>
+                    </>
+                 )}
+                 {entryToDisplay.status === 'Fout' && (
+                    <Button variant="ghost" onClick={resetInterface}><X className="mr-2"/> Sluiten</Button>
+                 )}
             </CardFooter>
           </Card>
         )}
       </div>
 
-      <div className="py-4">
+      <div ref={formRef} className="py-4">
         <div className="bg-card border rounded-lg p-2 w-full">
             <InvoerForm onFormSubmit={handleFormAction} />
         </div>

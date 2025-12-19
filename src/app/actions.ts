@@ -19,6 +19,44 @@ export type FormState = {
   };
 };
 
+function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, validationMessage: string } {
+    let isValid = true;
+    const validationMessages: string[] = [];
+
+    const cropsInSelection = [...new Set(parsedData.plots.map(parcelId => {
+        return parcels.find(p => p.id === parcelId)?.crop;
+    }).filter(Boolean))];
+
+    for (const crop of cropsInSelection) {
+      for (const productEntry of parsedData.products) {
+        const rule = middelMatrix.find(m => 
+          m.product.toLowerCase() === productEntry.product.toLowerCase() && 
+          m.crop.toLowerCase() === crop.toLowerCase()
+        );
+
+        if (!rule) {
+          isValid = false;
+          const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
+          if (!validationMessages.includes(msg)) {
+            validationMessages.push(msg);
+          }
+        } else if (productEntry.dosage > rule.maxDosage) {
+          isValid = false;
+          const msg = `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
+           if (!validationMessages.includes(msg)) {
+            validationMessages.push(msg);
+          }
+        }
+      }
+    }
+    
+    return {
+        isValid,
+        validationMessage: validationMessages.join(' ')
+    };
+}
+
+
 async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
   const allProducts = getProducts();
@@ -79,42 +117,7 @@ export async function processSprayEntry(
         }
     });
 
-    // 2. Validate
-    let validationMessage = '';
-    let isValid = true;
-    const validationMessages: string[] = [];
-
-
-    const cropsInSelection = [...new Set(finalParsedData.plots.map(parcelId => {
-        return parcels.find(p => p.id === parcelId)?.crop;
-    }).filter(Boolean))];
-
-
-    for (const crop of cropsInSelection) {
-      for (const productEntry of finalParsedData.products) {
-        const rule = middelMatrix.find(m => 
-          m.product.toLowerCase() === productEntry.product.toLowerCase() && 
-          m.crop.toLowerCase() === crop.toLowerCase()
-        );
-
-        if (!rule) {
-          isValid = false;
-          const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
-          if (!validationMessages.includes(msg)) {
-            validationMessages.push(msg);
-          }
-        } else if (productEntry.dosage > rule.maxDosage) {
-          isValid = false;
-          const msg = `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
-           if (!validationMessages.includes(msg)) {
-            validationMessages.push(msg);
-          }
-        }
-      }
-    }
-    
-    validationMessage = validationMessages.join(' ');
-
+    const { isValid, validationMessage } = validateSprayData(finalParsedData);
 
     // 3. Create Logbook and History entries
     const newEntry: LogbookEntry = {
@@ -127,25 +130,6 @@ export async function processSprayEntry(
     };
 
     addLogbookEntry(newEntry);
-
-    // Only add to history if fully valid
-    if (isValid && newEntry.parsedData) {
-      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
-        const parcel = parcels.find(p => p.id === parcelId)!;
-        return finalParsedData.products.map(productEntry => ({
-            logId: newLogId,
-            parcelId: parcel.id,
-            parcelName: parcel.name,
-            crop: parcel.crop,
-            variety: parcel.variety,
-            product: productEntry.product,
-            dosage: productEntry.dosage,
-            unit: productEntry.unit,
-            date: new Date(),
-        }));
-      });
-      addParcelHistoryEntries(historyEntries.flat());
-    }
     
     revalidatePath('/');
     revalidatePath('/logboek');
@@ -173,4 +157,50 @@ revalidatePath('/');
       entry: errorEntry,
     };
   }
+}
+
+export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormState> {
+    if (!entry.parsedData) {
+        return { message: "Fout: Geen geparseerde data om op te slaan." };
+    }
+    
+    // 1. Re-validate the (potentially edited) data
+    const { isValid, validationMessage } = validateSprayData(entry.parsedData);
+    
+    const updatedEntry: LogbookEntry = {
+        ...entry,
+        status: isValid ? 'Akkoord' : 'Te Controleren',
+        validationMessage: validationMessage.trim() || undefined,
+    };
+
+    // 2. Update the logbook entry
+    addLogbookEntry(updatedEntry);
+
+    // 3. Add to parcel history only if it's valid
+    if (isValid && updatedEntry.parsedData) {
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.flatMap(parcelId => {
+            const parcel = parcels.find(p => p.id === parcelId)!;
+            return updatedEntry.parsedData!.products.map(productEntry => ({
+                logId: updatedEntry.id,
+                parcelId: parcel.id,
+                parcelName: parcel.name,
+                crop: parcel.crop,
+                variety: parcel.variety,
+                product: productEntry.product,
+                dosage: productEntry.dosage,
+                unit: productEntry.unit,
+                date: new Date(updatedEntry.timestamp),
+            }));
+        });
+        addParcelHistoryEntries(historyEntries.flat());
+    }
+
+    revalidatePath('/');
+    revalidatePath('/logboek');
+    revalidatePath('/perceelhistorie');
+
+    return {
+        message: 'Bespuiting definitief opgeslagen.',
+        entry: updatedEntry,
+    };
 }
