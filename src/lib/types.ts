@@ -24,10 +24,7 @@ export type ProductEntry = {
 
 export type ParsedSprayData = {
   plots: string[];
-  product: string; // Keep for initial parsing structure
-  dosage: number; // Keep for initial parsing structure
-  unit: string; // Keep for initial parsing structure
-  products?: ProductEntry[]; // For multi-product editing
+  products: ProductEntry[];
 }
 
 export type LogbookEntry = {
@@ -35,7 +32,7 @@ export type LogbookEntry = {
   rawInput: string;
   status: LogStatus;
   timestamp: Date;
-  parsedData?: ParsedSprayData | (Omit<ParsedSprayData, 'product'|'dosage'|'unit'> & { products: ProductEntry[] });
+  parsedData?: ParsedSprayData;
   validationMessage?: string;
 };
 

@@ -10,7 +10,8 @@ import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
 import { Check, Pencil, X, AlertTriangle } from 'lucide-react';
-import { parcels, middelMatrix } from '@/lib/data';
+import { parcels } from '@/lib/data';
+import { getProducts } from '@/lib/store';
 import type { LogbookEntry, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
@@ -56,18 +57,8 @@ export function InvoerInterface() {
 
   const startEditing = () => {
     if (state.entry) {
-      if (state.entry.parsedData) {
-        // This is the correct way to get the products for editing
-        const displayProducts = getDisplayProducts(state.entry);
-        setEditableEntry({
-          ...state.entry,
-          parsedData: {
-            ...state.entry.parsedData,
-            plots: state.entry.parsedData.plots || [],
-            products: displayProducts,
-          },
-        });
-      }
+      // Ensure editableEntry is set up with the data from the latest form state
+      setEditableEntry(state.entry);
       setIsEditing(true);
     }
   };
@@ -123,23 +114,8 @@ export function InvoerInterface() {
     }
   };
 
-  const getDisplayProducts = (entry: LogbookEntry | null | undefined): ProductEntry[] => {
-    if (!entry?.parsedData) return [];
-    if ('products' in entry.parsedData && Array.isArray(entry.parsedData.products) && entry.parsedData.products.length > 0) {
-        return entry.parsedData.products;
-    }
-    if ('product' in entry.parsedData && typeof entry.parsedData.product === 'string') {
-        return [{ 
-            product: entry.parsedData.product, 
-            dosage: entry.parsedData.dosage, 
-            unit: entry.parsedData.unit 
-        }];
-    }
-    return [];
-  }
-
-  const displayProducts = getDisplayProducts(entryToDisplay);
-  const allUniqueProducts = [...new Set(middelMatrix.map(m => m.product))];
+  const displayProducts = entryToDisplay?.parsedData?.products || [];
+  const allDBProducts = getProducts();
 
 
   return (
@@ -172,7 +148,7 @@ export function InvoerInterface() {
                     isEditing ? (
                         <div className="space-y-6">
                             <EditProducts
-                                allProducts={allUniqueProducts}
+                                allProducts={allDBProducts}
                                 selectedProducts={displayProducts}
                                 onProductsChange={handleProductsChange}
                             />
@@ -183,17 +159,16 @@ export function InvoerInterface() {
                             />
                         </div>
                     ) : (
-                    <div className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+                       <div className="sm:col-span-2 font-semibold">Middelen:</div>
                         {displayProducts.map((p, i) => (
                            <div key={i} className="contents">
-                                <div className="font-semibold">Middel {displayProducts.length > 1 ? i+1 : ''}:</div>
-                                <div>{p.product}</div>
-                                <div className="font-semibold">Dosering:</div>
+                                <div className="pl-4">{p.product}:</div>
                                 <div>{p.dosage.toFixed(2)} {p.unit}</div>
                            </div>
                         ))}
-                        <div className="col-span-1 font-semibold">Percelen:</div>
-                        <div className="col-span-1">{getParcelNames(entryToDisplay.parsedData.plots)}</div>
+                        <div className="mt-2 font-semibold">Percelen:</div>
+                        <div className="mt-2">{getParcelNames(entryToDisplay.parsedData.plots)}</div>
                     </div>
                     )
                 ): (

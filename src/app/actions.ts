@@ -19,7 +19,7 @@ export type FormState = {
   };
 };
 
-async function getFinalParsedData(rawInput: string): Promise<Required<ParsedSprayData>> {
+async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
@@ -27,20 +27,15 @@ async function getFinalParsedData(rawInput: string): Promise<Required<ParsedSpra
   });
 
   const allProducts = getProducts();
-  if (parsedDataFromAI.product && !allProducts.find(p => p.toLowerCase() === parsedDataFromAI.product.toLowerCase())) {
-      addProduct(parsedDataFromAI.product);
-  }
-
-  const products: ProductEntry[] = parsedDataFromAI.products ? parsedDataFromAI.products : 
-    (parsedDataFromAI.product ? [{
-      product: parsedDataFromAI.product,
-      dosage: parsedDataFromAI.dosage,
-      unit: parsedDataFromAI.unit
-    }] : []);
+  parsedDataFromAI.products.forEach(p => {
+    if (p.product && !allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
+      addProduct(p.product);
+    }
+  });
   
   return {
     plots: parsedDataFromAI.plots || [],
-    products: products
+    products: parsedDataFromAI.products || []
   };
 }
 
@@ -69,6 +64,9 @@ export async function processSprayEntry(
     if (finalParsedData.plots.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");
     }
+     if (finalParsedData.products.length === 0) {
+        throw new Error("AI kon geen geldige middelen identificeren in de output.");
+    }
     
     // Add new product to database if it's the first time being used
     finalParsedData.products.forEach(p => {
@@ -86,22 +84,21 @@ export async function processSprayEntry(
     }).filter(Boolean));
 
     for (const crop of cropsInSelection) {
-        for (const productEntry of finalParsedData.products) {
-            const rule = middelMatrix.find(
-                m => m.product.toLowerCase() === productEntry.product.toLowerCase() && m.crop === crop
-            );
+      for (const productEntry of finalParsedData.products) {
+        const rule = middelMatrix.find(m => 
+          m.product.toLowerCase() === productEntry.product.toLowerCase() && 
+          m.crop === crop
+        );
 
-            if (!rule) {
-                isValid = false;
-                validationMessage += `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
-                break; 
-            } else if (productEntry.dosage > rule.maxDosage) {
-                isValid = false;
-                validationMessage += `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit} voor het gewas '${crop}'. `;
-                break;
-            }
+        if (!rule) {
+          isValid = false;
+          validationMessage += `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
+        } else if (productEntry.dosage > rule.maxDosage) {
+          isValid = false;
+          validationMessage += `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}. `;
         }
-        if(!isValid) break;
+      }
+      if (!isValid) break; 
     }
 
 
@@ -118,7 +115,7 @@ export async function processSprayEntry(
     addLogbookEntry(newEntry);
 
     // Only add to history if fully valid
-    if (isValid && newEntry.parsedData && 'products' in newEntry.parsedData) {
+    if (isValid && newEntry.parsedData) {
       const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
         const parcel = parcels.find(p => p.id === parcelId)!;
         return finalParsedData.products.map(productEntry => ({

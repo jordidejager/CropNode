@@ -19,11 +19,15 @@ const ParseSprayApplicationInputSchema = z.object({
 });
 export type ParseSprayApplicationInput = z.infer<typeof ParseSprayApplicationInputSchema>;
 
+const ProductEntrySchema = z.object({
+    product: z.string().describe('The product used in the spray application.'),
+    dosage: z.number().describe('The dosage of the product used.'),
+    unit: z.string().describe('The unit of measurement for the dosage.'),
+});
+
 const ParseSprayApplicationOutputSchema = z.object({
   plots: z.array(z.string()).describe('List of plot IDs identified in the input.'),
-  product: z.string().describe('The product used in the spray application.'),
-  dosage: z.number().describe('The dosage of the product used.'),
-  unit: z.string().describe('The unit of measurement for the dosage.'),
+  products: z.array(ProductEntrySchema).describe('A list of products, dosages, and units.'),
 });
 export type ParseSprayApplicationOutput = z.infer<typeof ParseSprayApplicationOutputSchema>;
 
@@ -41,20 +45,31 @@ const prompt = ai.definePrompt({
   You must extract the following information from the input and return ONLY the plot IDs.
 
   - plots: An array of plot IDs identified from the user input. If the input refers to all plots of a certain type (e.g., 'alle conference'), you must resolve these to their specific plot IDs using the provided plots data.
-  - product: The product used in the spray application.
-  - dosage: The dosage of the product used.
-  - unit: The unit of measurement for the dosage.
+  - products: An array of objects, where each object contains the product, dosage, and unit for each spray material mentioned.
 
-  Example Input:
+  Example Input 1:
   Natural Language Input: "Vandaag alle conference gespoten met 1,5 kg captan"
   Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"},{\\"id\\":\\"P-1003\\",\\"name\\":\\"Conference blok 1\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"}]"
 
-  Example Output:
+  Example Output 1:
   {
     "plots": ["P-1001", "P-1003"],
-    "product": "captan",
-    "dosage": 1.5,
-    "unit": "kg"
+    "products": [
+      { "product": "captan", "dosage": 1.5, "unit": "kg" }
+    ]
+  }
+  
+  Example Input 2:
+  Natural Language Input: "Vandaag alle peren met 2 kg ureum en 1,5 kg captan"
+  Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"}]"
+
+  Example Output 2:
+  {
+    "plots": ["P-1001"],
+    "products": [
+      { "product": "ureum", "dosage": 2, "unit": "kg" },
+      { "product": "captan", "dosage": 1.5, "unit": "kg" }
+    ]
   }
 
   Here is the information for the current spray application:

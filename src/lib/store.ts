@@ -3,7 +3,7 @@ import type { LogbookEntry, ParcelHistoryEntry } from './types';
 // Simple in-memory store
 let logbookEntries: LogbookEntry[] = [];
 let parcelHistoryEntries: ParcelHistoryEntry[] = [];
-let products: string[] = ['Captan', 'Regalis Plus', 'Zwavel', 'Koper'];
+let products: string[] = ['Captan', 'Regalis Plus', 'Zwavel', 'Koper', 'Ureum'];
 let historyIdCounter = 0;
 
 // Initialize with some demo data
@@ -14,9 +14,7 @@ const initialLog: LogbookEntry = {
     timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
     parsedData: {
         plots: ["P-1002", "P-2001"],
-        product: "Captan",
-        dosage: 1.8,
-        unit: "kg",
+        products: [{ product: "Captan", dosage: 1.8, unit: "kg"}],
     }
 };
 
@@ -41,7 +39,12 @@ export function getLogbookEntries(): LogbookEntry[] {
 }
 
 export function addLogbookEntry(entry: LogbookEntry) {
-  logbookEntries.unshift(entry);
+  const existingIndex = logbookEntries.findIndex(e => e.id === entry.id);
+  if (existingIndex > -1) {
+    logbookEntries[existingIndex] = entry;
+  } else {
+    logbookEntries.unshift(entry);
+  }
 }
 
 export function getParcelHistoryEntries(): ParcelHistoryEntry[] {
@@ -54,9 +57,11 @@ export function addParcelHistoryEntries(entries: Omit<ParcelHistoryEntry, 'id'>[
 }
 
 export function getProducts(): string[] {
-    return [...products];
+    return [...new Set(products)];
 }
 
 export function addProduct(product: string) {
-    products.push(product);
+    if (!products.find(p => p.toLowerCase() === product.toLowerCase())) {
+        products.push(product);
+    }
 }
