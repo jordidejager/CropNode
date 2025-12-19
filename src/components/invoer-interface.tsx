@@ -14,6 +14,7 @@ import { getProducts } from '@/lib/store';
 import type { LogbookEntry, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
+import { useFirebase } from '@/firebase/client-provider';
 
 const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | 'secondary' | 'destructive'> = {
   'Akkoord': 'default',
@@ -22,6 +23,7 @@ const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | '
 };
 
 export function InvoerInterface() {
+  const { db } = useFirebase();
   const initialState: FormState = { message: '', errors: {} };
   const [state, formAction] = useActionState(processSprayEntry, initialState);
   const { toast } = useToast();
@@ -37,11 +39,12 @@ export function InvoerInterface() {
 
   useEffect(() => {
     async function fetchProducts() {
-        const products = await getProducts();
+        if (!db) return;
+        const products = await getProducts(db);
         setAllProducts(products);
     }
     fetchProducts();
-  }, []);
+  }, [db]);
 
   const handleFormSubmit = (formData: FormData) => {
     startFormTransition(() => {

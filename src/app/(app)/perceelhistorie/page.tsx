@@ -6,8 +6,10 @@ import { parcels } from '@/lib/data';
 import { HistoryDashboard } from '@/components/history-dashboard';
 import type { ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useFirebase } from '@/firebase/client-provider';
 
 export default function PerceelHistoriePage() {
+  const { db } = useFirebase();
   const [historyEntries, setHistoryEntries] = useState<ParcelHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,13 +18,14 @@ export default function PerceelHistoriePage() {
 
   useEffect(() => {
     async function loadHistory() {
+      if (!db) return;
       setLoading(true);
-      const fetchedEntries = await getParcelHistoryEntries();
+      const fetchedEntries = await getParcelHistoryEntries(db);
       setHistoryEntries(fetchedEntries);
       setLoading(false);
     }
     loadHistory();
-  }, []);
+  }, [db]);
 
   if (loading) {
     return (

@@ -6,20 +6,23 @@ import { LogbookTable } from '@/components/logbook-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { LogbookEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useFirebase } from '@/firebase/client-provider';
 
 export default function LogboekPage() {
+  const { db } = useFirebase();
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadEntries() {
+      if (!db) return;
       setLoading(true);
-      const fetchedEntries = await getLogbookEntries();
+      const fetchedEntries = await getLogbookEntries(db);
       setEntries(fetchedEntries);
       setLoading(false);
     }
     loadEntries();
-  }, []);
+  }, [db]);
 
   return (
     <Card>
