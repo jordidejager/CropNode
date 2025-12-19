@@ -12,7 +12,7 @@ interface FirebaseContextType {
 
 const FirebaseContext = createContext<FirebaseContextType | null>(null);
 
-export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
+export function FirebaseProvider({ children }: { children: ReactNode }) {
   return (
     <FirebaseContext.Provider value={{ app, db }}>
       {children}
