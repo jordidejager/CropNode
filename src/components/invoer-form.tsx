@@ -5,17 +5,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Loader2, ArrowUp } from 'lucide-react';
 
-function SubmitButton() {
+function SubmitButton({ isProcessing }: { isProcessing: boolean }) {
   const { pending } = useFormStatus();
+  const isDisabled = pending || isProcessing;
   return (
-    <Button type="submit" size="icon" disabled={pending} className="absolute top-1/2 right-3 -translate-y-1/2">
-      {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+    <Button type="submit" size="icon" disabled={isDisabled} className="absolute top-1/2 right-3 -translate-y-1/2">
+      {isDisabled ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
       <span className="sr-only">Verwerk Invoer</span>
     </Button>
   );
 }
 
-export function InvoerForm({ onFormSubmit }: { onFormSubmit: (data: FormData) => void }) {
+export function InvoerForm({ onFormSubmit, isProcessing }: { onFormSubmit: (data: FormData) => void, isProcessing: boolean }) {
   const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const textarea = e.currentTarget;
     textarea.style.height = 'auto';
@@ -32,8 +33,9 @@ export function InvoerForm({ onFormSubmit }: { onFormSubmit: (data: FormData) =>
         onInput={handleInput}
         aria-label="Nieuwe bespuiting invoer"
         className="pr-12 resize-none text-base"
+        disabled={isProcessing}
       />
-      <SubmitButton />
+      <SubmitButton isProcessing={isProcessing} />
     </form>
   );
 }

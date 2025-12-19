@@ -20,42 +20,37 @@ export type FormState = {
 };
 
 function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, validationMessage: string } {
-    let isValid = true;
-    const validationMessages: string[] = [];
+  const validationMessages: string[] = [];
+  const uniqueCrops = [...new Set(
+    parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
+  )];
 
-    const cropsInSelection = [...new Set(parsedData.plots.map(parcelId => {
-        return parcels.find(p => p.id === parcelId)?.crop;
-    }).filter(Boolean))];
+  for (const productEntry of parsedData.products) {
+    for (const crop of uniqueCrops) {
+      const rule = middelMatrix.find(m => 
+        m.product.toLowerCase() === productEntry.product.toLowerCase() && 
+        m.crop.toLowerCase() === crop.toLowerCase()
+      );
 
-    for (const crop of cropsInSelection) {
-      for (const productEntry of parsedData.products) {
-        const rule = middelMatrix.find(m => 
-          m.product.toLowerCase() === productEntry.product.toLowerCase() && 
-          m.crop.toLowerCase() === crop.toLowerCase()
-        );
-
-        if (!rule) {
-          isValid = false;
-          const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
-          if (!validationMessages.includes(msg)) {
-            validationMessages.push(msg);
-          }
-        } else if (productEntry.dosage > rule.maxDosage) {
-          isValid = false;
-          const msg = `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
-           if (!validationMessages.includes(msg)) {
-            validationMessages.push(msg);
-          }
+      if (!rule) {
+        const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
+        if (!validationMessages.includes(msg)) {
+          validationMessages.push(msg);
+        }
+      } else if (productEntry.dosage > rule.maxDosage) {
+        const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
+        if (!validationMessages.includes(msg)) {
+          validationMessages.push(msg);
         }
       }
     }
+  }
     
-    return {
-        isValid,
-        validationMessage: validationMessages.join(' ')
-    };
+  return {
+    isValid: validationMessages.length === 0,
+    validationMessage: validationMessages.join(' ')
+  };
 }
-
 
 async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
@@ -68,7 +63,6 @@ async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   });
 
   // Ensure newly parsed products are added to the list if they are not already there.
-  // This can happen if the AI finds a product that is not in the initial list for some reason.
   parsedDataFromAI.products.forEach(p => {
     if (p.product && !allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
       addProduct(p.product);
@@ -110,16 +104,8 @@ export async function processSprayEntry(
         throw new Error("AI kon geen geldige middelen identificeren in de output.");
     }
     
-    // Add new product to database if it's the first time being used
-    finalParsedData.products.forEach(p => {
-        if (!getProducts().find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
-            addProduct(p.product);
-        }
-    });
-
     const { isValid, validationMessage } = validateSprayData(finalParsedData);
 
-    // 3. Create Logbook and History entries
     const newEntry: LogbookEntry = {
       id: newLogId,
       rawInput,
@@ -130,6 +116,25 @@ export async function processSprayEntry(
     };
 
     addLogbookEntry(newEntry);
+
+    // If valid, also add to parcel history immediately
+    if (isValid) {
+      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
+        const parcel = parcels.find(p => p.id === parcelId)!;
+        return finalParsedData.products.map(productEntry => ({
+          logId: newEntry.id,
+          parcelId: parcel.id,
+          parcelName: parcel.name,
+          crop: parcel.crop,
+          variety: parcel.variety,
+          product: productEntry.product,
+          dosage: productEntry.dosage,
+          unit: productEntry.unit,
+          date: new Date(newEntry.timestamp),
+        }));
+      });
+      addParcelHistoryEntries(historyEntries.flat());
+    }
     
     revalidatePath('/');
     revalidatePath('/logboek');
@@ -149,7 +154,7 @@ export async function processSprayEntry(
       validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
     addLogbookEntry(errorEntry);
-revalidatePath('/');
+    revalidatePath('/');
     revalidatePath('/logboek');
 
     return {
@@ -164,20 +169,29 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
         return { message: "Fout: Geen geparseerde data om op te slaan." };
     }
     
-    // 1. Re-validate the (potentially edited) data
     const { isValid, validationMessage } = validateSprayData(entry.parsedData);
     
     const updatedEntry: LogbookEntry = {
         ...entry,
-        status: isValid ? 'Akkoord' : 'Te Controleren',
+        status: 'Akkoord', // If we confirm, it should be Akkoord
         validationMessage: validationMessage.trim() || undefined,
     };
 
-    // 2. Update the logbook entry
+    // If it becomes valid after editing, set status to Akkoord
+    if (isValid) {
+        updatedEntry.status = 'Akkoord';
+        updatedEntry.validationMessage = undefined; // Clear warnings if it's now valid
+    } else {
+        // If still not valid, keep it as 'Te Controleren'
+        updatedEntry.status = 'Te Controleren';
+        updatedEntry.validationMessage = validationMessage.trim() || "Aangepaste data is nog steeds niet volledig valide.";
+    }
+
+
     addLogbookEntry(updatedEntry);
 
-    // 3. Add to parcel history only if it's valid
-    if (isValid && updatedEntry.parsedData) {
+    // Add to parcel history ONLY when status is 'Akkoord'
+    if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
         const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.flatMap(parcelId => {
             const parcel = parcels.find(p => p.id === parcelId)!;
             return updatedEntry.parsedData!.products.map(productEntry => ({
@@ -192,6 +206,8 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
                 date: new Date(updatedEntry.timestamp),
             }));
         });
+        // This should probably remove old entries for this logId and add new ones, but for now we just add.
+        // A more robust solution would handle updates.
         addParcelHistoryEntries(historyEntries.flat());
     }
 
