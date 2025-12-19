@@ -61,22 +61,27 @@ export async function processSprayEntry(
     // 2. Validate
     let validationMessage = '';
     let isValid = true;
-    for (const parcelId of finalParsedData.plots) {
-      const parcel = parcels.find(p => p.id === parcelId);
-      if (!parcel) continue;
+    let dosageWarningShown = false; // Flag to ensure dosage warning is shown only once
 
+    const cropsInSelection = new Set(finalParsedData.plots.map(parcelId => {
+      return parcels.find(p => p.id === parcelId)?.crop;
+    }).filter(Boolean));
+
+    for (const crop of cropsInSelection) {
       const rule = middelMatrix.find(
-        m => m.product.toLowerCase() === finalParsedData.product.toLowerCase() && m.crop === parcel.crop
+        m => m.product.toLowerCase() === finalParsedData.product.toLowerCase() && m.crop === crop
       );
 
       if (!rule) {
         isValid = false;
-        validationMessage += `⚠️ ${finalParsedData.product} mag mogelijk niet gebruikt worden op ${parcel.crop} (${parcel.name}). `;
-      } else if (finalParsedData.dosage > rule.maxDosage) {
+        validationMessage += `⚠️ ${finalParsedData.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
+      } else if (finalParsedData.dosage > rule.maxDosage && !dosageWarningShown) {
         isValid = false;
-        validationMessage += `⚠️ Dosering ${finalParsedData.dosage} ${finalParsedData.unit} voor ${finalParsedData.product} op ${parcel.name} overschrijdt max. ${rule.maxDosage} ${rule.unit}. `;
+        validationMessage += `⚠️ Dosering ${finalParsedData.dosage} ${finalParsedData.unit} voor ${finalParsedData.product} overschrijdt de maximale dosering van ${rule.maxDosage} ${rule.unit} voor het gewas '${crop}'. `;
+        dosageWarningShown = true;
       }
     }
+
 
     // 3. Create Logbook and History entries
     const newEntry: LogbookEntry = {
