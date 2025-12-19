@@ -61,7 +61,7 @@ export async function processSprayEntry(
     // 2. Validate
     let validationMessage = '';
     let isValid = true;
-    let dosageWarningShown = false; // Flag to ensure dosage warning is shown only once
+    let dosageWarningShown = false;
 
     const cropsInSelection = new Set(finalParsedData.plots.map(parcelId => {
       return parcels.find(p => p.id === parcelId)?.crop;
@@ -75,6 +75,7 @@ export async function processSprayEntry(
       if (!rule) {
         isValid = false;
         validationMessage += `⚠️ ${finalParsedData.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
+        break; // Stop after first invalid crop
       } else if (finalParsedData.dosage > rule.maxDosage && !dosageWarningShown) {
         isValid = false;
         validationMessage += `⚠️ Dosering ${finalParsedData.dosage} ${finalParsedData.unit} voor ${finalParsedData.product} overschrijdt de maximale dosering van ${rule.maxDosage} ${rule.unit} voor het gewas '${crop}'. `;
@@ -95,20 +96,21 @@ export async function processSprayEntry(
 
     addLogbookEntry(newEntry);
 
-    if (isValid) {
-      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.map(parcelId => {
+    // Only add to history if fully valid
+    if (isValid && newEntry.parsedData && 'product' in newEntry.parsedData) {
+      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
         const parcel = parcels.find(p => p.id === parcelId)!;
         return {
-          logId: newLogId,
-          parcelId: parcel.id,
-          parcelName: parcel.name,
-          crop: parcel.crop,
-          variety: parcel.variety,
-          product: finalParsedData.product,
-          dosage: finalParsedData.dosage,
-          unit: finalParsedData.unit,
-          date: new Date(),
-        };
+            logId: newLogId,
+            parcelId: parcel.id,
+            parcelName: parcel.name,
+            crop: parcel.crop,
+            variety: parcel.variety,
+            product: finalParsedData.product,
+            dosage: finalParsedData.dosage,
+            unit: finalParsedData.unit,
+            date: new Date(),
+        }
       });
       addParcelHistoryEntries(historyEntries);
     }
