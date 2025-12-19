@@ -9,13 +9,9 @@ type ActivePathProps = {
   passHref?: boolean;
 };
 
-export function ActivePath({ href, children, passHref = false }: ActivePathProps) {
+export function ActivePath({ href, children }: ActivePathProps) {
   const pathname = usePathname();
   const isActive = pathname === href;
 
-  if (passHref) {
-    return React.cloneElement(children, { isActive });
-  }
-
-  return children;
+  return React.cloneElement(children, { ...children.props, isActive });
 }

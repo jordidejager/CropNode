@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   SidebarProvider,
   Sidebar,
@@ -5,11 +6,23 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarInset,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Leaf, Bell } from 'lucide-react';
+import { Leaf, Bell, BookOpen, Tractor, Map, TestTube2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { ActivePath } from '@/components/active-path';
+
+const menuItems = [
+  { href: '/', label: 'Slimme Invoer', icon: Tractor },
+  { href: '/logboek', label: 'Logboek', icon: BookOpen },
+  { href: '/perceelhistorie', label: 'Perceelhistorie', icon: Map },
+  { href: '/percelen', label: 'Percelen', icon: Map },
+  { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTube2 },
+];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar');
@@ -25,7 +38,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <h1 className="text-lg font-bold text-foreground">AgriSprayer Pro</h1>
           </div>
         </SidebarHeader>
-        <SidebarContent className="flex-grow" />
+        <SidebarContent className="flex-grow">
+          <SidebarMenu>
+            {menuItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <ActivePath href={item.href} passHref>
+                  <Link href={item.href}>
+                    <SidebarMenuButton>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </ActivePath>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarContent>
         <SidebarFooter>
           <div className="flex items-center gap-3 rounded-md border p-2">
             <Avatar className="size-9">

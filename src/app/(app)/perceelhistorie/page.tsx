@@ -1,5 +1,19 @@
-// This page is now part of the main page as a tab.
-// This file can be removed.
+import { getParcelHistoryEntries } from '@/lib/store';
+import { parcels } from '@/lib/data';
+import { HistoryDashboard } from '@/components/history-dashboard';
+
+export const dynamic = 'force-dynamic';
+
 export default function PerceelHistoriePage() {
-    return null;
+  const historyEntries = getParcelHistoryEntries();
+  const cropVarieties = [...new Set(parcels.map(p => p.variety))];
+  const parcelNames = [...new Set(parcels.map(p => p.name))];
+
+  return (
+     <HistoryDashboard 
+        entries={historyEntries}
+        initialVarieties={cropVarieties}
+        initialParcels={parcelNames}
+      />
+  );
 }
