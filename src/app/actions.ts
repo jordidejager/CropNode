@@ -8,6 +8,9 @@ import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData, ProductEntry } 
 import { revalidatePath } from 'next/cache';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { config } from 'dotenv';
+
+config();
 
 // Initialize Firebase Admin SDK
 if (getApps().length === 0) {
