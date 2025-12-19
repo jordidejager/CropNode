@@ -61,6 +61,7 @@ export function EditProducts({ allProducts, selectedProducts, onProductsChange }
               value={entry.dosage}
               onChange={(e) => handleProductChange(index, 'dosage', e.target.value)}
               placeholder="Dosering"
+              step="0.01"
             />
           </div>
           <div>

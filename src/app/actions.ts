@@ -2,9 +2,9 @@
 
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
-import { parcels, middelMatrix, products } from '@/lib/data';
-import { addLogbookEntry, addParcelHistoryEntries, addProduct } from '@/lib/store';
-import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
+import { parcels, middelMatrix } from '@/lib/data';
+import { addLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
+import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData, ProductEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 
 const formSchema = z.object({
@@ -18,6 +18,32 @@ export type FormState = {
     rawInput?: string[];
   };
 };
+
+async function getFinalParsedData(rawInput: string): Promise<Required<ParsedSprayData>> {
+  const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
+  const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
+    naturalLanguageInput: rawInput,
+    plots: JSON.stringify(plotDataForPrompt),
+  });
+
+  const allProducts = getProducts();
+  if (parsedDataFromAI.product && !allProducts.find(p => p.toLowerCase() === parsedDataFromAI.product.toLowerCase())) {
+      addProduct(parsedDataFromAI.product);
+  }
+
+  const products: ProductEntry[] = parsedDataFromAI.products ? parsedDataFromAI.products : 
+    (parsedDataFromAI.product ? [{
+      product: parsedDataFromAI.product,
+      dosage: parsedDataFromAI.dosage,
+      unit: parsedDataFromAI.unit
+    }] : []);
+  
+  return {
+    plots: parsedDataFromAI.plots || [],
+    products: products
+  };
+}
+
 
 export async function processSprayEntry(
   prevState: FormState,
@@ -38,49 +64,44 @@ export async function processSprayEntry(
   const newLogId = Date.now();
 
   try {
-    // 1. Parse with AI
-    const plotDataForPrompt = parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }));
-    const parsedData: ParsedSprayData = await parseSprayApplication({
-      naturalLanguageInput: rawInput,
-      plots: JSON.stringify(plotDataForPrompt),
-    });
+    const finalParsedData = await getFinalParsedData(rawInput);
 
-    const resolvedPlotIds = parsedData.plots;
-
-    if (resolvedPlotIds.length === 0) {
+    if (finalParsedData.plots.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");
     }
     
     // Add new product to database if it's the first time being used
-    if (!products.find(p => p.toLowerCase() === parsedData.product.toLowerCase())) {
-        addProduct(parsedData.product);
-    }
-
-    const finalParsedData = { ...parsedData, plots: resolvedPlotIds };
+    finalParsedData.products.forEach(p => {
+        if (!getProducts().find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
+            addProduct(p.product);
+        }
+    });
 
     // 2. Validate
     let validationMessage = '';
     let isValid = true;
-    let dosageWarningShown = false;
 
     const cropsInSelection = new Set(finalParsedData.plots.map(parcelId => {
-      return parcels.find(p => p.id === parcelId)?.crop;
+        return parcels.find(p => p.id === parcelId)?.crop;
     }).filter(Boolean));
 
     for (const crop of cropsInSelection) {
-      const rule = middelMatrix.find(
-        m => m.product.toLowerCase() === finalParsedData.product.toLowerCase() && m.crop === crop
-      );
+        for (const productEntry of finalParsedData.products) {
+            const rule = middelMatrix.find(
+                m => m.product.toLowerCase() === productEntry.product.toLowerCase() && m.crop === crop
+            );
 
-      if (!rule) {
-        isValid = false;
-        validationMessage += `⚠️ ${finalParsedData.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
-        break; // Stop after first invalid crop
-      } else if (finalParsedData.dosage > rule.maxDosage && !dosageWarningShown) {
-        isValid = false;
-        validationMessage += `⚠️ Dosering ${finalParsedData.dosage} ${finalParsedData.unit} voor ${finalParsedData.product} overschrijdt de maximale dosering van ${rule.maxDosage} ${rule.unit} voor het gewas '${crop}'. `;
-        dosageWarningShown = true;
-      }
+            if (!rule) {
+                isValid = false;
+                validationMessage += `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'. `;
+                break; 
+            } else if (productEntry.dosage > rule.maxDosage) {
+                isValid = false;
+                validationMessage += `⚠️ Dosering ${productEntry.dosage.toFixed(2)} ${productEntry.unit} voor ${productEntry.product} overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit} voor het gewas '${crop}'. `;
+                break;
+            }
+        }
+        if(!isValid) break;
     }
 
 
@@ -97,22 +118,22 @@ export async function processSprayEntry(
     addLogbookEntry(newEntry);
 
     // Only add to history if fully valid
-    if (isValid && newEntry.parsedData && 'product' in newEntry.parsedData) {
+    if (isValid && newEntry.parsedData && 'products' in newEntry.parsedData) {
       const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
         const parcel = parcels.find(p => p.id === parcelId)!;
-        return {
+        return finalParsedData.products.map(productEntry => ({
             logId: newLogId,
             parcelId: parcel.id,
             parcelName: parcel.name,
             crop: parcel.crop,
             variety: parcel.variety,
-            product: finalParsedData.product,
-            dosage: finalParsedData.dosage,
-            unit: finalParsedData.unit,
+            product: productEntry.product,
+            dosage: productEntry.dosage,
+            unit: productEntry.unit,
             date: new Date(),
-        }
+        }));
       });
-      addParcelHistoryEntries(historyEntries);
+      addParcelHistoryEntries(historyEntries.flat());
     }
     
     revalidatePath('/');
@@ -133,7 +154,7 @@ export async function processSprayEntry(
       validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
     addLogbookEntry(errorEntry);
-    revalidatePath('/');
+revalidatePath('/');
     revalidatePath('/logboek');
 
     return {
