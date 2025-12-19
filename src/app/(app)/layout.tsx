@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Leaf, Bell, BookOpen, Tractor, Map, TestTube2 } from 'lucide-react';
+import { Leaf, Bell, BookOpen, Tractor, Map, TestTubeDiagonal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -21,7 +21,7 @@ const menuItems = [
   { href: '/logboek', label: 'Logboek', icon: BookOpen },
   { href: '/perceelhistorie', label: 'Perceelhistorie', icon: Map },
   { href: '/percelen', label: 'Percelen', icon: Map },
-  { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTube2 },
+  { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

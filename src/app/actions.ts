@@ -6,20 +6,7 @@ import { parcels, middelMatrix } from '@/lib/data';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
 import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData, ProductEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { config } from 'dotenv';
-
-config();
-
-// Initialize Firebase Admin SDK
-if (getApps().length === 0) {
-  initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!)),
-  });
-}
-
-const db = getFirestore();
+import { db } from '@/firebase/client';
 
 
 const formSchema = z.object({
@@ -69,7 +56,7 @@ function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, val
 
 
 async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
-  const allProducts = await getProducts(db as any);
+  const allProducts = await getProducts(db);
 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
@@ -80,9 +67,9 @@ async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
   // Ensure newly parsed products are added to the list if they are not already there.
   for (const p of parsedDataFromAI.products) {
       if (p.product) {
-          const products = await getProducts(db as any);
+          const products = await getProducts(db);
           if (!products.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
-              await addProduct(db as any, p.product);
+              await addProduct(db, p.product);
           }
       }
   }
@@ -131,7 +118,7 @@ export async function processSprayEntry(
       validationMessage: validationMessage.trim() || undefined,
     };
 
-    const newEntry = await addLogbookEntry(db as any, newEntryData);
+    const newEntry = await addLogbookEntry(db, newEntryData);
 
     // If valid, also add to parcel history immediately
     if (isValid) {
@@ -149,7 +136,7 @@ export async function processSprayEntry(
           date: new Date(newEntry.timestamp),
         }));
       });
-      await addParcelHistoryEntries(db as any, historyEntries.flat());
+      await addParcelHistoryEntries(db, historyEntries.flat());
     }
     
     revalidatePath('/');
@@ -168,7 +155,7 @@ export async function processSprayEntry(
       timestamp: new Date(),
       validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
-    const errorEntry = await addLogbookEntry(db as any, errorEntryData);
+    const errorEntry = await addLogbookEntry(db, errorEntryData);
     revalidatePath('/');
     revalidatePath('/logboek');
 
@@ -203,7 +190,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     }
 
 
-    await updateLogbookEntry(db as any, updatedEntry);
+    await updateLogbookEntry(db, updatedEntry);
 
     // Add to parcel history ONLY when status is 'Akkoord'
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
@@ -223,7 +210,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
         });
         // This should probably remove old entries for this logId and add new ones, but for now we just add.
         // A more robust solution would handle updates. For now we assume this is the final state.
-        await addParcelHistoryEntries(db as any, historyEntries.flat());
+        await addParcelHistoryEntries(db, historyEntries.flat());
     }
 
     revalidatePath('/');
