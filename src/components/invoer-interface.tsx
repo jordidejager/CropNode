@@ -56,26 +56,19 @@ export function InvoerInterface() {
 
   const startEditing = () => {
     if (state.entry) {
-        // Ensure editableEntry.parsedData exists and has a products array
-        if (state.entry.parsedData) {
-             const initialProducts: ProductEntry[] = 
-                'products' in state.entry.parsedData && state.entry.parsedData.products 
-                    ? state.entry.parsedData.products 
-                    : ('product' in state.entry.parsedData ? [{
-                        product: state.entry.parsedData.product,
-                        dosage: state.entry.parsedData.dosage,
-                        unit: state.entry.parsedData.unit,
-                    }] : []);
-
-            setEditableEntry({
-                ...state.entry,
-                parsedData: {
-                    plots: state.entry.parsedData.plots || [],
-                    products: initialProducts
-                }
-            });
-        }
-        setIsEditing(true);
+      if (state.entry.parsedData) {
+        // This is the correct way to get the products for editing
+        const displayProducts = getDisplayProducts(state.entry);
+        setEditableEntry({
+          ...state.entry,
+          parsedData: {
+            ...state.entry.parsedData,
+            plots: state.entry.parsedData.plots || [],
+            products: displayProducts,
+          },
+        });
+      }
+      setIsEditing(true);
     }
   };
 
@@ -130,18 +123,22 @@ export function InvoerInterface() {
     }
   };
 
-  const getDisplayProducts = () => {
-    if (!entryToDisplay?.parsedData) return [];
-    if ('products' in entryToDisplay.parsedData && entryToDisplay.parsedData.products) {
-        return entryToDisplay.parsedData.products;
+  const getDisplayProducts = (entry: LogbookEntry | null | undefined): ProductEntry[] => {
+    if (!entry?.parsedData) return [];
+    if ('products' in entry.parsedData && Array.isArray(entry.parsedData.products) && entry.parsedData.products.length > 0) {
+        return entry.parsedData.products;
     }
-    if ('product' in entryToDisplay.parsedData) {
-        return [{ product: entryToDisplay.parsedData.product, dosage: entryToDisplay.parsedData.dosage, unit: entryToDisplay.parsedData.unit }];
+    if ('product' in entry.parsedData && typeof entry.parsedData.product === 'string') {
+        return [{ 
+            product: entry.parsedData.product, 
+            dosage: entry.parsedData.dosage, 
+            unit: entry.parsedData.unit 
+        }];
     }
     return [];
   }
 
-  const displayProducts = getDisplayProducts();
+  const displayProducts = getDisplayProducts(entryToDisplay);
   const allUniqueProducts = [...new Set(middelMatrix.map(m => m.product))];
 
 
@@ -192,7 +189,7 @@ export function InvoerInterface() {
                                 <div className="font-semibold">Middel {displayProducts.length > 1 ? i+1 : ''}:</div>
                                 <div>{p.product}</div>
                                 <div className="font-semibold">Dosering:</div>
-                                <div>{p.dosage} {p.unit}</div>
+                                <div>{p.dosage.toFixed(2)} {p.unit}</div>
                            </div>
                         ))}
                         <div className="col-span-1 font-semibold">Percelen:</div>
