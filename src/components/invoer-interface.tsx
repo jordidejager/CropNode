@@ -1,8 +1,7 @@
 'use client';
 
-import { useFormState } from 'react-dom';
 import { processSprayEntry, updateAndConfirmEntry, type FormState } from '@/app/actions';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { InvoerForm } from './invoer-form';
 import { Button } from './ui/button';
@@ -24,7 +23,7 @@ const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | '
 
 export function InvoerInterface() {
   const initialState: FormState = { message: '', errors: {} };
-  const [state, formAction] = useFormState(processSprayEntry, initialState);
+  const [state, formAction] = useActionState(processSprayEntry, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   
