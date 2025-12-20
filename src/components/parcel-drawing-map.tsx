@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { MapContainer, TileLayer, FeatureGroup, useMap } from 'react-leaflet';
-import { EditControl } from 'react-leaflet-draw';
-import type { LatLngExpression } from 'leaflet';
+import React, { useEffect, useRef } from 'react';
+import type { LatLngExpression, Map, Polygon } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Parcel } from '@/lib/types';
 
-// Center of the Netherlands
 const mapCenter: LatLngExpression = [52.1326, 5.2913];
 
 interface ParcelDrawingMapProps {
@@ -14,95 +13,82 @@ interface ParcelDrawingMapProps {
   onSave: (coordinates: { lat: number; lng: number }[]) => void;
 }
 
-const DrawnShapeHandler = ({ onSave, initialLayer }: { onSave: (coords: any) => void; initialLayer: any }) => {
-  const map = useMap();
-  const layerRef = useRef<any>(null);
-
-  React.useEffect(() => {
-    if (initialLayer) {
-        // A little hacky, but leaflet-draw doesn't expose a clean API for this
-        // We add the layer to the feature group so it can be edited.
-        setTimeout(() => {
-            if (layerRef.current) {
-                const layer = layerRef.current.leafletElement;
-                if(layer){
-                    layer.addLayer(initialLayer);
-                    map.fitBounds(initialLayer.getBounds());
-                }
-            }
-        }, 100);
-    }
-  }, [initialLayer, map]);
-
-  const handleCreated = (e: any) => {
-    onSave(e.layer.getLatLngs()[0]);
-  };
-
-  const handleEdited = (e: any) => {
-    const layers = e.layers.getLayers();
-    if (layers.length > 0) {
-      onSave(layers[0].getLatLngs()[0]);
-    }
-  };
-
-  const handleDeleted = () => {
-    onSave([]);
-  };
-
-  return (
-    <FeatureGroup ref={layerRef}>
-      <EditControl
-        position="topright"
-        onCreated={handleCreated}
-        onEdited={handleEdited}
-        onDeleted={handleDeleted}
-        draw={{
-          rectangle: false,
-          circle: false,
-          circlemarker: false,
-          marker: false,
-          polyline: false,
-          polygon: {
-            allowIntersection: false,
-            shapeOptions: {
-              color: 'hsl(var(--primary))',
-              fillColor: 'hsl(var(--primary))',
-              fillOpacity: 0.5,
-            },
-          },
-        }}
-      />
-    </FeatureGroup>
-  );
-};
-
-
 export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSave }) => {
-  const L = require('leaflet'); // Import dynamically on client
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<Map | null>(null);
 
-  const initialShapeLayer = React.useMemo(() => {
-    if (parcel?.location && parcel.location.length > 0) {
-      const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]);
-      return L.polygon(latLngs, {
-          color: 'hsl(var(--primary))',
-          fillColor: 'hsl(var(--primary))',
-          fillOpacity: 0.5,
-      });
+  useEffect(() => {
+    const L = require('leaflet');
+    require('leaflet-draw');
+    
+    if (mapContainerRef.current && !mapRef.current) {
+        const map = L.map(mapContainerRef.current).setView(mapCenter, 8);
+        mapRef.current = map;
+
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        
+        if (parcel?.location && parcel.location.length > 0) {
+            const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as LatLngExpression[];
+            const polygon: Polygon = L.polygon(latLngs, {
+                color: 'hsl(var(--primary))',
+                fillColor: 'hsl(var(--primary))',
+                fillOpacity: 0.5,
+            });
+            drawnItems.addLayer(polygon);
+            map.fitBounds(polygon.getBounds());
+        }
+
+        const drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems
+            },
+            draw: {
+                polygon: {
+                    allowIntersection: false,
+                    shapeOptions: {
+                        color: 'hsl(var(--primary))'
+                    }
+                },
+                rectangle: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                polyline: false,
+            }
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, (event: any) => {
+            const layer = event.layer;
+            drawnItems.clearLayers();
+            drawnItems.addLayer(layer);
+            onSave(layer.getLatLngs()[0]);
+        });
+        
+        map.on(L.Draw.Event.EDITED, (event: any) => {
+            const layers = event.layers.getLayers();
+            if (layers.length > 0) {
+              onSave(layers[0].getLatLngs()[0]);
+            }
+        });
+        
+        map.on(L.Draw.Event.DELETED, () => {
+            onSave([]);
+        });
     }
-    return null;
-  }, [parcel, L]);
 
-  return (
-    <MapContainer center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }}>
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      <TileLayer
-        url='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-        attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-      />
-      <DrawnShapeHandler onSave={onSave} initialLayer={initialShapeLayer} />
-    </MapContainer>
-  );
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [parcel, onSave]);
+
+  return <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />;
 };

@@ -64,26 +64,26 @@ export default function PercelenPage() {
             }).addTo(map);
 
             const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
-            parcelsWithLocation.forEach(parcel => {
-                const polygon = L.polygon(parcel.location as LatLngExpression[], { 
-                    color: 'hsl(var(--primary))', 
-                    fillColor: 'hsl(var(--primary))', 
-                    fillOpacity: 0.4 
-                }).addTo(map);
+            if (parcelsWithLocation.length > 0) {
+              const group = L.featureGroup();
+              parcelsWithLocation.forEach(parcel => {
+                  const polygon = L.polygon(parcel.location as LatLngExpression[], { 
+                      color: 'hsl(var(--primary))', 
+                      fillColor: 'hsl(var(--primary))', 
+                      fillOpacity: 0.4 
+                  }).addTo(group);
 
-                polygon.bindTooltip(`
-                    <div class="text-center">
-                        <p class="font-bold">${parcel.name}</p>
-                        <p>${parcel.variety}</p>
-                        <p>${parcel.area} ha</p>
-                    </div>
-                `);
-            });
-        }
-    } else {
-        if (mapRef.current) {
-            mapRef.current.remove();
-            mapRef.current = null;
+                  polygon.bindTooltip(`
+                      <div class="text-center">
+                          <p class="font-bold">${parcel.name}</p>
+                          <p>${parcel.variety}</p>
+                          <p>${parcel.area} ha</p>
+                      </div>
+                  `);
+              });
+              group.addTo(map);
+              map.fitBounds(group.getBounds());
+            }
         }
     }
 

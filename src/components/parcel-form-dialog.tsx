@@ -26,10 +26,11 @@ import {
 import type { Parcel } from "@/lib/types"
 import { appleVarieties, pearVarieties } from "@/lib/data"
 import { Map, MapPin } from "lucide-react"
+import { Skeleton } from "./ui/skeleton"
 
 const ParcelDrawingMap = dynamic(
   () => import('@/components/parcel-drawing-map').then(m => m.ParcelDrawingMap),
-  { ssr: false, loading: () => <p>Kaart laden...</p> }
+  { ssr: false, loading: () => <Skeleton className="w-full h-full" /> }
 );
 
 
@@ -278,7 +279,7 @@ export function ParcelFormDialog({
                 {isMapOpen && (
                     <ParcelDrawingMap
                         key={mapRenderKey} 
-                        parcel={parcel}
+                        parcel={getValues()}
                         onSave={handleMapSave}
                     />
                 )}
