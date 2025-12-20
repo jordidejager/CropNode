@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -42,9 +42,8 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState("")
+  const [search, setSearch] = React.useState("")
   
-  // This is the key fix: Ensure value is never undefined for comparison.
   const currentValue = value || ""
 
   const currentLabel =
@@ -53,9 +52,9 @@ export function Combobox({
 
   const showCreateOption =
     creatable &&
-    inputValue &&
+    search &&
     !options.some(
-      (option) => option.label.toLowerCase() === inputValue.toLowerCase()
+      (option) => option.label.toLowerCase() === search.toLowerCase()
     )
 
   return (
@@ -76,27 +75,29 @@ export function Combobox({
         
       >
         <Command
-          filter={(searchValue, itemValue) => {
-            return itemValue.toLowerCase().includes(searchValue.toLowerCase())
+           filter={(itemValue, searchValue) => {
+            if (itemValue.toLowerCase().includes(searchValue.toLowerCase())) return 1
+            return 0
           }}
         >
           <CommandInput
             placeholder="Zoek of maak nieuw..."
-            value={inputValue}
-            onValueChange={setInputValue}
+            value={search}
+            onValueChange={setSearch}
           />
           <CommandList>
             <CommandEmpty>
-              {creatable && inputValue ? (
+              {showCreateOption ? (
                 <CommandItem
-                  value={inputValue}
+                  value={search}
                   onSelect={(currentValue) => {
                     onValueChange(currentValue)
+                    setSearch("")
                     setOpen(false)
-                    setInputValue("")
                   }}
                 >
-                  Maak "{inputValue}" aan
+                  <Plus className="mr-2 h-4 w-4" />
+                  Maak "{search}" aan
                 </CommandItem>
               ) : (
                 "Geen resultaten gevonden."
@@ -107,11 +108,10 @@ export function Combobox({
                 <CommandItem
                   key={option.value}
                   value={option.label}
-                  onSelect={(currentLabel) => {
-                    const selectedValue = options.find(opt => opt.label.toLowerCase() === currentLabel.toLowerCase())?.value || currentLabel;
-                    onValueChange(selectedValue)
+                  onSelect={() => {
+                    onValueChange(option.value)
+                    setSearch("")
                     setOpen(false)
-                    setInputValue("")
                   }}
                 >
                   <Check
@@ -125,16 +125,17 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && (
+              {showCreateOption && !creatable && (
                  <CommandItem
-                  value={inputValue}
-                  onSelect={(currentValue) => {
-                    onValueChange(currentValue)
+                  value={search}
+                  onSelect={() => {
+                    onValueChange(search)
+                    setSearch("")
                     setOpen(false)
-                    setInputValue("")
                   }}
                 >
-                  Maak "{inputValue}" aan
+                  <Plus className="mr-2 h-4 w-4" />
+                  Maak "{search}" aan
                 </CommandItem>
               )}
             </CommandGroup>
