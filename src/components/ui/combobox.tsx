@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
-import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -43,15 +42,22 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-
-  const handleSelect = (currentValue: string) => {
-    onValueChange(currentValue)
-    setOpen(false)
-  }
+  const [inputValue, setInputValue] = React.useState("")
 
   const currentLabel =
     options.find((option) => option.value.toLowerCase() === value?.toLowerCase())
       ?.label || value
+
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(inputValue.toLowerCase())
+  )
+
+  const showCreateOption =
+    creatable &&
+    inputValue &&
+    !filteredOptions.some(
+      (option) => option.label.toLowerCase() === inputValue.toLowerCase()
+    )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -68,32 +74,42 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"
+        
       >
-        <Command
-          filter={(value, search) => {
-            if (value.toLowerCase().includes(search.toLowerCase())) return 1
-            return 0
-          }}
-        >
-          <CommandInput placeholder="Zoek of maak nieuw..." />
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Zoek of maak nieuw..."
+            value={inputValue}
+            onValueChange={setInputValue}
+          />
           <CommandList>
             <CommandEmpty>
-              {creatable ? (
+              {creatable && inputValue ? (
                 <CommandItem
-                  onSelect={() => handleSelect(document.querySelector<HTMLInputElement>(`[cmdk-input]` )?.value || "")}
+                  value={inputValue}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue)
+                    setOpen(false)
+                    setInputValue("")
+                  }}
                 >
-                  Maak "{document.querySelector<HTMLInputElement>(`[cmdk-input]` )?.value}" aan
+                  Maak "{inputValue}" aan
                 </CommandItem>
               ) : (
                 "Geen resultaten gevonden."
               )}
             </CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={handleSelect}
+                  value={option.label}
+                  onSelect={(currentValue) => {
+                    const selectedValue = options.find(opt => opt.label.toLowerCase() === currentValue.toLowerCase())?.value || currentValue;
+                    onValueChange(selectedValue)
+                    setOpen(false)
+                    setInputValue("")
+                  }}
                 >
                   <Check
                     className={cn(
@@ -106,6 +122,18 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
+              {showCreateOption && !filteredOptions.length && (
+                 <CommandItem
+                  value={inputValue}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue)
+                    setOpen(false)
+                    setInputValue("")
+                  }}
+                >
+                  Maak "{inputValue}" aan
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>
