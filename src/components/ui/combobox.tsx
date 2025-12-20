@@ -42,8 +42,13 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState(value || '')
 
-  const selectedOption = options.find((option) => option.value === value);
+  const selectedOption = options.find((option) => option.value.toLowerCase() === value?.toLowerCase());
+
+  React.useEffect(() => {
+    setInputValue(value || '');
+  }, [value]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -58,17 +63,42 @@ export function Combobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+            // Dit voorkomt dat de dialoog sluit wanneer je buiten de popover klikt
+            // als de popover open is.
+             if (open) {
+                e.preventDefault();
+            }
+        }}
+      >
         <Command
-          filter={(searchValue, itemValue) => {
-            if (creatable) return 1;
-            return itemValue.toLowerCase().includes(searchValue.toLowerCase()) ? 1 : 0
+          filter={(itemValue, searchValue) => {
+             if (creatable) return 1;
+             return itemValue.toLowerCase().includes(searchValue.toLowerCase()) ? 1 : 0
           }}
         >
-          <CommandInput placeholder="Zoek of maak nieuw..." />
+          <CommandInput 
+            placeholder="Zoek of maak nieuw..."
+            value={inputValue}
+            onValueChange={setInputValue}
+          />
           <CommandList>
             <CommandEmpty>
-                {creatable ? `Geen resultaten. Selecteer om aan te maken.` : "Geen resultaten gevonden."}
+                {creatable && inputValue ? (
+                    <CommandItem
+                        value={inputValue}
+                        onSelect={(currentValue) => {
+                            onValueChange(currentValue)
+                            setOpen(false)
+                        }}
+                    >
+                      <Check className="mr-2 h-4 w-4 opacity-0" />
+                      Maak "{inputValue}" aan
+                    </CommandItem>
+                ): "Geen resultaten gevonden."}
             </CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
@@ -83,31 +113,12 @@ export function Combobox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0"
+                      value?.toLowerCase() === option.value.toLowerCase() ? "opacity-100" : "opacity-0"
                     )}
                   />
                   {option.label}
                 </CommandItem>
               ))}
-               {creatable && (
-                <CommandItem
-                    value="creatable-item" // This is a dummy value
-                    onSelect={(currentValue) => {
-                        // The `currentValue` from onSelect will be the input text
-                        // We need to get it from the command's internal state.
-                        // This is a bit of a hack, but it's how we can get the search value.
-                        const commandEl = document.querySelector('[cmdk-root=true]');
-                        const inputValue = (commandEl as any)?.getAttribute('data-value') || '';
-                        if (inputValue) {
-                            onValueChange(inputValue);
-                            setOpen(false);
-                        }
-                    }}
-                 >
-                    <Check className="mr-2 h-4 w-4 opacity-0" />
-                    <span className="italic">Nieuw ras aanmaken...</span>
-                 </CommandItem>
-              )}
             </CommandGroup>
           </CommandList>
         </Command>
