@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp } from 'firebase/firestore';
 import type { LogbookEntry, ParcelHistoryEntry } from './types';
 import { middelMatrix } from './data';
 
@@ -11,7 +11,14 @@ export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> 
   if (!db) return [];
   const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('timestamp', 'desc'));
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LogbookEntry));
+  return querySnapshot.docs.map(doc => {
+    const data = doc.data();
+    return { 
+      id: doc.id, 
+      ...data,
+      timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
+    } as LogbookEntry;
+  });
 }
 
 export async function addLogbookEntry(db: Firestore, entry: Omit<LogbookEntry, 'id'>): Promise<LogbookEntry> {
@@ -32,7 +39,14 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   if (!db) return [];
   const q = query(collection(db, HISTORY_COLLECTION), orderBy('date', 'desc'));
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ParcelHistoryEntry));
+  return querySnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+       id: doc.id, 
+       ...data,
+       date: (data.date as Timestamp)?.toDate() || new Date(),
+    } as ParcelHistoryEntry
+  });
 }
 
 export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[]) {
@@ -48,7 +62,6 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 export async function getProducts(db: Firestore): Promise<string[]> {
     const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
     if (!db) {
-        console.warn("Firestore db is not initialized, falling back to static data for products.");
         return staticProducts;
     }
     try {

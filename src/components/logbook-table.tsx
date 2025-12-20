@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { Timestamp } from 'firebase/firestore';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -18,6 +19,16 @@ const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' |
   'Akkoord': 'default', 
   'Fout': 'destructive',
 };
+
+const formatDate = (date: Date | Timestamp | undefined) => {
+  if (!date) return '';
+  const validDate = date instanceof Timestamp ? date.toDate() : date;
+  try {
+    return format(validDate, 'dd-MM-yyyy HH:mm');
+  } catch (e) {
+    return 'Ongeldige datum';
+  }
+}
 
 export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
   if (!entries || entries.length === 0) {
@@ -37,7 +48,7 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
           <TableBody>
             {entries.map((entry) => (
               <TableRow key={entry.id}>
-                <TableCell className="text-muted-foreground text-sm">{format(entry.timestamp, 'dd-MM-yyyy HH:mm')}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{formatDate(entry.timestamp)}</TableCell>
                 <TableCell>
                   <Tooltip delayDuration={300}>
                       <TooltipTrigger asChild>
