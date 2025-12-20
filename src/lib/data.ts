@@ -4,14 +4,14 @@ import type { Middel } from './types';
 // This file can be used for other static data if needed.
 
 export const middelMatrix: Middel[] = [
-  { product: 'Captan', crop: 'Peer', disease: 'Schurft', maxDosage: 1.5, unit: 'kg' },
-  { product: 'Captan', crop: 'Appel', disease: 'Schurft', maxDosage: 1.8, unit: 'kg' },
-  { product: 'Regalis Plus', crop: 'Appel', maxDosage: 1.25, unit: 'kg' },
-  { product: 'Regalis Plus', crop: 'Peer', maxDosage: 1.0, unit: 'kg' },
-  { product: 'Ureum', crop: 'Peer', maxDosage: 5.0, unit: 'kg' },
-  { product: 'Ureum', crop: 'Appel', maxDosage: 5.0, unit: 'kg' },
-  { product: 'Zwavel', crop: 'Appel', disease: 'Meeldauw', maxDosage: 7.5, unit: 'kg' },
-  { product: 'Koper', crop: 'Appel', disease: 'Kanker', maxDosage: 0.5, unit: 'l' },
+  { product: 'Captan', crop: 'Peer', disease: 'Schurft', maxDosage: 1.5, unit: 'kg', safetyPeriodDays: 21, maxApplicationsPerYear: 8, maxDosePerYear: 12, minIntervalDays: 7 },
+  { product: 'Captan', crop: 'Appel', disease: 'Schurft', maxDosage: 1.8, unit: 'kg', safetyPeriodDays: 21, maxApplicationsPerYear: 8, maxDosePerYear: 14.4, minIntervalDays: 7 },
+  { product: 'Regalis Plus', crop: 'Appel', maxDosage: 1.25, unit: 'kg', safetyPeriodDays: 45, maxApplicationsPerYear: 2, maxDosePerYear: 2.5, minIntervalDays: 21 },
+  { product: 'Regalis Plus', crop: 'Peer', maxDosage: 1.0, unit: 'kg', safetyPeriodDays: 45, maxApplicationsPerYear: 2, maxDosePerYear: 2.0, minIntervalDays: 21 },
+  { product: 'Ureum', crop: 'Peer', maxDosage: 5.0, unit: 'kg', safetyPeriodDays: 0, maxApplicationsPerYear: 10, maxDosePerYear: 50, minIntervalDays: 5 },
+  { product: 'Ureum', crop: 'Appel', maxDosage: 5.0, unit: 'kg', safetyPeriodDays: 0, maxApplicationsPerYear: 10, maxDosePerYear: 50, minIntervalDays: 5 },
+  { product: 'Zwavel', crop: 'Appel', disease: 'Meeldauw', maxDosage: 7.5, unit: 'kg', safetyPeriodDays: 5, maxApplicationsPerYear: 8, maxDosePerYear: 60, minIntervalDays: 7 },
+  { product: 'Koper', crop: 'Appel', disease: 'Kanker', maxDosage: 0.5, unit: 'l', safetyPeriodDays: 21, maxApplicationsPerYear: 4, maxDosePerYear: 2, minIntervalDays: 10 },
 ];
 
 export const products: string[] = ['Captan', 'Regalis Plus', 'Zwavel', 'Koper', 'Ureum'];

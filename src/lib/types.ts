@@ -13,6 +13,10 @@ export type Middel = {
   disease?: string;
   maxDosage: number;
   unit: string;
+  safetyPeriodDays?: number;
+  maxApplicationsPerYear?: number;
+  maxDosePerYear?: number;
+  minIntervalDays?: number;
 };
 
 export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout';
