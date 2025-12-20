@@ -43,19 +43,18 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
+  
+  // This is the key fix: Ensure value is never undefined for comparison.
+  const currentValue = value || ""
 
   const currentLabel =
-    options.find((option) => option.value.toLowerCase() === value?.toLowerCase())
-      ?.label || value
-
-  const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().includes(inputValue.toLowerCase())
-  )
+    options.find((option) => option.value.toLowerCase() === currentValue.toLowerCase())
+      ?.label || currentValue
 
   const showCreateOption =
     creatable &&
     inputValue &&
-    !filteredOptions.some(
+    !options.some(
       (option) => option.label.toLowerCase() === inputValue.toLowerCase()
     )
 
@@ -76,7 +75,11 @@ export function Combobox({
         className="w-[--radix-popover-trigger-width] p-0"
         
       >
-        <Command shouldFilter={false}>
+        <Command
+          filter={(searchValue, itemValue) => {
+            return itemValue.toLowerCase().includes(searchValue.toLowerCase())
+          }}
+        >
           <CommandInput
             placeholder="Zoek of maak nieuw..."
             value={inputValue}
@@ -100,12 +103,12 @@ export function Combobox({
               )}
             </CommandEmpty>
             <CommandGroup>
-              {filteredOptions.map((option) => (
+              {options.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.label}
-                  onSelect={(currentValue) => {
-                    const selectedValue = options.find(opt => opt.label.toLowerCase() === currentValue.toLowerCase())?.value || currentValue;
+                  onSelect={(currentLabel) => {
+                    const selectedValue = options.find(opt => opt.label.toLowerCase() === currentLabel.toLowerCase())?.value || currentLabel;
                     onValueChange(selectedValue)
                     setOpen(false)
                     setInputValue("")
@@ -114,7 +117,7 @@ export function Combobox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value?.toLowerCase() === option.value.toLowerCase()
+                      currentValue.toLowerCase() === option.value.toLowerCase()
                         ? "opacity-100"
                         : "opacity-0"
                     )}
@@ -122,7 +125,7 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && !filteredOptions.length && (
+              {showCreateOption && (
                  <CommandItem
                   value={inputValue}
                   onSelect={(currentValue) => {
