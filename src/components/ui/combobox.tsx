@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
+import { Command as CommandPrimitive } from 'cmdk'
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,28 +42,24 @@ export function Combobox({
   className,
   creatable = false,
 }: ComboboxProps) {
-  const [open, setOpen] = React.useState(false);
-  const [inputValue, setInputValue] = React.useState("");
+  const [open, setOpen] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState("")
 
-  const handleSelect = (selectedValue: string) => {
-    onValueChange(selectedValue);
-    setOpen(false);
-  };
+  const handleSelect = (currentValue: string) => {
+    onValueChange(currentValue.toLowerCase() === value?.toLowerCase() ? "" : currentValue)
+    setOpen(false)
+  }
   
-  const filteredOptions = options.filter((option) =>
+  const filteredOptions = options.filter(option => 
     option.label.toLowerCase().includes(inputValue.toLowerCase())
   );
-  
+
   const showCreateOption =
     creatable &&
     inputValue &&
     !options.some(
       (option) => option.label.toLowerCase() === inputValue.toLowerCase()
     );
-
-  const selectedOption = options.find(
-    (option) => option.value.toLowerCase() === value?.toLowerCase()
-  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -73,34 +70,38 @@ export function Combobox({
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
         >
-          <span className="truncate">{selectedOption?.label || value || placeholder}</span>
+          <span className="truncate">
+          {value
+            ? options.find((option) => option.value.toLowerCase() === value.toLowerCase())?.label
+            : placeholder}
+          </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => { e.preventDefault(); }}>
-        <Command>
-          <CommandInput
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => e.preventDefault()}>
+         <Command>
+          <CommandInput 
             placeholder="Zoek of maak nieuw..."
             value={inputValue}
             onValueChange={setInputValue}
           />
-           <CommandList>
+          <CommandList>
             <CommandEmpty>
-                {creatable && inputValue ? (
-                     <CommandItem
-                        value={inputValue}
-                        onSelect={() => handleSelect(inputValue)}
-                      >
-                        Maak "{inputValue}" aan
-                      </CommandItem>
-                ): "Geen resultaten gevonden."}
+              {creatable && inputValue ? (
+                <CommandItem
+                  onSelect={() => handleSelect(inputValue)}
+                  value={inputValue}
+                >
+                  Maak "{inputValue}" aan
+                </CommandItem>
+              ) : "Geen resultaten gevonden."}
             </CommandEmpty>
             <CommandGroup>
               {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.value}
-                  onSelect={() => handleSelect(option.value)}
+                  onSelect={handleSelect}
                 >
                   <Check
                     className={cn(
@@ -112,14 +113,13 @@ export function Combobox({
                 </CommandItem>
               ))}
               {showCreateOption && (
-                <CommandItem
-                  key={inputValue}
-                  value={inputValue}
-                  onSelect={() => handleSelect(inputValue)}
-                >
-                  <Check className="mr-2 h-4 w-4 opacity-0" />
-                  Maak "{inputValue}" aan
-                </CommandItem>
+                 <CommandItem
+                    onSelect={() => handleSelect(inputValue)}
+                    value={inputValue}
+                  >
+                    <Check className="mr-2 h-4 w-4 opacity-0" />
+                    Maak "{inputValue}" aan
+                  </CommandItem>
               )}
             </CommandGroup>
           </CommandList>

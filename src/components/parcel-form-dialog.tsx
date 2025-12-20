@@ -34,26 +34,39 @@ interface ParcelFormDialogProps {
 }
 
 export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: ParcelFormDialogProps) {
-  const { register, handleSubmit, formState: { errors }, reset, setValue, control } = useForm<ParcelFormValues>({
+  const { register, handleSubmit, formState: { errors }, reset, control, watch } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
   });
+  
+  const watchedCrop = watch('crop');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allVarieties, setAllVarieties] = useState<ComboboxOption[]>([]);
+  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
+  const [filteredVarieties, setFilteredVarieties] = useState<ComboboxOption[]>([]);
   const [loadingVarieties, setLoadingVarieties] = useState(true);
   const db = useFirestore();
 
   useEffect(() => {
-    async function fetchVarieties() {
+    async function fetchParcels() {
       if (!db || !isOpen) return;
       setLoadingVarieties(true);
       const parcels = await getParcels(db);
-      const uniqueVarieties = [...new Set(parcels.map(p => p.variety))];
-      setAllVarieties(uniqueVarieties.map(v => ({ value: v, label: v })));
+      setAllParcels(parcels);
       setLoadingVarieties(false);
     }
-    fetchVarieties();
+    fetchParcels();
   }, [db, isOpen]);
+
+  useEffect(() => {
+    if (allParcels.length > 0) {
+      const uniqueVarieties = [...new Set(
+        allParcels
+          .filter(p => !watchedCrop || p.crop.toLowerCase() === watchedCrop.toLowerCase())
+          .map(p => p.variety)
+      )];
+      setFilteredVarieties(uniqueVarieties.map(v => ({ value: v, label: v })));
+    }
+  }, [watchedCrop, allParcels]);
   
   useEffect(() => {
     if (isOpen) {
@@ -92,7 +105,7 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{parcel ? 'Perceel Aanpassen' : 'Nieuw Perceel Toevoegen'}</DialogTitle>
@@ -143,7 +156,7 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
                     name="variety"
                     render={({ field }) => (
                        <Combobox
-                          options={allVarieties}
+                          options={filteredVarieties}
                           value={field.value}
                           onValueChange={field.onChange}
                           placeholder="Kies of maak een ras..."
