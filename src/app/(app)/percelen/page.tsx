@@ -12,11 +12,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import type { Map, LatLngExpression } from 'leaflet';
+import { AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 export default function PercelenPage() {
@@ -51,19 +52,18 @@ export default function PercelenPage() {
     if (activeTab === 'map' && mapContainerRef.current) {
         if (!mapRef.current) { // Only initialize if map doesn't exist
             const L = require('leaflet');
-            const mapCenter: LatLngExpression = [52.1326, 5.2913];
             
-            const map = L.map(mapContainerRef.current).setView(mapCenter, 8);
+            const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+            let mapCenter: LatLngExpression = [52.1326, 5.2913]; // Default center
+            let zoomLevel = 8; // Default zoom
+
+            const map = L.map(mapContainerRef.current).setView(mapCenter, zoomLevel);
             mapRef.current = map;
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             }).addTo(map);
 
-            const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
             if (parcelsWithLocation.length > 0) {
               const group = L.featureGroup();
               parcelsWithLocation.forEach(parcel => {
@@ -85,14 +85,12 @@ export default function PercelenPage() {
               map.fitBounds(group.getBounds());
             }
         }
+    } else {
+        if (mapRef.current) {
+            mapRef.current.remove();
+            mapRef.current = null;
+        }
     }
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
   }, [activeTab, parcels]);
 
 
