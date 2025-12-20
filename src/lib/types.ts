@@ -2,7 +2,7 @@ export type Parcel = {
   id: string; // Firestore ID
   name: string;
   crop: string;
-  variety: string;
+  variety: string[]; // Kan meerdere rassen bevatten
   area: number; // in hectares
 };
 
@@ -42,7 +42,7 @@ export type ParcelHistoryEntry = {
   parcelId: string;
   parcelName: string;
   crop: string;
-  variety: string;
+  variety: string[]; // Aangepast naar array
   product: string;
   dosage: number;
   unit: string;

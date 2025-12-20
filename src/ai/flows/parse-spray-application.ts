@@ -15,7 +15,7 @@ const ParseSprayApplicationInputSchema = z.object({
   naturalLanguageInput: z
     .string()
     .describe('Natural language input describing the spray application.'),
-  plots: z.string().describe('A JSON string of available plots with their id, name, crop and variety.'),
+  plots: z.string().describe('A JSON string of available plots with their id, name, crop and comma-separated varieties.'),
   products: z.string().describe('A JSON string of available product names.'),
 });
 export type ParseSprayApplicationInput = z.infer<typeof ParseSprayApplicationInputSchema>;
@@ -44,7 +44,7 @@ const prompt = ai.definePrompt({
 
   The user will provide:
   1. A natural language input describing a spray application.
-  2. A JSON string of available plots.
+  2. A JSON string of available plots. Each plot can have multiple varieties, separated by commas.
   3. A JSON string of available products.
 
   You must extract the following information:
@@ -53,7 +53,7 @@ const prompt = ai.definePrompt({
 
   Example Input 1:
   Natural Language Input: "Vandaag alle conference gespoten met 1,5 kg captan"
-  Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"},{\\"id\\":\\"P-1003\\",\\"name\\":\\"Conference blok 1\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"}]"
+  Plots: "[{\\"id\\":\\"P-1001\\",\\"name\\":\\"Thuis peer\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference\\"},{\\"id\\":\\"P-1002\\",\\"name\\":\\"Achter huis\\",\\"crop\\":\\"Appel\\",\\"variety\\":\\"Elstar\\"},{\\"id\\":\\"P-1003\\",\\"name\\":\\"Conference blok 1\\",\\"crop\\":\\"Peer\\",\\"variety\\":\\"Conference, Doyenné\\"}]"
   Products: "[\\"Captan\\", \\"Regalis Plus\\", \\"Ureum\\"]"
 
   Example Output 1:

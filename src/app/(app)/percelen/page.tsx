@@ -52,14 +52,21 @@ export default function PercelenPage() {
     loadParcels();
   };
 
-  const handleFormSubmit = async (values: Omit<Parcel, 'id'> | Parcel) => {
+  const handleFormSubmit = async (values: Omit<Parcel, 'id' | 'variety'> & { variety: string | string[] }) => {
     if (!db) return;
+
+    const varietyAsArray = Array.isArray(values.variety)
+      ? values.variety
+      : values.variety.split(',').map(v => v.trim()).filter(Boolean);
+
+    const parcelData = { ...values, variety: varietyAsArray };
+
     try {
-      if ('id' in values) {
-        await updateParcel(db, values);
+      if ('id' in parcelData && parcelData.id) {
+        await updateParcel(db, parcelData as Parcel);
         toast({ title: 'Succesvol bijgewerkt', description: 'De perceelgegevens zijn opgeslagen.' });
       } else {
-        await addParcel(db, values);
+        await addParcel(db, parcelData);
         toast({ title: 'Succesvol toegevoegd', description: 'Het nieuwe perceel is opgeslagen.' });
       }
       loadParcels();
@@ -111,7 +118,7 @@ export default function PercelenPage() {
                       <TableCell className="font-medium">{parcel.id}</TableCell>
                       <TableCell>{parcel.name}</TableCell>
                       <TableCell>{parcel.crop}</TableCell>
-                      <TableCell>{parcel.variety}</TableCell>
+                      <TableCell>{Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety}</TableCell>
                       <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
                       <TableCell>
                         <AlertDialog>

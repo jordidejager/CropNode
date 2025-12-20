@@ -47,7 +47,7 @@ export function EditParcels({ allParcels, selectedParcelIds, onSelectionChange }
                   onCheckedChange={(checked) => handleCheckboxChange(parcel.id, !!checked)}
                 />
                 <Label htmlFor={`parcel-${parcel.id}`} className="font-normal cursor-pointer">
-                  {parcel.name} ({parcel.crop} - {parcel.variety})
+                  {parcel.name} ({parcel.crop} - {Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety})
                 </Label>
               </div>
             ))

@@ -76,6 +76,8 @@ export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> 
       date = dateValue.toDate();
     } else if (typeof dateValue === 'string') {
       date = new Date(dateValue);
+    } else if (dateValue && typeof dateValue.toDate === 'function') { // Fallback for different Timestamp-like objects
+      date = dateValue.toDate();
     } else {
       date = new Date(); // Fallback
     }
@@ -126,7 +128,18 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     const dateValue = data.date;
-    const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue);
+    
+    let date;
+    if (dateValue instanceof Timestamp) {
+      date = dateValue.toDate();
+    } else if (typeof dateValue === 'string') {
+      date = new Date(dateValue);
+    } else if (dateValue && typeof dateValue.toDate === 'function') {
+      date = dateValue.toDate();
+    } else {
+      date = new Date(); // Fallback
+    }
+
     return {
        id: doc.id, 
        ...data,
@@ -135,7 +148,7 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   });
 }
 
-export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[], parcels: Parcel[]) {
+export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id' | 'variety'>[], parcels: Parcel[]) {
   if (!db) throw new Error("Database not initialized");
   const batch = writeBatch(db);
   entries.forEach(entry => {

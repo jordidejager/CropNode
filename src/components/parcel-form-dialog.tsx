@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,9 @@ const formSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Naam is verplicht'),
   crop: z.string().min(1, 'Gewas is verplicht'),
-  variety: z.string().min(1, 'Ras is verplicht'),
+  variety: z.union([z.string(), z.array(z.string())]).refine(val => (Array.isArray(val) && val.length > 0) || (typeof val === 'string' && val.length > 0), {
+    message: 'Ras is verplicht',
+  }),
   area: z.coerce.number().min(0.01, 'Oppervlakte moet groter dan 0 zijn'),
 });
 
@@ -28,11 +30,23 @@ interface ParcelFormDialogProps {
 }
 
 export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: ParcelFormDialogProps) {
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<ParcelFormValues>({
+  const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: parcel || { name: '', crop: '', variety: '', area: 0 },
   });
   
+  useEffect(() => {
+    if (parcel) {
+      setValue('id', parcel.id);
+      setValue('name', parcel.name);
+      setValue('crop', parcel.crop);
+      setValue('area', parcel.area);
+      setValue('variety', Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety);
+    } else {
+      reset({ id: undefined, name: '', crop: '', variety: '', area: 0 });
+    }
+  }, [parcel, reset, setValue, isOpen]);
+
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleOpenChange = (open: boolean) => {
@@ -44,8 +58,8 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
 
   const processSubmit: SubmitHandler<ParcelFormValues> = async (data) => {
     setIsSubmitting(true);
-    const success = await onSubmit({ ...parcel, ...data });
-     setIsSubmitting(false);
+    const success = await onSubmit(data);
+    setIsSubmitting(false);
     if (success) {
       handleOpenChange(false);
     }
@@ -78,7 +92,8 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="variety" className="text-right">Ras</Label>
             <div className="col-span-3">
-              <Input id="variety" {...register('variety')} className="w-full" />
+              <Input id="variety" {...register('variety')} className="w-full" placeholder="bv. Conference, Doyenné" />
+              <p className="text-xs text-muted-foreground mt-1">Scheid meerdere rassen met een komma.</p>
               {errors.variety && <p className="text-red-500 text-xs mt-1">{errors.variety.message}</p>}
             </div>
           </div>
