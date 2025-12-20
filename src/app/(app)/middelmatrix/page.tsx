@@ -2,23 +2,27 @@
 
 import { useState, useMemo } from 'react';
 import { middelMatrix } from '@/lib/data';
+import type { Middel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 export default function MiddelMatrixPage() {
     const [searchTerm, setSearchTerm] = useState('');
 
-    const filteredMatrix = useMemo(() => {
-        if (!searchTerm) {
-            return middelMatrix;
-        }
-        return middelMatrix.filter(regel =>
+    const groupedAndFilteredMatrix = useMemo(() => {
+        const filtered = middelMatrix.filter(regel =>
             regel.product.toLowerCase().includes(searchTerm.toLowerCase()) ||
             regel.crop.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (regel.disease && regel.disease.toLowerCase().includes(searchTerm.toLowerCase()))
         );
+
+        return filtered.reduce((acc, regel) => {
+            (acc[regel.product] = acc[regel.product] || []).push(regel);
+            return acc;
+        }, {} as Record<string, Middel[]>);
     }, [searchTerm]);
 
     return (
@@ -56,19 +60,66 @@ export default function MiddelMatrixPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredMatrix.length > 0 ? (
-                                filteredMatrix.map((regel, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell className="font-medium">{regel.product}</TableCell>
-                                        <TableCell>{regel.crop}</TableCell>
-                                        <TableCell>{regel.disease || '-'}</TableCell>
-                                        <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                        <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                        <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                        <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                        <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                    </TableRow>
-                                ))
+                            {Object.keys(groupedAndFilteredMatrix).length > 0 ? (
+                                Object.entries(groupedAndFilteredMatrix).map(([product, regels]) => {
+                                    const isCollapsible = regels.length > 1;
+
+                                    if (!isCollapsible) {
+                                        const regel = regels[0];
+                                        return (
+                                            <TableRow key={regel.product + regel.crop}>
+                                                <TableCell className="font-medium">{regel.product}</TableCell>
+                                                <TableCell>{regel.crop}</TableCell>
+                                                <TableCell>{regel.disease || '-'}</TableCell>
+                                                <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                            </TableRow>
+                                        );
+                                    }
+
+                                    return (
+                                        <Collapsible asChild key={product} defaultOpen={false}>
+                                            <>
+                                                <TableRow className="font-medium bg-muted/50">
+                                                    <TableCell>
+                                                      <CollapsibleTrigger asChild>
+                                                          <button className="flex items-center gap-2 w-full text-left">
+                                                             <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
+                                                             {product}
+                                                          </button>
+                                                      </CollapsibleTrigger>
+                                                    </TableCell>
+                                                    <TableCell>{regels.length} gewassen</TableCell>
+                                                    <TableCell></TableCell>
+                                                    <TableCell></TableCell>
+                                                    <TableCell></TableCell>
+                                                    <TableCell></TableCell>
+                                                    <TableCell></TableCell>
+                                                    <TableCell></TableCell>
+                                                </TableRow>
+                                                <CollapsibleContent asChild>
+                                                    <>
+                                                        {regels.map((regel, index) => (
+                                                            <TableRow key={index} className="bg-background hover:bg-muted/50">
+                                                                <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                                                <TableCell>{regel.crop}</TableCell>
+                                                                <TableCell>{regel.disease || '-'}</TableCell>
+                                                                <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                                <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                                <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                                <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                                <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </>
+                                                </CollapsibleContent>
+                                            </>
+                                        </Collapsible>
+                                    );
+                                })
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={8} className="h-24 text-center">
