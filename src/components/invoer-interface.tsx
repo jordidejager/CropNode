@@ -144,11 +144,11 @@ export function InvoerInterface() {
   const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
   const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
   
-  if (productsLoading || !db) {
+  if (productsLoading) {
       return (
           <div className="w-full max-w-3xl mx-auto flex flex-col h-full items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="mt-4 text-muted-foreground">Databaseverbinding wordt gemaakt...</p>
+              <p className="mt-4 text-muted-foreground">Producten laden...</p>
           </div>
       );
   }
