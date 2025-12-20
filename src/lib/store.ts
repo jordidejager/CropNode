@@ -1,12 +1,29 @@
 
-import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc } from 'firebase/firestore';
 import type { LogbookEntry, ParcelHistoryEntry } from './types';
-import { products as staticProductsData } from './data';
+import { products as staticProductsData, middelMatrix } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
 const PRODUCTS_COLLECTION = 'products';
 
+
+export async function getLogbookEntry(db: Firestore, id: string): Promise<LogbookEntry | null> {
+  if (!db) return null;
+  const docRef = doc(db, LOGBOOK_COLLECTION, id);
+  const docSnap = await getDoc(docRef);
+
+  if (!docSnap.exists()) {
+    return null;
+  }
+  const data = docSnap.data();
+  const dateValue = data.date;
+  return {
+    id: docSnap.id,
+    ...data,
+    date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
+  } as LogbookEntry;
+}
 
 export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> {
   if (!db) return [];
@@ -15,10 +32,11 @@ export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> 
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     const dateValue = data.date;
+    const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue);
     return { 
       id: doc.id, 
       ...data,
-      date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
+      date,
     } as LogbookEntry;
   });
 }
@@ -36,6 +54,22 @@ export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Pr
     await setDoc(docRef, data, { merge: true });
 }
 
+export async function deleteLogbookEntry(db: Firestore, entryId: string): Promise<void> {
+  if (!db) throw new Error("Database not initialized");
+  // Also delete related history entries
+  const historyQuery = query(collection(db, HISTORY_COLLECTION), where("logId", "==", entryId));
+  const historySnapshot = await getDocs(historyQuery);
+  const batch = writeBatch(db);
+  historySnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+  });
+  
+  const logbookDocRef = doc(db, LOGBOOK_COLLECTION, entryId);
+  batch.delete(logbookDocRef);
+  
+  await batch.commit();
+}
+
 
 export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHistoryEntry[]> {
   if (!db) return [];
@@ -44,10 +78,11 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     const dateValue = data.date;
+    const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue);
     return {
        id: doc.id, 
        ...data,
-       date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
+       date,
     } as ParcelHistoryEntry
   });
 }
@@ -63,14 +98,14 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 }
 
 export async function getProducts(db: Firestore): Promise<string[]> {
-    const staticProducts = [...new Set(staticProductsData.map(m => m))];
+    const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
     if (!db) {
         return staticProducts;
     }
     try {
         const querySnapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
         const dbProducts = querySnapshot.docs.map(doc => doc.data().name as string);
-        const allProducts = [...new Set([...dbProducts, ...staticProducts])];
+        const allProducts = [...new Set([...dbProducts, ...staticProducts, ...staticProductsData])];
         return allProducts;
     } catch (error) {
         console.error("Error fetching products, falling back to static list:", error);

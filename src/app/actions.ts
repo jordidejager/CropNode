@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parcels, middelMatrix } from '@/lib/data';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry } from '@/lib/store';
 import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -121,8 +121,11 @@ export async function processSprayEntry(
       status: isValid ? 'Akkoord' : 'Te Controleren',
       date: new Date(),
       parsedData: finalParsedData,
-      ...(validationMessage && { validationMessage: validationMessage.trim() }),
     };
+    
+    if (validationMessage) {
+        newEntryData.validationMessage = validationMessage.trim();
+    }
 
     const newEntry = await addLogbookEntry(firestore, newEntryData);
 
@@ -239,4 +242,12 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
         message: 'Bespuiting definitief opgeslagen.',
         entry: { ...updatedEntry, date: dateToReturn.toISOString() },
     };
+}
+
+
+export async function deleteLogbookEntry(entryId: string) {
+    const { firestore } = initializeFirebase();
+    await dbDeleteLogbookEntry(firestore, entryId);
+    revalidatePath('/logboek');
+    revalidatePath('/perceelhistorie');
 }

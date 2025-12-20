@@ -1,3 +1,5 @@
+'use client';
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { LogbookEntry, LogStatus } from '@/lib/types';
@@ -9,8 +11,30 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/tooltip";
 import { Timestamp } from 'firebase/firestore';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Button } from './ui/button';
+import { MoreHorizontal, Trash2, Pencil } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { useState, useTransition } from 'react';
+import { deleteLogbookEntry } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -30,6 +54,66 @@ const formatDate = (date: Date | Timestamp | undefined) => {
   }
 }
 
+function ActionsCell({ entry }: { entry: LogbookEntry }) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  const handleDelete = () => {
+    startTransition(async () => {
+      await deleteLogbookEntry(entry.id);
+      toast({
+        title: 'Verwijderd',
+        description: 'De logboekregel is succesvol verwijderd.',
+      });
+      setIsDeleteDialogOpen(false);
+    });
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <Link href={`/logboek/${entry.id}/bewerken`} passHref>
+             <DropdownMenuItem>
+                <Pencil className="mr-2 h-4 w-4" />
+                <span>Bewerken & Bevestigen</span>
+              </DropdownMenuItem>
+          </Link>
+          <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-red-600">
+            <Trash2 className="mr-2 h-4 w-4" />
+            <span>Verwijderen</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deze actie kan niet ongedaan worden gemaakt. Dit zal de logboekregel permanent verwijderen en de bijbehorende historie van percelen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isPending} className="bg-destructive hover:bg-destructive/90">
+              {isPending ? 'Verwijderen...' : 'Verwijderen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+
 export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
   if (!entries || entries.length === 0) {
     return <p className="text-center text-muted-foreground py-10">Nog geen invoer in het logboek.</p>;
@@ -42,7 +126,8 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
             <TableRow>
               <TableHead className="w-[150px]">Datum</TableHead>
               <TableHead>Invoer</TableHead>
-              <TableHead className="w-[150px] text-right">Status</TableHead>
+              <TableHead className="w-[150px]">Status</TableHead>
+              <TableHead className="w-[50px] text-right"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -61,13 +146,16 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                       </TooltipContent>
                   </Tooltip>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell>
                   <Badge
                     variant={statusVariant[entry.status]}
                     className={cn('capitalize', entry.status === 'Analyseren...' && 'animate-pulse')}
                   >
                     {entry.status}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <ActionsCell entry={entry} />
                 </TableCell>
               </TableRow>
             ))}
