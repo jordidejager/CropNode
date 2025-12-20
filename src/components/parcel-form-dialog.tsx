@@ -13,8 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Combobox, ComboboxOption } from './ui/combobox';
 import type { Parcel } from '@/lib/types';
 import { useFirestore } from '@/firebase';
-import { getParcels } from '@/lib/store';
-
+import { appleVarieties, pearVarieties } from '@/lib/data';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -41,32 +40,19 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
   const watchedCrop = watch('crop');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
-  const [filteredVarieties, setFilteredVarieties] = useState<ComboboxOption[]>([]);
-  const [loadingVarieties, setLoadingVarieties] = useState(true);
+  const [varietyOptions, setVarietyOptions] = useState<ComboboxOption[]>([]);
+  
   const db = useFirestore();
 
   useEffect(() => {
-    async function fetchParcels() {
-      if (!db || !isOpen) return;
-      setLoadingVarieties(true);
-      const parcels = await getParcels(db);
-      setAllParcels(parcels);
-      setLoadingVarieties(false);
+    let options: string[] = [];
+    if (watchedCrop?.toLowerCase() === 'appel') {
+      options = appleVarieties;
+    } else if (watchedCrop?.toLowerCase() === 'peer') {
+      options = pearVarieties;
     }
-    fetchParcels();
-  }, [db, isOpen]);
-
-  useEffect(() => {
-    if (allParcels.length > 0) {
-      const uniqueVarieties = [...new Set(
-        allParcels
-          .filter(p => !watchedCrop || p.crop.toLowerCase() === watchedCrop.toLowerCase())
-          .map(p => p.variety)
-      )];
-      setFilteredVarieties(uniqueVarieties.map(v => ({ value: v, label: v })));
-    }
-  }, [watchedCrop, allParcels]);
+    setVarietyOptions(options.map(v => ({ value: v, label: v })));
+  }, [watchedCrop]);
   
   useEffect(() => {
     if (isOpen) {
@@ -145,26 +131,19 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="variety" className="text-right">Ras</Label>
             <div className="col-span-3">
-              {loadingVarieties ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Rassen laden...</span>
-                </div>
-              ) : (
-                <Controller
-                    control={control}
-                    name="variety"
-                    render={({ field }) => (
-                       <Combobox
-                          options={filteredVarieties}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Kies of maak een ras..."
-                          creatable
-                        />
-                    )}
-                />
-              )}
+              <Controller
+                  control={control}
+                  name="variety"
+                  render={({ field }) => (
+                      <Combobox
+                        options={varietyOptions}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder="Kies of maak een ras..."
+                        creatable
+                      />
+                  )}
+              />
               {errors.variety && <p className="text-red-500 text-xs mt-1">{errors.variety.message}</p>}
             </div>
           </div>
