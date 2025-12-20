@@ -36,6 +36,7 @@ import { useState, useTransition } from 'react';
 import { deleteLogbookEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { parcels } from '@/lib/data';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -139,6 +140,10 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
   );
 }
 
+const getParcelNames = (plotIds: string[] | undefined) => {
+    if (!plotIds || plotIds.length === 0) return '-';
+    return plotIds.map(id => parcels.find(p => p.id === id)?.name || id).join(', ');
+};
 
 export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
   if (!entries || entries.length === 0) {
@@ -152,6 +157,7 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
             <TableRow>
               <TableHead className="w-[150px]">Datum</TableHead>
               <TableHead>Invoer</TableHead>
+              <TableHead>Percelen</TableHead>
               <TableHead className="w-[150px]">Status</TableHead>
               <TableHead className="w-[50px] text-right"></TableHead>
             </TableRow>
@@ -163,7 +169,7 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                 <TableCell>
                   <Tooltip delayDuration={300}>
                       <TooltipTrigger asChild>
-                          <p className="truncate max-w-xs md:max-w-md lg:max-w-lg font-medium">{entry.rawInput}</p>
+                          <p className="truncate max-w-[200px] md:max-w-xs font-medium">{entry.rawInput}</p>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-md">
                           <p className="font-semibold mb-2">Volledige Invoer:</p>
@@ -171,6 +177,9 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                           {entry.validationMessage && <p className="mt-2 p-2 bg-secondary rounded-md text-secondary-foreground text-sm">{entry.validationMessage}</p>}
                       </TooltipContent>
                   </Tooltip>
+                </TableCell>
+                <TableCell className="text-sm truncate max-w-[200px]">
+                    {getParcelNames(entry.parsedData?.plots)}
                 </TableCell>
                 <TableCell>
                   <Badge
