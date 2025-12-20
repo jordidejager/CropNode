@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useForm, Controller, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -56,8 +56,6 @@ export function ParcelFormDialog({
     reset,
     control,
     watch,
-    setValue,
-    getValues,
   } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -70,26 +68,17 @@ export function ParcelFormDialog({
   })
 
   const watchedCrop = watch("crop")
-
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [varietyOptions, setVarietyOptions] = useState<ComboboxOption[]>([])
 
-  useEffect(() => {
+  const varietyOptions = useMemo<ComboboxOption[]>(() => {
     let options: string[] = []
     if (watchedCrop?.toLowerCase() === "appel") {
       options = appleVarieties
     } else if (watchedCrop?.toLowerCase() === "peer") {
       options = pearVarieties
     }
-    const newOptions = options.map((v) => ({ value: v, label: v }));
-    setVarietyOptions(newOptions);
-
-    const currentVariety = getValues("variety");
-    const currentVarietyIsValid = newOptions.some(opt => opt.value === currentVariety);
-    if (!currentVarietyIsValid && currentVariety) {
-       setValue("variety", "");
-    }
-  }, [watchedCrop, getValues, setValue])
+    return options.map((v) => ({ value: v, label: v }))
+  }, [watchedCrop])
 
   useEffect(() => {
     if (isOpen) {
@@ -188,15 +177,24 @@ export function ParcelFormDialog({
               <Controller
                 control={control}
                 name="variety"
-                render={({ field }) => (
-                  <Combobox
-                    options={varietyOptions}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    placeholder="Kies of maak een ras..."
-                    creatable
-                  />
-                )}
+                render={({ field }) => {
+                  // Reset variety if it's no longer valid for the selected crop
+                  const isVarietyValid = varietyOptions.some(opt => opt.value === field.value);
+                  if (field.value && !isVarietyValid) {
+                    // Schedule the reset for the next render to avoid state update issues
+                    setTimeout(() => field.onChange(""), 0);
+                  }
+                  
+                  return (
+                    <Combobox
+                      options={varietyOptions}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Kies of maak een ras..."
+                      creatable
+                    />
+                  );
+                }}
               />
               {errors.variety && (
                 <p className="text-red-500 text-xs mt-1">
