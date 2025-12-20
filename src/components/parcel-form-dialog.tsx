@@ -70,7 +70,6 @@ export function ParcelFormDialog({
   })
 
   const watchedCrop = watch("crop")
-  const watchedVariety = watch("variety");
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [varietyOptions, setVarietyOptions] = useState<ComboboxOption[]>([])
@@ -85,12 +84,12 @@ export function ParcelFormDialog({
     const newOptions = options.map((v) => ({ value: v, label: v }));
     setVarietyOptions(newOptions);
 
-    // Only reset variety if the currently selected one is not in the new list of options
-    const currentVarietyIsValid = newOptions.some(opt => opt.value === watchedVariety);
-    if (!currentVarietyIsValid && watchedVariety) {
+    const currentVariety = getValues("variety");
+    const currentVarietyIsValid = newOptions.some(opt => opt.value === currentVariety);
+    if (!currentVarietyIsValid && currentVariety) {
        setValue("variety", "");
     }
-  }, [watchedCrop, watchedVariety, setValue])
+  }, [watchedCrop, getValues, setValue])
 
   useEffect(() => {
     if (isOpen) {
@@ -128,7 +127,7 @@ export function ParcelFormDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
