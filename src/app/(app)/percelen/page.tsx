@@ -52,7 +52,7 @@ export default function PercelenPage() {
     loadParcels();
   };
 
-  const handleFormSubmit = async (values: Omit<Parcel, 'id' | 'variety'> & { variety: string | string[] }) => {
+  const handleFormSubmit = async (values: Omit<Parcel, 'id' | 'variety'> & { id?: string, variety: string | string[] }) => {
     if (!db) return;
 
     const varietyAsArray = Array.isArray(values.variety)
@@ -62,16 +62,18 @@ export default function PercelenPage() {
     const parcelData = { ...values, variety: varietyAsArray };
 
     try {
-      if ('id' in parcelData && parcelData.id) {
+      if (parcelData.id) {
         await updateParcel(db, parcelData as Parcel);
         toast({ title: 'Succesvol bijgewerkt', description: 'De perceelgegevens zijn opgeslagen.' });
       } else {
-        await addParcel(db, parcelData);
+        const { id, ...addData } = parcelData; // remove id for add operation
+        await addParcel(db, addData);
         toast({ title: 'Succesvol toegevoegd', description: 'Het nieuwe perceel is opgeslagen.' });
       }
       loadParcels();
       return true; // Indicate success
     } catch (error) {
+      console.error(error);
       toast({ variant: 'destructive', title: 'Fout opgetreden', description: 'Er is een fout opgetreden bij het opslaan.' });
       return false; // Indicate failure
     }
@@ -97,7 +99,6 @@ export default function PercelenPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">ID</TableHead>
                   <TableHead>Naam</TableHead>
                   <TableHead>Gewas</TableHead>
                   <TableHead>Ras</TableHead>
@@ -109,14 +110,13 @@ export default function PercelenPage() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell>
+                      <TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : parcels.length > 0 ? (
                   parcels.map((parcel) => (
                     <TableRow key={parcel.id}>
-                      <TableCell className="font-medium">{parcel.id}</TableCell>
-                      <TableCell>{parcel.name}</TableCell>
+                      <TableCell className="font-medium">{parcel.name}</TableCell>
                       <TableCell>{parcel.crop}</TableCell>
                       <TableCell>{Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety}</TableCell>
                       <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
@@ -154,7 +154,7 @@ export default function PercelenPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center h-24">
+                    <TableCell colSpan={5} className="text-center h-24">
                       Geen percelen gevonden. Voeg je eerste perceel toe om te beginnen.
                     </TableCell>
                   </TableRow>

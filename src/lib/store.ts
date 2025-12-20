@@ -12,7 +12,7 @@ const PARCELS_COLLECTION = 'parcels';
 // Parcel Functions
 export async function getParcels(db: Firestore): Promise<Parcel[]> {
   if (!db) return [];
-  const querySnapshot = await getDocs(collection(db, PARCELS_COLLECTION));
+  const querySnapshot = await getDocs(query(collection(db, PARCELS_COLLECTION), orderBy('name')));
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Parcel));
 }
 
@@ -25,6 +25,7 @@ export async function addParcel(db: Firestore, parcel: Omit<Parcel, 'id'>): Prom
 export async function updateParcel(db: Firestore, parcel: Parcel): Promise<void> {
   if (!db) throw new Error("Database not initialized");
   const { id, ...data } = parcel;
+  if (!id) throw new Error("Parcel ID is missing for update");
   const docRef = doc(db, PARCELS_COLLECTION, id);
   await setDoc(docRef, data, { merge: true });
 }
