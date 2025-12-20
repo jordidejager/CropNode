@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select"
-import { Combobox, ComboboxOption } from "./ui/combobox"
 import type { Parcel } from "@/lib/types"
 import { appleVarieties, pearVarieties } from "@/lib/data"
 
@@ -56,6 +55,7 @@ export function ParcelFormDialog({
     reset,
     control,
     watch,
+    setValue,
   } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -70,14 +70,13 @@ export function ParcelFormDialog({
   const watchedCrop = watch("crop")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const varietyOptions = useMemo<ComboboxOption[]>(() => {
-    let options: string[] = []
+  const varietyOptions = useMemo<string[]>(() => {
     if (watchedCrop?.toLowerCase() === "appel") {
-      options = appleVarieties
+      return appleVarieties
     } else if (watchedCrop?.toLowerCase() === "peer") {
-      options = pearVarieties
+      return pearVarieties
     }
-    return options.map((v) => ({ value: v, label: v }))
+    return []
   }, [watchedCrop])
 
   useEffect(() => {
@@ -101,6 +100,12 @@ export function ParcelFormDialog({
       }
     }
   }, [parcel, isOpen, reset])
+
+  // Reset variety when crop changes and the current variety is not in the new list
+  useEffect(() => {
+    setValue('variety', '');
+  }, [watchedCrop, setValue]);
+
 
   const handleClose = () => {
     onOpenChange(false)
@@ -177,24 +182,20 @@ export function ParcelFormDialog({
               <Controller
                 control={control}
                 name="variety"
-                render={({ field }) => {
-                  // Reset variety if it's no longer valid for the selected crop
-                  const isVarietyValid = varietyOptions.some(opt => opt.value === field.value);
-                  if (field.value && !isVarietyValid) {
-                    // Schedule the reset for the next render to avoid state update issues
-                    setTimeout(() => field.onChange(""), 0);
-                  }
-                  
-                  return (
-                    <Combobox
-                      options={varietyOptions}
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      placeholder="Kies of maak een ras..."
-                      creatable
-                    />
-                  );
-                }}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value} disabled={!watchedCrop}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kies een ras" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {varietyOptions.map((variety) => (
+                        <SelectItem key={variety} value={variety}>
+                          {variety}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
               {errors.variety && (
                 <p className="text-red-500 text-xs mt-1">

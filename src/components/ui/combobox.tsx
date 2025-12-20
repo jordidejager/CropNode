@@ -109,9 +109,9 @@ export function Combobox({
                   key={option.value}
                   value={option.label}
                   onSelect={() => {
-                    onValueChange(option.value)
-                    setSearch("")
-                    setOpen(false)
+                    onValueChange(option.value);
+                    setSearch('');
+                    setOpen(false);
                   }}
                 >
                   <Check
@@ -125,7 +125,7 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && !creatable && (
+              {showCreateOption && (
                  <CommandItem
                   value={search}
                   onSelect={() => {
