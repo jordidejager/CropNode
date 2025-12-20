@@ -82,14 +82,14 @@ export function Combobox({
           />
           <CommandList>
              <CommandEmpty>
-                {creatable ? `Geen resultaten. Druk op Enter om "${inputValue}" aan te maken.` : "Geen resultaten gevonden."}
+                {creatable && inputValue ? `Geen resultaten. Selecteer om "${inputValue}" aan te maken.` : "Geen resultaten gevonden."}
             </CommandEmpty>
             <CommandGroup>
               {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={handleSelect}
+                  value={option.label} // Use label for filtering in command
+                  onSelect={() => handleSelect(option.value)}
                 >
                   <Check
                     className={cn(
@@ -104,7 +104,7 @@ export function Combobox({
                  <CommandItem
                     key={inputValue}
                     value={inputValue}
-                    onSelect={handleSelect}
+                    onSelect={() => handleSelect(inputValue)}
                     className="italic"
                  >
                     <Check className="mr-2 h-4 w-4 opacity-0" />
