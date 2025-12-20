@@ -7,17 +7,19 @@ import type { Parcel } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle } from "lucide-react";
+import { MoreHorizontal, PlusCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
-import { AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -162,6 +164,11 @@ export default function PercelenPage() {
       return false; // Indicate failure
     }
   };
+  
+  const groupedParcels = parcels.reduce((acc, parcel) => {
+    (acc[parcel.name] = acc[parcel.name] || []).push(parcel);
+    return acc;
+  }, {} as Record<string, Parcel[]>);
 
 
   return (
@@ -199,51 +206,66 @@ export default function PercelenPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {loading ? (
-                          Array.from({ length: 5 }).map((_, i) => (
+                         {loading ? (
+                          Array.from({ length: 3 }).map((_, i) => (
                             <TableRow key={i}>
-                              <TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell>
+                              <TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell>
                             </TableRow>
                           ))
-                        ) : parcels.length > 0 ? (
-                          parcels.map((parcel) => (
-                            <TableRow key={parcel.id}>
-                              <TableCell className="font-medium">{parcel.name}</TableCell>
-                              <TableCell>{parcel.crop}</TableCell>
-                              <TableCell>{parcel.variety}</TableCell>
-                              <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
-                              <TableCell>
-                                <AlertDialog>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" className="h-8 w-8 p-0">
-                                        <span className="sr-only">Open menu</span>
-                                        <MoreHorizontal className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleEdit(parcel)}>Aanpassen</DropdownMenuItem>
-                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
-                                         <AlertDialogTrigger className="w-full text-red-500 relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">Verwijderen</AlertDialogTrigger>
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                   <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          Deze actie kan niet ongedaan worden gemaakt. Dit zal het perceel permanent verwijderen.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Annuleren</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDelete(parcel.id)} className="bg-destructive hover:bg-destructive/90">Verwijderen</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                        ) : Object.keys(groupedParcels).length > 0 ? (
+                           Object.entries(groupedParcels).map(([name, subParcels]) => {
+                                const totalArea = subParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+                                const isCollapsible = subParcels.length > 1;
+
+                                if (!isCollapsible) {
+                                    const parcel = subParcels[0];
+                                    return (
+                                        <TableRow key={parcel.id}>
+                                            <TableCell className="font-medium">{parcel.name}</TableCell>
+                                            <TableCell>{parcel.crop}</TableCell>
+                                            <TableCell>{parcel.variety}</TableCell>
+                                            <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
+                                            <TableCell>
+                                                 <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                }
+
+                                return (
+                                    <Collapsible asChild key={name} defaultOpen={false}>
+                                        <>
+                                            <TableRow className="font-medium bg-muted/50">
+                                                <TableCell>
+                                                    <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
+                                                         {({ open }) => open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                         {name}
+                                                    </CollapsibleTrigger>
+                                                </TableCell>
+                                                <TableCell>{subParcels[0].crop}</TableCell>
+                                                <TableCell>{subParcels.length} rassen</TableCell>
+                                                <TableCell className="text-right">{totalArea.toFixed(2)}</TableCell>
+                                                <TableCell></TableCell>
+                                            </TableRow>
+                                            <CollapsibleContent asChild>
+                                                <>
+                                                    {subParcels.map((parcel, index) => (
+                                                        <TableRow key={parcel.id} className={cn(index === subParcels.length -1 && "border-b-2 border-b-muted-foreground/50")}>
+                                                            <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                                            <TableCell className="text-muted-foreground"></TableCell>
+                                                            <TableCell className="text-muted-foreground">{parcel.variety}</TableCell>
+                                                            <TableCell className="text-right text-muted-foreground">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
+                                                            <TableCell>
+                                                                <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </>
+                                            </CollapsibleContent>
+                                        </>
+                                    </Collapsible>
+                                );
+                           })
                         ) : (
                           <TableRow>
                             <TableCell colSpan={5} className="text-center h-24">
@@ -281,5 +303,39 @@ export default function PercelenPage() {
         onSubmit={handleFormSubmit}
       />
     </>
+  );
+}
+
+
+function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p: Parcel) => void, onDelete: (id: string) => void }) {
+  return (
+    <AlertDialog>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onEdit(parcel)}>Aanpassen</DropdownMenuItem>
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
+              <AlertDialogTrigger className="w-full text-red-500 relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">Verwijderen</AlertDialogTrigger>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deze actie kan niet ongedaan worden gemaakt. Dit zal het perceel permanent verwijderen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onDelete(parcel.id)} className="bg-destructive hover:bg-destructive/90">Verwijderen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
   );
 }
