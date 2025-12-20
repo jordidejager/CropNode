@@ -237,10 +237,12 @@ export default function PercelenPage() {
                                         <>
                                             <TableRow className="font-medium bg-muted/50">
                                                 <TableCell>
-                                                    <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
-                                                         {({ open }) => open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                  <CollapsibleTrigger asChild>
+                                                      <button className="flex items-center gap-2 w-full text-left">
+                                                         <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
                                                          {name}
-                                                    </CollapsibleTrigger>
+                                                      </button>
+                                                  </CollapsibleTrigger>
                                                 </TableCell>
                                                 <TableCell>{subParcels[0].crop}</TableCell>
                                                 <TableCell>{subParcels.length} rassen</TableCell>
@@ -250,7 +252,7 @@ export default function PercelenPage() {
                                             <CollapsibleContent asChild>
                                                 <>
                                                     {subParcels.map((parcel, index) => (
-                                                        <TableRow key={parcel.id} className={cn(index === subParcels.length -1 && "border-b-2 border-b-muted-foreground/50")}>
+                                                        <TableRow key={parcel.id} className="bg-background hover:bg-muted/50">
                                                             <TableCell className="pl-12 text-muted-foreground"></TableCell>
                                                             <TableCell className="text-muted-foreground"></TableCell>
                                                             <TableCell className="text-muted-foreground">{parcel.variety}</TableCell>
