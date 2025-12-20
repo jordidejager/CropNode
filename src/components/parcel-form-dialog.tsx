@@ -77,11 +77,9 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
     }
   }, [parcel, isOpen, reset]);
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      reset();
-    }
-    onOpenChange(open);
+  const handleClose = () => {
+    reset();
+    onOpenChange(false);
   }
 
   const processSubmit: SubmitHandler<ParcelFormValues> = async (data) => {
@@ -89,12 +87,12 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
     const success = await onSubmit(data);
     setIsSubmitting(false);
     if (success) {
-      handleOpenChange(false);
+      handleClose();
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{parcel ? 'Perceel Aanpassen' : 'Nieuw Perceel Toevoegen'}</DialogTitle>
@@ -165,7 +163,7 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>Annuleren</Button>
+            <Button type="button" variant="outline" onClick={handleClose}>Annuleren</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Opslaan...' : 'Opslaan'}
             </Button>
