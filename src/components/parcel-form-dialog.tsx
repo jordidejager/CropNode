@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from "react"
 import { useForm, Controller, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import dynamic from 'next/dynamic';
 import {
   Dialog,
   DialogContent,
@@ -25,13 +24,9 @@ import {
 } from "./ui/select"
 import type { Parcel } from "@/lib/types"
 import { appleVarieties, pearVarieties } from "@/lib/data"
-import { Map, MapPin } from "lucide-react"
+import { MapPin } from "lucide-react"
 import { Skeleton } from "./ui/skeleton"
-
-const ParcelDrawingMap = dynamic(
-  () => import('@/components/parcel-drawing-map').then(m => m.ParcelDrawingMap),
-  { ssr: false, loading: () => <Skeleton className="w-full h-full" /> }
-);
+import { ParcelDrawingMap } from "./parcel-drawing-map"
 
 
 const formSchema = z.object({
@@ -82,8 +77,7 @@ export function ParcelFormDialog({
   const watchedCrop = watch("crop")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [mapRenderKey, setMapRenderKey] = useState(0);
-
+  
   const varietyOptions = useMemo(() => {
     if (watchedCrop?.toLowerCase() === "appel") {
       return appleVarieties
@@ -123,12 +117,15 @@ export function ParcelFormDialog({
   }
 
   const openMap = () => {
-    setMapRenderKey(prev => prev + 1); // Increment key to force re-render
     setIsMapOpen(true);
   }
   
   const handleMapSave = (coordinates: { lat: number; lng: number }[]) => {
     setValue('location', coordinates);
+    setIsMapOpen(false);
+  };
+  
+  const handleMapCancel = () => {
     setIsMapOpen(false);
   };
 
@@ -267,25 +264,35 @@ export function ParcelFormDialog({
           </form>
         </DialogContent>
       </Dialog>
+      
       <Dialog open={isMapOpen} onOpenChange={setIsMapOpen}>
           <DialogContent className="max-w-4xl h-[80vh]">
               <DialogHeader>
                   <DialogTitle>Teken perceel op de kaart</DialogTitle>
                   <DialogDescription>
-                      Teken de omtrek van het perceel op de kaart en klik op 'Opslaan' als je klaar bent.
+                      Teken de omtrek van het perceel op de kaart. Klik op 'Opslaan' als je klaar bent of 'Annuleren' om te sluiten.
                   </DialogDescription>
               </DialogHeader>
-              <div className="h-[calc(80vh-150px)]">
+              <div className="h-[calc(80vh-200px)] w-full">
                 {isMapOpen && (
                     <ParcelDrawingMap
-                        key={mapRenderKey} 
                         parcel={getValues()}
                         onSave={handleMapSave}
                     />
                 )}
               </div>
+               <DialogFooter>
+                  <Button type="button" variant="outline" onClick={handleMapCancel}>
+                    Annuleren
+                  </Button>
+                  <Button type="button" onClick={() => setIsMapOpen(false)}>
+                    Coördinaten Opslaan
+                  </Button>
+              </DialogFooter>
           </DialogContent>
       </Dialog>
     </>
   )
 }
+
+    

@@ -1,12 +1,22 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import type { LatLngExpression, Map, Polygon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Parcel } from '@/lib/types';
+import L from 'leaflet';
 
-const mapCenter: LatLngExpression = [52.1326, 5.2913];
+const mapCenter: L.LatLngExpression = [52.1326, 5.2913];
+
+// Fix for default icon issue with Leaflet in React
+if (typeof window !== 'undefined') {
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  });
+}
 
 interface ParcelDrawingMapProps {
   parcel?: Parcel | null;
@@ -15,12 +25,10 @@ interface ParcelDrawingMapProps {
 
 export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSave }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<Map | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
 
   useEffect(() => {
-    const L = require('leaflet');
-    require('leaflet-draw');
-    
     if (mapContainerRef.current && !mapRef.current) {
         const map = L.map(mapContainerRef.current).setView(mapCenter, 8);
         mapRef.current = map;
@@ -31,10 +39,11 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
 
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
+        drawnItemsRef.current = drawnItems;
         
         if (parcel?.location && parcel.location.length > 0) {
-            const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as LatLngExpression[];
-            const polygon: Polygon = L.polygon(latLngs, {
+            const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as L.LatLngExpression[];
+            const polygon: L.Polygon = L.polygon(latLngs, {
                 color: 'hsl(var(--primary))',
                 fillColor: 'hsl(var(--primary))',
                 fillOpacity: 0.5,
@@ -45,7 +54,8 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
 
         const drawControl = new L.Control.Draw({
             edit: {
-                featureGroup: drawnItems
+                featureGroup: drawnItems,
+                remove: true,
             },
             draw: {
                 polygon: {
@@ -67,13 +77,15 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
             const layer = event.layer;
             drawnItems.clearLayers();
             drawnItems.addLayer(layer);
-            onSave(layer.getLatLngs()[0]);
+            const latLngs = layer.getLatLngs()[0].map((latlng: L.LatLng) => ({ lat: latlng.lat, lng: latlng.lng }));
+            onSave(latLngs);
         });
         
         map.on(L.Draw.Event.EDITED, (event: any) => {
             const layers = event.layers.getLayers();
             if (layers.length > 0) {
-              onSave(layers[0].getLatLngs()[0]);
+              const latLngs = layers[0].getLatLngs()[0].map((latlng: L.LatLng) => ({ lat: latlng.lat, lng: latlng.lng }));
+              onSave(latLngs);
             }
         });
         
@@ -92,3 +104,5 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
 
   return <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />;
 };
+
+    

@@ -12,13 +12,21 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import type { LatLngExpression } from 'leaflet';
-import { MapContainer, TileLayer, Polygon, Tooltip, FeatureGroup } from 'react-leaflet';
-import { EditControl } from "react-leaflet-draw";
+import L, { type LatLngExpression } from 'leaflet';
+
+// Fix for default icon issue with Leaflet in React
+if (typeof window !== 'undefined') {
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  });
+}
 
 
 export default function PercelenPage() {
@@ -30,6 +38,9 @@ export default function PercelenPage() {
   
   const db = useFirestore();
   const { toast } = useToast();
+  const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
 
   async function loadParcels() {
     if (!db) return;
@@ -44,6 +55,54 @@ export default function PercelenPage() {
       loadParcels();
     }
   }, [db]);
+
+
+  useEffect(() => {
+    if (activeTab === 'map' && mapContainerRef.current) {
+        if (!mapRef.current) {
+            const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
+            mapRef.current = map;
+    
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            }).addTo(map);
+        }
+
+        // Clear existing polygons before adding new ones
+        mapRef.current.eachLayer(layer => {
+            if (layer instanceof L.Polygon) {
+                mapRef.current?.removeLayer(layer);
+            }
+        });
+
+        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+        if (parcelsWithLocation.length > 0) {
+            const featureGroup = L.featureGroup();
+            parcelsWithLocation.forEach(parcel => {
+                const latLngs = parcel.location as LatLngExpression[];
+                const polygon = L.polygon(latLngs, { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 });
+                
+                polygon.bindTooltip(`
+                    <div class="text-center">
+                        <p class="font-bold">${parcel.name}</p>
+                        <p>${parcel.variety}</p>
+                        <p>${parcel.area} ha</p>
+                    </div>
+                `);
+
+                featureGroup.addLayer(polygon);
+            });
+            featureGroup.addTo(mapRef.current);
+            mapRef.current.fitBounds(featureGroup.getBounds());
+        }
+
+    } else if (activeTab !== 'map' && mapRef.current) {
+        // This tab is not active, destroy the map.
+        mapRef.current.remove();
+        mapRef.current = null;
+    }
+}, [activeTab, parcels, loading]);
+
 
 
   const handleAdd = () => {
@@ -84,39 +143,6 @@ export default function PercelenPage() {
       toast({ variant: 'destructive', title: 'Fout opgetreden', description: 'Er is een fout opgetreden bij het opslaan.' });
       return false; // Indicate failure
     }
-  };
-  
-  const MapView = ({ parcels }: { parcels: Parcel[] }) => {
-      const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
-      let mapCenter: LatLngExpression = [52.1326, 5.2913]; // Default center
-      let zoomLevel = 8; // Default zoom
-      
-      let bounds: LatLngExpression[] | undefined = undefined;
-      if (parcelsWithLocation.length > 0) {
-          bounds = parcelsWithLocation.flatMap(p => p.location) as LatLngExpression[];
-      }
-      
-      return (
-          <MapContainer center={mapCenter} zoom={zoomLevel} bounds={bounds} style={{ height: '100%', width: '100%' }}>
-              <TileLayer
-                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                  attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
-              />
-              <FeatureGroup>
-                {parcelsWithLocation.map(parcel => (
-                    <Polygon key={parcel.id} positions={parcel.location as LatLngExpression[]} pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 }}>
-                        <Tooltip>
-                            <div className="text-center">
-                                <p className="font-bold">{parcel.name}</p>
-                                <p>{parcel.variety}</p>
-                                <p>{parcel.area} ha</p>
-                            </div>
-                        </Tooltip>
-                    </Polygon>
-                ))}
-              </FeatureGroup>
-          </MapContainer>
-      );
   };
 
 
@@ -179,9 +205,9 @@ export default function PercelenPage() {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                       <DropdownMenuItem onClick={() => handleEdit(parcel)}>Aanpassen</DropdownMenuItem>
-                                      <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem className="text-red-500">Verwijderen</DropdownMenuItem>
-                                      </AlertDialogTrigger>
+                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
+                                         <AlertDialogTrigger className="w-full text-red-500 relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">Verwijderen</AlertDialogTrigger>
+                                      </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
                                    <AlertDialogContent>
@@ -213,23 +239,21 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
+        <TabsContent value="map">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Kaartoverzicht</CardTitle>
+                    <CardDescription>
+                        {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="h-[600px] w-full rounded-md border overflow-hidden" ref={mapContainerRef}>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
       </Tabs>
-      
-      {activeTab === 'map' && (
-        <Card>
-            <CardHeader>
-                <CardTitle>Kaartoverzicht</CardTitle>
-                <CardDescription>
-                    {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="h-[600px] w-full rounded-md border overflow-hidden">
-                  <MapView parcels={parcels} />
-                </div>
-            </CardContent>
-        </Card>
-      )}
       
       <ParcelFormDialog
         isOpen={isFormOpen}
