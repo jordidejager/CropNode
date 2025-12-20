@@ -1,26 +1,22 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useFirestore } from '@/firebase';
-import { getParcels, addParcel, updateParcel, deleteParcel } from '@/lib/store';
-import type { Parcel } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ParcelFormDialog } from '@/components/parcel-form-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import dynamic from 'next/dynamic';
-import { AlertDialogTrigger } from '@/components/ui/alert-dialog';
-
-const ParcelMapView = dynamic(() => import('@/components/parcel-map-view').then(m => m.ParcelMapView), {
-  ssr: false,
-  loading: () => <Skeleton className="h-[600px] w-full" />,
-});
+import { useEffect, useState, useRef } from "react";
+import { useFirestore } from "@/firebase";
+import { getParcels, addParcel, updateParcel, deleteParcel } from "@/lib/store";
+import type { Parcel } from "@/lib/types";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { MoreHorizontal, PlusCircle } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ParcelFormDialog } from "@/components/parcel-form-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
+import type { Map, LatLngExpression } from 'leaflet';
 
 
 export default function PercelenPage() {
@@ -32,6 +28,10 @@ export default function PercelenPage() {
   
   const db = useFirestore();
   const { toast } = useToast();
+
+  const mapRef = useRef<Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
 
   async function loadParcels() {
     if (!db) return;
@@ -46,6 +46,55 @@ export default function PercelenPage() {
       loadParcels();
     }
   }, [db]);
+
+  useEffect(() => {
+    if (activeTab === 'map' && mapContainerRef.current) {
+        if (!mapRef.current) { // Only initialize if map doesn't exist
+            const L = require('leaflet');
+            const mapCenter: LatLngExpression = [52.1326, 5.2913];
+            
+            const map = L.map(mapContainerRef.current).setView(mapCenter, 8);
+            mapRef.current = map;
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            }).addTo(map);
+
+            const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+            parcelsWithLocation.forEach(parcel => {
+                const polygon = L.polygon(parcel.location as LatLngExpression[], { 
+                    color: 'hsl(var(--primary))', 
+                    fillColor: 'hsl(var(--primary))', 
+                    fillOpacity: 0.4 
+                }).addTo(map);
+
+                polygon.bindTooltip(`
+                    <div class="text-center">
+                        <p class="font-bold">${parcel.name}</p>
+                        <p>${parcel.variety}</p>
+                        <p>${parcel.area} ha</p>
+                    </div>
+                `);
+            });
+        }
+    } else {
+        if (mapRef.current) {
+            mapRef.current.remove();
+            mapRef.current = null;
+        }
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [activeTab, parcels]);
+
 
   const handleAdd = () => {
     setEditingParcel(null);
@@ -180,10 +229,23 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
+
+        <TabsContent value="map">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Kaartoverzicht</CardTitle>
+                    <CardDescription>
+                        {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div ref={mapContainerRef} className="h-[600px] w-full rounded-md border overflow-hidden" />
+                </CardContent>
+            </Card>
+        </TabsContent>
+
       </Tabs>
       
-      {activeTab === 'map' && <ParcelMapView parcels={parcels} />}
-
       <ParcelFormDialog
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
