@@ -4,6 +4,7 @@ export type Parcel = {
   crop: string;
   variety: string;
   area: number; // in hectares
+  location?: { lat: number; lng: number }[]; // Array of coordinates for polygon
 };
 
 export type Middel = {

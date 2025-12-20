@@ -1,0 +1,28 @@
+diff --git a/node_modules/react-leaflet-draw/dist/react-leaflet-draw.js b/node_modules/react-leaflet-draw/dist/react-leaflet-draw.js
+index 9a2491b..0489b4f 100644
+--- a/node_modules/react-leaflet-draw/dist/react-leaflet-draw.js
++++ b/node_modules/react-leaflet-draw/dist/react-leaflet-draw.js
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ if (process.env.NODE_ENV === 'production') {
+-  module.exports = require('./react-leaflet-draw.cjs.production.min.js');
++  module.exports = require('./react-leaflet-draw.cjs.development.js');
+ } else {
+   module.exports = require('./react-leaflet-draw.cjs.development.js');
+ }
+diff --git a/node_modules/react-leaflet-draw/package.json b/node_modules/react-leaflet-draw/package.json
+index 3b5f3a7..49a463e 100644
+--- a/node_modules/react-leaflet-draw/package.json
++++ b/node_modules/react-leaflet-draw/package.json
+@@ -34,7 +34,7 @@
+     "leaflet": ">=1.0.0 <2.0.0",
+     "leaflet-draw": ">=1.0.0 <2.0.0",
+     "prop-types": ">=15.6.0 <16.0.0",
+-    "react": ">=16.8.0 <18.0.0",
+-    "react-dom": ">=16.8.0 <18.0.0"
++    "react": ">=16.8.0 < 20.0.0",
++    "react-dom": ">=16.8.0 < 20.0.0"
+   },
+   "resolutions": {}
+ }
