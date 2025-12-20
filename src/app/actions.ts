@@ -196,10 +196,10 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
 
     if (isValid) {
         updatedEntryData.status = 'Akkoord';
-        updatedEntryData.validationMessage = undefined;
+        delete updatedEntryData.validationMessage;
     } else {
         updatedEntryData.status = 'Te Controleren';
-        updatedEntryData.validationMessage = validationMessage || undefined;
+        updatedEntryData.validationMessage = validationMessage;
     }
 
     const updatedEntry = updatedEntryData as LogbookEntry;
@@ -265,7 +265,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
         
         entry.status = 'Akkoord';
-        entry.validationMessage = undefined;
+        delete entry.validationMessage;
 
         await updateLogbookEntry(firestore, entry);
 
@@ -294,3 +294,5 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: false, message };
     }
 }
+
+    
