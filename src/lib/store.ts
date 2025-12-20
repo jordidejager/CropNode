@@ -1,6 +1,7 @@
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp } from 'firebase/firestore';
 import type { LogbookEntry, ParcelHistoryEntry } from './types';
-import { middelMatrix } from './data';
+import { products as staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
@@ -13,10 +14,11 @@ export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> 
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
+    const dateValue = data.date;
     return { 
       id: doc.id, 
       ...data,
-      date: (data.date as Timestamp)?.toDate() || new Date(),
+      date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
     } as LogbookEntry;
   });
 }
@@ -31,7 +33,7 @@ export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Pr
     if (!db) throw new Error("Database not initialized");
     const { id, ...data } = entry;
     const docRef = doc(db, LOGBOOK_COLLECTION, id);
-    await setDoc(docRef, data);
+    await setDoc(docRef, data, { merge: true });
 }
 
 
@@ -41,10 +43,11 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
+    const dateValue = data.date;
     return {
        id: doc.id, 
        ...data,
-       date: (data.date as Timestamp)?.toDate() || new Date(),
+       date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
     } as ParcelHistoryEntry
   });
 }
@@ -60,7 +63,7 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 }
 
 export async function getProducts(db: Firestore): Promise<string[]> {
-    const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
+    const staticProducts = [...new Set(staticProductsData.map(m => m))];
     if (!db) {
         return staticProducts;
     }
