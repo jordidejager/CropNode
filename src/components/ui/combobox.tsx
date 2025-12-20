@@ -42,23 +42,8 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState("")
 
-  const getDisplayValue = () => {
-    return options.find((opt) => opt.value === value)?.label || value || placeholder
-  }
-
-  const handleSelect = (currentValue: string) => {
-    onValueChange(currentValue === value ? "" : currentValue)
-    setInputValue("")
-    setOpen(false)
-  }
-
-  const filteredOptions = options.filter(option => 
-    option.label.toLowerCase().includes(inputValue.toLowerCase())
-  );
-  
-  const showCreateOption = creatable && inputValue && !options.some(option => option.label.toLowerCase() === inputValue.toLowerCase());
+  const selectedOption = options.find((option) => option.value === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -69,27 +54,31 @@ export function Combobox({
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
         >
-          <span className="truncate">{getDisplayValue()}</span>
+          <span className="truncate">{selectedOption?.label || value || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Zoek of maak nieuw..."
-            value={inputValue}
-            onValueChange={setInputValue}
-          />
+        <Command
+          filter={(searchValue, itemValue) => {
+            if (creatable) return 1;
+            return itemValue.toLowerCase().includes(searchValue.toLowerCase()) ? 1 : 0
+          }}
+        >
+          <CommandInput placeholder="Zoek of maak nieuw..." />
           <CommandList>
-             <CommandEmpty>
-                {creatable && inputValue ? `Geen resultaten. Selecteer om "${inputValue}" aan te maken.` : "Geen resultaten gevonden."}
+            <CommandEmpty>
+                {creatable ? `Geen resultaten. Selecteer om aan te maken.` : "Geen resultaten gevonden."}
             </CommandEmpty>
             <CommandGroup>
-              {filteredOptions.map((option) => (
+              {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label} // Use label for filtering in command
-                  onSelect={() => handleSelect(option.value)}
+                  value={option.value}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue === value ? "" : currentValue)
+                    setOpen(false)
+                  }}
                 >
                   <Check
                     className={cn(
@@ -100,15 +89,23 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && (
-                 <CommandItem
-                    key={inputValue}
-                    value={inputValue}
-                    onSelect={() => handleSelect(inputValue)}
-                    className="italic"
+               {creatable && (
+                <CommandItem
+                    value="creatable-item" // This is a dummy value
+                    onSelect={(currentValue) => {
+                        // The `currentValue` from onSelect will be the input text
+                        // We need to get it from the command's internal state.
+                        // This is a bit of a hack, but it's how we can get the search value.
+                        const commandEl = document.querySelector('[cmdk-root=true]');
+                        const inputValue = (commandEl as any)?.getAttribute('data-value') || '';
+                        if (inputValue) {
+                            onValueChange(inputValue);
+                            setOpen(false);
+                        }
+                    }}
                  >
                     <Check className="mr-2 h-4 w-4 opacity-0" />
-                    Maak "{inputValue}" aan
+                    <span className="italic">Nieuw ras aanmaken...</span>
                  </CommandItem>
               )}
             </CommandGroup>
