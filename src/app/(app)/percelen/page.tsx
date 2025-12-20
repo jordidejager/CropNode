@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useFirestore } from '@/firebase';
 import { getParcels, addParcel, updateParcel, deleteParcel } from '@/lib/store';
 import type { Parcel } from '@/lib/types';
@@ -15,7 +15,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dynamic from 'next/dynamic';
-import { ParcelMapView } from '@/components/parcel-map-view';
+
+const ParcelMapView = dynamic(() => import('@/components/parcel-map-view').then(m => m.ParcelMapView), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[600px] w-full" />,
+});
 
 
 export default function PercelenPage() {
@@ -175,7 +179,7 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
-        <TabsContent value="map" forceMount>
+        <TabsContent value="map" forceMount={false} className="data-[state=inactive]:hidden">
              {activeTab === 'map' && <ParcelMapView parcels={parcels} />}
         </TabsContent>
       </Tabs>
