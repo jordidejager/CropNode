@@ -21,15 +21,16 @@ export function ParcelMapView({ parcels }: ParcelMapViewProps) {
     const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
     const mapRef = useRef<Map>(null);
 
-    useEffect(() => {
+     useEffect(() => {
+        const map = mapRef.current;
         // This is the cleanup function.
         // It will be called when the component is unmounted.
         return () => {
-            if (mapRef.current) {
-                mapRef.current.remove();
+            if (map) {
+                map.remove();
             }
         };
-    }, []);
+    }, [mapRef]);
 
     return (
         <Card>
@@ -41,7 +42,7 @@ export function ParcelMapView({ parcels }: ParcelMapViewProps) {
             </CardHeader>
             <CardContent>
                 <div className="h-[600px] w-full rounded-md border overflow-hidden">
-                    <MapContainer whenCreated={map => mapRef.current = map} center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }}>
+                    <MapContainer ref={mapRef} center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }}>
                         <TileLayer
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
