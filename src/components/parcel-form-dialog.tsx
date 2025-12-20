@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useForm, Controller, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,7 +24,6 @@ import {
 } from "./ui/select"
 import { Combobox, ComboboxOption } from "./ui/combobox"
 import type { Parcel } from "@/lib/types"
-import { useFirestore } from "@/firebase"
 import { appleVarieties, pearVarieties } from "@/lib/data"
 
 const formSchema = z.object({
@@ -58,6 +56,8 @@ export function ParcelFormDialog({
     reset,
     control,
     watch,
+    setValue,
+    getValues,
   } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -70,11 +70,10 @@ export function ParcelFormDialog({
   })
 
   const watchedCrop = watch("crop")
+  const watchedVariety = watch("variety");
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [varietyOptions, setVarietyOptions] = useState<ComboboxOption[]>([])
-
-  const db = useFirestore()
 
   useEffect(() => {
     let options: string[] = []
@@ -83,8 +82,15 @@ export function ParcelFormDialog({
     } else if (watchedCrop?.toLowerCase() === "peer") {
       options = pearVarieties
     }
-    setVarietyOptions(options.map((v) => ({ value: v, label: v })))
-  }, [watchedCrop])
+    const newOptions = options.map((v) => ({ value: v, label: v }));
+    setVarietyOptions(newOptions);
+
+    // Only reset variety if the currently selected one is not in the new list of options
+    const currentVarietyIsValid = newOptions.some(opt => opt.value === watchedVariety);
+    if (!currentVarietyIsValid && watchedVariety) {
+       setValue("variety", "");
+    }
+  }, [watchedCrop, watchedVariety, setValue])
 
   useEffect(() => {
     if (isOpen) {
@@ -109,7 +115,6 @@ export function ParcelFormDialog({
   }, [parcel, isOpen, reset])
 
   const handleClose = () => {
-    reset()
     onOpenChange(false)
   }
 
@@ -123,7 +128,7 @@ export function ParcelFormDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
