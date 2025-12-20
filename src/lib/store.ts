@@ -1,13 +1,41 @@
 
-import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc } from 'firebase/firestore';
-import type { LogbookEntry, ParcelHistoryEntry } from './types';
+import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry } from './types';
 import { products as staticProductsData, middelMatrix } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
 const PRODUCTS_COLLECTION = 'products';
+const PARCELS_COLLECTION = 'parcels';
 
 
+// Parcel Functions
+export async function getParcels(db: Firestore): Promise<Parcel[]> {
+  if (!db) return [];
+  const querySnapshot = await getDocs(collection(db, PARCELS_COLLECTION));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Parcel));
+}
+
+export async function addParcel(db: Firestore, parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
+  if (!db) throw new Error("Database not initialized");
+  const docRef = await addDoc(collection(db, PARCELS_COLLECTION), parcel);
+  return { id: docRef.id, ...parcel };
+}
+
+export async function updateParcel(db: Firestore, parcel: Parcel): Promise<void> {
+  if (!db) throw new Error("Database not initialized");
+  const { id, ...data } = parcel;
+  const docRef = doc(db, PARCELS_COLLECTION, id);
+  await setDoc(docRef, data, { merge: true });
+}
+
+export async function deleteParcel(db: Firestore, parcelId: string): Promise<void> {
+  if (!db) throw new Error("Database not initialized");
+  await deleteDoc(doc(db, PARCELS_COLLECTION, parcelId));
+}
+
+
+// Logbook Functions
 export async function getLogbookEntry(db: Firestore, id: string): Promise<LogbookEntry | null> {
   if (!db) return null;
   const docRef = doc(db, LOGBOOK_COLLECTION, id);
@@ -18,10 +46,20 @@ export async function getLogbookEntry(db: Firestore, id: string): Promise<Logboo
   }
   const data = docSnap.data();
   const dateValue = data.date;
+  
+  let date;
+  if (dateValue instanceof Timestamp) {
+    date = dateValue.toDate();
+  } else if (typeof dateValue === 'string') {
+    date = new Date(dateValue);
+  } else {
+    date = new Date(); // Fallback
+  }
+
   return {
     id: docSnap.id,
     ...data,
-    date: dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue),
+    date,
   } as LogbookEntry;
 }
 
@@ -32,7 +70,16 @@ export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> 
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     const dateValue = data.date;
-    const date = dateValue instanceof Timestamp ? dateValue.toDate() : new Date(dateValue);
+    
+    let date;
+    if (dateValue instanceof Timestamp) {
+      date = dateValue.toDate();
+    } else if (typeof dateValue === 'string') {
+      date = new Date(dateValue);
+    } else {
+      date = new Date(); // Fallback
+    }
+
     return { 
       id: doc.id, 
       ...data,
@@ -71,6 +118,7 @@ export async function deleteLogbookEntry(db: Firestore, entryId: string): Promis
 }
 
 
+// Parcel History Functions
 export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHistoryEntry[]> {
   if (!db) return [];
   const q = query(collection(db, HISTORY_COLLECTION), orderBy('date', 'desc'));
@@ -87,16 +135,27 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   });
 }
 
-export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[]) {
+export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[], parcels: Parcel[]) {
   if (!db) throw new Error("Database not initialized");
   const batch = writeBatch(db);
   entries.forEach(entry => {
-    const docRef = doc(collection(db, HISTORY_COLLECTION));
-    batch.set(docRef, entry);
+    const parcel = parcels.find(p => p.id === entry.parcelId);
+    if (parcel) {
+        const docRef = doc(collection(db, HISTORY_COLLECTION));
+        const historyEntry: Omit<ParcelHistoryEntry, 'id'> = {
+            ...entry,
+            parcelName: parcel.name,
+            crop: parcel.crop,
+            variety: parcel.variety,
+        };
+        batch.set(docRef, historyEntry);
+    }
   });
   await batch.commit();
 }
 
+
+// Product Functions
 export async function getProducts(db: Firestore): Promise<string[]> {
     const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
     if (!db) {

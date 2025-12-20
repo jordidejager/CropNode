@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getParcelHistoryEntries } from '@/lib/store';
-import { parcels } from '@/lib/data';
+import { getParcelHistoryEntries, getParcels } from '@/lib/store';
 import { HistoryDashboard } from '@/components/history-dashboard';
-import type { ParcelHistoryEntry } from '@/lib/types';
+import type { Parcel, ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFirestore } from '@/firebase';
 
 export default function PerceelHistoriePage() {
   const [historyEntries, setHistoryEntries] = useState<ParcelHistoryEntry[]>([]);
+  const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
   const db = useFirestore();
 
@@ -20,8 +20,12 @@ export default function PerceelHistoriePage() {
     async function loadHistory() {
       if (!db) return;
       setLoading(true);
-      const fetchedEntries = await getParcelHistoryEntries(db);
+      const [fetchedEntries, fetchedParcels] = await Promise.all([
+        getParcelHistoryEntries(db),
+        getParcels(db)
+      ]);
       setHistoryEntries(fetchedEntries);
+      setParcels(fetchedParcels);
       setLoading(false);
     }
     loadHistory();

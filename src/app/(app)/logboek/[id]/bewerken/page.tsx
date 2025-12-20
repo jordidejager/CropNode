@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { getLogbookEntry, getProducts } from '@/lib/store';
-import type { LogbookEntry, ProductEntry } from '@/lib/types';
+import { getLogbookEntry, getProducts, getParcels } from '@/lib/store';
+import type { LogbookEntry, Parcel, ProductEntry } from '@/lib/types';
 import { useFirestore } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
 import { EditParcels } from '@/components/edit-parcels';
 import { EditProducts } from '@/components/edit-products';
-import { parcels } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { updateAndConfirmEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +18,7 @@ import { useRouter } from 'next/navigation';
 export default function EditLogbookEntryPage({ params }: { params: { id: string } }) {
   const [entry, setEntry] = useState<LogbookEntry | null>(null);
   const [allProducts, setAllProducts] = useState<string[]>([]);
+  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
   const [isConfirming, startConfirmTransition] = useTransition();
 
@@ -31,12 +31,14 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
 
     async function loadData() {
       setLoading(true);
-      const [fetchedEntry, fetchedProducts] = await Promise.all([
+      const [fetchedEntry, fetchedProducts, fetchedParcels] = await Promise.all([
         getLogbookEntry(db, params.id),
-        getProducts(db)
+        getProducts(db),
+        getParcels(db)
       ]);
       setEntry(fetchedEntry);
       setAllProducts(fetchedProducts);
+      setAllParcels(fetchedParcels);
       setLoading(false);
     }
     loadData();
@@ -127,7 +129,7 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
               onProductsChange={handleProductsChange}
             />
             <EditParcels
-              allParcels={parcels}
+              allParcels={allParcels}
               selectedParcelIds={entry.parsedData.plots}
               onSelectionChange={handleParcelsChange}
             />

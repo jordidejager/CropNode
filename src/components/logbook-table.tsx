@@ -2,7 +2,7 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import type { LogbookEntry, LogStatus } from '@/lib/types';
+import type { LogbookEntry, Parcel, LogStatus } from '@/lib/types';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -32,12 +32,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { deleteLogbookEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { parcels } from '@/lib/data';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useFirestore } from '@/firebase';
+import { getParcels } from '@/lib/store';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -141,12 +142,12 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
   );
 }
 
-function ParcelListCollapsible({ plotIds }: { plotIds: string[] | undefined }) {
+function ParcelListCollapsible({ plotIds, allParcels }: { plotIds: string[] | undefined, allParcels: Parcel[] }) {
     if (!plotIds || plotIds.length === 0) {
         return <span>-</span>;
     }
 
-    const parcelNames = plotIds.map(id => parcels.find(p => p.id === id)?.name || id);
+    const parcelNames = plotIds.map(id => allParcels.find(p => p.id === id)?.name || id);
     const count = parcelNames.length;
 
     return (
@@ -172,6 +173,19 @@ function ParcelListCollapsible({ plotIds }: { plotIds: string[] | undefined }) {
 }
 
 export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
+  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
+  const db = useFirestore();
+
+  useEffect(() => {
+    async function loadParcels() {
+      if(db) {
+        const parcels = await getParcels(db);
+        setAllParcels(parcels);
+      }
+    }
+    loadParcels();
+  }, [db]);
+
   if (!entries || entries.length === 0) {
     return <p className="text-center text-muted-foreground py-10">Nog geen invoer in het logboek.</p>;
   }
@@ -205,7 +219,7 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                   </Tooltip>
                 </TableCell>
                 <TableCell className="text-sm">
-                    <ParcelListCollapsible plotIds={entry.parsedData?.plots} />
+                    <ParcelListCollapsible plotIds={entry.parsedData?.plots} allParcels={allParcels} />
                 </TableCell>
                 <TableCell>
                   <Badge

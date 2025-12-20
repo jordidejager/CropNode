@@ -3,9 +3,9 @@
 
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
-import { parcels, middelMatrix } from '@/lib/data';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry } from '@/lib/store';
-import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
+import { middelMatrix } from '@/lib/data';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Timestamp } from 'firebase/firestore';
@@ -24,7 +24,7 @@ export type FormState = {
   };
 };
 
-function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, validationMessage: string } {
+function validateSprayData(parsedData: ParsedSprayData, parcels: Parcel[]): { isValid: boolean, validationMessage: string } {
     const validationMessages: string[] = [];
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
@@ -65,28 +65,33 @@ function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, val
 }
 
 
-async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
+async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
   const { firestore } = initializeFirebase();
-  const allProducts = await getProducts(firestore);
+  const [allProducts, allParcels] = await Promise.all([
+    getProducts(firestore),
+    getParcels(firestore)
+  ]);
 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
-    plots: JSON.stringify(parcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
+    plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
     products: JSON.stringify(allProducts),
   });
 
   for (const p of parsedDataFromAI.products) {
       if (p.product) {
-          const products = await getProducts(firestore);
-          if (!products.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
+          if (!allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
               await addProduct(firestore, p.product);
           }
       }
   }
   
   return {
-    plots: parsedDataFromAI.plots || [],
-    products: parsedDataFromAI.products || []
+    finalParsedData: {
+        plots: parsedDataFromAI.plots || [],
+        products: parsedDataFromAI.products || []
+    },
+    parcels: allParcels
   };
 }
 
@@ -111,7 +116,7 @@ export async function processSprayEntry(
   const newDate = new Date();
 
   try {
-    const finalParsedData = await getFinalParsedData(rawInput);
+    const { finalParsedData, parcels } = await getFinalParsedData(rawInput);
 
     if (finalParsedData.plots.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");
@@ -120,7 +125,7 @@ export async function processSprayEntry(
         throw new Error("AI kon geen geldige middelen identificeren in de output.");
     }
     
-    const { isValid, validationMessage } = validateSprayData(finalParsedData);
+    const { isValid, validationMessage } = validateSprayData(finalParsedData, parcels);
 
     const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
@@ -136,21 +141,21 @@ export async function processSprayEntry(
     const newEntry = await addLogbookEntry(firestore, newEntryData);
 
     if (isValid) {
-      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
-        const parcel = parcels.find(p => p.id === parcelId)!;
+      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.map(parcelId => {
         return finalParsedData.products.map(productEntry => ({
           logId: newEntry.id,
-          parcelId: parcel.id,
-          parcelName: parcel.name,
-          crop: parcel.crop,
-          variety: parcel.variety,
+          parcelId: parcelId,
           product: productEntry.product,
           dosage: productEntry.dosage,
           unit: productEntry.unit,
           date: newDate,
+          // These fields will be populated by addParcelHistoryEntries
+          parcelName: '', 
+          crop: '', 
+          variety: '',
         }));
-      });
-      await addParcelHistoryEntries(firestore, historyEntries.flat());
+      }).flat();
+      await addParcelHistoryEntries(firestore, historyEntries, parcels);
     }
     
     revalidatePath('/');
@@ -188,7 +193,8 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
         return { message: "Fout: Geen geparseerde data om op te slaan." };
     }
     
-    const { isValid, validationMessage } = validateSprayData(entry.parsedData);
+    const allParcels = await getParcels(firestore);
+    const { isValid, validationMessage } = validateSprayData(entry.parsedData, allParcels);
     
     const updatedEntryData: Partial<LogbookEntry> = {
         ...entry,
@@ -207,21 +213,21 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     await updateLogbookEntry(firestore, updatedEntry);
 
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
-        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.flatMap(parcelId => {
-            const parcel = parcels.find(p => p.id === parcelId)!;
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.map(parcelId => {
             return updatedEntry.parsedData!.products.map(productEntry => ({
                 logId: updatedEntry.id,
-                parcelId: parcel.id,
-                parcelName: parcel.name,
-                crop: parcel.crop,
-                variety: parcel.variety,
+                parcelId: parcelId,
                 product: productEntry.product,
                 dosage: productEntry.dosage,
                 unit: productEntry.unit,
                 date: new Date(updatedEntry.date),
+                // These fields will be populated by addParcelHistoryEntries
+                parcelName: '', 
+                crop: '', 
+                variety: '',
             }));
-        });
-        await addParcelHistoryEntries(firestore, historyEntries.flat());
+        }).flat();
+        await addParcelHistoryEntries(firestore, historyEntries, allParcels);
     }
 
     revalidatePath('/');
@@ -250,7 +256,10 @@ export async function deleteLogbookEntry(entryId: string) {
 export async function confirmLogbookEntry(entryId: string): Promise<{ success: boolean; message?: string }> {
     const { firestore } = initializeFirebase();
     try {
-        const entry = await getLogbookEntry(firestore, entryId);
+        const [entry, allParcels] = await Promise.all([
+          getLogbookEntry(firestore, entryId),
+          getParcels(firestore),
+        ]);
 
         if (!entry) {
             return { success: false, message: 'Logboekregel niet gevonden.' };
@@ -259,8 +268,13 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
 
-        const { isValid, validationMessage } = validateSprayData(entry.parsedData);
+        const { isValid, validationMessage } = validateSprayData(entry.parsedData, allParcels);
         if (!isValid) {
+            // Update status to 'Te Controleren' and save validation message
+            entry.status = 'Te Controleren';
+            entry.validationMessage = validationMessage;
+            await updateLogbookEntry(firestore, entry);
+            revalidatePath('/logboek');
             return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
         }
         
@@ -269,21 +283,21 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
         await updateLogbookEntry(firestore, entry);
 
-        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.flatMap(parcelId => {
-            const parcel = parcels.find(p => p.id === parcelId)!;
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.map(parcelId => {
             return entry.parsedData!.products.map(productEntry => ({
                 logId: entry.id,
-                parcelId: parcel.id,
-                parcelName: parcel.name,
-                crop: parcel.crop,
-                variety: parcel.variety,
+                parcelId: parcelId,
                 product: productEntry.product,
                 dosage: productEntry.dosage,
                 unit: productEntry.unit,
                 date: new Date(entry.date),
+                // These fields will be populated by addParcelHistoryEntries
+                parcelName: '', 
+                crop: '', 
+                variety: '',
             }));
-        });
-        await addParcelHistoryEntries(firestore, historyEntries.flat());
+        }).flat();
+        await addParcelHistoryEntries(firestore, historyEntries, allParcels);
 
         revalidatePath('/logboek');
         revalidatePath('/perceelhistorie');
@@ -294,5 +308,3 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: false, message };
     }
 }
-
-    

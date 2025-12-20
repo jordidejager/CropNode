@@ -10,12 +10,18 @@ import { Calendar as CalendarIcon, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { Timestamp } from 'firebase/firestore';
 
 type Filters = {
   variety: string;
   parcel: string;
   date: Date | undefined;
 };
+
+const formatDate = (date: Date | Timestamp) => {
+    const d = date instanceof Timestamp ? date.toDate() : date;
+    return format(d, 'dd MMMM yyyy', { locale: nl });
+}
 
 export function HistoryDashboard({
   entries,
@@ -41,7 +47,10 @@ export function HistoryDashboard({
   const filteredEntries = entries.filter(entry => {
     const varietyMatch = filters.variety === 'all' || entry.variety === filters.variety;
     const parcelMatch = filters.parcel === 'all' || entry.parcelName === filters.parcel;
-    const dateMatch = !filters.date || new Date(entry.date).toDateString() === filters.date.toDateString();
+    
+    const entryDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+    const dateMatch = !filters.date || entryDate.toDateString() === filters.date.toDateString();
+    
     return varietyMatch && parcelMatch && dateMatch;
   });
 
@@ -105,7 +114,7 @@ export function HistoryDashboard({
               <Card key={entry.id} className="flex flex-col">
                 <CardHeader>
                   <CardTitle className="text-base">{entry.parcelName} <span className="font-normal text-muted-foreground">({entry.variety})</span></CardTitle>
-                  <CardDescription>{format(entry.date, 'dd MMMM yyyy', { locale: nl })}</CardDescription>
+                  <CardDescription>{formatDate(entry.date)}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
                   <p className="font-semibold text-primary">{entry.product}</p>

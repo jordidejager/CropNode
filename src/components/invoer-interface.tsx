@@ -9,9 +9,8 @@ import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { cn } from '@/lib/utils';
 import { Check, Pencil, X, AlertTriangle, Loader2 } from 'lucide-react';
-import { parcels } from '@/lib/data';
-import { getProducts } from '@/lib/store';
-import type { LogbookEntry, ProductEntry } from '@/lib/types';
+import { getParcels, getProducts } from '@/lib/store';
+import type { LogbookEntry, Parcel, ProductEntry } from '@/lib/types';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
 import { useFirestore } from '@/firebase';
@@ -44,18 +43,23 @@ export function InvoerInterface() {
   const [isEditing, setIsEditing] = useState(false);
   const [editableEntry, setEditableEntry] = useState<LogbookEntry | null>(null);
   const [allProducts, setAllProducts] = useState<string[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
+  const [loading, setLoading] = useState(true);
   const db = useFirestore();
 
   useEffect(() => {
-    async function fetchProducts() {
+    async function fetchData() {
         if (!db) return;
-        setProductsLoading(true);
-        const products = await getProducts(db);
+        setLoading(true);
+        const [products, parcels] = await Promise.all([
+          getProducts(db),
+          getParcels(db)
+        ]);
         setAllProducts(products);
-        setProductsLoading(false);
+        setAllParcels(parcels);
+        setLoading(false);
     }
-    fetchProducts();
+    fetchData();
   }, [db]);
 
   const handleFormSubmit = (formData: FormData) => {
@@ -125,7 +129,7 @@ export function InvoerInterface() {
 
   const getParcelNames = (plotIds: string[] = []) => {
     if (plotIds.length === 0) return 'Geen';
-    return plotIds.map(id => parcels.find(p => p.id === id)?.name || id).join(', ');
+    return plotIds.map(id => allParcels.find(p => p.id === id)?.name || id).join(', ');
   }
   
   const entryToDisplay = isEditing ? editableEntry : deserializeEntry(state.entry);
@@ -157,11 +161,11 @@ export function InvoerInterface() {
   const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : deserializeEntry(state.entry)?.parsedData?.products || [];
   const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : deserializeEntry(state.entry)?.parsedData?.plots || [];
   
-  if (productsLoading) {
+  if (loading) {
       return (
           <div className="w-full max-w-3xl mx-auto flex flex-col h-full items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="mt-4 text-muted-foreground">Producten laden...</p>
+              <p className="mt-4 text-muted-foreground">Data laden...</p>
           </div>
       );
   }
@@ -215,7 +219,7 @@ export function InvoerInterface() {
                                     onProductsChange={handleProductsChange}
                                 />
                                  <EditParcels 
-                                    allParcels={parcels} 
+                                    allParcels={allParcels} 
                                     selectedParcelIds={displayPlots}
                                     onSelectionChange={handleParcelsChange}
                                 />

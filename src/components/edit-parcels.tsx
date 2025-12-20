@@ -38,18 +38,22 @@ export function EditParcels({ allParcels, selectedParcelIds, onSelectionChange }
       />
       <ScrollArea className="h-48 rounded-md border p-2">
         <div className="space-y-2">
-          {filteredParcels.map(parcel => (
-            <div key={parcel.id} className="flex items-center gap-2">
-              <Checkbox
-                id={`parcel-${parcel.id}`}
-                checked={selectedParcelIds.includes(parcel.id)}
-                onCheckedChange={(checked) => handleCheckboxChange(parcel.id, !!checked)}
-              />
-              <Label htmlFor={`parcel-${parcel.id}`} className="font-normal cursor-pointer">
-                {parcel.name} ({parcel.crop} - {parcel.variety})
-              </Label>
-            </div>
-          ))}
+          {filteredParcels.length > 0 ? (
+            filteredParcels.map(parcel => (
+              <div key={parcel.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`parcel-${parcel.id}`}
+                  checked={selectedParcelIds.includes(parcel.id)}
+                  onCheckedChange={(checked) => handleCheckboxChange(parcel.id, !!checked)}
+                />
+                <Label htmlFor={`parcel-${parcel.id}`} className="font-normal cursor-pointer">
+                  {parcel.name} ({parcel.crop} - {parcel.variety})
+                </Label>
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-muted-foreground p-4">Geen percelen gevonden.</p>
+          )}
         </div>
       </ScrollArea>
     </div>
