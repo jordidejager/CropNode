@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -116,7 +117,7 @@ export async function processSprayEntry(
       status: isValid ? 'Akkoord' : 'Te Controleren',
       timestamp: new Date(),
       parsedData: finalParsedData,
-      validationMessage: validationMessage.trim() || undefined,
+      ...(validationMessage.trim() && { validationMessage: validationMessage.trim() }),
     };
 
     const newEntry = await addLogbookEntry(firestore, newEntryData);
@@ -175,22 +176,21 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     
     const { isValid, validationMessage } = validateSprayData(entry.parsedData);
     
-    const updatedEntry: LogbookEntry = {
+    const updatedEntryData: Partial<LogbookEntry> = {
         ...entry,
-        status: 'Akkoord', // If we confirm, it should be Akkoord
-        validationMessage: validationMessage.trim() || undefined,
     };
 
     // If it becomes valid after editing, set status to Akkoord
     if (isValid) {
-        updatedEntry.status = 'Akkoord';
-        updatedEntry.validationMessage = undefined; // Clear warnings if it's now valid
+        updatedEntryData.status = 'Akkoord';
+        delete updatedEntryData.validationMessage; // Clear warnings if it's now valid
     } else {
         // If still not valid, keep it as 'Te Controleren'
-        updatedEntry.status = 'Te Controleren';
-        updatedEntry.validationMessage = validationMessage.trim() || "Aangepaste data is nog steeds niet volledig valide.";
+        updatedEntryData.status = 'Te Controleren';
+        updatedEntryData.validationMessage = validationMessage.trim() || "Aangepaste data is nog steeds niet volledig valide.";
     }
 
+    const updatedEntry = updatedEntryData as LogbookEntry;
 
     await updateLogbookEntry(firestore, updatedEntry);
 
