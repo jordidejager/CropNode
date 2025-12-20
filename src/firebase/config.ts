@@ -3,15 +3,11 @@
  */
 import { FirebaseOptions } from 'firebase/app';
 
-// This is a temporary workaround for environment variable loading issues.
-// In a real production scenario, these values should come from process.env
-// and the Next.js server should be restarted after .env file changes.
 export const firebaseConfig: FirebaseOptions = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "STUDIO-PROJECT-ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  projectId: "studio-4324599374-5cd58",
+  appId: "1:362806825748:web:44b117e5a108076543a801",
+  apiKey: "AIzaSyCJfYSlB5lwMya9DMXxUd4DJ3IjatymwrQ",
+  authDomain: "studio-4324599374-5cd58.firebaseapp.com",
+  measurementId: "",
+  messagingSenderId: "362806825748",
 };
