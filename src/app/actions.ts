@@ -8,6 +8,7 @@ import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProduc
 import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
+import { Timestamp } from 'firebase/firestore';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -154,19 +155,23 @@ export async function processSprayEntry(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Onbekende fout van AI.';
+    const newDate = new Date();
     const errorEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: 'Fout',
-      date: new Date(),
-      validationMessage: `Analyse mislukt: ${errorMessage}`,
+      date: newDate,
     };
+     if (errorMessage) {
+        errorEntryData.validationMessage = `Analyse mislukt: ${errorMessage}`;
+    }
+
     const errorEntry = await addLogbookEntry(firestore, errorEntryData);
     revalidatePath('/');
     revalidatePath('/logboek');
 
     return {
       message: `Fout bij verwerken: ${errorMessage}`,
-      entry: { ...errorEntry, date: errorEntry.date.toISOString() },
+      entry: { ...errorEntry, date: newDate.toISOString() },
     };
   }
 }
@@ -226,8 +231,12 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
 
+    const dateToReturn = updatedEntry.date instanceof Timestamp 
+      ? updatedEntry.date.toDate() 
+      : new Date(updatedEntry.date);
+
     return {
         message: 'Bespuiting definitief opgeslagen.',
-        entry: { ...updatedEntry, date: updatedEntry.date.toISOString() },
+        entry: { ...updatedEntry, date: dateToReturn.toISOString() },
     };
 }
