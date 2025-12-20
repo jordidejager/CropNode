@@ -9,14 +9,14 @@ const PRODUCTS_COLLECTION = 'products';
 
 export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> {
   if (!db) return [];
-  const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('timestamp', 'desc'));
+  const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('date', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     return { 
       id: doc.id, 
       ...data,
-      timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
+      date: (data.date as Timestamp)?.toDate() || new Date(),
     } as LogbookEntry;
   });
 }

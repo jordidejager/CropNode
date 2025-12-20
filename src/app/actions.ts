@@ -115,7 +115,7 @@ export async function processSprayEntry(
     const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: isValid ? 'Akkoord' : 'Te Controleren',
-      timestamp: new Date(),
+      date: new Date(),
       parsedData: finalParsedData,
       ...(validationMessage.trim() && { validationMessage: validationMessage.trim() }),
     };
@@ -135,7 +135,7 @@ export async function processSprayEntry(
           product: productEntry.product,
           dosage: productEntry.dosage,
           unit: productEntry.unit,
-          date: new Date(newEntry.timestamp),
+          date: new Date(newEntry.date),
         }));
       });
       await addParcelHistoryEntries(firestore, historyEntries.flat());
@@ -154,7 +154,7 @@ export async function processSprayEntry(
     const errorEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: 'Fout',
-      timestamp: new Date(),
+      date: new Date(),
       validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
     const errorEntry = await addLogbookEntry(firestore, errorEntryData);
@@ -207,7 +207,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
                 product: productEntry.product,
                 dosage: productEntry.dosage,
                 unit: productEntry.unit,
-                date: new Date(updatedEntry.timestamp),
+                date: new Date(updatedEntry.date),
             }));
         });
         // This should probably remove old entries for this logId and add new ones, but for now we just add.

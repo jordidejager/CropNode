@@ -31,7 +31,7 @@ export type LogbookEntry = {
   id: string; // Firestore ID
   rawInput: string;
   status: LogStatus;
-  timestamp: Date;
+  date: Date;
   parsedData?: ParsedSprayData;
   validationMessage?: string;
 };

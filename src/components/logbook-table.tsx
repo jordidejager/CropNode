@@ -48,7 +48,7 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
           <TableBody>
             {entries.map((entry) => (
               <TableRow key={entry.id}>
-                <TableCell className="text-muted-foreground text-sm">{formatDate(entry.timestamp)}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{formatDate(entry.date)}</TableCell>
                 <TableCell>
                   <Tooltip delayDuration={300}>
                       <TooltipTrigger asChild>
