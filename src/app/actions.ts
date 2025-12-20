@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parcels, middelMatrix } from '@/lib/data';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct } from '@/lib/store';
-import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData, ProductEntry } from '@/lib/types';
+import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 
@@ -13,9 +13,12 @@ const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
 });
 
+// We need to return a serializable version of the entry from the server action
+type SerializableLogbookEntry = Omit<LogbookEntry, 'date'> & { date: string };
+
 export type FormState = {
   message: string;
-  entry?: LogbookEntry;
+  entry?: SerializableLogbookEntry;
   errors?: {
     rawInput?: string[];
   };
@@ -117,7 +120,7 @@ export async function processSprayEntry(
       status: isValid ? 'Akkoord' : 'Te Controleren',
       date: new Date(),
       parsedData: finalParsedData,
-      ...(validationMessage.trim() && { validationMessage: validationMessage.trim() }),
+      ...(validationMessage && { validationMessage: validationMessage.trim() }),
     };
 
     const newEntry = await addLogbookEntry(firestore, newEntryData);
@@ -147,7 +150,7 @@ export async function processSprayEntry(
 
     return {
       message: 'Invoer succesvol verwerkt.',
-      entry: newEntry,
+      entry: { ...newEntry, date: newEntry.date.toISOString() },
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Onbekende fout van AI.';
@@ -163,7 +166,7 @@ export async function processSprayEntry(
 
     return {
       message: `Fout bij verwerken: ${errorMessage}`,
-      entry: errorEntry,
+      entry: { ...errorEntry, date: errorEntry.date.toISOString() },
     };
   }
 }
@@ -187,7 +190,11 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     } else {
         // If still not valid, keep it as 'Te Controleren'
         updatedEntryData.status = 'Te Controleren';
-        updatedEntryData.validationMessage = validationMessage.trim() || "Aangepaste data is nog steeds niet volledig valide.";
+        if (validationMessage) {
+            updatedEntryData.validationMessage = validationMessage.trim();
+        } else {
+            delete updatedEntryData.validationMessage;
+        }
     }
 
     const updatedEntry = updatedEntryData as LogbookEntry;
@@ -221,6 +228,6 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
 
     return {
         message: 'Bespuiting definitief opgeslagen.',
-        entry: updatedEntry,
+        entry: { ...updatedEntry, date: updatedEntry.date.toISOString() },
     };
 }

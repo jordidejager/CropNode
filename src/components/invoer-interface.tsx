@@ -22,6 +22,16 @@ const statusVariant: Record<"Akkoord" | "Te Controleren" | "Fout", 'default' | '
   'Fout': 'destructive',
 };
 
+// Helper function to convert SerializableLogbookEntry back to LogbookEntry
+function deserializeEntry(serializableEntry: FormState['entry']): LogbookEntry | null {
+  if (!serializableEntry) return null;
+  return {
+    ...serializableEntry,
+    date: new Date(serializableEntry.date),
+  };
+}
+
+
 export function InvoerInterface() {
   const [state, formAction] = useActionState(processSprayEntry, { message: '', errors: {} });
   const { toast } = useToast();
@@ -82,29 +92,32 @@ export function InvoerInterface() {
 
   const startEditing = () => {
     if (state.entry) {
-      setEditableEntry(JSON.parse(JSON.stringify(state.entry))); // Deep copy
+      const entry = deserializeEntry(state.entry);
+      setEditableEntry(entry ? JSON.parse(JSON.stringify(entry)) : null); // Deep copy
       setIsEditing(true);
     }
   };
   
   useEffect(() => {
     if (state.entry) {
-      setEditableEntry(JSON.parse(JSON.stringify(state.entry)));
+       const entry = deserializeEntry(state.entry);
+       setEditableEntry(entry ? JSON.parse(JSON.stringify(entry)) : null);
     }
   }, [state.entry]);
 
   useEffect(() => {
     if (state.message && showResult && !isProcessing) {
-      if (state.entry?.status === 'Fout') {
+      const entry = deserializeEntry(state.entry);
+      if (entry?.status === 'Fout') {
         toast({
             variant: 'destructive',
             title: 'Fout bij verwerking',
-            description: state.entry.validationMessage || 'De AI kon de invoer niet analyseren.',
+            description: entry.validationMessage || 'De AI kon de invoer niet analyseren.',
         });
-      } else if (state.entry) {
+      } else if (entry) {
         toast({
             title: 'Analyse voltooid',
-            description: `Status: ${state.entry.status}. ${state.entry.validationMessage || ''}`,
+            description: `Status: ${entry.status}. ${entry.validationMessage || ''}`,
         });
       }
     }
@@ -115,7 +128,7 @@ export function InvoerInterface() {
     return plotIds.map(id => parcels.find(p => p.id === id)?.name || id).join(', ');
   }
   
-  const entryToDisplay = isEditing ? editableEntry : state.entry;
+  const entryToDisplay = isEditing ? editableEntry : deserializeEntry(state.entry);
 
   const handleParcelsChange = (selectedIds: string[]) => {
     if (editableEntry && editableEntry.parsedData) {
@@ -141,8 +154,8 @@ export function InvoerInterface() {
     }
   };
 
-  const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : state.entry?.parsedData?.products || [];
-  const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : state.entry?.parsedData?.plots || [];
+  const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : deserializeEntry(state.entry)?.parsedData?.products || [];
+  const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : deserializeEntry(state.entry)?.parsedData?.plots || [];
   
   if (productsLoading) {
       return (
