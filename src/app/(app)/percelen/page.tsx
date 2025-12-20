@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useFirestore } from '@/firebase';
 import { getParcels, addParcel, updateParcel, deleteParcel } from '@/lib/store';
 import type { Parcel } from '@/lib/types';
@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog } from '@/components/parcel-form-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dynamic from 'next/dynamic';
 
@@ -27,6 +27,7 @@ export default function PercelenPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
+  const [activeTab, setActiveTab] = useState('list');
   
   const db = useFirestore();
   const { toast } = useToast();
@@ -87,7 +88,7 @@ export default function PercelenPage() {
 
   return (
     <>
-      <Tabs defaultValue="list">
+      <Tabs defaultValue="list" value={activeTab} onValueChange={setActiveTab}>
         <div className="flex justify-between items-center mb-4">
             <div>
                 <CardTitle>Mijn Percelen</CardTitle>
@@ -178,8 +179,8 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
-        <TabsContent value="map">
-            <ParcelMapView parcels={parcels} />
+        <TabsContent value="map" forceMount>
+             {activeTab === 'map' && <ParcelMapView parcels={parcels} />}
         </TabsContent>
       </Tabs>
 

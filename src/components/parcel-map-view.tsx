@@ -7,6 +7,8 @@ import { MapContainer, TileLayer, Polygon, Tooltip } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
 import type { Parcel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { useEffect, useRef } from 'react';
+import type { Map } from 'leaflet';
 
 interface ParcelMapViewProps {
     parcels: Parcel[];
@@ -17,6 +19,17 @@ const mapCenter: LatLngExpression = [52.1326, 5.2913];
 
 export function ParcelMapView({ parcels }: ParcelMapViewProps) {
     const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+    const mapRef = useRef<Map>(null);
+
+    useEffect(() => {
+        // This is the cleanup function.
+        // It will be called when the component is unmounted.
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.remove();
+            }
+        };
+    }, []);
 
     return (
         <Card>
@@ -28,9 +41,9 @@ export function ParcelMapView({ parcels }: ParcelMapViewProps) {
             </CardHeader>
             <CardContent>
                 <div className="h-[600px] w-full rounded-md border overflow-hidden">
-                    <MapContainer center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }}>
+                    <MapContainer whenCreated={map => mapRef.current = map} center={mapCenter} zoom={8} style={{ height: '100%', width: '100%' }}>
                         <TileLayer
-                            url="https://{s}.tile.openstreetmap.org/{z}/{y}.png"
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         />
                          <TileLayer
