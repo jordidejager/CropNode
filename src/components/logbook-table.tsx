@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
-import { MoreHorizontal, Trash2, Pencil, CheckCircle } from 'lucide-react';
+import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +37,7 @@ import { deleteLogbookEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { parcels } from '@/lib/data';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -48,7 +49,7 @@ const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' |
 
 const formatDate = (date: Date | Timestamp | undefined) => {
   if (!date) return '';
-  const validDate = date instanceof Timestamp ? date.toDate() : date;
+  const validDate = date instanceof Timestamp ? date.toDate() : new Date(date);
   try {
     return format(validDate, 'dd-MM-yyyy HH:mm');
   } catch (e) {
@@ -140,10 +141,35 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
   );
 }
 
-const getParcelNames = (plotIds: string[] | undefined) => {
-    if (!plotIds || plotIds.length === 0) return '-';
-    return plotIds.map(id => parcels.find(p => p.id === id)?.name || id).join(', ');
-};
+function ParcelListCollapsible({ plotIds }: { plotIds: string[] | undefined }) {
+    if (!plotIds || plotIds.length === 0) {
+        return <span>-</span>;
+    }
+
+    const parcelNames = plotIds.map(id => parcels.find(p => p.id === id)?.name || id);
+    const count = parcelNames.length;
+
+    return (
+        <Collapsible>
+            <div className="flex items-center space-x-2">
+                <span className="text-sm">{count} perce{count > 1 ? 'len' : 'el'}</span>
+                <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6">
+                        <ChevronDown className="h-4 w-4 transition-transform [&[data-state=open]]:rotate-180" />
+                        <span className="sr-only">{count} percelen</span>
+                    </Button>
+                </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+                <ul className="list-disc pl-5 mt-2 space-y-1 text-xs text-muted-foreground">
+                    {parcelNames.map((name, index) => (
+                        <li key={index}>{name}</li>
+                    ))}
+                </ul>
+            </CollapsibleContent>
+        </Collapsible>
+    );
+}
 
 export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
   if (!entries || entries.length === 0) {
@@ -178,8 +204,8 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                       </TooltipContent>
                   </Tooltip>
                 </TableCell>
-                <TableCell className="text-sm truncate max-w-[200px]">
-                    {getParcelNames(entry.parsedData?.plots)}
+                <TableCell className="text-sm">
+                    <ParcelListCollapsible plotIds={entry.parsedData?.plots} />
                 </TableCell>
                 <TableCell>
                   <Badge
