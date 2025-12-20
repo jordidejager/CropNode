@@ -41,17 +41,28 @@ export function Combobox({
   className,
   creatable = false,
 }: ComboboxProps) {
-  const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const [inputValue, setInputValue] = React.useState("");
 
-  const selectedOption = options.find((option) => option.value.toLowerCase() === value?.toLowerCase());
-
-  const handleSelect = (currentValue: string) => {
-    onValueChange(currentValue.toLowerCase() === value?.toLowerCase() ? "" : currentValue);
+  const handleSelect = (selectedValue: string) => {
+    onValueChange(selectedValue);
     setOpen(false);
   };
   
-  const showCreateOption = creatable && inputValue && !options.some(option => option.value.toLowerCase() === inputValue.toLowerCase());
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(inputValue.toLowerCase())
+  );
+  
+  const showCreateOption =
+    creatable &&
+    inputValue &&
+    !options.some(
+      (option) => option.label.toLowerCase() === inputValue.toLowerCase()
+    );
+
+  const selectedOption = options.find(
+    (option) => option.value.toLowerCase() === value?.toLowerCase()
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -66,37 +77,30 @@ export function Combobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <Command filter={(itemValue, searchValue) => {
-            if (itemValue.toLowerCase().includes(searchValue.toLowerCase())) return 1;
-            return 0;
-        }}>
-          <CommandInput 
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => { e.preventDefault(); }}>
+        <Command>
+          <CommandInput
             placeholder="Zoek of maak nieuw..."
             value={inputValue}
             onValueChange={setInputValue}
           />
-          <CommandList>
+           <CommandList>
             <CommandEmpty>
                 {creatable && inputValue ? (
                      <CommandItem
                         value={inputValue}
                         onSelect={() => handleSelect(inputValue)}
                       >
-                        <Check className="mr-2 h-4 w-4 opacity-0" />
                         Maak "{inputValue}" aan
                       </CommandItem>
                 ): "Geen resultaten gevonden."}
             </CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.value}
-                  onSelect={handleSelect}
+                  onSelect={() => handleSelect(option.value)}
                 >
                   <Check
                     className={cn(
@@ -107,16 +111,16 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-               {showCreateOption && (
-                  <CommandItem
-                    key={inputValue}
-                    value={inputValue}
-                    onSelect={() => handleSelect(inputValue)}
-                  >
-                    <Check className="mr-2 h-4 w-4 opacity-0" />
-                     Maak "{inputValue}" aan
-                  </CommandItem>
-                )}
+              {showCreateOption && (
+                <CommandItem
+                  key={inputValue}
+                  value={inputValue}
+                  onSelect={() => handleSelect(inputValue)}
+                >
+                  <Check className="mr-2 h-4 w-4 opacity-0" />
+                  Maak "{inputValue}" aan
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>
