@@ -7,7 +7,7 @@ import type { Parcel } from '@/lib/types';
 import L from 'leaflet';
 import 'leaflet-draw';
 
-const mapCenter: L.LatLngExpression = [52.1326, 5.2913];
+const defaultCenter: L.LatLngExpression = [52.1326, 5.2913];
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -27,19 +27,23 @@ interface ParcelDrawingMapProps {
 export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSave }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
-        const map = L.map(mapContainerRef.current).setView(mapCenter, 8);
+        const map = L.map(mapContainerRef.current);
         mapRef.current = map;
 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            attribution: 'Tiles &copy; Esri'
         }).addTo(map);
 
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
+        drawnItemsRef.current = drawnItems;
         
+        let initialBounds: L.LatLngBounds | null = null;
+
         if (parcel?.location && parcel.location.length > 0) {
             const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as L.LatLngExpression[];
             const polygon: L.Polygon = L.polygon(latLngs, {
@@ -48,8 +52,15 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
                 fillOpacity: 0.5,
             });
             drawnItems.addLayer(polygon);
-            map.fitBounds(polygon.getBounds());
+            initialBounds = polygon.getBounds();
         }
+
+        if (initialBounds) {
+            map.fitBounds(initialBounds);
+        } else {
+            map.setView(defaultCenter, 8);
+        }
+
 
         const drawControl = new L.Control.Draw({
             edit: {

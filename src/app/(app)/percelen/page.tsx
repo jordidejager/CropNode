@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import dynamic from 'next/dynamic';
+import { useEffect, useState, useRef } from "react";
 import { useFirestore } from "@/firebase";
 import { getParcels, addParcel, updateParcel, deleteParcel } from "@/lib/store";
 import type { Parcel } from "@/lib/types";
@@ -13,12 +12,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import type { LatLngExpression, LatLngBoundsExpression } from 'leaflet';
 import L from 'leaflet';
+import { AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -30,49 +29,72 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
-const Polygon = dynamic(() => import('react-leaflet').then(mod => mod.Polygon), { ssr: false });
-const Tooltip = dynamic(() => import('react-leaflet').then(mod => mod.Tooltip), { ssr: false });
-
 const MapView = ({ parcels }: { parcels: Parcel[] }) => {
-    const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+    const mapRef = useRef<L.Map | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement>(null);
 
-    let bounds: LatLngBoundsExpression | undefined = undefined;
-    if (parcelsWithLocation.length > 0) {
-        const allLatLngs = parcelsWithLocation.flatMap(parcel => 
-            (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
-        );
-        if (allLatLngs.length > 0) {
-           bounds = L.latLngBounds(allLatLngs as L.LatLngExpression[]);
+    useEffect(() => {
+        if (!mapContainerRef.current) return;
+
+        // Cleanup previous map instance if it exists
+        if (mapRef.current) {
+            mapRef.current.remove();
+            mapRef.current = null;
         }
-    }
-    
-    const mapCenter: LatLngExpression = bounds ? bounds.getCenter() : [52.1326, 5.2913];
-    const zoomLevel = bounds ? 13 : 8;
+
+        // Initialize map
+        const map = L.map(mapContainerRef.current);
+        mapRef.current = map;
+
+        L.tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            { attribution: "Tiles &copy; Esri" }
+        ).addTo(map);
+
+        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+
+        if (parcelsWithLocation.length > 0) {
+            const allLatLngs = parcelsWithLocation.flatMap(parcel => 
+                (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
+            ) as L.LatLngExpression[];
+
+            if (allLatLngs.length > 0) {
+                const bounds = L.latLngBounds(allLatLngs);
+                map.fitBounds(bounds, { padding: [50, 50] });
+
+                parcelsWithLocation.forEach(parcel => {
+                    const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
+                        color: 'hsl(var(--primary))',
+                        fillColor: 'hsl(var(--primary))',
+                        fillOpacity: 0.4
+                    }).addTo(map);
+                    
+                    polygon.bindTooltip(`
+                        <div class="text-center">
+                            <p class="font-bold">${parcel.name}</p>
+                            <p>${parcel.variety}</p>
+                            <p>${parcel.area} ha</p>
+                        </div>
+                    `);
+                });
+            }
+        } else {
+            // Default view if no parcels have locations
+            map.setView([52.1326, 5.2913], 8);
+        }
+
+        // Cleanup function
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
+        };
+
+    }, [parcels]);
 
     return (
-        <MapContainer center={mapCenter} zoom={zoomLevel} bounds={bounds} style={{ height: '100%', width: '100%' }}>
-            <TileLayer
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
-            />
-            {parcelsWithLocation.map(parcel => (
-                <Polygon
-                    key={parcel.id}
-                    positions={parcel.location as LatLngExpression[]}
-                    pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 }}
-                >
-                    <Tooltip>
-                        <div className="text-center">
-                            <p className="font-bold">{parcel.name}</p>
-                            <p>{parcel.variety}</p>
-                            <p>{parcel.area} ha</p>
-                        </div>
-                    </Tooltip>
-                </Polygon>
-            ))}
-        </MapContainer>
+        <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }}></div>
     );
 };
 
