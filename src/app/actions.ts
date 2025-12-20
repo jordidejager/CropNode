@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parcels, middelMatrix } from '@/lib/data';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry } from '@/lib/store';
 import type { LogbookEntry, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -14,7 +14,6 @@ const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
 });
 
-// We need to return a serializable version of the entry from the server action
 type SerializableLogbookEntry = Omit<LogbookEntry, 'date'> & { date: string };
 
 export type FormState = {
@@ -52,9 +51,16 @@ function validateSprayData(parsedData: ParsedSprayData): { isValid: boolean, val
         }
     }
 
+    if (validationMessages.length > 0) {
+        return {
+            isValid: false,
+            validationMessage: validationMessages.join(' ')
+        };
+    }
+
     return {
-        isValid: validationMessages.length === 0,
-        validationMessage: validationMessages.join(' ')
+        isValid: true,
+        validationMessage: ''
     };
 }
 
@@ -69,7 +75,6 @@ async function getFinalParsedData(rawInput: string): Promise<ParsedSprayData> {
     products: JSON.stringify(allProducts),
   });
 
-  // Ensure newly parsed products are added to the list if they are not already there.
   for (const p of parsedDataFromAI.products) {
       if (p.product) {
           const products = await getProducts(firestore);
@@ -103,6 +108,7 @@ export async function processSprayEntry(
   
   const { rawInput } = validatedFields.data;
   const { firestore } = initializeFirebase();
+  const newDate = new Date();
 
   try {
     const finalParsedData = await getFinalParsedData(rawInput);
@@ -119,17 +125,16 @@ export async function processSprayEntry(
     const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: isValid ? 'Akkoord' : 'Te Controleren',
-      date: new Date(),
+      date: newDate,
       parsedData: finalParsedData,
     };
     
     if (validationMessage) {
-        newEntryData.validationMessage = validationMessage.trim();
+        newEntryData.validationMessage = validationMessage;
     }
 
     const newEntry = await addLogbookEntry(firestore, newEntryData);
 
-    // If valid, also add to parcel history immediately
     if (isValid) {
       const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.flatMap(parcelId => {
         const parcel = parcels.find(p => p.id === parcelId)!;
@@ -142,7 +147,7 @@ export async function processSprayEntry(
           product: productEntry.product,
           dosage: productEntry.dosage,
           unit: productEntry.unit,
-          date: new Date(newEntry.date),
+          date: newDate,
         }));
       });
       await addParcelHistoryEntries(firestore, historyEntries.flat());
@@ -158,15 +163,13 @@ export async function processSprayEntry(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Onbekende fout van AI.';
-    const newDate = new Date();
+    
     const errorEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
       status: 'Fout',
       date: newDate,
+      validationMessage: `Analyse mislukt: ${errorMessage}`,
     };
-     if (errorMessage) {
-        errorEntryData.validationMessage = `Analyse mislukt: ${errorMessage}`;
-    }
 
     const errorEntry = await addLogbookEntry(firestore, errorEntryData);
     revalidatePath('/');
@@ -191,25 +194,18 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
         ...entry,
     };
 
-    // If it becomes valid after editing, set status to Akkoord
     if (isValid) {
         updatedEntryData.status = 'Akkoord';
-        delete updatedEntryData.validationMessage; // Clear warnings if it's now valid
+        updatedEntryData.validationMessage = undefined;
     } else {
-        // If still not valid, keep it as 'Te Controleren'
         updatedEntryData.status = 'Te Controleren';
-        if (validationMessage) {
-            updatedEntryData.validationMessage = validationMessage.trim();
-        } else {
-            delete updatedEntryData.validationMessage;
-        }
+        updatedEntryData.validationMessage = validationMessage || undefined;
     }
 
     const updatedEntry = updatedEntryData as LogbookEntry;
 
     await updateLogbookEntry(firestore, updatedEntry);
 
-    // Add to parcel history ONLY when status is 'Akkoord'
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
         const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.flatMap(parcelId => {
             const parcel = parcels.find(p => p.id === parcelId)!;
@@ -225,8 +221,6 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
                 date: new Date(updatedEntry.date),
             }));
         });
-        // This should probably remove old entries for this logId and add new ones, but for now we just add.
-        // A more robust solution would handle updates. For now we assume this is the final state.
         await addParcelHistoryEntries(firestore, historyEntries.flat());
     }
 
@@ -250,4 +244,53 @@ export async function deleteLogbookEntry(entryId: string) {
     await dbDeleteLogbookEntry(firestore, entryId);
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
+}
+
+
+export async function confirmLogbookEntry(entryId: string): Promise<{ success: boolean; message?: string }> {
+    const { firestore } = initializeFirebase();
+    try {
+        const entry = await getLogbookEntry(firestore, entryId);
+
+        if (!entry) {
+            return { success: false, message: 'Logboekregel niet gevonden.' };
+        }
+        if (!entry.parsedData) {
+            return { success: false, message: 'Geen data om te bevestigen.' };
+        }
+
+        const { isValid, validationMessage } = validateSprayData(entry.parsedData);
+        if (!isValid) {
+            return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
+        }
+        
+        entry.status = 'Akkoord';
+        entry.validationMessage = undefined;
+
+        await updateLogbookEntry(firestore, entry);
+
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.flatMap(parcelId => {
+            const parcel = parcels.find(p => p.id === parcelId)!;
+            return entry.parsedData!.products.map(productEntry => ({
+                logId: entry.id,
+                parcelId: parcel.id,
+                parcelName: parcel.name,
+                crop: parcel.crop,
+                variety: parcel.variety,
+                product: productEntry.product,
+                dosage: productEntry.dosage,
+                unit: productEntry.unit,
+                date: new Date(entry.date),
+            }));
+        });
+        await addParcelHistoryEntries(firestore, historyEntries.flat());
+
+        revalidatePath('/logboek');
+        revalidatePath('/perceelhistorie');
+
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Onbekende fout.';
+        return { success: false, message };
+    }
 }

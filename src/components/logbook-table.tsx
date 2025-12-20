@@ -18,9 +18,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
-import { MoreHorizontal, Trash2, Pencil } from 'lucide-react';
+import { MoreHorizontal, Trash2, Pencil, CheckCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useState, useTransition } from 'react';
-import { deleteLogbookEntry } from '@/app/actions';
+import { deleteLogbookEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
@@ -69,6 +70,24 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
       setIsDeleteDialogOpen(false);
     });
   }
+  
+  const handleConfirm = () => {
+    startTransition(async () => {
+        const result = await confirmLogbookEntry(entry.id);
+        if (result.success) {
+            toast({
+                title: 'Bevestigd!',
+                description: 'De logboekregel is als "Akkoord" gemarkeerd.',
+            });
+        } else {
+             toast({
+                variant: 'destructive',
+                title: 'Fout bij bevestigen',
+                description: result.message || 'Kon de regel niet bevestigen.',
+            });
+        }
+    });
+  }
 
   return (
     <>
@@ -80,12 +99,19 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {entry.status === 'Te Controleren' && (
+            <DropdownMenuItem onClick={handleConfirm} disabled={isPending}>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              <span>Bevestigen</span>
+            </DropdownMenuItem>
+          )}
           <Link href={`/logboek/${entry.id}/bewerken`} passHref>
              <DropdownMenuItem>
                 <Pencil className="mr-2 h-4 w-4" />
-                <span>Bewerken & Bevestigen</span>
+                <span>Bewerken</span>
               </DropdownMenuItem>
           </Link>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-red-600">
             <Trash2 className="mr-2 h-4 w-4" />
             <span>Verwijderen</span>
