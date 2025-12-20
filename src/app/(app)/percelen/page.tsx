@@ -12,12 +12,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import type { Map, LatLngExpression } from 'leaflet';
-import { AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import type { LatLngExpression } from 'leaflet';
+import { MapContainer, TileLayer, Polygon, Tooltip, FeatureGroup } from 'react-leaflet';
+import { EditControl } from "react-leaflet-draw";
 
 
 export default function PercelenPage() {
@@ -29,10 +30,6 @@ export default function PercelenPage() {
   
   const db = useFirestore();
   const { toast } = useToast();
-
-  const mapRef = useRef<Map | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-
 
   async function loadParcels() {
     if (!db) return;
@@ -47,51 +44,6 @@ export default function PercelenPage() {
       loadParcels();
     }
   }, [db]);
-
-  useEffect(() => {
-    if (activeTab === 'map' && mapContainerRef.current) {
-        if (!mapRef.current) { // Only initialize if map doesn't exist
-            const L = require('leaflet');
-            
-            const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
-            let mapCenter: LatLngExpression = [52.1326, 5.2913]; // Default center
-            let zoomLevel = 8; // Default zoom
-
-            const map = L.map(mapContainerRef.current).setView(mapCenter, zoomLevel);
-            mapRef.current = map;
-
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-            }).addTo(map);
-
-            if (parcelsWithLocation.length > 0) {
-              const group = L.featureGroup();
-              parcelsWithLocation.forEach(parcel => {
-                  const polygon = L.polygon(parcel.location as LatLngExpression[], { 
-                      color: 'hsl(var(--primary))', 
-                      fillColor: 'hsl(var(--primary))', 
-                      fillOpacity: 0.4 
-                  }).addTo(group);
-
-                  polygon.bindTooltip(`
-                      <div class="text-center">
-                          <p class="font-bold">${parcel.name}</p>
-                          <p>${parcel.variety}</p>
-                          <p>${parcel.area} ha</p>
-                      </div>
-                  `);
-              });
-              group.addTo(map);
-              map.fitBounds(group.getBounds());
-            }
-        }
-    } else {
-        if (mapRef.current) {
-            mapRef.current.remove();
-            mapRef.current = null;
-        }
-    }
-  }, [activeTab, parcels]);
 
 
   const handleAdd = () => {
@@ -133,6 +85,40 @@ export default function PercelenPage() {
       return false; // Indicate failure
     }
   };
+  
+  const MapView = ({ parcels }: { parcels: Parcel[] }) => {
+      const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+      let mapCenter: LatLngExpression = [52.1326, 5.2913]; // Default center
+      let zoomLevel = 8; // Default zoom
+      
+      let bounds: LatLngExpression[] | undefined = undefined;
+      if (parcelsWithLocation.length > 0) {
+          bounds = parcelsWithLocation.flatMap(p => p.location) as LatLngExpression[];
+      }
+      
+      return (
+          <MapContainer center={mapCenter} zoom={zoomLevel} bounds={bounds} style={{ height: '100%', width: '100%' }}>
+              <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                  attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+              />
+              <FeatureGroup>
+                {parcelsWithLocation.map(parcel => (
+                    <Polygon key={parcel.id} positions={parcel.location as LatLngExpression[]} pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 }}>
+                        <Tooltip>
+                            <div className="text-center">
+                                <p className="font-bold">{parcel.name}</p>
+                                <p>{parcel.variety}</p>
+                                <p>{parcel.area} ha</p>
+                            </div>
+                        </Tooltip>
+                    </Polygon>
+                ))}
+              </FeatureGroup>
+          </MapContainer>
+      );
+  };
+
 
   return (
     <>
@@ -227,22 +213,23 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
-
-        <TabsContent value="map">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Kaartoverzicht</CardTitle>
-                    <CardDescription>
-                        {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div ref={mapContainerRef} className="h-[600px] w-full rounded-md border overflow-hidden" />
-                </CardContent>
-            </Card>
-        </TabsContent>
-
       </Tabs>
+      
+      {activeTab === 'map' && (
+        <Card>
+            <CardHeader>
+                <CardTitle>Kaartoverzicht</CardTitle>
+                <CardDescription>
+                    {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-[600px] w-full rounded-md border overflow-hidden">
+                  <MapView parcels={parcels} />
+                </div>
+            </CardContent>
+        </Card>
+      )}
       
       <ParcelFormDialog
         isOpen={isFormOpen}
@@ -253,3 +240,5 @@ export default function PercelenPage() {
     </>
   );
 }
+
+    
