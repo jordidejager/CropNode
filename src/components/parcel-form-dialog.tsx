@@ -47,7 +47,7 @@ interface ParcelFormDialogProps {
   isOpen: boolean
   onOpenChange: (isOpen: boolean) => void
   parcel: Parcel | null
-  onSubmit: (data: ParcelFormValues) => Promise<boolean>
+  onSubmit: (data: ParcelFormValues) => Promise<void>
 }
 
 export function ParcelFormDialog({
@@ -134,11 +134,9 @@ export function ParcelFormDialog({
 
   const processSubmit: SubmitHandler<ParcelFormValues> = async (data) => {
     setIsSubmitting(true)
-    const success = await onSubmit(data)
+    await onSubmit(data)
     setIsSubmitting(false)
-    if (success) {
-      handleClose()
-    }
+    handleClose()
   }
 
   return (

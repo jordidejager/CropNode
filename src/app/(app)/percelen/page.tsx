@@ -156,12 +156,10 @@ export default function PercelenPage() {
         await addParcel(db, addData);
         toast({ title: 'Succesvol toegevoegd', description: 'Het nieuwe perceel is opgeslagen.' });
       }
-      loadParcels();
-      return true; // Indicate success
+      await loadParcels();
     } catch (error) {
       console.error(error);
       toast({ variant: 'destructive', title: 'Fout opgetreden', description: 'Er is een fout opgetreden bij het opslaan.' });
-      return false; // Indicate failure
     }
   };
   
