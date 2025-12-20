@@ -40,7 +40,9 @@ export default function PercelenPage() {
   }
 
   useEffect(() => {
-    loadParcels();
+    if(db) {
+      loadParcels();
+    }
   }, [db]);
 
   const handleAdd = () => {
