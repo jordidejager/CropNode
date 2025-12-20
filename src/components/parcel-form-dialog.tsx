@@ -25,8 +25,11 @@ import {
 import type { Parcel } from "@/lib/types"
 import { appleVarieties, pearVarieties } from "@/lib/data"
 import { MapPin } from "lucide-react"
-import { Skeleton } from "./ui/skeleton"
-import { ParcelDrawingMap } from "./parcel-drawing-map"
+import dynamic from "next/dynamic"
+
+const ParcelDrawingMap = dynamic(() => import('./parcel-drawing-map').then(mod => mod.ParcelDrawingMap), {
+  ssr: false,
+});
 
 
 const formSchema = z.object({
@@ -294,5 +297,3 @@ export function ParcelFormDialog({
     </>
   )
 }
-
-    

@@ -27,7 +27,6 @@ interface ParcelDrawingMapProps {
 export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSave }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
 
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
@@ -40,7 +39,6 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
 
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
-        drawnItemsRef.current = drawnItems;
         
         if (parcel?.location && parcel.location.length > 0) {
             const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as L.LatLngExpression[];
@@ -95,7 +93,7 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
         });
     }
 
-    // Cleanup function
+    // Cleanup function to remove the map instance
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();

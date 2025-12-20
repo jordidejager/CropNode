@@ -34,21 +34,21 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapCo
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Polygon = dynamic(() => import('react-leaflet').then(mod => mod.Polygon), { ssr: false });
 const Tooltip = dynamic(() => import('react-leaflet').then(mod => mod.Tooltip), { ssr: false });
-const FeatureGroup = dynamic(() => import('react-leaflet').then(mod => mod.FeatureGroup), { ssr: false });
 
 const MapView = ({ parcels }: { parcels: Parcel[] }) => {
     const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
 
     let bounds: LatLngBoundsExpression | undefined = undefined;
     if (parcelsWithLocation.length > 0) {
-        const featureGroup = L.featureGroup(parcelsWithLocation.map(parcel => {
-            const latLngs = parcel.location as LatLngExpression[];
-            return L.polygon(latLngs);
-        }));
-        bounds = featureGroup.getBounds();
+        const allLatLngs = parcelsWithLocation.flatMap(parcel => 
+            (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
+        );
+        if (allLatLngs.length > 0) {
+           bounds = L.latLngBounds(allLatLngs as L.LatLngExpression[]);
+        }
     }
     
-    const mapCenter: LatLngExpression = [52.1326, 5.2913];
+    const mapCenter: LatLngExpression = bounds ? bounds.getCenter() : [52.1326, 5.2913];
     const zoomLevel = bounds ? 13 : 8;
 
     return (
