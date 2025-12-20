@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
-import { Command as CommandPrimitive } from 'cmdk'
+import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -43,23 +43,15 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState("")
 
   const handleSelect = (currentValue: string) => {
-    onValueChange(currentValue.toLowerCase() === value?.toLowerCase() ? "" : currentValue)
+    onValueChange(currentValue)
     setOpen(false)
   }
-  
-  const filteredOptions = options.filter(option => 
-    option.label.toLowerCase().includes(inputValue.toLowerCase())
-  );
 
-  const showCreateOption =
-    creatable &&
-    inputValue &&
-    !options.some(
-      (option) => option.label.toLowerCase() === inputValue.toLowerCase()
-    );
+  const currentLabel =
+    options.find((option) => option.value.toLowerCase() === value?.toLowerCase())
+      ?.label || value
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -70,34 +62,34 @@ export function Combobox({
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
         >
-          <span className="truncate">
-          {value
-            ? options.find((option) => option.value.toLowerCase() === value.toLowerCase())?.label
-            : placeholder}
-          </span>
+          <span className="truncate">{currentLabel || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => e.preventDefault()}>
-         <Command>
-          <CommandInput 
-            placeholder="Zoek of maak nieuw..."
-            value={inputValue}
-            onValueChange={setInputValue}
-          />
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+      >
+        <Command
+          filter={(value, search) => {
+            if (value.toLowerCase().includes(search.toLowerCase())) return 1
+            return 0
+          }}
+        >
+          <CommandInput placeholder="Zoek of maak nieuw..." />
           <CommandList>
             <CommandEmpty>
-              {creatable && inputValue ? (
+              {creatable ? (
                 <CommandItem
-                  onSelect={() => handleSelect(inputValue)}
-                  value={inputValue}
+                  onSelect={() => handleSelect(document.querySelector<HTMLInputElement>(`[cmdk-input]` )?.value || "")}
                 >
-                  Maak "{inputValue}" aan
+                  Maak "{document.querySelector<HTMLInputElement>(`[cmdk-input]` )?.value}" aan
                 </CommandItem>
-              ) : "Geen resultaten gevonden."}
+              ) : (
+                "Geen resultaten gevonden."
+              )}
             </CommandEmpty>
             <CommandGroup>
-              {filteredOptions.map((option) => (
+              {options.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.value}
@@ -106,21 +98,14 @@ export function Combobox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value?.toLowerCase() === option.value.toLowerCase() ? "opacity-100" : "opacity-0"
+                      value?.toLowerCase() === option.value.toLowerCase()
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
                   />
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && (
-                 <CommandItem
-                    onSelect={() => handleSelect(inputValue)}
-                    value={inputValue}
-                  >
-                    <Check className="mr-2 h-4 w-4 opacity-0" />
-                    Maak "{inputValue}" aan
-                  </CommandItem>
-              )}
             </CommandGroup>
           </CommandList>
         </Command>
