@@ -46,18 +46,19 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 }
 
 export async function getProducts(db: Firestore): Promise<string[]> {
+    const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
     if (!db) {
         console.warn("Firestore db is not initialized, falling back to static data for products.");
-        return [...new Set(middelMatrix.map(m => m.product))];
+        return staticProducts;
     }
     try {
         const querySnapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
-        const products = querySnapshot.docs.map(doc => doc.data().name as string);
-        const allProducts = [...new Set([...products, ...middelMatrix.map(m => m.product)])];
+        const dbProducts = querySnapshot.docs.map(doc => doc.data().name as string);
+        const allProducts = [...new Set([...dbProducts, ...staticProducts])];
         return allProducts;
     } catch (error) {
         console.error("Error fetching products, falling back to static list:", error);
-        return [...new Set(middelMatrix.map(m => m.product))];
+        return staticProducts;
     }
 }
 
