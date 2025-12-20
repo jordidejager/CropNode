@@ -6,24 +6,26 @@ import { parcels } from '@/lib/data';
 import { HistoryDashboard } from '@/components/history-dashboard';
 import type { ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { db } from '@/firebase/client';
+import { useFirestore } from '@/firebase';
 
 export default function PerceelHistoriePage() {
   const [historyEntries, setHistoryEntries] = useState<ParcelHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const db = useFirestore();
 
   const cropVarieties = [...new Set(parcels.map(p => p.variety))];
   const parcelNames = [...new Set(parcels.map(p => p.name))];
 
   useEffect(() => {
     async function loadHistory() {
+      if (!db) return;
       setLoading(true);
       const fetchedEntries = await getParcelHistoryEntries(db);
       setHistoryEntries(fetchedEntries);
       setLoading(false);
     }
     loadHistory();
-  }, []);
+  }, [db]);
 
   if (loading) {
     return (
