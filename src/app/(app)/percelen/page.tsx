@@ -179,10 +179,9 @@ export default function PercelenPage() {
                 </CardContent>
             </Card>
         </TabsContent>
-        <TabsContent value="map" forceMount={false} className="data-[state=inactive]:hidden">
-             {activeTab === 'map' && <ParcelMapView parcels={parcels} />}
-        </TabsContent>
       </Tabs>
+      
+      {activeTab === 'map' && <ParcelMapView parcels={parcels} />}
 
       <ParcelFormDialog
         isOpen={isFormOpen}
