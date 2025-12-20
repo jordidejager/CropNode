@@ -81,6 +81,7 @@ export function ParcelFormDialog({
   const watchedCrop = watch("crop")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const [mapRenderKey, setMapRenderKey] = useState(0);
 
   const varietyOptions = useMemo(() => {
     if (watchedCrop?.toLowerCase() === "appel") {
@@ -118,6 +119,11 @@ export function ParcelFormDialog({
 
   const handleClose = () => {
     onOpenChange(false)
+  }
+
+  const openMap = () => {
+    setMapRenderKey(prev => prev + 1); // Increment key to force re-render
+    setIsMapOpen(true);
   }
   
   const handleMapSave = (coordinates: { lat: number; lng: number }[]) => {
@@ -243,7 +249,7 @@ export function ParcelFormDialog({
                   Locatie
                 </Label>
                 <div className="col-span-3">
-                  <Button type="button" variant="outline" onClick={() => setIsMapOpen(true)} className="w-full">
+                  <Button type="button" variant="outline" onClick={openMap} className="w-full">
                     <MapPin className="mr-2 h-4 w-4" /> 
                     {getValues('location') && getValues('location').length > 0 ? 'Locatie Bewerken' : 'Teken op kaart'}
                   </Button>
@@ -269,10 +275,13 @@ export function ParcelFormDialog({
                   </DialogDescription>
               </DialogHeader>
               <div className="h-[calc(80vh-150px)]">
-                <ParcelDrawingMap 
-                    parcel={parcel}
-                    onSave={handleMapSave}
-                />
+                {isMapOpen && (
+                    <ParcelDrawingMap
+                        key={mapRenderKey} 
+                        parcel={parcel}
+                        onSave={handleMapSave}
+                    />
+                )}
               </div>
           </DialogContent>
       </Dialog>
