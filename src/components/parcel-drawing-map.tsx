@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Parcel } from '@/lib/types';
 import L from 'leaflet';
+import 'leaflet-draw';
 
 const mapCenter: L.LatLngExpression = [52.1326, 5.2913];
 
@@ -94,6 +95,7 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
         });
     }
 
+    // Cleanup function
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -104,5 +106,3 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
 
   return <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />;
 };
-
-    

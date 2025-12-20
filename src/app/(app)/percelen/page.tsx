@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
+import dynamic from 'next/dynamic';
 import { useFirestore } from "@/firebase";
 import { getParcels, addParcel, updateParcel, deleteParcel } from "@/lib/store";
 import type { Parcel } from "@/lib/types";
@@ -16,7 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import L, { type LatLngExpression } from 'leaflet';
+import type { LatLngExpression, LatLngBoundsExpression } from 'leaflet';
+import L from 'leaflet';
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -28,6 +30,52 @@ if (typeof window !== 'undefined') {
   });
 }
 
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Polygon = dynamic(() => import('react-leaflet').then(mod => mod.Polygon), { ssr: false });
+const Tooltip = dynamic(() => import('react-leaflet').then(mod => mod.Tooltip), { ssr: false });
+const FeatureGroup = dynamic(() => import('react-leaflet').then(mod => mod.FeatureGroup), { ssr: false });
+
+const MapView = ({ parcels }: { parcels: Parcel[] }) => {
+    const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+
+    let bounds: LatLngBoundsExpression | undefined = undefined;
+    if (parcelsWithLocation.length > 0) {
+        const featureGroup = L.featureGroup(parcelsWithLocation.map(parcel => {
+            const latLngs = parcel.location as LatLngExpression[];
+            return L.polygon(latLngs);
+        }));
+        bounds = featureGroup.getBounds();
+    }
+    
+    const mapCenter: LatLngExpression = [52.1326, 5.2913];
+    const zoomLevel = bounds ? 13 : 8;
+
+    return (
+        <MapContainer center={mapCenter} zoom={zoomLevel} bounds={bounds} style={{ height: '100%', width: '100%' }}>
+            <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+            />
+            {parcelsWithLocation.map(parcel => (
+                <Polygon
+                    key={parcel.id}
+                    positions={parcel.location as LatLngExpression[]}
+                    pathOptions={{ color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 }}
+                >
+                    <Tooltip>
+                        <div className="text-center">
+                            <p className="font-bold">{parcel.name}</p>
+                            <p>{parcel.variety}</p>
+                            <p>{parcel.area} ha</p>
+                        </div>
+                    </Tooltip>
+                </Polygon>
+            ))}
+        </MapContainer>
+    );
+};
+
 
 export default function PercelenPage() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -38,9 +86,6 @@ export default function PercelenPage() {
   
   const db = useFirestore();
   const { toast } = useToast();
-  const mapRef = useRef<L.Map | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-
 
   async function loadParcels() {
     if (!db) return;
@@ -55,55 +100,6 @@ export default function PercelenPage() {
       loadParcels();
     }
   }, [db]);
-
-
-  useEffect(() => {
-    if (activeTab === 'map' && mapContainerRef.current) {
-        if (!mapRef.current) {
-            const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
-            mapRef.current = map;
-    
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-            }).addTo(map);
-        }
-
-        // Clear existing polygons before adding new ones
-        mapRef.current.eachLayer(layer => {
-            if (layer instanceof L.Polygon) {
-                mapRef.current?.removeLayer(layer);
-            }
-        });
-
-        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
-        if (parcelsWithLocation.length > 0) {
-            const featureGroup = L.featureGroup();
-            parcelsWithLocation.forEach(parcel => {
-                const latLngs = parcel.location as LatLngExpression[];
-                const polygon = L.polygon(latLngs, { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 });
-                
-                polygon.bindTooltip(`
-                    <div class="text-center">
-                        <p class="font-bold">${parcel.name}</p>
-                        <p>${parcel.variety}</p>
-                        <p>${parcel.area} ha</p>
-                    </div>
-                `);
-
-                featureGroup.addLayer(polygon);
-            });
-            featureGroup.addTo(mapRef.current);
-            mapRef.current.fitBounds(featureGroup.getBounds());
-        }
-
-    } else if (activeTab !== 'map' && mapRef.current) {
-        // This tab is not active, destroy the map.
-        mapRef.current.remove();
-        mapRef.current = null;
-    }
-}, [activeTab, parcels, loading]);
-
-
 
   const handleAdd = () => {
     setEditingParcel(null);
@@ -248,7 +244,8 @@ export default function PercelenPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="h-[600px] w-full rounded-md border overflow-hidden" ref={mapContainerRef}>
+                    <div className="h-[600px] w-full rounded-md border overflow-hidden">
+                       {activeTab === 'map' && <MapView parcels={parcels} />}
                     </div>
                 </CardContent>
             </Card>
@@ -264,5 +261,3 @@ export default function PercelenPage() {
     </>
   );
 }
-
-    
