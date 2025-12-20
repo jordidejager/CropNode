@@ -52,14 +52,10 @@ export default function PercelenPage() {
     loadParcels();
   };
 
-  const handleFormSubmit = async (values: Omit<Parcel, 'id' | 'variety'> & { id?: string, variety: string | string[] }) => {
+  const handleFormSubmit = async (values: Omit<Parcel, 'id'> & { id?: string }) => {
     if (!db) return;
 
-    const varietyAsArray = Array.isArray(values.variety)
-      ? values.variety
-      : values.variety.split(',').map(v => v.trim()).filter(Boolean);
-
-    const parcelData = { ...values, variety: varietyAsArray };
+    const parcelData = { ...values };
 
     try {
       if (parcelData.id) {
@@ -118,7 +114,7 @@ export default function PercelenPage() {
                     <TableRow key={parcel.id}>
                       <TableCell className="font-medium">{parcel.name}</TableCell>
                       <TableCell>{parcel.crop}</TableCell>
-                      <TableCell>{Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety}</TableCell>
+                      <TableCell>{parcel.variety}</TableCell>
                       <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
                       <TableCell>
                         <AlertDialog>

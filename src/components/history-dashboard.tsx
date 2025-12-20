@@ -45,7 +45,7 @@ export function HistoryDashboard({
   const isFiltered = filters.variety !== 'all' || filters.parcel !== 'all' || filters.date !== undefined;
 
   const filteredEntries = entries.filter(entry => {
-    const varietyMatch = filters.variety === 'all' || (Array.isArray(entry.variety) && entry.variety.includes(filters.variety));
+    const varietyMatch = filters.variety === 'all' || entry.variety === filters.variety;
     const parcelMatch = filters.parcel === 'all' || entry.parcelName === filters.parcel;
     
     const entryDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
@@ -113,7 +113,7 @@ export function HistoryDashboard({
             {filteredEntries.map(entry => (
               <Card key={entry.id} className="flex flex-col">
                 <CardHeader>
-                  <CardTitle className="text-base">{entry.parcelName} <span className="font-normal text-muted-foreground">({Array.isArray(entry.variety) ? entry.variety.join(', ') : entry.variety})</span></CardTitle>
+                  <CardTitle className="text-base">{entry.parcelName} <span className="font-normal text-muted-foreground">({entry.variety})</span></CardTitle>
                   <CardDescription>{formatDate(entry.date)}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">

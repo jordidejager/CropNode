@@ -74,7 +74,7 @@ async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: 
 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
-    plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: Array.isArray(p.variety) ? p.variety.join(', ') : p.variety }))),
+    plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
     products: JSON.stringify(allProducts),
   });
 
@@ -141,7 +141,7 @@ export async function processSprayEntry(
     const newEntry = await addLogbookEntry(firestore, newEntryData);
 
     if (isValid) {
-      const historyEntries: Omit<ParcelHistoryEntry, 'id' | 'variety'>[] = finalParsedData.plots.map(parcelId => {
+      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.map(parcelId => {
         return finalParsedData.products.map(productEntry => ({
           logId: newEntry.id,
           parcelId: parcelId,
@@ -152,6 +152,7 @@ export async function processSprayEntry(
           // These fields will be populated by addParcelHistoryEntries
           parcelName: '', 
           crop: '', 
+          variety: ''
         }));
       }).flat();
       await addParcelHistoryEntries(firestore, historyEntries, parcels);
@@ -212,7 +213,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     await updateLogbookEntry(firestore, updatedEntry);
 
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
-        const historyEntries: Omit<ParcelHistoryEntry, 'id' | 'variety'>[] = updatedEntry.parsedData.plots.map(parcelId => {
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.map(parcelId => {
             return updatedEntry.parsedData!.products.map(productEntry => ({
                 logId: updatedEntry.id,
                 parcelId: parcelId,
@@ -223,6 +224,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
                 // These fields will be populated by addParcelHistoryEntries
                 parcelName: '', 
                 crop: '', 
+                variety: ''
             }));
         }).flat();
         await addParcelHistoryEntries(firestore, historyEntries, allParcels);
@@ -281,7 +283,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
         await updateLogbookEntry(firestore, entry);
 
-        const historyEntries: Omit<ParcelHistoryEntry, 'id' | 'variety'>[] = entry.parsedData.plots.map(parcelId => {
+        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.map(parcelId => {
             return entry.parsedData!.products.map(productEntry => ({
                 logId: entry.id,
                 parcelId: parcelId,
@@ -292,6 +294,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
                 // These fields will be populated by addParcelHistoryEntries
                 parcelName: '', 
                 crop: '', 
+                variety: ''
             }));
         }).flat();
         await addParcelHistoryEntries(firestore, historyEntries, allParcels);

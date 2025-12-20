@@ -1,27 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useForm, Controller, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Parcel } from '@/lib/types';
-import { useForm, SubmitHandler } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Combobox } from './ui/combobox';
+import { Combobox, ComboboxOption } from './ui/combobox';
+import type { Parcel } from '@/lib/types';
 import { useFirestore } from '@/firebase';
 import { getParcels } from '@/lib/store';
-import { Loader2 } from 'lucide-react';
+
 
 const formSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Naam is verplicht'),
   crop: z.string().min(1, 'Gewas is verplicht'),
-  variety: z.union([z.string(), z.array(z.string())]).refine(val => (Array.isArray(val) && val.length > 0) || (typeof val === 'string' && val.length > 0), {
-    message: 'Ras is verplicht',
-  }),
+  variety: z.string().min(1, 'Ras is verplicht'),
   area: z.coerce.number().min(0.01, 'Oppervlakte moet groter dan 0 zijn'),
 });
 
@@ -35,44 +34,48 @@ interface ParcelFormDialogProps {
 }
 
 export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: ParcelFormDialogProps) {
-  const { register, handleSubmit, formState: { errors }, reset, setValue, watch, control } = useForm<ParcelFormValues>({
+  const { register, handleSubmit, formState: { errors }, reset, setValue, control } = useForm<ParcelFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: '',
-      crop: '',
-      variety: [],
-      area: 0,
-    }
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allVarieties, setAllVarieties] = useState<string[]>([]);
+  const [allVarieties, setAllVarieties] = useState<ComboboxOption[]>([]);
   const [loadingVarieties, setLoadingVarieties] = useState(true);
   const db = useFirestore();
 
   useEffect(() => {
     async function fetchVarieties() {
-      if (!db) return;
+      if (!db || !isOpen) return;
       setLoadingVarieties(true);
       const parcels = await getParcels(db);
-      const uniqueVarieties = [...new Set(parcels.flatMap(p => p.variety))];
-      setAllVarieties(uniqueVarieties);
+      const uniqueVarieties = [...new Set(parcels.map(p => p.variety))];
+      setAllVarieties(uniqueVarieties.map(v => ({ value: v, label: v })));
       setLoadingVarieties(false);
     }
     fetchVarieties();
   }, [db, isOpen]);
   
   useEffect(() => {
-    if (parcel) {
-      setValue('id', parcel.id);
-      setValue('name', parcel.name);
-      setValue('crop', parcel.crop);
-      setValue('area', parcel.area);
-      setValue('variety', Array.isArray(parcel.variety) ? parcel.variety.join(', ') : parcel.variety);
-    } else {
-      reset({ id: undefined, name: '', crop: '', variety: '', area: 0 });
+    if (isOpen) {
+      if (parcel) {
+        reset({
+          id: parcel.id,
+          name: parcel.name,
+          crop: parcel.crop,
+          area: parcel.area,
+          variety: parcel.variety,
+        });
+      } else {
+        reset({
+          id: undefined,
+          name: '',
+          crop: '',
+          variety: '',
+          area: 0.0,
+        });
+      }
     }
-  }, [parcel, reset, setValue, isOpen]);
+  }, [parcel, isOpen, reset]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -89,10 +92,6 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
       handleOpenChange(false);
     }
   };
-
-  const varietyValue = watch('variety');
-
-  const varietyOptions = allVarieties.map(v => ({ value: v, label: v }));
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -141,15 +140,20 @@ export function ParcelFormDialog({ isOpen, onOpenChange, parcel, onSubmit }: Par
                   <span>Rassen laden...</span>
                 </div>
               ) : (
-                <Combobox
-                    options={varietyOptions}
-                    value={typeof varietyValue === 'string' ? varietyValue.split(',').map(v => v.trim()).filter(Boolean) : varietyValue}
-                    onValueChange={(values) => setValue('variety', values.join(', '))}
-                    placeholder="Kies of maak rassen..."
-                    multiple
+                <Controller
+                    control={control}
+                    name="variety"
+                    render={({ field }) => (
+                       <Combobox
+                          options={allVarieties}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Kies of maak een ras..."
+                          creatable
+                        />
+                    )}
                 />
               )}
-              <p className="text-xs text-muted-foreground mt-1">Scheid meerdere rassen met een komma.</p>
               {errors.variety && <p className="text-red-500 text-xs mt-1">{errors.variety.message}</p>}
             </div>
           </div>

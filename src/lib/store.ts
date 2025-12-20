@@ -149,7 +149,7 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   });
 }
 
-export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id' | 'variety'>[], parcels: Parcel[]) {
+export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[], parcels: Parcel[]) {
   if (!db) throw new Error("Database not initialized");
   const batch = writeBatch(db);
   entries.forEach(entry => {
