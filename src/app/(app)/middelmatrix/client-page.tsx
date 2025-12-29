@@ -102,6 +102,11 @@ const areRegelsSimilar = (a: Middel, b: Middel) => {
         a.minIntervalDays === b.minIntervalDays;
 };
 
+const formatDisease = (disease: string | undefined) => {
+    if (!disease) return '-';
+    return disease.split('(')[0].trim();
+};
+
 export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
@@ -212,7 +217,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                                 <TableRow key={regel.id}>
                                                     <TableCell className="font-medium">{regel.product}</TableCell>
                                                     <TableCell>{regel.crop}</TableCell>
-                                                    <TableCell>{regel.disease || '-'}</TableCell>
+                                                    <TableCell>{formatDisease(regel.disease)}</TableCell>
                                                     <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
                                                     <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
                                                     <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
@@ -248,7 +253,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                                                 <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
                                                                     <TableCell className="pl-12 text-muted-foreground"></TableCell>
                                                                     <TableCell>{regel.crop}</TableCell>
-                                                                    <TableCell>{regel.disease || '-'}</TableCell>
+                                                                    <TableCell>{formatDisease(regel.disease)}</TableCell>
                                                                     <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
                                                                     <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
                                                                     <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
