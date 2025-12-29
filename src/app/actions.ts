@@ -321,7 +321,8 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     if (!file || file.size === 0) {
         return { success: false, message: 'Geen bestand geselecteerd.' };
     }
-
+    
+    // Always initialize firebase in a server action
     const { firestore, storage } = initializeFirebase();
 
     try {
@@ -373,9 +374,9 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         
         return { success: true, message: `${parsedResult.middelen.length} middel-regel(s) voor ${productName} succesvol geïmporteerd.` };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Fout bij importeren voorschrift:", error);
-        const message = error instanceof Error ? error.message : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
+        const message = error instanceof Error ? `${error.message} (${(error as any).code})` : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
         return { success: false, message };
     }
 }
