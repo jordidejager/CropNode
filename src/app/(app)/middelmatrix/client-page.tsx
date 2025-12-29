@@ -80,7 +80,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                  toast({
                     variant: 'destructive',
                     title: `Import mislukt`,
-                    description: `Fouten: ${errorMessages.join(', ')}`,
+                    description: `De volgende fouten zijn opgetreden: ${errorMessages.join(', ')}`,
                 });
             }
     
