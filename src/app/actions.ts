@@ -322,7 +322,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message: 'Geen bestand geselecteerd.' };
     }
     
-    // Always initialize firebase in a server action
     const { firestore, storage } = initializeFirebase();
 
     try {
@@ -376,7 +375,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
 
     } catch (error: any) {
         console.error("Fout bij importeren voorschrift:", error);
-        const message = error instanceof Error ? `${error.message} (${(error as any).code})` : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
+        const message = error.code ? `${error.message} (${error.code})` : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
         return { success: false, message };
     }
 }
