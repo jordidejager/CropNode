@@ -1,13 +1,9 @@
 
-
-
-
-
 'use server';
 
 import type { CtgbMiddel } from './types';
 
-const REVALIDATE_TIME_SECONDS = 60 * 60 * 24; // 1 day
+const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 1 week
 
 const CTGB_API_BASE_URL = "https://toelatingen.ctgb.nl/ords/ctgb_pub/toelating";
 
@@ -53,38 +49,43 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
 };
 
 export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
-    const crops = ["Appel", "Peer"];
-    
-    const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
-    
-    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
+    try {
+        const crops = ["Appel", "Peer"];
+        const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
+        const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
 
-    const allMiddelen = [...appelMiddelen, ...peerMiddelen];
-    const uniekeMiddelenMap = new Map<number, any>();
-    allMiddelen.forEach(m => {
-        if (m && m.toelating_id) {
-            uniekeMiddelenMap.set(m.toelating_id, m);
+        const allMiddelen = [...appelMiddelen, ...peerMiddelen];
+        const uniekeMiddelenMap = new Map<number, any>();
+        
+        allMiddelen.forEach(middel => {
+            if (middel && middel.toelating_id) {
+                uniekeMiddelenMap.set(middel.toelating_id, middel);
+            }
+        });
+
+        if (uniekeMiddelenMap.size === 0) {
+            console.log("No unique middelen found after fetching from API.");
+            return [];
         }
-    });
-    
-    const uniekeMiddelen = Array.from(uniekeMiddelenMap.values());
 
-    const resultPromises = uniekeMiddelen.map(async (middel) => {
-        if (!middel || !middel.toelating_id) return null;
-        
-        const werkzameStoffen = await getWerkzameStoffen(middel.toelating_id);
-        
-        return {
-            toelatingsnummer: middel.toelatingsnummer,
-            naam: middel.toelatingnaam,
-            status: middel.toelatingstatus_oms,
-            werkzameStoffen: werkzameStoffen
-        } as CtgbMiddel;
-    });
+        const resultPromises = Array.from(uniekeMiddelenMap.values()).map(async (middel) => {
+            if (!middel || !middel.toelating_id) return null;
+            
+            const werkzameStoffen = await getWerkzameStoffen(middel.toelating_id);
+            
+            return {
+                toelatingsnummer: middel.toelatingsnummer,
+                naam: middel.toelatingnaam,
+                status: middel.toelatingstatus_oms,
+                werkzameStoffen: werkzameStoffen,
+            } as CtgbMiddel;
+        });
 
-    const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
+        const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
 
-    return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
+        return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
+    } catch (error) {
+        console.error("Critical error in getCtgbDataFromApi:", error);
+        return [];
+    }
 }
-
-
