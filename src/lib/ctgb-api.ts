@@ -50,7 +50,6 @@ export async function getCtgbData(): Promise<CtgbMiddel[]> {
     const toelatingen = await getCtgbToelatingen();
 
     const pitfruitGewassen = ["Appel", "Peer"];
-    const pitfruitMiddelen: any[] = [];
 
     // This part involves multiple fetches, so we should be careful.
     // Let's fetch all applications in parallel to speed things up.
