@@ -3,33 +3,30 @@
 
 import type { CtgbMiddel } from './types';
 
-const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
 // Corrected base URL for the CTGB public API
 const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating";
 
-// Helper function to make cached API calls
-const fetchWithCache = async (url: string) => {
+// Helper function to make API calls. Caching is removed as we now control sync manually.
+const fetchFromApi = async (url: string) => {
     try {
-        const response = await fetch(url, {
-            next: { revalidate: REVALIDATE_TIME_SECONDS }
-        });
+        const response = await fetch(url);
         if (!response.ok) {
             console.error(`CTGB API error for URL ${url}: ${response.statusText}`);
-            return { items: [] };
+            // Throw an error to be caught by the caller
+            throw new Error(`API returned status ${response.status} for ${url}`);
         }
         return response.json();
     } catch (error) {
         console.error(`Fetch failed for URL ${url}:`, error);
-        // Return a default structure to prevent crashes downstream
-        return { items: [] };
+        // Re-throw the error to ensure the sync process fails explicitly
+        throw error;
     }
 };
 
 // Gets all authorized products for a specific crop ("gewas")
 const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
     try {
-        // Use the correct endpoint as per the documentation
-        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
+        const data = await fetchFromApi(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
         return data.items || [];
     } catch (error) {
         console.error(`Fout bij ophalen middelen voor gewas ${gewas}:`, error);
@@ -41,8 +38,7 @@ const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     if (!toelatingId) return "Niet beschikbaar";
     try {
-        // Use the correct endpoint as per the documentation
-        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
+        const data = await fetchFromApi(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
         if (data.items && data.items.length > 0) {
             return data.items.map((item: any) => `${item.werkzame_stof} (${item.gehalte})`).join(', ');
         }
@@ -53,8 +49,8 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     }
 };
 
-// Main function called from the page to get all data for pit fruit
-export async function getCtgbData(): Promise<CtgbMiddel[]> {
+// Main function to be called by the server action to get all data for pit fruit
+export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
     const crops = ["Appel", "Peer"];
     
     // 1. Fetch all products for "Appel" and "Peer" in parallel

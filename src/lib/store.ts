@@ -2,8 +2,9 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
 import { staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
@@ -12,6 +13,38 @@ const PRODUCTS_COLLECTION = 'products';
 const PARCELS_COLLECTION = 'parcels';
 const MIDDELEN_COLLECTION = 'middelen';
 const UPLOAD_LOG_COLLECTION = 'uploadLog';
+const CTGB_MIDDELEN_COLLECTION = 'ctgb_middelen';
+
+
+// CTGB Middelen Functions
+export async function getCtgbMiddelen(db: Firestore): Promise<CtgbMiddel[]> {
+    if (!db) return [];
+    const q = query(collection(db, CTGB_MIDDEL23_COLLECTION), orderBy('naam'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CtgbMiddel));
+}
+
+export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+
+    const batch = writeBatch(db);
+    const collectionRef = collection(db, CTGB_MIDDELEN_COLLECTION);
+
+    // 1. Delete all existing documents in the collection
+    const existingDocsSnapshot = await getDocs(collectionRef);
+    existingDocsSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+
+    // 2. Add the new documents
+    middelen.forEach(middel => {
+        const docRef = doc(collectionRef); // Create a new doc with a random ID
+        batch.set(docRef, middel);
+    });
+
+    // 3. Commit the atomic batch
+    await batch.commit();
+}
 
 
 // Upload Log Functions

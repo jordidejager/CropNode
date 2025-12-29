@@ -7,11 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Download, RefreshCw } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, extractPdfText } from '@/app/actions';
+import { importVoorschrift, extractPdfText, syncCtgbDatabase } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -156,8 +156,25 @@ const formatDate = (date: Date) => {
 
 function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMiddel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
+    const [isSyncing, startSyncTransition] = useTransition();
+    const { toast } = useToast();
+    const router = useRouter();
+
+    const handleSync = () => {
+        startSyncTransition(async () => {
+            toast({ title: 'Synchronisatie gestart', description: 'De CTGB database wordt op de achtergrond bijgewerkt.' });
+            const result = await syncCtgbDatabase();
+            if (result.success) {
+                toast({ title: 'Synchronisatie Voltooid', description: `${result.count} middelen zijn succesvol gesynchroniseerd.` });
+                router.refresh();
+            } else {
+                toast({ variant: 'destructive', title: 'Synchronisatie Mislukt', description: result.message });
+            }
+        });
+    };
     
     const filteredData = useMemo(() => {
+        if (!initialCtgbData) return [];
         return initialCtgbData.filter(middel =>
             middel.naam.toLowerCase().includes(searchTerm.toLowerCase()) ||
             middel.werkzameStoffen.toLowerCase().includes(searchTerm.toLowerCase())
@@ -171,18 +188,24 @@ function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMidd
                     <div>
                         <CardTitle>CTGB Databank (Pitfruit)</CardTitle>
                         <CardDescription>
-                            Officiële database van middelen toegelaten voor Appels & Peren.
+                            Lokale kopie van de officiële database van middelen toegelaten voor Appels & Peren.
                         </CardDescription>
                     </div>
-                    <div className="relative w-1/3">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Zoek op naam of werkzame stof..."
-                            className="w-full rounded-lg bg-background pl-8"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex items-center gap-4">
+                        <div className="relative w-72">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                type="search"
+                                placeholder="Zoek op naam of werkzame stof..."
+                                className="w-full rounded-lg bg-background pl-8"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                         <Button onClick={handleSync} disabled={isSyncing} variant="outline">
+                            {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Synchroniseer
+                        </Button>
                     </div>
                 </div>
             </CardHeader>
@@ -210,7 +233,7 @@ function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMidd
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={4} className="h-24 text-center">
-                                        Geen middelen gevonden.
+                                        Geen middelen gevonden. Probeer de database te synchroniseren.
                                     </TableCell>
                                 </TableRow>
                             )}

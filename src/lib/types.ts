@@ -69,7 +69,8 @@ export type UploadLog = {
 };
 
 export type CtgbMiddel = {
-    toelatingnummer: number;
+    id?: string; // Firestore ID, optional here but present in DB
+    toelatingnummer: string;
     naam: string;
     status: string;
     werkzameStoffen: string;

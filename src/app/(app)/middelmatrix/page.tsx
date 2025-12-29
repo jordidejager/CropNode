@@ -3,16 +3,15 @@
 'use server';
 
 import { initializeFirebase } from '@/firebase';
-import { getMiddelen, getUploadLogs } from '@/lib/store';
+import { getMiddelen, getUploadLogs, getCtgbMiddelen } from '@/lib/store';
 import { MiddelMatrixClientPage } from './client-page';
-import { getCtgbData } from '@/lib/ctgb-api';
 
 export default async function MiddelMatrixPage() {
     const { firestore } = initializeFirebase();
     const [middelen, uploadLogs, ctgbData] = await Promise.all([
         getMiddelen(firestore),
         getUploadLogs(firestore),
-        getCtgbData()
+        getCtgbMiddelen(firestore) // Fetch from Firestore instead of API
     ]);
 
     return <MiddelMatrixClientPage 
