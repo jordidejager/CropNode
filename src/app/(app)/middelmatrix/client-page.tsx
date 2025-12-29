@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
@@ -168,7 +169,12 @@ function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMidd
                 toast({ title: 'Synchronisatie Voltooid', description: `${result.count} middelen zijn succesvol gesynchroniseerd.` });
                 router.refresh();
             } else {
-                toast({ variant: 'destructive', title: 'Synchronisatie Mislukt', description: result.message });
+                toast({ 
+                    variant: 'destructive', 
+                    title: 'Synchronisatie Mislukt', 
+                    description: result.message,
+                    fullError: result.fullError 
+                });
             }
         });
     };

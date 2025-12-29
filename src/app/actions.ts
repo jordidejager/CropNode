@@ -393,14 +393,14 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
 }
 
 
-export async function syncCtgbDatabase(): Promise<{ success: boolean, message: string, count: number }> {
-    const { firestore } = initializeFirebase();
+export async function syncCtgbDatabase(): Promise<{ success: boolean, message: string, fullError?: string, count: number }> {
     try {
         console.log("Starting CTGB API data fetch...");
         const middelen = await getCtgbDataFromApi();
         console.log(`Fetched ${middelen.length} middelen from CTGB API.`);
-        
+
         if (middelen.length > 0) {
+            const { firestore } = initializeFirebase();
             await syncCtgbMiddelen(firestore, middelen);
             console.log("Successfully synced data to Firestore.");
         } else {
@@ -417,7 +417,7 @@ export async function syncCtgbDatabase(): Promise<{ success: boolean, message: s
 
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Onbekende fout bij synchroniseren.';
-        console.error("Error syncing CTGB database:", message);
-        return { success: false, message, count: 0 };
+        console.error("Error syncing CTGB database:", error);
+        return { success: false, message, fullError: error instanceof Error ? error.stack : String(error), count: 0 };
     }
 }
