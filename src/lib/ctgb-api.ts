@@ -8,14 +8,20 @@ const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating"
 
 // Helper function to make cached API calls
 const fetchWithCache = async (url: string) => {
-    const response = await fetch(url, {
-        next: { revalidate: REVALIDATE_TIME_SECONDS }
-    });
-    if (!response.ok) {
-        console.error(`CTGB API error for URL ${url}: ${response.statusText}`);
+    try {
+        const response = await fetch(url, {
+            next: { revalidate: REVALIDATE_TIME_SECONDS }
+        });
+        if (!response.ok) {
+            console.error(`CTGB API error for URL ${url}: ${response.statusText}`);
+            return { items: [] };
+        }
+        return response.json();
+    } catch (error) {
+        console.error(`Fetch failed for URL ${url}:`, error);
+        // Return a default structure to prevent crashes downstream
         return { items: [] };
     }
-    return response.json();
 };
 
 // Gets all authorized products for a specific crop ("gewas")
@@ -50,7 +56,16 @@ export async function getCtgbData(): Promise<CtgbMiddel[]> {
     
     // 1. Fetch all products for "Appel" and "Peer" in parallel
     const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
-    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
+    
+    let appelMiddelen: any[] = [];
+    let peerMiddelen: any[] = [];
+
+    try {
+        [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
+    } catch (error) {
+        console.error("Error fetching middelen in parallel:", error);
+        return []; // Return empty if the initial fetch fails
+    }
 
     // 2. Combine and deduplicate the lists based on toelating_id
     const allMiddelen = [...appelMiddelen, ...peerMiddelen];
@@ -70,9 +85,14 @@ export async function getCtgbData(): Promise<CtgbMiddel[]> {
         };
     });
 
-    // 4. Await all results and filter out any nulls
-    const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
+    try {
+        // 4. Await all results and filter out any nulls
+        const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
 
-    // Sort by name
-    return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
+        // Sort by name
+        return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
+    } catch (error) {
+        console.error("Error processing result promises:", error);
+        return [];
+    }
 }
