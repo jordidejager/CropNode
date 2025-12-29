@@ -11,13 +11,46 @@ import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-re
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift } from '@/app/actions';
+import { importVoorschrift, getSignedUploadUrl } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import pdf from 'pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { initializeFirebase } from '@/firebase';
+
+pdf.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+
+
+async function getPdfText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            if (!event.target?.result) {
+                return reject(new Error("FileReader error"));
+            }
+            try {
+                const typedArray = new Uint8Array(event.target.result as ArrayBuffer);
+                const pdfDoc = await pdf.getDocument(typedArray).promise;
+                let text = '';
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => 'str' in item ? item.str : '').join(' ');
+                }
+                resolve(text);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
@@ -37,12 +70,47 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
             return;
         }
 
-        const formData = new FormData();
-        selectedFiles.forEach(file => {
-            formData.append('voorschriftPdf', file);
-        });
-
         startImportTransition(async () => {
+            const formData = new FormData();
+            
+            for (const file of selectedFiles) {
+                try {
+                    // 1. Get Signed URL
+                    const signedUrlResult = await getSignedUploadUrl(file.name, file.type);
+                    if (!signedUrlResult.success || !signedUrlResult.url) {
+                        throw new Error(`Kon geen veilige upload-URL voor ${file.name} verkrijgen: ${signedUrlResult.message}`);
+                    }
+
+                    // 2. Upload file directly to GCS
+                    await fetch(signedUrlResult.url, {
+                        method: 'PUT',
+                        body: file,
+                        headers: { 'Content-Type': file.type },
+                    });
+
+                    // 3. Get Download URL
+                    const { storage } = initializeFirebase();
+                    const fileRef = ref(storage, signedUrlResult.filePath);
+                    const downloadUrl = await getDownloadURL(fileRef);
+
+                    // 4. Extract PDF text
+                    const pdfText = await getPdfText(file);
+
+                    // 5. Append data to FormData
+                    const fileData = {
+                        fileName: file.name,
+                        pdfText: pdfText,
+                        downloadUrl: downloadUrl,
+                    };
+                    formData.append('filesData', JSON.stringify(fileData));
+
+                } catch (error: any) {
+                     toast({ variant: 'destructive', title: `Fout bij ${file.name}`, description: error.message });
+                     return;
+                }
+            }
+
+
             const result = await importVoorschrift(formData);
             if (result.success) {
                 toast({ title: 'Import succesvol!', description: result.message });

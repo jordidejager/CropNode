@@ -11,6 +11,7 @@ import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import { v4 as uuidv4 } from 'uuid';
+import { getStorage, ref, getDownloadURL } from "firebase/storage";
 import { adminStorage } from '@/firebase/admin';
 
 const formSchema = z.object({
@@ -315,91 +316,94 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
 
 export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const files = formData.getAll('voorschriftPdf') as File[];
-
-    if (!files || files.length === 0) {
-        return { success: false, message: 'Geen bestanden geselecteerd.' };
+    const filesData = formData.getAll('filesData');
+  
+    if (!filesData || filesData.length === 0) {
+      return { success: false, message: 'Geen bestanden geselecteerd.' };
     }
-    
+  
     const { firestore } = initializeFirebase();
     let successfulImports = 0;
     let failedImports = 0;
     const errorMessages: string[] = [];
-
-    const bucket = adminStorage.bucket();
-
-    for (const file of files) {
-        try {
-            const fileBuffer = Buffer.from(await file.arrayBuffer());
-            
-            // 1. Upload PDF to Firebase Storage using Admin SDK
-            const filePath = `voorschriften/${uuidv4()}-${file.name}`;
-            const storageFile = bucket.file(filePath);
-
-            await new Promise<void>((resolve, reject) => {
-                const stream = storageFile.createWriteStream({
-                    metadata: { contentType: file.type || 'application/pdf' },
-                });
-                stream.on('error', (err) => reject(err));
-                stream.on('finish', () => resolve());
-                stream.end(fileBuffer);
-            });
-            
-            await storageFile.makePublic();
-            const pdfUrl = storageFile.publicUrl();
-
-            // 2. Parse PDF text
-            const data = await pdf(fileBuffer);
-            const voorschriftText = data.text;
-            if (!voorschriftText) {
-                throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
-            }
-            
-            // 3. Parse text with AI
-            const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
-            if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-                throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
-            }
-            
-            const productName = parsedResult.middelen[0]?.product;
-            if (!productName) {
-                throw new Error(`De AI kon de productnaam niet bepalen in ${file.name}.`);
-            }
-
-            // 4. Add data to Firestore
-            await addMiddelen(firestore, parsedResult.middelen);
-            
-            const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> & { pdfUrl?: string } = {
-                productName,
-                uploadDate: new Date(),
-                fileName: file.name,
-                pdfUrl,
-            };
-
-            if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-            if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-            if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-            if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
-            
-            await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
-            successfulImports++;
-        } catch (error: any) {
-            console.error(`Fout bij importeren van ${file.name}:`, error);
-            const errorMessage = error.message || 'Onbekende fout.';
-            failedImports++;
-            errorMessages.push(`(${file.name}: ${errorMessage})`);
+  
+    for (const fileInfo of filesData) {
+      if (typeof fileInfo !== 'string') continue;
+  
+      const { fileName, pdfText, downloadUrl } = JSON.parse(fileInfo);
+  
+      try {
+        if (!pdfText) {
+          throw new Error(`Kon geen tekst uit ${fileName} extraheren.`);
         }
-    }
+  
+        // Parse text with AI
+        const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
+        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+          throw new Error(`De AI kon geen geldige middelengegevens uit ${fileName} extraheren.`);
+        }
+  
+        const productName = parsedResult.middelen[0]?.product;
+        if (!productName) {
+          throw new Error(`De AI kon de productnaam niet bepalen in ${fileName}.`);
+        }
+  
+        // Add data to Firestore
+        await addMiddelen(firestore, parsedResult.middelen);
+  
+        const newLogData: Omit<UploadLog, 'id'> = {
+          productName,
+          uploadDate: new Date(),
+          fileName: fileName,
+          pdfUrl: downloadUrl,
+        };
 
+        if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+        if (parsedResult.labelVersion) newLog-data.labelVersion = parsedResult.labelVersion;
+        if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+        if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
+  
+        await addUploadLog(firestore, newLogData);
+        successfulImports++;
+      } catch (error: any) {
+        console.error(`Fout bij importeren van ${fileName}:`, error);
+        const errorMessage = error.message || 'Onbekende fout.';
+        failedImports++;
+        errorMessages.push(`(${fileName}: ${errorMessage})`);
+      }
+    }
+  
     revalidatePath('/middelmatrix');
-    
+  
     let message = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
     if (failedImports > 0) {
-        message += ` ${failedImports} mislukt. Fouten: ${errorMessages.join(', ')}`;
+      message += ` ${failedImports} mislukt. Fouten: ${errorMessages.join(', ')}`;
     }
-
-    return { 
-        success: successfulImports > 0 && failedImports === 0, 
-        message 
+  
+    return {
+      success: successfulImports > 0,
+      message,
     };
+  }
+
+  export async function getSignedUploadUrl(fileName: string, contentType: string) {
+    try {
+        const bucket = adminStorage.bucket();
+        const filePath = `voorschriften/${uuidv4()}-${fileName}`;
+        const file = bucket.file(filePath);
+
+        const options = {
+            version: 'v4' as const,
+            action: 'write' as const,
+            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+            contentType: contentType,
+        };
+
+        const [url] = await file.getSignedUrl(options);
+        return { success: true, url: url, filePath: filePath };
+
+    } catch (error: any) {
+        console.error("Error getting signed URL: ", error);
+        return { success: false, message: error.message };
+    }
 }
