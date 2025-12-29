@@ -4,39 +4,38 @@
 import type { CtgbMiddel } from './types';
 
 const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating";
 
-// Deze functie haalt de gegevens op, filtert ze en transformeert ze naar het juiste formaat.
-// Caching is ingeschakeld om het aantal API-verzoeken te beperken.
-const getCtgbToelatingen = async (): Promise<any[]> => {
+// Helper function to make cached API calls
+const fetchWithCache = async (url: string) => {
+    const response = await fetch(url, {
+        next: { revalidate: REVALIDATE_TIME_SECONDS }
+    });
+    if (!response.ok) {
+        console.error(`CTGB API error for URL ${url}: ${response.statusText}`);
+        return { items: [] };
+    }
+    return response.json();
+};
+
+// Gets all authorized products for a specific crop ("gewas")
+const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
     try {
-        const response = await fetch("https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get/", {
-            next: { revalidate: REVALIDATE_TIME_SECONDS }
-        });
-        if (!response.ok) {
-            throw new Error(`Fout bij het ophalen van CTGB data: ${response.statusText}`);
-        }
-        const data = await response.json();
-        return (data as any).items;
+        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
+        return data.items || [];
     } catch (error) {
-        console.error("Fout bij het ophalen van CTGB-toelatingen:", error);
+        console.error(`Fout bij ophalen middelen voor gewas ${gewas}:`, error);
         return [];
     }
-}
+};
 
-// Deze functie haalt de werkzame stoffen op voor een specifiek toelatingsnummer.
+// Gets the active substances for a specific authorization ID
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     if (!toelatingId) return "Niet beschikbaar";
     try {
-        const response = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_werkzame_stof/${toelatingId}/`, {
-             next: { revalidate: REVALIDATE_TIME_SECONDS }
-        });
-        if (!response.ok) {
-            return "Niet beschikbaar";
-        }
-        const data = await response.json();
-        const items = (data as any).items;
-        if (items && items.length > 0) {
-            return items.map((item: any) => `${item.werkzame_stof} (${item.gehalte})`).join(', ');
+        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
+        if (data.items && data.items.length > 0) {
+            return data.items.map((item: any) => `${item.werkzame_stof} (${item.gehalte})`).join(', ');
         }
         return "Niet gespecificeerd";
     } catch (error) {
@@ -45,49 +44,35 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     }
 };
 
-// Hoofdfunctie die wordt aangeroepen vanuit de pagina.
+// Main function called from the page to get all data for pit fruit
 export async function getCtgbData(): Promise<CtgbMiddel[]> {
-    const toelatingen = await getCtgbToelatingen();
-    const pitfruitGewassen = ["Appel", "Peer"];
+    const crops = ["Appel", "Peer"];
+    
+    // 1. Fetch all products for "Appel" and "Peer" in parallel
+    const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
+    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
 
-    const applicationPromises = toelatingen.map(async (toelating) => {
-        if (!toelating.toelating_id) return null;
-        try {
-            const toepassingenResponse = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_toepassing/${toelating.toelating_id}/`, {
-                next: { revalidate: REVALIDATE_TIME_SECONDS }
-            });
-            if (toepassingenResponse.ok) {
-                const toepassingenData = await toepassingenResponse.json();
-                const items = (toepassingenData as any).items;
-                const heeftPitfruitToepassing = items.some((toep: any) =>
-                    pitfruitGewassen.includes(toep.gewas_oms)
-                );
-                if (heeftPitfruitToepassing) {
-                    return toelating;
-                }
-            }
-        } catch (error) {
-            console.error(`Fout bij ophalen toepassing voor toelating ${toelating.toelating_id}:`, error);
-        }
-        return null;
+    // 2. Combine and deduplicate the lists based on toelating_id
+    const allMiddelen = [...appelMiddelen, ...peerMiddelen];
+    const uniekeMiddelen = Array.from(new Map(allMiddelen.map(m => [m.toelating_id, m])).values());
+
+    // 3. Fetch active substances for the unique list of products in parallel
+    const resultPromises = uniekeMiddelen.map(async (middel) => {
+        if (!middel || !middel.toelating_id) return null;
+        
+        const werkzameStoffen = await getWerkzameStoffen(middel.toelating_id);
+        
+        return {
+            toelatingnummer: middel.toelatingsnummer,
+            naam: middel.toelatingnaam,
+            status: middel.toelatingstatus_oms,
+            werkzameStoffen: werkzameStoffen
+        };
     });
 
-    const results = await Promise.all(applicationPromises);
-    const filteredMiddelen = results.filter(middel => middel !== null);
+    // 4. Await all results and filter out any nulls
+    const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
 
-    const uniekeMiddelen = Array.from(new Map(filteredMiddelen.map(m => [m.toelating_id, m])).values());
-
-    const resultaat = await Promise.all(
-        uniekeMiddelen.map(async (middel) => {
-            const werkzameStoffen = await getWerkzameStoffen(middel.toelating_id);
-            return {
-                toelatingnummer: middel.toelatingsnummer,
-                naam: middel.toelatingnaam,
-                status: middel.toelatingstatus_oms,
-                werkzameStoffen: werkzameStoffen
-            };
-        })
-    );
-
-    return resultaat;
+    // Sort by name
+    return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
 }
