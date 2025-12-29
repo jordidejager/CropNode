@@ -67,4 +67,10 @@ export type UploadLog = {
     activeSubstances: string;
     fileName: string;
 };
-    
+
+export type CtgbMiddel = {
+    toelatingnummer: number;
+    naam: string;
+    status: string;
+    werkzameStoffen: string;
+};

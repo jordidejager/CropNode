@@ -2,12 +2,12 @@
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
-import type { Middel, UploadLog } from '@/lib/types';
+import type { Middel, UploadLog, CtgbMiddel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -36,29 +36,29 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
             toast({ variant: 'destructive', title: 'Geen bestanden', description: 'Selecteer een of meerdere PDF-bestanden om te importeren.' });
             return;
         }
-
+    
         onOpenChange(false);
         toast({
             title: 'Import Gestart',
             description: `Verwerking van ${selectedFiles.length} bestand(en) is op de achtergrond gestart.`,
         });
-
+    
         startImportTransition(() => {
             selectedFiles.forEach(async (file) => {
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
                     const textResult = await extractPdfText(formData);
-
+    
                     if (!textResult.success || !textResult.text) {
                         throw new Error(textResult.message || `Kon geen tekst uit ${file.name} extraheren.`);
                     }
-
+    
                     const importResult = await importVoorschrift({
                         fileName: file.name,
                         pdfText: textResult.text,
                     });
-
+    
                     if (importResult.success) {
                         toast({
                             title: 'Import Succesvol',
@@ -154,7 +154,76 @@ const formatDate = (date: Date) => {
     }
 }
 
-export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialData: Middel[], initialLogs: UploadLog[] }) {
+function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMiddel[] }) {
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    const filteredData = useMemo(() => {
+        return initialCtgbData.filter(middel =>
+            middel.naam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            middel.werkzameStoffen.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [initialCtgbData, searchTerm]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>CTGB Databank (Pitfruit)</CardTitle>
+                        <CardDescription>
+                            Officiële database van middelen toegelaten voor Appels & Peren.
+                        </CardDescription>
+                    </div>
+                    <div className="relative w-1/3">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Zoek op naam of werkzame stof..."
+                            className="w-full rounded-lg bg-background pl-8"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Toelatingnummer</TableHead>
+                                <TableHead>Naam</TableHead>
+                                <TableHead>Werkzame stoffen</TableHead>
+                                <TableHead>Status</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredData.length > 0 ? (
+                                filteredData.map(middel => (
+                                    <TableRow key={middel.toelatingnummer}>
+                                        <TableCell>{middel.toelatingnummer}</TableCell>
+                                        <TableCell className="font-medium">{middel.naam}</TableCell>
+                                        <TableCell>{middel.werkzameStoffen}</TableCell>
+                                        <TableCell>{middel.status}</TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center">
+                                        Geen middelen gevonden.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+
+export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbData }: { initialData: Middel[], initialLogs: UploadLog[], initialCtgbData: CtgbMiddel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
     const router = useRouter();
@@ -223,7 +292,8 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                         </div>
                         <div className="flex items-center gap-4">
                             <TabsList>
-                                <TabsTrigger value="database">Database</TabsTrigger>
+                                <TabsTrigger value="database">Mijn Middelen</TabsTrigger>
+                                <TabsTrigger value="ctgb">CTGB Database</TabsTrigger>
                                 <TabsTrigger value="log">Upload Logboek</TabsTrigger>
                             </TabsList>
                             <Button onClick={() => setIsImporting(true)}>
@@ -329,6 +399,9 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                         </CardContent>
                     </Card>
                 </TabsContent>
+                <TabsContent value="ctgb">
+                    <CtgbDatabaseClientPage initialCtgbData={initialCtgbData} />
+                </TabsContent>
                 <TabsContent value="log">
                     <Card>
                         <CardHeader>
@@ -344,7 +417,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                             <TableHead>Upload Datum</TableHead>
                                             <TableHead>Toelating</TableHead>
                                             <TableHead>Versie</TableHead>
-                                            <TableHead className="max-w-xs">Actieve Stof(fen)</TableHead>
+                                            <TableHead>Actieve Stof(fen)</TableHead>
                                             <TableHead>Bestand</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -400,5 +473,3 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
-
-    

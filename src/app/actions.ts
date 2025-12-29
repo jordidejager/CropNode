@@ -371,13 +371,13 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
         productName,
         uploadDate: new Date(),
         fileName: fileName,
+        activeSubstances: parsedResult.activeSubstances || 'Niet gevonden',
       };
 
       if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
       if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
       if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-      if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
-  
+      
       await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
       
       revalidatePath('/middelmatrix');
