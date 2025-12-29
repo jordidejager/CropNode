@@ -66,5 +66,6 @@ export type UploadLog = {
     prescriptionDate?: string;
     activeSubstances?: string;
     fileName: string;
+    pdfUrl?: string;
 };
     
