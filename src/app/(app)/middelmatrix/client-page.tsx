@@ -7,11 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, FileText } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, FileText, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift } from '@/app/actions';
+import { importVoorschrift, generateSignedUploadUrl } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,11 +19,11 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.entry';
 
-// Set worker source for pdf.js
-if (typeof window !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
+// Use the local worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
 
 async function getPdfText(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -44,10 +44,18 @@ async function getPdfText(file: File): Promise<string> {
                 }
                 resolve(text);
             } catch (error) {
-                reject(error);
+                console.error("Error extracting PDF text:", error);
+                if (error instanceof Error) {
+                     reject(new Error(`PDF-extractie mislukt: ${error.message}`));
+                } else {
+                     reject(new Error(`Onbekende PDF-extractiefout.`));
+                }
             }
         };
-        reader.onerror = reject;
+        reader.onerror = (error) => {
+             console.error("FileReader error:", error);
+             reject(new Error("Bestand kon niet worden gelezen."));
+        };
         reader.readAsArrayBuffer(file);
     });
 }
@@ -72,37 +80,56 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
         }
 
         startImportTransition(async () => {
-            const formData = new FormData();
-            const filesData = [];
+            let successfulImports = 0;
+            let failedImports = 0;
+            const errorMessages: string[] = [];
 
             for (const file of selectedFiles) {
                 try {
-                    // 1. Extract PDF text
+                    // 1. Extract PDF text on the client
                     const pdfText = await getPdfText(file);
 
-                    // 2. Append data to FormData
-                    filesData.push({
+                    // 2. Call the server action with the text and filename
+                    const result = await importVoorschrift({
                         fileName: file.name,
                         pdfText: pdfText,
                     });
 
+                    if (result.success) {
+                        successfulImports++;
+                    } else {
+                        throw new Error(result.message || `Onbekende fout bij verwerken van ${file.name}`);
+                    }
+
                 } catch (error: any) {
-                     toast({ variant: 'destructive', title: `Fout bij ${file.name}`, description: error.message });
-                     return;
+                    failedImports++;
+                    const errorMessage = error.message || 'Onbekende fout.';
+                    console.error(`Fout bij ${file.name}:`, errorMessage);
+                    errorMessages.push(`(${file.name}: ${errorMessage})`);
+                    toast({
+                        variant: 'destructive',
+                        title: `Fout bij ${file.name}`,
+                        description: errorMessage,
+                    });
                 }
             }
 
-            formData.append('filesData', JSON.stringify(filesData));
-            const result = await importVoorschrift(formData);
-
-            if (result.success) {
-                toast({ title: 'Import succesvol!', description: result.message });
-                onImportSuccess();
-                onOpenChange(false);
-                setSelectedFiles([]);
-            } else {
-                toast({ variant: 'destructive', title: 'Import mislukt', description: result.message });
+            let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
+            if (failedImports > 0) {
+                finalMessage += ` ${failedImports} mislukt.`;
             }
+
+            toast({
+                title: 'Import Voltooid',
+                description: finalMessage,
+            });
+            
+            if (successfulImports > 0) {
+                 onImportSuccess();
+            }
+
+            onOpenChange(false);
+            setSelectedFiles([]);
         });
     };
 
@@ -307,39 +334,39 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 }
 
                                                 return (
-                                                    <Collapsible key={product} asChild>
-                                                      <TableBody>
-                                                        <TableRow className="font-medium bg-muted/50">
-                                                          <TableCell>
-                                                            <CollapsibleTrigger asChild>
-                                                              <button className="flex items-center gap-2 w-full text-left">
-                                                                <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                                                                {product}
-                                                              </button>
-                                                            </CollapsibleTrigger>
-                                                          </TableCell>
-                                                          <TableCell>{regels.length} regels</TableCell>
-                                                          <TableCell colSpan={6}></TableCell>
-                                                        </TableRow>
-                                                        <CollapsibleContent asChild>
-                                                          <>
-                                                            {regels.map((regel, index) => (
-                                                              <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
-                                                                <TableCell className="pl-12 text-muted-foreground"></TableCell>
-                                                                <TableCell>{regel.crop}</TableCell>
-                                                                <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                                <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                                <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                                <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                                <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                                <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                              </TableRow>
-                                                            ))}
-                                                          </>
-                                                        </CollapsibleContent>
-                                                      </TableBody>
-                                                    </Collapsible>
-                                                  );
+                                                      <Collapsible asChild key={product} defaultOpen={false}>
+                                                        <TableBody>
+                                                          <TableRow className="font-medium bg-muted/50">
+                                                            <TableCell>
+                                                              <CollapsibleTrigger asChild>
+                                                                <button className="flex items-center gap-2 w-full text-left">
+                                                                  <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
+                                                                  {product}
+                                                                </button>
+                                                              </CollapsibleTrigger>
+                                                            </TableCell>
+                                                            <TableCell>{regels.length} regels</TableCell>
+                                                            <TableCell colSpan={6}></TableCell>
+                                                          </TableRow>
+                                                          <CollapsibleContent asChild>
+                                                            <>
+                                                              {regels.map((regel, index) => (
+                                                                <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
+                                                                  <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                                                  <TableCell>{regel.crop}</TableCell>
+                                                                  <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                                  <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                                  <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                                  <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                                  <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                                  <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                                </TableRow>
+                                                              ))}
+                                                            </>
+                                                          </CollapsibleContent>
+                                                        </TableBody>
+                                                      </Collapsible>
+                                                    );
                                             })
                                         ) : (
                                             <TableRow>
@@ -425,3 +452,5 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
+
+    
