@@ -9,9 +9,7 @@ import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel,
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
-import pdf from 'pdf-parse';
 import { v4 as uuidv4 } from 'uuid';
-import { getStorage, ref, getDownloadURL } from "firebase/storage";
 import { adminStorage } from '@/firebase/admin';
 
 const formSchema = z.object({
@@ -314,11 +312,40 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     }
 }
 
+export async function getSignedUploadUrl(fileName: string, contentType: string): Promise<{ success: boolean; url?: string; downloadUrl?: string; message?: string }> {
+    try {
+        const bucket = adminStorage.bucket();
+        const filePath = `voorschriften/${uuidv4()}-${fileName}`;
+        const file = bucket.file(filePath);
+
+        const [url] = await file.getSignedUrl({
+            version: 'v4',
+            action: 'write',
+            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+            contentType: contentType,
+        });
+
+        const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+        
+        return { success: true, url, downloadUrl };
+
+    } catch (error: any) {
+        console.error("Error getting signed URL: ", error);
+        return { success: false, message: error.message };
+    }
+}
+
 
 export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const filesData = formData.getAll('filesData');
-  
-    if (!filesData || filesData.length === 0) {
+    const filesDataString = formData.get('filesData');
+    
+    if (!filesDataString || typeof filesDataString !== 'string') {
+        return { success: false, message: 'Geen bestanden geselecteerd.' };
+    }
+
+    const filesData = JSON.parse(filesDataString);
+
+    if (!Array.isArray(filesData) || filesData.length === 0) {
       return { success: false, message: 'Geen bestanden geselecteerd.' };
     }
   
@@ -328,9 +355,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     const errorMessages: string[] = [];
   
     for (const fileInfo of filesData) {
-      if (typeof fileInfo !== 'string') continue;
-  
-      const { fileName, pdfText, downloadUrl } = JSON.parse(fileInfo);
+      const { fileName, pdfText, downloadUrl } = fileInfo;
   
       try {
         if (!pdfText) {
@@ -351,7 +376,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         // Add data to Firestore
         await addMiddelen(firestore, parsedResult.middelen);
   
-        const newLogData: Omit<UploadLog, 'id'> = {
+        const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> & { pdfUrl?: string } = {
           productName,
           uploadDate: new Date(),
           fileName: fileName,
@@ -359,11 +384,11 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         };
 
         if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-        if (parsedResult.labelVersion) newLog-data.labelVersion = parsedResult.labelVersion;
+        if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
         if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
         if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
   
-        await addUploadLog(firestore, newLogData);
+        await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
         successfulImports++;
       } catch (error: any) {
         console.error(`Fout bij importeren van ${fileName}:`, error);
@@ -384,26 +409,4 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
       success: successfulImports > 0,
       message,
     };
-  }
-
-  export async function getSignedUploadUrl(fileName: string, contentType: string) {
-    try {
-        const bucket = adminStorage.bucket();
-        const filePath = `voorschriften/${uuidv4()}-${fileName}`;
-        const file = bucket.file(filePath);
-
-        const options = {
-            version: 'v4' as const,
-            action: 'write' as const,
-            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-            contentType: contentType,
-        };
-
-        const [url] = await file.getSignedUrl(options);
-        return { success: true, url: url, filePath: filePath };
-
-    } catch (error: any) {
-        console.error("Error getting signed URL: ", error);
-        return { success: false, message: error.message };
-    }
 }
