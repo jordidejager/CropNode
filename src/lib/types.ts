@@ -64,7 +64,7 @@ export type UploadLog = {
     admissionNumber?: string;
     labelVersion?: string;
     prescriptionDate?: string;
-    activeSubstances?: string;
+    activeSubstances: string;
     fileName: string;
 };
     

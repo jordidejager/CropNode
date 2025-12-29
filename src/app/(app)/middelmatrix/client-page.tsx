@@ -295,10 +295,10 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 return (
                                                       <Collapsible asChild key={product} defaultOpen={false}>
                                                         <>
-                                                          <TableRow className="font-medium bg-muted/50">
-                                                            <TableCell colSpan={8}>
+                                                          <TableRow>
+                                                            <TableCell colSpan={8} className="p-0">
                                                               <CollapsibleTrigger asChild>
-                                                                <button className="flex items-center gap-2 w-full text-left">
+                                                                <button className="flex items-center gap-2 w-full text-left font-medium bg-muted/50 p-4">
                                                                   <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
                                                                   {product} ({regels.length} regels)
                                                                 </button>

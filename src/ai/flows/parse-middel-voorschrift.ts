@@ -34,7 +34,7 @@ const ParseMiddelVoorschriftOutputSchema = z.object({
     admissionNumber: z.string().optional().describe('The admission number (toelatingsnummer), usually a 5-digit number followed by N.'),
     labelVersion: z.string().optional().describe('The version of the label (WG/W-number), e.g., "W.5" or "WGA W.1".'),
     prescriptionDate: z.string().optional().describe('The date of the prescription document.'),
-    activeSubstances: z.string().optional().describe('The active substances (werkzame stoffen) and their concentrations, as a single string.'),
+    activeSubstances: z.string().describe('The active substances (werkzame stoffen) and their concentrations, as a single string.'),
 });
 
 export type ParseMiddelVoorschriftOutput = z.infer<typeof ParseMiddelVoorschriftOutputSchema>;
@@ -54,7 +54,7 @@ First, extract the following general information from the document:
 - admissionNumber: The admission number (toelatingsnummer), usually a 5-digit number followed by "N".
 - labelVersion: The version of the label, often indicated by "W." or "WGA", e.g., "W.5".
 - prescriptionDate: The date the document was issued or is valid from.
-- activeSubstances: The list of active substances (werkzame stoffen) and their concentrations. Format this as a single string, e.g., "Captan 800 g/kg".
+- activeSubstances: The list of active substances (werkzame stoffen) and their concentrations. This is a mandatory field. Format this as a single string, e.g., "Captan 800 g/kg".
 
 Next, extract the application rules. You must only extract information for the crops "Peer" (pear) and "Appel" (apple). Ignore all other crops.
 For each relevant crop application mentioned in the text, create a separate object in the 'middelen' array.
@@ -71,7 +71,7 @@ From the text, extract the following fields for each "Peer" or "Appel" applicati
 - minIntervalDays: The minimum number of days between two consecutive applications.
 
 Pay close attention to tables and lists in the text, as they often contain the structured data you need. If information is different for Apple and Pear, create two separate objects.
-If any piece of information cannot be found in the text, leave the corresponding field out of the JSON output.
+If any piece of information cannot be found in the text, leave the corresponding field out of the JSON output, except for activeSubstances which is mandatory.
 
 Example Input:
 "WETTELIJK GEBRUIKSVOORSCHRIFT
