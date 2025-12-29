@@ -92,6 +92,16 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     );
 }
 
+const areRegelsSimilar = (a: Middel, b: Middel) => {
+    return a.disease === b.disease &&
+        a.maxDosage === b.maxDosage &&
+        a.unit === b.unit &&
+        a.safetyPeriodDays === b.safetyPeriodDays &&
+        a.maxApplicationsPerYear === b.maxApplicationsPerYear &&
+        a.maxDosePerYear === b.maxDosePerYear &&
+        a.minIntervalDays === b.minIntervalDays;
+};
+
 export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
@@ -104,10 +114,45 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
             (regel.disease && regel.disease.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
-        return filtered.reduce((acc, regel) => {
+        const groupedByProduct = filtered.reduce((acc, regel) => {
             (acc[regel.product] = acc[regel.product] || []).push(regel);
             return acc;
         }, {} as Record<string, Middel[]>);
+        
+        Object.keys(groupedByProduct).forEach(product => {
+            const regels = groupedByProduct[product];
+            const mergedRegels: Middel[] = [];
+            const processedIndexes = new Set<number>();
+
+            for (let i = 0; i < regels.length; i++) {
+                if (processedIndexes.has(i)) continue;
+
+                const currentRegel = regels[i];
+                let mergedRegel: Middel = { ...currentRegel };
+                let merged = false;
+
+                for (let j = i + 1; j < regels.length; j++) {
+                    if (processedIndexes.has(j)) continue;
+
+                    const otherRegel = regels[j];
+                    if (
+                        (currentRegel.crop.toLowerCase() === 'appel' && otherRegel.crop.toLowerCase() === 'peer' ||
+                         currentRegel.crop.toLowerCase() === 'peer' && otherRegel.crop.toLowerCase() === 'appel') &&
+                        areRegelsSimilar(currentRegel, otherRegel)
+                    ) {
+                        mergedRegel.crop = 'Appel / Peer';
+                        processedIndexes.add(j);
+                        merged = true;
+                    }
+                }
+                mergedRegels.push(mergedRegel);
+                processedIndexes.add(i);
+            }
+            groupedByProduct[product] = mergedRegels;
+        });
+
+        return groupedByProduct;
+
     }, [searchTerm, initialData]);
 
     const handleImportSuccess = () => {
@@ -189,7 +234,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                                               </button>
                                                           </CollapsibleTrigger>
                                                         </TableCell>
-                                                        <TableCell>{regels.length} gewassen</TableCell>
+                                                        <TableCell>{regels.length} regels</TableCell>
                                                         <TableCell></TableCell>
                                                         <TableCell></TableCell>
                                                         <TableCell></TableCell>
@@ -199,8 +244,8 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                                     </TableRow>
                                                     <CollapsibleContent asChild>
                                                         <>
-                                                            {regels.map((regel) => (
-                                                                <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
+                                                            {regels.map((regel, index) => (
+                                                                <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
                                                                     <TableCell className="pl-12 text-muted-foreground"></TableCell>
                                                                     <TableCell>{regel.crop}</TableCell>
                                                                     <TableCell>{regel.disease || '-'}</TableCell>
