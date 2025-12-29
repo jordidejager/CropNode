@@ -316,57 +316,77 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
 
 export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const file = formData.get('voorschriftPdf') as File;
+    const files = formData.getAll('voorschriftPdf') as File[];
 
-    if (!file || file.size === 0) {
-        return { success: false, message: 'Geen bestand geselecteerd.' };
+    if (!files || files.length === 0) {
+        return { success: false, message: 'Geen bestanden geselecteerd.' };
     }
     
-    const { firestore } = initializeFirebase();
+    const { firestore, storage } = initializeFirebase();
+    let successfulImports = 0;
+    let failedImports = 0;
+    const errorMessages: string[] = [];
 
-    try {
-        const fileBuffer = Buffer.from(await file.arrayBuffer());
-        const data = await pdf(fileBuffer);
-        const voorschriftText = data.text;
+    for (const file of files) {
+        try {
+            const fileBuffer = Buffer.from(await file.arrayBuffer());
+            
+            // 1. Upload PDF to Firebase Storage
+            const storageRef = ref(storage, `voorschriften/${uuidv4()}-${file.name}`);
+            const uploadResult = await uploadBytes(storageRef, fileBuffer, { contentType: file.type });
+            const pdfUrl = await getDownloadURL(uploadResult.ref);
 
-        if (!voorschriftText) {
-            return { success: false, message: 'Kon geen tekst uit de PDF extraheren.' };
+            // 2. Parse PDF text
+            const data = await pdf(fileBuffer);
+            const voorschriftText = data.text;
+            if (!voorschriftText) {
+                throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
+            }
+            
+            // 3. Parse text with AI
+            const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
+            if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+                throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
+            }
+            
+            const productName = parsedResult.middelen[0]?.product;
+            if (!productName) {
+                throw new Error(`De AI kon de productnaam niet bepalen in ${file.name}.`);
+            }
+
+            // 4. Add data to Firestore
+            await addMiddelen(firestore, parsedResult.middelen);
+            
+            const newLogData: Omit<UploadLog, 'id'> = {
+                productName,
+                uploadDate: new Date(),
+                fileName: file.name,
+                pdfUrl,
+            };
+
+            if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+            if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
+            if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+            if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
+            
+            await addUploadLog(firestore, newLogData);
+            successfulImports++;
+        } catch (error: any) {
+            console.error(`Fout bij importeren van ${file.name}:`, error);
+            failedImports++;
+            errorMessages.push(`(${file.name}: ${error.message})`);
         }
-        
-        const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
-        
-        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-            return { success: false, message: 'De AI kon geen geldige middelengegevens uit de tekst extraheren.' };
-        }
-        
-        const productName = parsedResult.middelen[0]?.product;
-        if (!productName) {
-            return { success: false, message: 'De AI kon de productnaam niet bepalen.' };
-        }
-
-        await addMiddelen(firestore, parsedResult.middelen);
-        
-        const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> = {
-            productName: productName,
-            uploadDate: new Date(),
-            fileName: file.name,
-        };
-
-        if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-        if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-        if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-        if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
-
-        await addUploadLog(firestore, newLogData);
-
-        revalidatePath('/middelmatrix');
-        
-        return { success: true, message: `${parsedResult.middelen.length} middel-regel(s) voor ${productName} succesvol geïmporteerd.` };
-
-    } catch (error: any) {
-        console.error("Fout bij importeren voorschrift:", error);
-        return { success: false, message: error.message };
     }
+
+    revalidatePath('/middelmatrix');
+    
+    let message = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
+    if (failedImports > 0) {
+        message += ` ${failedImports} mislukt. Fouten: ${errorMessages.join(', ')}`;
+    }
+
+    return { 
+        success: failedImports === 0, 
+        message 
+    };
 }
-
-    

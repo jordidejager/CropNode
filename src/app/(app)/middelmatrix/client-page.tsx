@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -21,32 +21,34 @@ import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/comp
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
-            setSelectedFile(event.target.files[0]);
+            setSelectedFiles(Array.from(event.target.files));
         }
     };
 
     const handleImport = async () => {
-        if (!selectedFile) {
-            toast({ variant: 'destructive', title: 'Geen bestand', description: 'Selecteer een PDF-bestand om te importeren.' });
+        if (selectedFiles.length === 0) {
+            toast({ variant: 'destructive', title: 'Geen bestanden', description: 'Selecteer een of meerdere PDF-bestanden om te importeren.' });
             return;
         }
 
         const formData = new FormData();
-        formData.append('voorschriftPdf', selectedFile);
+        selectedFiles.forEach(file => {
+            formData.append('voorschriftPdf', file);
+        });
 
         startImportTransition(async () => {
             const result = await importVoorschrift(formData);
             if (result.success) {
-                toast({ title: 'Import geslaagd!', description: result.message });
+                toast({ title: 'Import succesvol!', description: result.message });
                 onImportSuccess();
                 onOpenChange(false);
-                setSelectedFile(null);
+                setSelectedFiles([]);
             } else {
                 toast({ variant: 'destructive', title: 'Import mislukt', description: result.message });
             }
@@ -56,17 +58,17 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     return (
         <Dialog open={open} onOpenChange={(isOpen) => {
             onOpenChange(isOpen);
-            if (!isOpen) setSelectedFile(null);
+            if (!isOpen) setSelectedFiles([]);
         }}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Importeer Voorschrift via PDF</DialogTitle>
+                    <DialogTitle>Importeer Voorschrift(en) via PDF</DialogTitle>
                     <DialogDescription>
-                        Upload een PDF-bestand van een gebruikersvoorschrift. De AI zal de gegevens extraheren en opslaan.
+                        Upload één of meerdere PDF-bestanden van een gebruikersvoorschrift. De AI zal de gegevens extraheren en opslaan.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                    <Label htmlFor="voorschrift-pdf">PDF-bestand</Label>
+                    <Label htmlFor="voorschrift-pdf">PDF-bestand(en)</Label>
                     <Input
                         id="voorschrift-pdf"
                         ref={fileInputRef}
@@ -74,11 +76,16 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                         accept="application/pdf"
                         onChange={handleFileChange}
                         className="cursor-pointer"
+                        multiple
                     />
-                    {selectedFile && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                            <File className="h-4 w-4" />
-                            <span>{selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)</span>
+                    {selectedFiles.length > 0 && (
+                        <div className="flex flex-col gap-2 text-sm text-muted-foreground mt-2 max-h-32 overflow-y-auto">
+                            {selectedFiles.map((file, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                    <File className="h-4 w-4" />
+                                    <span>{file.name} ({Math.round(file.size / 1024)} KB)</span>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -86,9 +93,9 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     <DialogClose asChild>
                         <Button type="button" variant="outline">Annuleren</Button>
                     </DialogClose>
-                    <Button onClick={handleImport} disabled={isImporting || !selectedFile}>
+                    <Button onClick={handleImport} disabled={isImporting || selectedFiles.length === 0}>
                         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        Importeer en Analyseer
+                        {isImporting ? `Verwerken... (${selectedFiles.length})` : `Importeer en Analyseer (${selectedFiles.length})`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -312,7 +319,8 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                             <TableHead>Toelating</TableHead>
                                             <TableHead>Versie</TableHead>
                                             <TableHead className="max-w-xs">Actieve Stof(fen)</TableHead>
-                                            <TableHead>PDF Bestand</TableHead>
+                                            <TableHead>Bestand</TableHead>
+                                            <TableHead className="text-right">Acties</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -323,7 +331,16 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     <TableCell>{formatDate(log.uploadDate)}</TableCell>
                                                     <TableCell>{log.admissionNumber ?? '-'}</TableCell>
                                                     <TableCell>{log.labelVersion ?? '-'}</TableCell>
-                                                    <TableCell className="max-w-xs truncate">{log.activeSubstances ?? '-'}</TableCell>
+                                                    <TableCell className="max-w-xs truncate">
+                                                        <Tooltip delayDuration={100}>
+                                                            <TooltipTrigger asChild>
+                                                                <p className="truncate max-w-[200px]">{log.activeSubstances ?? '-'}</p>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{log.activeSubstances}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <Tooltip delayDuration={100}>
                                                             <TooltipTrigger asChild>
@@ -334,11 +351,20 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {log.pdfUrl && (
+                                                            <Button asChild variant="outline" size="sm">
+                                                                <a href={log.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                                                    <Download className="mr-2 h-4 w-4" /> Download
+                                                                </a>
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="h-24 text-center">
+                                                <TableCell colSpan={7} className="h-24 text-center">
                                                     Nog geen voorschriften geïmporteerd.
                                                 </TableCell>
                                             </TableRow>
