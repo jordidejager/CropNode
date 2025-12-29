@@ -52,7 +52,7 @@
     "lucide-react": "^0.475.0",
     "next": "15.5.9",
     "patch-package": "^8.0.0",
-    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "4.5.136",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.3",
     "react-hook-form": "^7.54.2",

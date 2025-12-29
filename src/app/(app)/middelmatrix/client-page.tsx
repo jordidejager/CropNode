@@ -18,10 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import pdf from 'pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js';
+import * as pdfjsLib from 'pdfjs-dist';
 
-pdf.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
-
+// Set worker source for pdf.js
+if (typeof window !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 async function getPdfText(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -32,12 +34,13 @@ async function getPdfText(file: File): Promise<string> {
             }
             try {
                 const typedArray = new Uint8Array(event.target.result as ArrayBuffer);
-                const pdfDoc = await pdf.getDocument(typedArray).promise;
+                const pdfDoc = await pdfjsLib.getDocument(typedArray).promise;
                 let text = '';
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
                     const page = await pdfDoc.getPage(i);
                     const content = await page.getTextContent();
                     text += content.items.map(item => 'str' in item ? item.str : '').join(' ');
+                    text += '\n'; // Add newline between pages
                 }
                 resolve(text);
             } catch (error) {
@@ -323,7 +326,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 }
 
                                                 return (
-                                                    <Collapsible key={product} defaultOpen={false} >
+                                                    <Collapsible key={product} asChild>
                                                       <TableBody>
                                                         <TableRow className="font-medium bg-muted/50">
                                                           <TableCell>
@@ -338,7 +341,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                           <TableCell colSpan={6}></TableCell>
                                                         </TableRow>
                                                         <CollapsibleContent asChild>
-                                                          
+                                                          <>
                                                             {regels.map((regel, index) => (
                                                               <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
                                                                 <TableCell className="pl-12 text-muted-foreground"></TableCell>
@@ -351,7 +354,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                 <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
                                                               </TableRow>
                                                             ))}
-                                                          
+                                                          </>
                                                         </CollapsibleContent>
                                                       </TableBody>
                                                     </Collapsible>
@@ -453,5 +456,3 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
-
-    
