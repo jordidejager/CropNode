@@ -7,46 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift } from '@/app/actions';
+import { importVoorschrift, extractPdfText } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Set up the worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-
-async function extractPdfText(file: File): Promise<{ success: boolean; text?: string; message?: string }> {
-  if (!file) {
-    return { success: false, message: 'Geen bestand gevonden.' };
-  }
-
-  const buffer = await file.arrayBuffer();
-
-  try {
-    const loadingTask = pdfjsLib.getDocument(buffer);
-    const pdf = await loadingTask.promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map((item: any) => item.str).join(' ');
-    }
-    return { success: true, text };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Onbekende fout bij PDF-extractie.';
-    console.error('PDF-verwerking mislukt:', message);
-    return { success: false, message: `PDF-extractie mislukt: ${message}` };
-  }
-}
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
@@ -72,7 +43,10 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     
             for (const file of selectedFiles) {
                 try {
-                    const textResult = await extractPdfText(file);
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const textResult = await extractPdfText(formData);
+
                     if (!textResult.success || !textResult.text) {
                         throw new Error(textResult.message || `Kon geen tekst uit ${file.name} extraheren.`);
                     }

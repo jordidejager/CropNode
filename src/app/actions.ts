@@ -9,6 +9,7 @@ import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel,
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
+import pdf from 'pdf-parse';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -309,6 +310,31 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: false, message };
     }
 }
+
+const extractTextSchema = z.object({
+    file: z.instanceof(File),
+});
+
+export async function extractPdfText(formData: FormData): Promise<{ success: boolean; text?: string; message?: string }> {
+    const validatedFields = extractTextSchema.safeParse({ file: formData.get('file') });
+    
+    if (!validatedFields.success) {
+        return { success: false, message: 'Geen geldig bestand ontvangen.' };
+    }
+    
+    const { file } = validatedFields.data;
+
+    try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const data = await pdf(buffer);
+        return { success: true, text: data.text };
+    } catch (error) {
+        console.error("Fout bij PDF-extractie:", error);
+        const message = error instanceof Error ? error.message : "Onbekende serverfout bij PDF-verwerking.";
+        return { success: false, message };
+    }
+}
+
 
 const importSchema = z.object({
     fileName: z.string(),
