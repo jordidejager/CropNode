@@ -9,7 +9,7 @@ import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProduc
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
-import { Timestamp } from 'firebase/firestore';
+import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
