@@ -4,6 +4,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
 import { staticProductsData } from './data';
@@ -28,11 +29,12 @@ export async function getCtgbMiddelen(db: Firestore): Promise<CtgbMiddel[]> {
 export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): Promise<void> {
     if (!db) throw new Error("Database not initialized");
 
-    const batch = writeBatch(db);
     const collectionRef = collection(db, CTGB_MIDDELEN_COLLECTION);
+    const existingDocsSnapshot = await getDocs(collectionRef);
+    
+    const batch = writeBatch(db);
 
     // 1. Delete all existing documents in the collection
-    const existingDocsSnapshot = await getDocs(collectionRef);
     existingDocsSnapshot.forEach(doc => {
         batch.delete(doc.ref);
     });

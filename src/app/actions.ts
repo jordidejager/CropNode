@@ -400,8 +400,12 @@ export async function syncCtgbDatabase(): Promise<{ success: boolean, message: s
         const middelen = await getCtgbDataFromApi();
         console.log(`Fetched ${middelen.length} middelen from CTGB API.`);
         
-        await syncCtgbMiddelen(firestore, middelen);
-        console.log("Successfully synced data to Firestore.");
+        if (middelen.length > 0) {
+            await syncCtgbMiddelen(firestore, middelen);
+            console.log("Successfully synced data to Firestore.");
+        } else {
+            console.log("No middelen found from API, skipping sync to Firestore.");
+        }
 
         revalidatePath('/middelmatrix');
         
