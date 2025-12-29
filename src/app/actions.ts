@@ -9,8 +9,6 @@ import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel,
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
-import { v4 as uuidv4 } from 'uuid';
-import { adminStorage } from '@/firebase/admin';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -312,30 +310,6 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     }
 }
 
-export async function getSignedUploadUrl(fileName: string, contentType: string): Promise<{ success: boolean; url?: string; downloadUrl?: string; message?: string }> {
-    try {
-        const bucket = adminStorage.bucket();
-        const filePath = `voorschriften/${uuidv4()}-${fileName}`;
-        const file = bucket.file(filePath);
-
-        const [url] = await file.getSignedUrl({
-            version: 'v4',
-            action: 'write',
-            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-            contentType: contentType,
-        });
-
-        const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-        
-        return { success: true, url, downloadUrl };
-
-    } catch (error: any) {
-        console.error("Error getting signed URL: ", error);
-        return { success: false, message: error.message };
-    }
-}
-
-
 export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
     const filesDataString = formData.get('filesData');
     
@@ -355,7 +329,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     const errorMessages: string[] = [];
   
     for (const fileInfo of filesData) {
-      const { fileName, pdfText, downloadUrl } = fileInfo;
+      const { fileName, pdfText } = fileInfo;
   
       try {
         if (!pdfText) {
@@ -376,19 +350,17 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         // Add data to Firestore
         await addMiddelen(firestore, parsedResult.middelen);
   
-        const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> & { pdfUrl?: string } = {
+        const newLogData: Omit<UploadLog, 'id'> = {
           productName,
           uploadDate: new Date(),
           fileName: fileName,
-          pdfUrl: downloadUrl,
+          admissionNumber: parsedResult.admissionNumber || undefined,
+          labelVersion: parsedResult.labelVersion || undefined,
+          prescriptionDate: parsedResult.prescriptionDate || undefined,
+          activeSubstances: parsedResult.activeSubstances || undefined,
         };
 
-        if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-        if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-        if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-        if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
-  
-        await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
+        await addUploadLog(firestore, newLogData);
         successfulImports++;
       } catch (error: any) {
         console.error(`Fout bij importeren van ${fileName}:`, error);

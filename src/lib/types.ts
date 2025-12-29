@@ -65,7 +65,6 @@ export type UploadLog = {
     labelVersion?: string;
     prescriptionDate?: string;
     activeSubstances?: string;
-    pdfUrl: string;
     fileName: string;
 };
     

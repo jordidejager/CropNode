@@ -7,11 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download, FileText } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, FileText } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, getSignedUploadUrl } from '@/app/actions';
+import { importVoorschrift } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,32 +77,13 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
 
             for (const file of selectedFiles) {
                 try {
-                    // 1. Get Signed URL
-                    const signedUrlResult = await getSignedUploadUrl(file.name, file.type);
-                    if (!signedUrlResult.success || !signedUrlResult.url) {
-                        throw new Error(`Kon geen veilige upload-URL voor ${file.name} verkrijgen: ${signedUrlResult.message}`);
-                    }
-
-                    // 2. Upload file directly to GCS
-                    const uploadResponse = await fetch(signedUrlResult.url, {
-                        method: 'PUT',
-                        body: file,
-                        headers: { 'Content-Type': file.type },
-                    });
-                    
-                    if (!uploadResponse.ok) {
-                        const errorText = await uploadResponse.text();
-                        throw new Error(`Upload naar cloud-opslag mislukt: ${errorText}`);
-                    }
-
-                    // 3. Extract PDF text
+                    // 1. Extract PDF text
                     const pdfText = await getPdfText(file);
 
-                    // 4. Append data to FormData
+                    // 2. Append data to FormData
                     filesData.push({
                         fileName: file.name,
                         pdfText: pdfText,
-                        downloadUrl: signedUrlResult.downloadUrl,
                     });
 
                 } catch (error: any) {
@@ -390,7 +371,6 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                             <TableHead>Versie</TableHead>
                                             <TableHead className="max-w-xs">Actieve Stof(fen)</TableHead>
                                             <TableHead>Bestand</TableHead>
-                                            <TableHead className="text-right">Acties</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -411,7 +391,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TableCell>
-                                                    <TableCell>
+                                                     <TableCell>
                                                         <Tooltip delayDuration={100}>
                                                             <TooltipTrigger asChild>
                                                                 <div className="flex items-center gap-2">
@@ -424,22 +404,11 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {log.pdfUrl ? (
-                                                            <Button asChild variant="outline" size="sm">
-                                                                <a href={log.pdfUrl} target="_blank" rel="noopener noreferrer">
-                                                                    <Download className="mr-2 h-4 w-4" /> Download
-                                                                </a>
-                                                            </Button>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">Geen bestand</span>
-                                                        )}
-                                                    </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={7} className="h-24 text-center">
+                                                <TableCell colSpan={6} className="h-24 text-center">
                                                     Nog geen voorschriften geïmporteerd.
                                                 </TableCell>
                                             </TableRow>
