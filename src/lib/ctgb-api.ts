@@ -3,23 +3,37 @@
 
 import type { CtgbMiddel } from './types';
 
-// Corrected base URL for the CTGB public API
+const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+// Base URL for the CTGB public API
 const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating";
+
+// Helper function to make cached API calls
+const fetchWithCache = async (url: string) => {
+    try {
+        const response = await fetch(url, {
+            next: { revalidate: REVALIDATE_TIME_SECONDS }
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`CTGB API error for ${url}: ${response.status} ${response.statusText}`, errorText);
+            throw new Error(`API returned status ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Fetch failed for ${url}:`, error);
+        throw error; // Re-throw to be handled by the caller
+    }
+};
 
 // Gets all authorized products for a specific crop ("gewas")
 const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
     try {
-        const response = await fetch(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`CTGB API error for crop ${gewas}: ${response.status} ${response.statusText}`, errorText);
-            throw new Error(`API returned status ${response.status} for ${gewas}`);
-        }
-        const data = await response.json();
+        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
         return data.items || [];
     } catch (error) {
-        console.error(`Fetch failed for crop ${gewas}:`, error);
-        throw error; // Re-throw to be handled by the caller
+        console.error(`Fout bij ophalen middelen voor gewas ${gewas}:`, error);
+        throw error;
     }
 };
 
@@ -27,20 +41,15 @@ const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     if (!toelatingId) return "Niet beschikbaar";
     try {
-        const response = await fetch(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
-        if (!response.ok) {
-            // It's possible a middel doesn't have substances, so we don't throw, just log.
-            console.warn(`CTGB API warning for substance ${toelatingId}: ${response.status}`);
-            return "Kon stoffen niet ophalen";
-        }
-        const data = await response.json();
+        const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
         if (data.items && data.items.length > 0) {
             return data.items.map((item: any) => `${item.werkzame_stof} (${item.gehalte})`).join(', ');
         }
         return "Niet gespecificeerd";
     } catch (error) {
-        console.error(`Fetch failed for substance ${toelatingId}:`, error);
-        return "Fout bij ophalen stoffen";
+         // It's possible a middel doesn't have substances, so we don't throw, just log and return a friendly message.
+        console.warn(`Kon werkzame stoffen voor toelatingId ${toelatingId} niet ophalen.`, error);
+        return "Kon stoffen niet ophalen";
     }
 };
 
