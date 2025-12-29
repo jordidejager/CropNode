@@ -31,17 +31,20 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
         }
     };
 
-    const handleImport = async () => {
+    const handleImport = () => {
         if (selectedFiles.length === 0) {
             toast({ variant: 'destructive', title: 'Geen bestanden', description: 'Selecteer een of meerdere PDF-bestanden om te importeren.' });
             return;
         }
-    
-        startImportTransition(async () => {
-            let successfulImports = 0;
-            const errorMessages: string[] = [];
-    
-            for (const file of selectedFiles) {
+
+        onOpenChange(false);
+        toast({
+            title: 'Import Gestart',
+            description: `Verwerking van ${selectedFiles.length} bestand(en) is op de achtergrond gestart.`,
+        });
+
+        startImportTransition(() => {
+            selectedFiles.forEach(async (file) => {
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
@@ -55,41 +58,29 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                         fileName: file.name,
                         pdfText: textResult.text,
                     });
-    
+
                     if (importResult.success) {
-                        successfulImports++;
+                        toast({
+                            title: 'Import Succesvol',
+                            description: `${file.name} is succesvol geïmporteerd.`,
+                        });
+                        onImportSuccess();
                     } else {
                         throw new Error(importResult.message || `Onbekende fout bij verwerken van ${file.name}`);
                     }
                 } catch (error: any) {
                     const errorMessage = error.message || 'Onbekende fout.';
-                    console.error(`Fout bij ${file.name}:`, errorMessage);
-                    errorMessages.push(`${file.name}: ${errorMessage}`);
+                    console.error(`Fout bij importeren van ${file.name}:`, errorMessage);
+                    toast({
+                        variant: 'destructive',
+                        title: `Import Mislukt: ${file.name}`,
+                        description: errorMessage,
+                    });
                 }
-            }
-            
-            if (successfulImports > 0) {
-                 toast({
-                    title: 'Import Voltooid',
-                    description: `${successfulImports} van de ${selectedFiles.length} voorschrift(en) succesvol geïmporteerd.`,
-                });
-            }
-           
-            if (errorMessages.length > 0) {
-                 toast({
-                    variant: 'destructive',
-                    title: `Import mislukt`,
-                    description: `De volgende fouten zijn opgetreden: ${errorMessages.join(', ')}`,
-                });
-            }
-    
-            if (successfulImports > 0) {
-                onImportSuccess();
-            }
-
-            onOpenChange(false);
-            setSelectedFiles([]);
+            });
         });
+        
+        setSelectedFiles([]);
     };
 
     return (
@@ -132,7 +123,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     </DialogClose>
                     <Button onClick={handleImport} disabled={isImporting || selectedFiles.length === 0}>
                         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        {isImporting ? `Verwerken... (${selectedFiles.length})` : `Importeer en Analyseer (${selectedFiles.length})`}
+                        {`Importeer en Analyseer (${selectedFiles.length})`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -295,16 +286,16 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 return (
                                                       <Collapsible asChild key={product} defaultOpen={false}>
                                                         <>
-                                                          <TableRow>
-                                                            <TableCell colSpan={8} className="p-0">
-                                                              <CollapsibleTrigger asChild>
-                                                                <button className="flex items-center gap-2 w-full text-left font-medium bg-muted/50 p-4">
-                                                                  <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                                                                  {product} ({regels.length} regels)
-                                                                </button>
-                                                              </CollapsibleTrigger>
-                                                            </TableCell>
-                                                          </TableRow>
+                                                            <TableRow>
+                                                                <TableCell colSpan={8} className="p-0">
+                                                                <CollapsibleTrigger asChild>
+                                                                    <button className="flex items-center gap-2 w-full text-left font-medium bg-muted/50 p-4">
+                                                                    <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
+                                                                    {product} ({regels.length} regels)
+                                                                    </button>
+                                                                </CollapsibleTrigger>
+                                                                </TableCell>
+                                                            </TableRow>
                                                           <CollapsibleContent asChild>
                                                             <>
                                                               {regels.map((regel) => (
