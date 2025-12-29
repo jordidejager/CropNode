@@ -1,15 +1,18 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen, addUploadLog } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -319,28 +322,56 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message: 'Geen bestand geselecteerd.' };
     }
 
-    const { firestore } = initializeFirebase();
+    const { firestore, storage } = initializeFirebase();
 
     try {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const data = await pdf(buffer);
+        const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+        // 1. Upload PDF to Firebase Storage
+        const fileName = `${uuidv4()}-${file.name}`;
+        const storageRef = ref(storage, `voorschriften/${fileName}`);
+        await uploadBytes(storageRef, fileBuffer, { contentType: file.type });
+        const pdfUrl = await getDownloadURL(storageRef);
+        
+        // 2. Extract text from PDF
+        const data = await pdf(fileBuffer);
         const voorschriftText = data.text;
 
         if (!voorschriftText) {
             return { success: false, message: 'Kon geen tekst uit de PDF extraheren.' };
         }
         
-        const parsedMiddelen = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
+        // 3. Parse text with AI
+        const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
         
-        if (!parsedMiddelen || parsedMiddelen.length === 0) {
+        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
             return { success: false, message: 'De AI kon geen geldige middelengegevens uit de tekst extraheren.' };
         }
-
-        await addMiddelen(firestore, parsedMiddelen);
         
+        const productName = parsedResult.middelen[0]?.product;
+        if (!productName) {
+            return { success: false, message: 'De AI kon de productnaam niet bepalen.' };
+        }
+
+        // 4. Save middelen to the database (this will replace old ones)
+        await addMiddelen(firestore, parsedResult.middelen);
+        
+        // 5. Create and save the upload log
+        const newLog: Omit<UploadLog, 'id'> = {
+            productName: productName,
+            uploadDate: new Date(),
+            admissionNumber: parsedResult.admissionNumber,
+            labelVersion: parsedResult.labelVersion,
+            prescriptionDate: parsedResult.prescriptionDate,
+            activeSubstances: parsedResult.activeSubstances,
+            pdfUrl: pdfUrl,
+            fileName: file.name
+        };
+        await addUploadLog(firestore, newLog);
+
         revalidatePath('/middelmatrix');
         
-        return { success: true, message: `${parsedMiddelen.length} middel-regel(s) succesvol geïmporteerd en opgeslagen in de database.` };
+        return { success: true, message: `${parsedResult.middelen.length} middel-regel(s) voor ${productName} succesvol geïmporteerd.` };
 
     } catch (error) {
         console.error("Fout bij importeren voorschrift:", error);
@@ -348,5 +379,3 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message };
     }
 }
-
-    

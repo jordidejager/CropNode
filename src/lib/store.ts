@@ -1,7 +1,8 @@
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { products as staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
@@ -9,6 +10,28 @@ const HISTORY_COLLECTION = 'parcelHistory';
 const PRODUCTS_COLLECTION = 'products';
 const PARCELS_COLLECTION = 'parcels';
 const MIDDELEN_COLLECTION = 'middelen';
+const UPLOAD_LOG_COLLECTION = 'uploadLog';
+
+
+// Upload Log Functions
+export async function getUploadLogs(db: Firestore): Promise<UploadLog[]> {
+    if (!db) return [];
+    const q = query(collection(db, UPLOAD_LOG_COLLECTION), orderBy('uploadDate', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            uploadDate: (data.uploadDate as Timestamp).toDate(),
+        } as UploadLog;
+    });
+}
+
+export async function addUploadLog(db: Firestore, log: Omit<UploadLog, 'id'>): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    await addDoc(collection(db, UPLOAD_LOG_COLLECTION), log);
+}
 
 
 // Middel Functions
@@ -24,13 +47,20 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
 
     const productName = middelen[0].product;
     if (!productName) {
-        throw new Error("Product name is missing in the data to be added.");
+        // If product name is not found in the first entry, try to find it in others.
+        const foundProduct = middelen.find(m => m.product);
+        if (!foundProduct) {
+            throw new Error("Product name is missing in all provided data entries.");
+        }
+        // It's inconsistent, but we proceed with the first one we found.
+        // The AI prompt should enforce consistency.
     }
 
     const batch = writeBatch(db);
+    const productToDelete = middelen[0].product;
 
     // 1. Find and delete all existing entries for this product
-    const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "==", productName));
+    const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "==", productToDelete));
     const existingDocsSnapshot = await getDocs(q);
     existingDocsSnapshot.forEach(doc => {
         batch.delete(doc.ref);
@@ -39,7 +69,8 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     // 2. Add the new entries
     middelen.forEach(newMiddel => {
         const docRef = doc(collection(db, MIDDELEN_COLLECTION));
-        batch.set(docRef, newMiddel);
+        // Ensure product name is consistent, taking it from the first entry.
+        batch.set(docRef, {...newMiddel, product: productToDelete });
     });
     
     // 3. Commit the atomic batch

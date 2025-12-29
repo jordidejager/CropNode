@@ -1,9 +1,8 @@
+
 'use client';
 
 import {
-  createContext,
   ReactNode,
-  useContext,
   useEffect,
   useState,
 } from 'react';
@@ -11,6 +10,7 @@ import {
 import { FirebaseApp } from 'firebase/app';
 import { Auth } from 'firebase/auth';
 import { Firestore } from 'firebase/firestore';
+import { FirebaseStorage } from 'firebase/storage';
 
 import { initializeFirebase, FirebaseProvider } from '.';
 
@@ -18,13 +18,8 @@ type FirebaseContextType = {
   app: FirebaseApp | null;
   auth: Auth | null;
   firestore: Firestore | null;
+  storage: FirebaseStorage | null;
 };
-
-const FirebaseContext = createContext<FirebaseContextType>({
-  app: null,
-  auth: null,
-  firestore: null,
-});
 
 /**
  * Provider that will ensure that Firebase is only initialized once on the client.
@@ -73,10 +68,9 @@ export default function FirebaseProviderWrapper({
       app={firebase.app!}
       auth={firebase.auth!}
       firestore={firebase.firestore!}
+      storage={firebase.storage!}
     >
       {children}
     </FirebaseProvider>
   );
 }
-
-export const useFirebase = () => useContext(FirebaseContext);

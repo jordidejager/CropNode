@@ -1,27 +1,28 @@
+
 'use client';
 import {
   createContext,
   ReactNode,
   useContext,
-  useEffect,
-  useState,
 } from 'react';
 
 import { FirebaseApp } from 'firebase/app';
 import { Auth } from 'firebase/auth';
 import { Firestore } from 'firebase/firestore';
-import { initializeFirebase } from '.';
+import { FirebaseStorage } from 'firebase/storage';
 
 type FirebaseContextType = {
   app: FirebaseApp | null;
   auth: Auth | null;
   firestore: Firestore | null;
+  storage: FirebaseStorage | null;
 };
 
 const FirebaseContext = createContext<FirebaseContextType>({
   app: null,
   auth: null,
   firestore: null,
+  storage: null,
 });
 
 /**
@@ -54,14 +55,16 @@ export function FirebaseProvider({
   app,
   auth,
   firestore,
+  storage,
 }: {
   children: ReactNode;
   app: FirebaseApp;
   auth: Auth;
   firestore: Firestore;
+  storage: FirebaseStorage;
 }) {
   return (
-    <FirebaseContext.Provider value={{ app, auth, firestore }}>
+    <FirebaseContext.Provider value={{ app, auth, firestore, storage }}>
       {children}
     </FirebaseContext.Provider>
   );
@@ -149,3 +152,15 @@ export const useAuth = () => useFirebase()?.auth;
  * ```
  */
 export const useFirestore = () => useFirebase()?.firestore;
+
+
+/**
+ * Returns the Firebase storage instance.
+ *
+ * This hook is the recommended way to access the Firebase storage instance.
+ *
+ * Note: This hook will not work with server-side rendering.
+ *
+ * @returns The Firebase storage instance.
+ */
+export const useStorage = () => useFirebase()?.storage;

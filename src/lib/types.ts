@@ -1,4 +1,5 @@
 
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -56,4 +57,15 @@ export type ParcelHistoryEntry = {
   date: Date;
 };
 
+export type UploadLog = {
+    id: string; // Firestore ID
+    productName: string;
+    uploadDate: Date;
+    admissionNumber?: string;
+    labelVersion?: string;
+    prescriptionDate?: string;
+    activeSubstances?: string;
+    pdfUrl: string;
+    fileName: string;
+};
     

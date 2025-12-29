@@ -2,18 +2,21 @@
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
-import type { Middel } from '@/lib/types';
+import type { Middel, UploadLog } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { importVoorschrift } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { format } from 'date-fns';
+import { nl } from 'date-fns/locale';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
@@ -107,7 +110,15 @@ const formatDisease = (disease: string | undefined) => {
     return disease.split('(')[0].trim();
 };
 
-export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
+const formatDate = (date: Date) => {
+    try {
+        return format(date, 'dd-MM-yyyy HH:mm', { locale: nl });
+    } catch {
+        return 'Ongeldige datum';
+    }
+}
+
+export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialData: Middel[], initialLogs: UploadLog[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
     const router = useRouter();
@@ -134,7 +145,6 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
 
                 const currentRegel = regels[i];
                 let mergedRegel: Middel = { ...currentRegel };
-                let merged = false;
 
                 for (let j = i + 1; j < regels.length; j++) {
                     if (processedIndexes.has(j)) continue;
@@ -147,7 +157,6 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                     ) {
                         mergedRegel.crop = 'Appel / Peer';
                         processedIndexes.add(j);
-                        merged = true;
                     }
                 }
                 mergedRegels.push(mergedRegel);
@@ -161,126 +170,183 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
     }, [searchTerm, initialData]);
 
     const handleImportSuccess = () => {
-        // Force a server-side data refresh by reloading the page
         router.refresh();
     };
 
     return (
         <>
-            <Card>
-                <CardHeader>
+            <Tabs defaultValue="database">
+                <CardHeader className="px-0">
                     <div className="flex justify-between items-start">
                         <div>
-                            <CardTitle>Middelen Database</CardTitle>
+                            <CardTitle>Middelen</CardTitle>
                             <CardDescription>
-                                Doorzoekbare database van toegelaten middelen voor pitfruit, live vanuit de database.
+                                Database van toegelaten middelen en upload-historie.
                             </CardDescription>
                         </div>
-                         <Button onClick={() => setIsImporting(true)}>
-                            <Upload className="mr-2 h-4 w-4" /> Voorschrift Importeren
-                        </Button>
-                    </div>
-                    <div className="relative mt-4">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Zoek op middel, gewas of ziekte..."
-                            className="w-full rounded-lg bg-background pl-8"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                        <div className="flex items-center gap-4">
+                            <TabsList>
+                                <TabsTrigger value="database">Database</TabsTrigger>
+                                <TabsTrigger value="log">Upload Logboek</TabsTrigger>
+                            </TabsList>
+                            <Button onClick={() => setIsImporting(true)}>
+                                <Upload className="mr-2 h-4 w-4" /> Voorschrift Importeren
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Middel</TableHead>
-                                    <TableHead>Gewas</TableHead>
-                                    <TableHead>Ziekte/Plaag</TableHead>
-                                    <TableHead className="text-right">Max Dosis</TableHead>
-                                    <TableHead className="text-right">Interval (dgn)</TableHead>
-                                    <TableHead className="text-right">Max Toep./jr</TableHead>
-                                    <TableHead className="text-right">Max Dosis/jr</TableHead>
-                                    <TableHead className="text-right">Termijn (dgn)</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {Object.keys(groupedAndFilteredMatrix).length > 0 ? (
-                                    Object.entries(groupedAndFilteredMatrix).map(([product, regels]) => {
-                                        const isCollapsible = regels.length > 1;
 
-                                        if (!isCollapsible) {
-                                            const regel = regels[0];
-                                            return (
-                                                <TableRow key={regel.id}>
-                                                    <TableCell className="font-medium">{regel.product}</TableCell>
-                                                    <TableCell>{regel.crop}</TableCell>
-                                                    <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                    <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                    <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                    <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                    <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                    <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                </TableRow>
-                                            );
-                                        }
+                <TabsContent value="database">
+                    <Card>
+                        <CardHeader>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="search"
+                                    placeholder="Zoek op middel, gewas of ziekte..."
+                                    className="w-full rounded-lg bg-background pl-8"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Middel</TableHead>
+                                            <TableHead>Gewas</TableHead>
+                                            <TableHead>Ziekte/Plaag</TableHead>
+                                            <TableHead className="text-right">Max Dosis</TableHead>
+                                            <TableHead className="text-right">Interval (dgn)</TableHead>
+                                            <TableHead className="text-right">Max Toep./jr</TableHead>
+                                            <TableHead className="text-right">Max Dosis/jr</TableHead>
+                                            <TableHead className="text-right">Termijn (dgn)</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {Object.keys(groupedAndFilteredMatrix).length > 0 ? (
+                                            Object.entries(groupedAndFilteredMatrix).map(([product, regels]) => {
+                                                const isCollapsible = regels.length > 1;
 
-                                        return (
-                                            <Collapsible asChild key={product} defaultOpen={false}>
-                                                <>
-                                                    <TableRow className="font-medium bg-muted/50">
-                                                        <TableCell>
-                                                          <CollapsibleTrigger asChild>
-                                                              <button className="flex items-center gap-2 w-full text-left">
-                                                                 <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                                                                 {product}
-                                                              </button>
-                                                          </CollapsibleTrigger>
-                                                        </TableCell>
-                                                        <TableCell>{regels.length} regels</TableCell>
-                                                        <TableCell></TableCell>
-                                                        <TableCell></TableCell>
-                                                        <TableCell></TableCell>
-                                                        <TableCell></TableCell>
-                                                        <TableCell></TableCell>
-                                                        <TableCell></TableCell>
-                                                    </TableRow>
-                                                    <CollapsibleContent asChild>
+                                                if (!isCollapsible) {
+                                                    const regel = regels[0];
+                                                    return (
+                                                        <TableRow key={regel.id}>
+                                                            <TableCell className="font-medium">{regel.product}</TableCell>
+                                                            <TableCell>{regel.crop}</TableCell>
+                                                            <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                            <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                            <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                        </TableRow>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <Collapsible asChild key={product} defaultOpen={false}>
                                                         <>
-                                                            {regels.map((regel, index) => (
-                                                                <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
-                                                                    <TableCell className="pl-12 text-muted-foreground"></TableCell>
-                                                                    <TableCell>{regel.crop}</TableCell>
-                                                                    <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                                    <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                                    <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                                    <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                                    <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                                    <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                                </TableRow>
-                                                            ))}
+                                                            <TableRow className="font-medium bg-muted/50">
+                                                                <TableCell>
+                                                                <CollapsibleTrigger asChild>
+                                                                    <button className="flex items-center gap-2 w-full text-left">
+                                                                        <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
+                                                                        {product}
+                                                                    </button>
+                                                                </CollapsibleTrigger>
+                                                                </TableCell>
+                                                                <TableCell>{regels.length} regels</TableCell>
+                                                                <TableCell colSpan={6}></TableCell>
+                                                            </TableRow>
+                                                            <CollapsibleContent asChild>
+                                                                <>
+                                                                    {regels.map((regel, index) => (
+                                                                        <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
+                                                                            <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                                                            <TableCell>{regel.crop}</TableCell>
+                                                                            <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                                            <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                                            <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                                            <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                                            <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                                            <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </>
+                                                            </CollapsibleContent>
                                                         </>
-                                                    </CollapsibleContent>
-                                                </>
-                                            </Collapsible>
-                                        );
-                                    })
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={8} className="h-24 text-center">
-                                            Geen middelen gevonden voor "{searchTerm}".
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                                    </Collapsible>
+                                                );
+                                            })
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={8} className="h-24 text-center">
+                                                    Geen middelen gevonden voor "{searchTerm}".
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="log">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Upload Logboek</CardTitle>
+                            <CardDescription>Overzicht van alle geïmporteerde voorschriften.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Middel</TableHead>
+                                            <TableHead>Upload Datum</TableHead>
+                                            <TableHead>Toelating</TableHead>
+                                            <TableHead>Versie</TableHead>
+                                            <TableHead>Actieve Stof(fen)</TableHead>
+                                            <TableHead>PDF</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {initialLogs.length > 0 ? (
+                                            initialLogs.map(log => (
+                                                <TableRow key={log.id}>
+                                                    <TableCell className="font-medium">{log.productName}</TableCell>
+                                                    <TableCell>{formatDate(log.uploadDate)}</TableCell>
+                                                    <TableCell>{log.admissionNumber ?? '-'}</TableCell>
+                                                    <TableCell>{log.labelVersion ?? '-'}</TableCell>
+                                                    <TableCell className="max-w-xs truncate">{log.activeSubstances ?? '-'}</TableCell>
+                                                    <TableCell>
+                                                        <Button variant="outline" size="sm" asChild>
+                                                            <a href={log.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                                                <Download className="mr-2 h-4 w-4" />
+                                                                {log.fileName}
+                                                            </a>
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="h-24 text-center">
+                                                    Nog geen voorschriften geïmporteerd.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
             <ImportDialog open={isImporting} onOpenChange={setIsImporting} onImportSuccess={handleImportSuccess} />
         </>
     );
 }
-    

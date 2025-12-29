@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -10,7 +11,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import type { Middel } from '@/lib/types';
 
 const ParseMiddelVoorschriftInputSchema = z.object({
   voorschrift: z.string().describe('The full text of the usage instructions (gebruikersvoorschrift).'),
@@ -29,7 +29,14 @@ const MiddelSchema = z.object({
   minIntervalDays: z.number().optional().describe('The minimum interval in days between applications.'),
 });
 
-const ParseMiddelVoorschriftOutputSchema = z.array(MiddelSchema);
+const ParseMiddelVoorschriftOutputSchema = z.object({
+    middelen: z.array(MiddelSchema),
+    admissionNumber: z.string().optional().describe('The admission number (toelatingsnummer), usually a 5-digit number followed by N.'),
+    labelVersion: z.string().optional().describe('The version of the label (WG/W-number), e.g., "W.5" or "WGA W.1".'),
+    prescriptionDate: z.string().optional().describe('The date of the prescription document.'),
+    activeSubstances: z.string().optional().describe('The active substances (werkzame stoffen) and their concentrations, as a single string.'),
+});
+
 export type ParseMiddelVoorschriftOutput = z.infer<typeof ParseMiddelVoorschriftOutputSchema>;
 
 export async function parseMiddelVoorschrift(input: ParseMiddelVoorschriftInput): Promise<ParseMiddelVoorschriftOutput> {
@@ -41,13 +48,19 @@ const prompt = ai.definePrompt({
   input: { schema: ParseMiddelVoorschriftInputSchema },
   output: { schema: ParseMiddelVoorschriftOutputSchema },
   prompt: `You are an expert in reading and interpreting Dutch usage instructions (WGGA/gebruiksvoorschriften) for agricultural pesticides and fungicides, specifically for fruit cultivation.
-Your task is to extract very specific information from the provided text and structure it as a JSON array.
+Your task is to extract very specific information from the provided text and structure it as a JSON object.
 
-You must only extract information for the crops "Peer" (pear) and "Appel" (apple). Ignore all other crops.
-For each relevant crop mentioned in the text, create a separate object in the output array.
+First, extract the following general information from the document:
+- admissionNumber: The admission number (toelatingsnummer), usually a 5-digit number followed by "N".
+- labelVersion: The version of the label, often indicated by "W." or "WGA", e.g., "W.5".
+- prescriptionDate: The date the document was issued or is valid from.
+- activeSubstances: The list of active substances (werkzame stoffen) and their concentrations. Format this as a single string, e.g., "Captan 800 g/kg".
+
+Next, extract the application rules. You must only extract information for the crops "Peer" (pear) and "Appel" (apple). Ignore all other crops.
+For each relevant crop application mentioned in the text, create a separate object in the 'middelen' array.
 
 From the text, extract the following fields for each "Peer" or "Appel" application:
-- product: The name of the product. This should be consistent across all objects in the array.
+- product: The name of the product. This should be consistent across all objects.
 - crop: The crop ("Peer" or "Appel").
 - disease: The target disease or pest (e.g., "Schurft", "Meeldauw", "Fruitmot"). If not specified for a particular dosage, leave it out.
 - maxDosage: The maximum dosage per application. Find the value and its unit. This is often per hectare (ha).
@@ -58,10 +71,15 @@ From the text, extract the following fields for each "Peer" or "Appel" applicati
 - minIntervalDays: The minimum number of days between two consecutive applications.
 
 Pay close attention to tables and lists in the text, as they often contain the structured data you need. If information is different for Apple and Pear, create two separate objects.
+If any piece of information cannot be found in the text, leave the corresponding field out of the JSON output.
 
 Example Input:
-"GEBRUIKSVOORSCHRIFT
-Het middel Captan 80 WDG is een contactfungicide.
+"WETTELIJK GEBRUIKSVOORSCHRIFT
+Toelatingsnummer: 12345 N
+Toegestaan is uitsluitend het professionele gebruik als schimmelbestrijdingsmiddel...
+Werkzame stoffen: captan 800 g/kg
+Datum: 15-05-2023
+Versie: W.3
 
 Toepassingen in Appel en Peer:
 Tegen Schurft (Venturia spp.)
@@ -70,30 +88,36 @@ Veiligheidstermijn: 21 dagen.
 Maximale totale dosis per 12 maanden: 15,2 kg/ha."
 
 Example Output:
-[
-  {
-    "product": "Captan 80 WDG",
-    "crop": "Appel",
-    "disease": "Schurft (Venturia spp.)",
-    "maxDosage": 1.9,
-    "unit": "kg",
-    "safetyPeriodDays": 21,
-    "maxApplicationsPerYear": 8,
-    "maxDosePerYear": 15.2,
-    "minIntervalDays": 7
-  },
-  {
-    "product": "Captan 80 WDG",
-    "crop": "Peer",
-    "disease": "Schurft (Venturia spp.)",
-    "maxDosage": 1.9,
-    "unit": "kg",
-    "safetyPeriodDays": 21,
-    "maxApplicationsPerYear": 8,
-    "maxDosePerYear": 15.2,
-    "minIntervalDays": 7
-  }
-]
+{
+  "middelen": [
+    {
+      "product": "Unknown Product Name",
+      "crop": "Appel",
+      "disease": "Schurft (Venturia spp.)",
+      "maxDosage": 1.9,
+      "unit": "kg",
+      "safetyPeriodDays": 21,
+      "maxApplicationsPerYear": 8,
+      "maxDosePerYear": 15.2,
+      "minIntervalDays": 7
+    },
+    {
+      "product": "Unknown Product Name",
+      "crop": "Peer",
+      "disease": "Schurft (Venturia spp.)",
+      "maxDosage": 1.9,
+      "unit": "kg",
+      "safetyPeriodDays": 21,
+      "maxApplicationsPerYear": 8,
+      "maxDosePerYear": 15.2,
+      "minIntervalDays": 7
+    }
+  ],
+  "admissionNumber": "12345 N",
+  "labelVersion": "W.3",
+  "prescriptionDate": "15-05-2023",
+  "activeSubstances": "captan 800 g/kg"
+}
 
 Now, parse the following instruction text:
 {{{voorschrift}}}
