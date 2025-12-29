@@ -1,4 +1,5 @@
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel } from './types';
 import { products as staticProductsData } from './data';
@@ -19,24 +20,29 @@ export async function getMiddelen(db: Firestore): Promise<Middel[]> {
 
 export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[]): Promise<void> {
     if (!db) throw new Error("Database not initialized");
+    if (middelen.length === 0) return;
+
+    const productName = middelen[0].product;
+    if (!productName) {
+        throw new Error("Product name is missing in the data to be added.");
+    }
+
     const batch = writeBatch(db);
-    
-    // To avoid duplicates, first fetch existing ones.
-    const existingMiddelen = await getMiddelen(db);
 
-    middelen.forEach(newMiddel => {
-        const exists = existingMiddelen.some(
-            m => m.product.toLowerCase() === newMiddel.product.toLowerCase() &&
-                 m.crop.toLowerCase() === newMiddel.crop.toLowerCase() &&
-                 m.disease?.toLowerCase() === newMiddel.disease?.toLowerCase()
-        );
-
-        if (!exists) {
-            const docRef = doc(collection(db, MIDDELEN_COLLECTION));
-            batch.set(docRef, newMiddel);
-        }
+    // 1. Find and delete all existing entries for this product
+    const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "==", productName));
+    const existingDocsSnapshot = await getDocs(q);
+    existingDocsSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
     });
     
+    // 2. Add the new entries
+    middelen.forEach(newMiddel => {
+        const docRef = doc(collection(db, MIDDELEN_COLLECTION));
+        batch.set(docRef, newMiddel);
+    });
+    
+    // 3. Commit the atomic batch
     await batch.commit();
 }
 
@@ -231,5 +237,3 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
-
-    
