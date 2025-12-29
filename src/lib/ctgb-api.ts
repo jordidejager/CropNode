@@ -3,12 +3,15 @@
 
 import type { CtgbMiddel } from './types';
 
+const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
 // Deze functie haalt de gegevens op, filtert ze en transformeert ze naar het juiste formaat.
 // Caching is ingeschakeld om het aantal API-verzoeken te beperken.
 const getCtgbToelatingen = async (): Promise<any[]> => {
-    const fetch = (await import('node-fetch')).default;
     try {
-        const response = await fetch("https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get/");
+        const response = await fetch("https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get/", {
+            next: { revalidate: REVALIDATE_TIME_SECONDS }
+        });
         if (!response.ok) {
             throw new Error(`Fout bij het ophalen van CTGB data: ${response.statusText}`);
         }
@@ -22,10 +25,11 @@ const getCtgbToelatingen = async (): Promise<any[]> => {
 
 // Deze functie haalt de werkzame stoffen op voor een specifiek toelatingsnummer.
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
-    const fetch = (await import('node-fetch')).default;
     if (!toelatingId) return "Niet beschikbaar";
     try {
-        const response = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_werkzame_stof/${toelatingId}/`);
+        const response = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_werkzame_stof/${toelatingId}/`, {
+             next: { revalidate: REVALIDATE_TIME_SECONDS }
+        });
         if (!response.ok) {
             return "Niet beschikbaar";
         }
@@ -43,31 +47,40 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
 
 // Hoofdfunctie die wordt aangeroepen vanuit de pagina.
 export async function getCtgbData(): Promise<CtgbMiddel[]> {
-    const fetch = (await import('node-fetch')).default;
     const toelatingen = await getCtgbToelatingen();
 
     const pitfruitGewassen = ["Appel", "Peer"];
     const pitfruitMiddelen: any[] = [];
 
-    for (const toelating of toelatingen) {
-        // We controleren of er een 'W-codering' is, wat duidt op een landbouwtoepassing
+    // This part involves multiple fetches, so we should be careful.
+    // Let's fetch all applications in parallel to speed things up.
+    const applicationPromises = toelatingen.map(async (toelating) => {
         if (toelating.wtg_code_oms) {
-             const toepassingenResponse = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_toepassing/${toelating.toelating_id}/`);
-             if(toepassingenResponse.ok){
-                const toepassingenData = await toepassingenResponse.json();
-                const items = (toepassingenData as any).items;
-                const heeftPitfruitToepassing = items.some((toep: any) => 
-                    pitfruitGewassen.includes(toep.gewas_oms)
-                );
-
-                if (heeftPitfruitToepassing) {
-                    pitfruitMiddelen.push(toelating);
+            try {
+                const toepassingenResponse = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_toepassing/${toelating.toelating_id}/`, {
+                     next: { revalidate: REVALIDATE_TIME_SECONDS }
+                });
+                if (toepassingenResponse.ok) {
+                    const toepassingenData = await toepassingenResponse.json();
+                    const items = (toepassingenData as any).items;
+                    const heeftPitfruitToepassing = items.some((toep: any) =>
+                        pitfruitGewassen.includes(toep.gewas_oms)
+                    );
+                    if (heeftPitfruitToepassing) {
+                        return toelating;
+                    }
                 }
-             }
+            } catch (error) {
+                 console.error(`Fout bij ophalen toepassing voor toelating ${toelating.toelating_id}:`, error);
+            }
         }
-    }
+        return null;
+    });
 
-    const uniekeMiddelen = Array.from(new Map(pitfruitMiddelen.map(m => [m.toelating_id, m])).values());
+    const results = await Promise.all(applicationPromises);
+    const filteredMiddelen = results.filter(middel => middel !== null);
+
+    const uniekeMiddelen = Array.from(new Map(filteredMiddelen.map(m => [m.toelating_id, m])).values());
 
     const resultaat = await Promise.all(
         uniekeMiddelen.map(async (middel) => {
