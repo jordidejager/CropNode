@@ -5,6 +5,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
 import { staticProductsData } from './data';
@@ -30,6 +31,8 @@ export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): P
     if (!db) throw new Error("Database not initialized");
 
     const collectionRef = collection(db, CTGB_MIDDELEN_COLLECTION);
+    
+    // We need to fetch existing docs to delete them in the batch
     const existingDocsSnapshot = await getDocs(collectionRef);
     
     const batch = writeBatch(db);
@@ -42,7 +45,7 @@ export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): P
     // 2. Add the new documents
     middelen.forEach(middel => {
         const docRef = doc(collectionRef); // Create a new doc with a random ID
-        batch.set(docRef, middel);
+        batch.set(docRef, middel); // The middel object should already have the correct structure
     });
 
     // 3. Commit the atomic batch

@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
@@ -220,7 +221,7 @@ function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMidd
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Toelatingnummer</TableHead>
+                                <TableHead>Toelatingsnummer</TableHead>
                                 <TableHead>Naam</TableHead>
                                 <TableHead>Werkzame stoffen</TableHead>
                                 <TableHead>Status</TableHead>
