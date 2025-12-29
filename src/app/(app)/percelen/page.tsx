@@ -18,7 +18,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
-import { cn } from "@/lib/utils";
 
 
 // Fix for default icon issue with Leaflet in React

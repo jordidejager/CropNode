@@ -10,6 +10,7 @@ import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel 
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Timestamp } from 'firebase/firestore';
+import pdf from 'pdf-parse';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -311,8 +312,22 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 }
 
 
-export async function importVoorschrift(voorschriftText: string): Promise<{ success: boolean; message: string; }> {
+export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
+    const file = formData.get('voorschriftPdf') as File;
+
+    if (!file || file.size === 0) {
+        return { success: false, message: 'Geen bestand geselecteerd.' };
+    }
+
     try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const data = await pdf(buffer);
+        const voorschriftText = data.text;
+
+        if (!voorschriftText) {
+            return { success: false, message: 'Kon geen tekst uit de PDF extraheren.' };
+        }
+        
         const parsedMiddelen = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
         
         if (!parsedMiddelen || parsedMiddelen.length === 0) {
@@ -327,7 +342,7 @@ export async function importVoorschrift(voorschriftText: string): Promise<{ succ
 
     } catch (error) {
         console.error("Fout bij importeren voorschrift:", error);
-        const message = error instanceof Error ? error.message : 'Er is een onbekende fout opgetreden bij het analyseren van de tekst.';
+        const message = error instanceof Error ? error.message : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
         return { success: false, message };
     }
 }

@@ -1,37 +1,47 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useRef } from 'react';
 import { middelMatrix } from '@/lib/data';
 import type { Middel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2 } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { importVoorschrift } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
-    const [voorschriftText, setVoorschriftText] = useState('');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) {
+            setSelectedFile(event.target.files[0]);
+        }
+    };
+
     const handleImport = async () => {
-        if (!voorschriftText) {
-            toast({ variant: 'destructive', title: 'Leeg veld', description: 'Plak de tekst van het voorschrift in het veld.' });
+        if (!selectedFile) {
+            toast({ variant: 'destructive', title: 'Geen bestand', description: 'Selecteer een PDF-bestand om te importeren.' });
             return;
         }
 
+        const formData = new FormData();
+        formData.append('voorschriftPdf', selectedFile);
+
         startImportTransition(async () => {
-            const result = await importVoorschrift(voorschriftText);
+            const result = await importVoorschrift(formData);
             if (result.success) {
                 toast({ title: 'Import geslaagd!', description: result.message });
                 onImportSuccess();
                 onOpenChange(false);
+                setSelectedFile(null);
             } else {
                 toast({ variant: 'destructive', title: 'Import mislukt', description: result.message });
             }
@@ -39,29 +49,39 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(isOpen) => {
+            onOpenChange(isOpen);
+            if (!isOpen) setSelectedFile(null);
+        }}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Importeer Voorschrift</DialogTitle>
+                    <DialogTitle>Importeer Voorschrift via PDF</DialogTitle>
                     <DialogDescription>
-                        Plak hier de volledige tekst van een gebruikersvoorschrift. De AI zal de gegevens extraheren.
+                        Upload een PDF-bestand van een gebruikersvoorschrift. De AI zal de gegevens extraheren.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                    <Label htmlFor="voorschrift-text">Tekst van gebruikersvoorschrift</Label>
-                    <Textarea
-                        id="voorschrift-text"
-                        value={voorschriftText}
-                        onChange={(e) => setVoorschriftText(e.target.value)}
-                        placeholder="Plak hier de tekst..."
-                        rows={15}
+                    <Label htmlFor="voorschrift-pdf">PDF-bestand</Label>
+                    <Input
+                        id="voorschrift-pdf"
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handleFileChange}
+                        className="cursor-pointer"
                     />
+                    {selectedFile && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                            <File className="h-4 w-4" />
+                            <span>{selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)</span>
+                        </div>
+                    )}
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="outline">Annuleren</Button>
                     </DialogClose>
-                    <Button onClick={handleImport} disabled={isImporting}>
+                    <Button onClick={handleImport} disabled={isImporting || !selectedFile}>
                         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                         Importeer en Analyseer
                     </Button>
