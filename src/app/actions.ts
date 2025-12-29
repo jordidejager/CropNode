@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -11,8 +10,8 @@ import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
+import { adminStorage } from '@/firebase/admin';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -322,22 +321,35 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message: 'Geen bestanden geselecteerd.' };
     }
     
-    const { firestore, storage } = initializeFirebase();
+    const { firestore } = initializeFirebase();
     let successfulImports = 0;
     let failedImports = 0;
     const errorMessages: string[] = [];
 
+    const bucket = adminStorage.bucket();
+
     for (const file of files) {
         try {
-            const fileBuffer = await file.arrayBuffer();
+            const fileBuffer = Buffer.from(await file.arrayBuffer());
             
-            // 1. Upload PDF to Firebase Storage
-            const storageRef = ref(storage, `voorschriften/${uuidv4()}-${file.name}`);
-            const uploadResult = await uploadBytes(storageRef, fileBuffer, { contentType: file.type });
-            const pdfUrl = await getDownloadURL(uploadResult.ref);
+            // 1. Upload PDF to Firebase Storage using Admin SDK
+            const filePath = `voorschriften/${uuidv4()}-${file.name}`;
+            const storageFile = bucket.file(filePath);
+
+            await new Promise<void>((resolve, reject) => {
+                const stream = storageFile.createWriteStream({
+                    metadata: { contentType: file.type || 'application/pdf' },
+                });
+                stream.on('error', (err) => reject(err));
+                stream.on('finish', () => resolve());
+                stream.end(fileBuffer);
+            });
+            
+            await storageFile.makePublic();
+            const pdfUrl = storageFile.publicUrl();
 
             // 2. Parse PDF text
-            const data = await pdf(Buffer.from(fileBuffer));
+            const data = await pdf(fileBuffer);
             const voorschriftText = data.text;
             if (!voorschriftText) {
                 throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
@@ -357,27 +369,19 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             // 4. Add data to Firestore
             await addMiddelen(firestore, parsedResult.middelen);
             
-            const newLogData: Omit<UploadLog, 'id'> = {
+            const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> & { pdfUrl?: string } = {
                 productName,
                 uploadDate: new Date(),
                 fileName: file.name,
                 pdfUrl,
             };
 
-            if (parsedResult.admissionNumber) {
-                newLogData.admissionNumber = parsedResult.admissionNumber;
-            }
-            if (parsedResult.labelVersion) {
-                newLogData.labelVersion = parsedResult.labelVersion;
-            }
-            if (parsedResult.prescriptionDate) {
-                newLogData.prescriptionDate = parsedResult.prescriptionDate;
-            }
-            if (parsedResult.activeSubstances) {
-                newLogData.activeSubstances = parsedResult.activeSubstances;
-            }
+            if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+            if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
+            if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+            if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
             
-            await addUploadLog(firestore, newLogData);
+            await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
             successfulImports++;
         } catch (error: any) {
             console.error(`Fout bij importeren van ${file.name}:`, error);
@@ -395,7 +399,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     }
 
     return { 
-        success: failedImports === 0, 
+        success: successfulImports > 0 && failedImports === 0, 
         message 
     };
 }
