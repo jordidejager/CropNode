@@ -309,7 +309,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                             <>
                                                               {regels.map((regel, index) => (
                                                                 <TableRow key={`${regel.id}-${index}`} className="bg-background hover:bg-muted/50">
-                                                                  <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                                                  <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
                                                                   <TableCell>{regel.crop}</TableCell>
                                                                   <TableCell>{formatDisease(regel.disease)}</TableCell>
                                                                   <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
