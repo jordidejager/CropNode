@@ -7,58 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, FileText, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, FileText } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift } from '@/app/actions';
+import { importVoorschrift, extractPdfText } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Set the workerSrc to the path of the locally-hosted worker file
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-
-async function getPdfText(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            if (!event.target?.result) {
-                return reject(new Error("FileReader error"));
-            }
-            try {
-                const typedArray = new Uint8Array(event.target.result as ArrayBuffer);
-                const pdfDoc = await pdfjsLib.getDocument(typedArray).promise;
-                let text = '';
-                for (let i = 1; i <= pdfDoc.numPages; i++) {
-                    const page = await pdfDoc.getPage(i);
-                    const content = await page.getTextContent();
-                    text += content.items.map(item => 'str' in item ? item.str : '').join(' ');
-                    text += '\n'; // Add newline between pages
-                }
-                resolve(text);
-            } catch (error) {
-                console.error("Error extracting PDF text:", error);
-                if (error instanceof Error) {
-                     reject(new Error(`PDF-extractie mislukt: ${error.message}`));
-                } else {
-                     reject(new Error(`Onbekende PDF-extractiefout.`));
-                }
-            }
-        };
-        reader.onerror = (error) => {
-             console.error("FileReader error:", error);
-             reject(new Error("Bestand kon niet worden gelezen."));
-        };
-        reader.readAsArrayBuffer(file);
-    });
-}
-
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
@@ -84,10 +43,17 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     
             for (const file of selectedFiles) {
                 try {
-                    const pdfText = await getPdfText(file);
+                    const formData = new FormData();
+                    formData.append('pdf', file);
+                    
+                    const textResult = await extractPdfText(formData);
+                    if (!textResult.success || !textResult.text) {
+                        throw new Error(textResult.message || `Kon geen tekst uit ${file.name} extraheren.`);
+                    }
+
                     const result = await importVoorschrift({
                         fileName: file.name,
-                        pdfText: pdfText,
+                        pdfText: textResult.text,
                     });
     
                     if (result.success) {
@@ -103,22 +69,18 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
             }
             
             if (successfulImports > 0) {
-                let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
-                if (errorMessages.length > 0) {
-                    finalMessage += ` ${errorMessages.length} mislukt.`;
-                }
                 toast({
                     title: 'Import Voltooid',
-                    description: finalMessage,
+                    description: `${successfulImports} van de ${selectedFiles.length} voorschrift(en) succesvol geïmporteerd.`,
                 });
                 onImportSuccess();
             }
             
-            if (successfulImports === 0 && errorMessages.length > 0) {
+            if (errorMessages.length > 0) {
                  toast({
                     variant: 'destructive',
                     title: `Import mislukt`,
-                    description: `De volgende fouten zijn opgetreden: ${errorMessages.join(', ')}`,
+                    description: `Fouten: ${errorMessages.join(', ')}`,
                 });
             }
     

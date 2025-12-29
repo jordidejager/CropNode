@@ -9,6 +9,7 @@ import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel,
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
+import pdf from 'pdf-parse';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -315,6 +316,23 @@ const importSchema = z.object({
     pdfText: z.string(),
 });
 
+export async function extractPdfText(formData: FormData): Promise<{success: boolean; text?: string; message?: string}> {
+  const file = formData.get('pdf') as File;
+  if (!file) {
+    return { success: false, message: "Geen bestand gevonden." };
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const data = await pdf(buffer);
+    return { success: true, text: data.text };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Onbekende fout bij PDF-extractie.';
+    console.error("PDF-extractie mislukt:", message);
+    return { success: false, message: `PDF-extractie mislukt: ${message}` };
+  }
+}
+
 export async function importVoorschrift(input: { fileName: string; pdfText: string; }): Promise<{ success: boolean; message: string; }> {
     const validation = importSchema.safeParse(input);
     if (!validation.success) {
@@ -363,5 +381,3 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
       return { success: false, message: errorMessage };
     }
 }
-
-    
