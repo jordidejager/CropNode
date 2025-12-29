@@ -1,6 +1,7 @@
 
 
 
+
 'use server';
 
 import type { CtgbMiddel } from './types';
@@ -58,7 +59,6 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
 export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
     const crops = ["Appel", "Peer"];
     
-    // 1. Fetch all products for "Appel" and "Peer" in parallel
     const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
     
     const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises.map(p => p.catch(e => {
@@ -66,7 +66,6 @@ export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
         return []; // Return empty array on failure to not break Promise.all
     })));
 
-    // 2. Combine and deduplicate the lists based on toelating_id
     const allMiddelen = [...appelMiddelen, ...peerMiddelen];
     const uniekeMiddelenMap = new Map();
     allMiddelen.forEach(m => {
@@ -76,23 +75,21 @@ export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
     });
     const uniekeMiddelen = Array.from(uniekeMiddelenMap.values());
 
-    // 3. Fetch active substances for the unique list of products in parallel
     const resultPromises = uniekeMiddelen.map(async (middel) => {
         if (!middel || !middel.toelating_id) return null;
         
         const werkzameStoffen = await getWerkzameStoffen(middel.toelating_id);
         
         return {
-            toelatingnummer: middel.toelatingsnummer,
+            toelatingsnummer: middel.toelatingsnummer,
             naam: middel.toelatingnaam,
             status: middel.toelatingstatus_oms,
             werkzameStoffen: werkzameStoffen
-        };
+        } as CtgbMiddel;
     });
 
-    // 4. Await all results and filter out any nulls
     const resultaat = (await Promise.all(resultPromises)).filter(Boolean) as CtgbMiddel[];
 
-    // Sort by name
     return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
 }
+

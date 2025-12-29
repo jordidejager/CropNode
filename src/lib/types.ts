@@ -1,6 +1,7 @@
 
 
 
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -71,8 +72,9 @@ export type UploadLog = {
 
 export type CtgbMiddel = {
     id?: string; // Firestore ID, optional here but present in DB
-    toelatingnummer: string;
+    toelatingsnummer: string;
     naam: string;
     status: string;
     werkzameStoffen: string;
 };
+

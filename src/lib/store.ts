@@ -6,6 +6,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
 import { staticProductsData } from './data';
@@ -44,8 +45,14 @@ export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): P
 
     // 2. Add the new documents
     middelen.forEach(middel => {
-        const docRef = doc(collectionRef); // Create a new doc with a random ID
-        batch.set(docRef, middel); // The middel object should already have the correct structure
+        const docRef = doc(collectionRef); 
+        const dataToSet: Omit<CtgbMiddel, 'id'> = {
+            toelatingsnummer: middel.toelatingsnummer,
+            naam: middel.naam,
+            status: middel.status,
+            werkzameStoffen: middel.werkzameStoffen
+        };
+        batch.set(docRef, dataToSet);
     });
 
     // 3. Commit the atomic batch
@@ -308,3 +315,4 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
+

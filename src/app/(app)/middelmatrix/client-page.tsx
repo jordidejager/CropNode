@@ -1,6 +1,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
@@ -230,8 +231,8 @@ function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMidd
                         <TableBody>
                             {filteredData.length > 0 ? (
                                 filteredData.map(middel => (
-                                    <TableRow key={middel.toelatingnummer}>
-                                        <TableCell>{middel.toelatingnummer}</TableCell>
+                                    <TableRow key={middel.toelatingsnummer}>
+                                        <TableCell>{middel.toelatingsnummer}</TableCell>
                                         <TableCell className="font-medium">{middel.naam}</TableCell>
                                         <TableCell>{middel.werkzameStoffen}</TableCell>
                                         <TableCell>{middel.status}</TableCell>
@@ -503,3 +504,4 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
         </>
     );
 }
+
