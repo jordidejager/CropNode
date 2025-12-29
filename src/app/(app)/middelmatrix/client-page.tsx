@@ -106,7 +106,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     });
                 }
             }
-
+            
             if (successfulImports > 0) {
                 let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
                 if (failedImports > 0) {
@@ -117,7 +117,16 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     description: finalMessage,
                 });
                 onImportSuccess();
+            } else if (failedImports > 0 && successfulImports === 0) {
+                // Don't show "Import Voltooid" if everything failed. The error toasts are enough.
+            } else {
+                 toast({
+                    variant: 'destructive',
+                    title: 'Import Mislukt',
+                    description: 'Geen enkel bestand kon worden geïmporteerd. Probeer het opnieuw.',
+                });
             }
+
 
             onOpenChange(false);
             setSelectedFiles([]);

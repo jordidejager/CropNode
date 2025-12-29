@@ -341,17 +341,18 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
   
       await addMiddelen(firestore, parsedResult.middelen);
   
-      const newLogData: Omit<UploadLog, 'id'> = {
+      const newLogData: Partial<Omit<UploadLog, 'id'>> = {
         productName,
         uploadDate: new Date(),
         fileName: fileName,
-        admissionNumber: parsedResult.admissionNumber || undefined,
-        labelVersion: parsedResult.labelVersion || undefined,
-        prescriptionDate: parsedResult.prescriptionDate || undefined,
-        activeSubstances: parsedResult.activeSubstances || undefined,
       };
 
-      await addUploadLog(firestore, newLogData);
+      if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+      if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
+      if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+      if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
+  
+      await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
       
       revalidatePath('/middelmatrix');
       return { success: true, message: `${fileName} succesvol geïmporteerd.` };
