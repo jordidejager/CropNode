@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 import { z } from 'zod';
@@ -347,16 +346,18 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
 
         await addMiddelen(firestore, parsedResult.middelen);
         
-        const newLog: Omit<UploadLog, 'id' | 'pdfUrl'> = {
+        const newLogData: Omit<UploadLog, 'id' | 'pdfUrl'> = {
             productName: productName,
             uploadDate: new Date(),
             fileName: file.name,
-            admissionNumber: parsedResult.admissionNumber || undefined,
-            labelVersion: parsedResult.labelVersion || undefined,
-            prescriptionDate: parsedResult.prescriptionDate || undefined,
-            activeSubstances: parsedResult.activeSubstances || undefined,
         };
-        await addUploadLog(firestore, newLog);
+
+        if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+        if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
+        if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+        if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
+
+        await addUploadLog(firestore, newLogData);
 
         revalidatePath('/middelmatrix');
         
