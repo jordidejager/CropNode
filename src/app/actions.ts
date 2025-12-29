@@ -4,8 +4,7 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
-import { addMiddelToMatrix, middelMatrix } from '@/lib/data';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -26,11 +25,12 @@ export type FormState = {
   };
 };
 
-function validateSprayData(parsedData: ParsedSprayData, parcels: Parcel[]): { isValid: boolean, validationMessage: string } {
+async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string }> {
     const validationMessages: string[] = [];
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
     )];
+    const middelMatrix = await getMiddelen(db);
 
     for (const productEntry of parsedData.products) {
         for (const crop of uniqueCrops) {
@@ -127,7 +127,7 @@ export async function processSprayEntry(
         throw new Error("AI kon geen geldige middelen identificeren in de output.");
     }
     
-    const { isValid, validationMessage } = validateSprayData(finalParsedData, parcels);
+    const { isValid, validationMessage } = await validateSprayData(firestore, finalParsedData, parcels);
 
     const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
@@ -196,7 +196,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     }
     
     const allParcels = await getParcels(firestore);
-    const { isValid, validationMessage } = validateSprayData(entry.parsedData, allParcels);
+    const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
     
     const updatedEntryData: Partial<LogbookEntry> = {
         ...entry,
@@ -270,7 +270,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
 
-        const { isValid, validationMessage } = validateSprayData(entry.parsedData, allParcels);
+        const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
         if (!isValid) {
             // Update status to 'Te Controleren' and save validation message
             entry.status = 'Te Controleren';
@@ -319,6 +319,8 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message: 'Geen bestand geselecteerd.' };
     }
 
+    const { firestore } = initializeFirebase();
+
     try {
         const buffer = Buffer.from(await file.arrayBuffer());
         const data = await pdf(buffer);
@@ -334,11 +336,11 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: 'De AI kon geen geldige middelengegevens uit de tekst extraheren.' };
         }
 
-        addMiddelToMatrix(parsedMiddelen);
+        await addMiddelen(firestore, parsedMiddelen);
         
         revalidatePath('/middelmatrix');
         
-        return { success: true, message: `${parsedMiddelen.length} middel-regel(s) succesvol geïmporteerd en toegevoegd.` };
+        return { success: true, message: `${parsedMiddelen.length} middel-regel(s) succesvol geïmporteerd en opgeslagen in de database.` };
 
     } catch (error) {
         console.error("Fout bij importeren voorschrift:", error);
@@ -346,3 +348,5 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message };
     }
 }
+
+    

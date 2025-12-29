@@ -1,12 +1,44 @@
 
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry } from './types';
-import { products as staticProductsData, middelMatrix } from './data';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel } from './types';
+import { products as staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
 const PRODUCTS_COLLECTION = 'products';
 const PARCELS_COLLECTION = 'parcels';
+const MIDDELEN_COLLECTION = 'middelen';
+
+
+// Middel Functions
+export async function getMiddelen(db: Firestore): Promise<Middel[]> {
+  if (!db) return [];
+  const querySnapshot = await getDocs(query(collection(db, MIDDELEN_COLLECTION), orderBy('product')));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Middel));
+}
+
+export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[]): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    const batch = writeBatch(db);
+    
+    // To avoid duplicates, first fetch existing ones.
+    const existingMiddelen = await getMiddelen(db);
+
+    middelen.forEach(newMiddel => {
+        const exists = existingMiddelen.some(
+            m => m.product.toLowerCase() === newMiddel.product.toLowerCase() &&
+                 m.crop.toLowerCase() === newMiddel.crop.toLowerCase() &&
+                 m.disease?.toLowerCase() === newMiddel.disease?.toLowerCase()
+        );
+
+        if (!exists) {
+            const docRef = doc(collection(db, MIDDELEN_COLLECTION));
+            batch.set(docRef, newMiddel);
+        }
+    });
+    
+    await batch.commit();
+}
 
 
 // Parcel Functions
@@ -171,7 +203,8 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 
 // Product Functions
 export async function getProducts(db: Firestore): Promise<string[]> {
-    const staticProducts = [...new Set(middelMatrix.map(m => m.product))];
+    const middelen = await getMiddelen(db);
+    const staticProducts = [...new Set(middelen.map(m => m.product))];
     if (!db) {
         return staticProducts;
     }
@@ -198,3 +231,5 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
+
+    

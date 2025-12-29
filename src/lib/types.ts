@@ -1,3 +1,4 @@
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -8,6 +9,7 @@ export type Parcel = {
 };
 
 export type Middel = {
+  id: string; // Firestore ID
   product: string;
   crop: string;
   disease?: string;
@@ -53,3 +55,5 @@ export type ParcelHistoryEntry = {
   unit: string;
   date: Date;
 };
+
+    
