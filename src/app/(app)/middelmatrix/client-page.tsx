@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [isImporting, startImportTransition] = useTransition();
@@ -175,6 +176,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
 
     return (
         <>
+        <TooltipProvider>
             <Tabs defaultValue="database">
                 <CardHeader className="px-0">
                     <div className="flex justify-between items-start">
@@ -309,7 +311,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                             <TableHead>Upload Datum</TableHead>
                                             <TableHead>Toelating</TableHead>
                                             <TableHead>Versie</TableHead>
-                                            <TableHead>Actieve Stof(fen)</TableHead>
+                                            <TableHead className="max-w-xs">Actieve Stof(fen)</TableHead>
                                             <TableHead>PDF Bestand</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -323,7 +325,14 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     <TableCell>{log.labelVersion ?? '-'}</TableCell>
                                                     <TableCell className="max-w-xs truncate">{log.activeSubstances ?? '-'}</TableCell>
                                                     <TableCell>
-                                                        {log.fileName}
+                                                        <Tooltip delayDuration={100}>
+                                                            <TooltipTrigger asChild>
+                                                                <p className="truncate max-w-[150px]">{log.fileName}</p>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{log.fileName}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -341,6 +350,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                     </Card>
                 </TabsContent>
             </Tabs>
+        </TooltipProvider>
             <ImportDialog open={isImporting} onOpenChange={setIsImporting} onImportSuccess={handleImportSuccess} />
         </>
     );
