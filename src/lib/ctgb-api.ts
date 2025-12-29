@@ -48,30 +48,26 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
 // Hoofdfunctie die wordt aangeroepen vanuit de pagina.
 export async function getCtgbData(): Promise<CtgbMiddel[]> {
     const toelatingen = await getCtgbToelatingen();
-
     const pitfruitGewassen = ["Appel", "Peer"];
 
-    // This part involves multiple fetches, so we should be careful.
-    // Let's fetch all applications in parallel to speed things up.
     const applicationPromises = toelatingen.map(async (toelating) => {
-        if (toelating.wtg_code_oms) {
-            try {
-                const toepassingenResponse = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_toepassing/${toelating.toelating_id}/`, {
-                     next: { revalidate: REVALIDATE_TIME_SECONDS }
-                });
-                if (toepassingenResponse.ok) {
-                    const toepassingenData = await toepassingenResponse.json();
-                    const items = (toepassingenData as any).items;
-                    const heeftPitfruitToepassing = items.some((toep: any) =>
-                        pitfruitGewassen.includes(toep.gewas_oms)
-                    );
-                    if (heeftPitfruitToepassing) {
-                        return toelating;
-                    }
+        if (!toelating.toelating_id) return null;
+        try {
+            const toepassingenResponse = await fetch(`https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating/get_toepassing/${toelating.toelating_id}/`, {
+                next: { revalidate: REVALIDATE_TIME_SECONDS }
+            });
+            if (toepassingenResponse.ok) {
+                const toepassingenData = await toepassingenResponse.json();
+                const items = (toepassingenData as any).items;
+                const heeftPitfruitToepassing = items.some((toep: any) =>
+                    pitfruitGewassen.includes(toep.gewas_oms)
+                );
+                if (heeftPitfruitToepassing) {
+                    return toelating;
                 }
-            } catch (error) {
-                 console.error(`Fout bij ophalen toepassing voor toelating ${toelating.toelating_id}:`, error);
             }
+        } catch (error) {
+            console.error(`Fout bij ophalen toepassing voor toelating ${toelating.toelating_id}:`, error);
         }
         return null;
     });
