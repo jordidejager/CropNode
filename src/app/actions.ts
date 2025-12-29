@@ -329,7 +329,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
 
     for (const file of files) {
         try {
-            const fileBuffer = Buffer.from(await file.arrayBuffer());
+            const fileBuffer = await file.arrayBuffer();
             
             // 1. Upload PDF to Firebase Storage
             const storageRef = ref(storage, `voorschriften/${uuidv4()}-${file.name}`);
@@ -337,7 +337,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             const pdfUrl = await getDownloadURL(uploadResult.ref);
 
             // 2. Parse PDF text
-            const data = await pdf(fileBuffer);
+            const data = await pdf(Buffer.from(fileBuffer));
             const voorschriftText = data.text;
             if (!voorschriftText) {
                 throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
@@ -357,23 +357,31 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             // 4. Add data to Firestore
             await addMiddelen(firestore, parsedResult.middelen);
             
-             const newLogData: Omit<UploadLog, 'id'> = {
+            const newLogData: Omit<UploadLog, 'id'> = {
                 productName,
                 uploadDate: new Date(),
                 fileName: file.name,
                 pdfUrl,
-                ...(parsedResult.admissionNumber && { admissionNumber: parsedResult.admissionNumber }),
-                ...(parsedResult.labelVersion && { labelVersion: parsedResult.labelVersion }),
-                ...(parsedResult.prescriptionDate && { prescriptionDate: parsedResult.prescriptionDate }),
-                ...(parsedResult.activeSubstances && { activeSubstances: parsedResult.activeSubstances }),
             };
 
+            if (parsedResult.admissionNumber) {
+                newLogData.admissionNumber = parsedResult.admissionNumber;
+            }
+            if (parsedResult.labelVersion) {
+                newLogData.labelVersion = parsedResult.labelVersion;
+            }
+            if (parsedResult.prescriptionDate) {
+                newLogData.prescriptionDate = parsedResult.prescriptionDate;
+            }
+            if (parsedResult.activeSubstances) {
+                newLogData.activeSubstances = parsedResult.activeSubstances;
+            }
             
             await addUploadLog(firestore, newLogData);
             successfulImports++;
         } catch (error: any) {
             console.error(`Fout bij importeren van ${file.name}:`, error);
-            const errorMessage = error.code ? `${error.message} (${error.code})` : error.message;
+            const errorMessage = error.message || 'Onbekende fout.';
             failedImports++;
             errorMessages.push(`(${file.name}: ${errorMessage})`);
         }
@@ -391,5 +399,3 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         message 
     };
 }
-
-    
