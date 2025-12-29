@@ -357,24 +357,25 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             // 4. Add data to Firestore
             await addMiddelen(firestore, parsedResult.middelen);
             
-            const newLogData: Omit<UploadLog, 'id'> = {
+             const newLogData: Omit<UploadLog, 'id'> = {
                 productName,
                 uploadDate: new Date(),
                 fileName: file.name,
                 pdfUrl,
+                ...(parsedResult.admissionNumber && { admissionNumber: parsedResult.admissionNumber }),
+                ...(parsedResult.labelVersion && { labelVersion: parsedResult.labelVersion }),
+                ...(parsedResult.prescriptionDate && { prescriptionDate: parsedResult.prescriptionDate }),
+                ...(parsedResult.activeSubstances && { activeSubstances: parsedResult.activeSubstances }),
             };
 
-            if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-            if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-            if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-            if (parsedResult.activeSubstances) newLogData.activeSubstances = parsedResult.activeSubstances;
             
             await addUploadLog(firestore, newLogData);
             successfulImports++;
         } catch (error: any) {
             console.error(`Fout bij importeren van ${file.name}:`, error);
+            const errorMessage = error.code ? `${error.message} (${error.code})` : error.message;
             failedImports++;
-            errorMessages.push(`(${file.name}: ${error.message})`);
+            errorMessages.push(`(${file.name}: ${errorMessage})`);
         }
     }
 
@@ -390,3 +391,5 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         message 
     };
 }
+
+    
