@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, FileText } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, FileText, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set the workerSrc to the path of the worker file from node_modules
+// Set the workerSrc to the path of the locally-hosted worker file
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 
@@ -77,11 +77,11 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
             toast({ variant: 'destructive', title: 'Geen bestanden', description: 'Selecteer een of meerdere PDF-bestanden om te importeren.' });
             return;
         }
-
+    
         startImportTransition(async () => {
             let successfulImports = 0;
-            let failedImports = 0;
-
+            const errorMessages: string[] = [];
+    
             for (const file of selectedFiles) {
                 try {
                     const pdfText = await getPdfText(file);
@@ -89,45 +89,39 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                         fileName: file.name,
                         pdfText: pdfText,
                     });
-
+    
                     if (result.success) {
                         successfulImports++;
                     } else {
                         throw new Error(result.message || `Onbekende fout bij verwerken van ${file.name}`);
                     }
                 } catch (error: any) {
-                    failedImports++;
                     const errorMessage = error.message || 'Onbekende fout.';
                     console.error(`Fout bij ${file.name}:`, errorMessage);
-                    toast({
-                        variant: 'destructive',
-                        title: `Fout bij ${file.name}`,
-                        description: errorMessage,
-                    });
+                    errorMessages.push(`${file.name}: ${errorMessage}`);
                 }
             }
             
             if (successfulImports > 0) {
                 let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
-                if (failedImports > 0) {
-                    finalMessage += ` ${failedImports} mislukt.`;
+                if (errorMessages.length > 0) {
+                    finalMessage += ` ${errorMessages.length} mislukt.`;
                 }
                 toast({
                     title: 'Import Voltooid',
                     description: finalMessage,
                 });
                 onImportSuccess();
-            } else if (failedImports > 0 && successfulImports === 0) {
-                // Don't show "Import Voltooid" if everything failed. The error toasts are enough.
-            } else {
+            }
+            
+            if (successfulImports === 0 && errorMessages.length > 0) {
                  toast({
                     variant: 'destructive',
-                    title: 'Import Mislukt',
-                    description: 'Geen enkel bestand kon worden geïmporteerd. Probeer het opnieuw.',
+                    title: `Import mislukt`,
+                    description: `De volgende fouten zijn opgetreden: ${errorMessages.join(', ')}`,
                 });
             }
-
-
+    
             onOpenChange(false);
             setSelectedFiles([]);
         });
@@ -452,5 +446,3 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
-
-    
