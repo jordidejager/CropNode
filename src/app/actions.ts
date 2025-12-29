@@ -10,8 +10,6 @@ import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
-import { adminStorage } from '@/firebase/admin';
-import { v4 as uuidv4 } from 'uuid';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -313,7 +311,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     }
 }
 
-export async function extractPdfText(formData: FormData): Promise<{success: boolean; text?: string; fileUrl?: string; message?: string}> {
+export async function extractPdfText(formData: FormData): Promise<{success: boolean; text?: string; message?: string}> {
   const file = formData.get('pdf') as File;
   if (!file) {
     return { success: false, message: "Geen bestand gevonden." };
@@ -322,29 +320,10 @@ export async function extractPdfText(formData: FormData): Promise<{success: bool
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    // 1. Upload file to storage
-    const bucket = adminStorage.bucket();
-    const filePath = `voorschriften/${uuidv4()}-${file.name}`;
-    const fileHandle = bucket.file(filePath);
-
-    await fileHandle.save(buffer, {
-        metadata: {
-            contentType: file.type,
-        },
-    });
-
-    // 2. Get public URL
-    const [publicUrl] = await fileHandle.getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491' // Far-future expiration date
-    });
-
-    // 3. Extract text
     const data = await pdf(buffer);
-    
-    return { success: true, text: data.text, fileUrl: publicUrl };
+    return { success: true, text: data.text };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Onbekende fout bij PDF-extractie of upload.';
+    const message = error instanceof Error ? error.message : 'Onbekende fout bij PDF-extractie.';
     console.error("PDF-verwerking mislukt:", message);
     return { success: false, message: `PDF-extractie mislukt: ${message}` };
   }
@@ -354,16 +333,15 @@ export async function extractPdfText(formData: FormData): Promise<{success: bool
 const importSchema = z.object({
     fileName: z.string(),
     pdfText: z.string(),
-    pdfUrl: z.string().optional(),
 });
 
-export async function importVoorschrift(input: { fileName: string; pdfText: string; pdfUrl?: string; }): Promise<{ success: boolean; message: string; }> {
+export async function importVoorschrift(input: { fileName: string; pdfText: string; }): Promise<{ success: boolean; message: string; }> {
     const validation = importSchema.safeParse(input);
     if (!validation.success) {
         return { success: false, message: 'Ongeldige input.' };
     }
     
-    const { fileName, pdfText, pdfUrl } = validation.data;
+    const { fileName, pdfText } = validation.data;
     const { firestore } = initializeFirebase();
   
     try {
@@ -387,7 +365,6 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
         productName,
         uploadDate: new Date(),
         fileName: fileName,
-        pdfUrl: pdfUrl,
       };
 
       if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;

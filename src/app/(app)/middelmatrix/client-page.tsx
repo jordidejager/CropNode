@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -54,7 +54,6 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     const importResult = await importVoorschrift({
                         fileName: file.name,
                         pdfText: textResult.text,
-                        pdfUrl: textResult.fileUrl,
                     });
     
                     if (importResult.success) {
@@ -379,26 +378,17 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                         </Tooltip>
                                                     </TableCell>
                                                      <TableCell>
-                                                        {log.pdfUrl ? (
-                                                            <Button asChild variant="outline" size="sm">
-                                                                <a href={log.pdfUrl} target="_blank" rel="noopener noreferrer">
-                                                                    <Download className="mr-2 h-4 w-4" />
-                                                                    Download
-                                                                </a>
-                                                            </Button>
-                                                        ) : (
-                                                            <Tooltip delayDuration={100}>
-                                                                <TooltipTrigger asChild>
-                                                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                                                    <File className="h-4 w-4 flex-shrink-0" />
-                                                                    <span className="truncate max-w-[150px]">{log.fileName}</span>
-                                                                    </div>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p>{log.fileName}</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        )}
+                                                        <Tooltip delayDuration={100}>
+                                                            <TooltipTrigger asChild>
+                                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                                <File className="h-4 w-4 flex-shrink-0" />
+                                                                <span className="truncate max-w-[150px]">{log.fileName}</span>
+                                                                </div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{log.fileName}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
