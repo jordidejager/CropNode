@@ -4,6 +4,7 @@
 import type { CtgbMiddel } from './types';
 
 const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
+// Corrected base URL for the CTGB public API
 const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating";
 
 // Helper function to make cached API calls
@@ -27,6 +28,7 @@ const fetchWithCache = async (url: string) => {
 // Gets all authorized products for a specific crop ("gewas")
 const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
     try {
+        // Use the correct endpoint as per the documentation
         const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
         return data.items || [];
     } catch (error) {
@@ -39,6 +41,7 @@ const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     if (!toelatingId) return "Niet beschikbaar";
     try {
+        // Use the correct endpoint as per the documentation
         const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_werkzame_stof/${toelatingId}/`);
         if (data.items && data.items.length > 0) {
             return data.items.map((item: any) => `${item.werkzame_stof} (${item.gehalte})`).join(', ');
