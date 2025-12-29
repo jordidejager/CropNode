@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import { z } from 'zod';
@@ -326,8 +327,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
 
     try {
         const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-        // 1. Extract text from PDF
         const data = await pdf(fileBuffer);
         const voorschriftText = data.text;
 
@@ -335,7 +334,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: 'Kon geen tekst uit de PDF extraheren.' };
         }
         
-        // 2. Parse text with AI
         const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
         
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
@@ -347,18 +345,16 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: 'De AI kon de productnaam niet bepalen.' };
         }
 
-        // 3. Save middelen to the database (this will replace old ones)
         await addMiddelen(firestore, parsedResult.middelen);
         
-        // 4. Create and save the upload log
-        const newLog: Omit<UploadLog, 'id'> = {
+        const newLog: Omit<UploadLog, 'id' | 'pdfUrl'> = {
             productName: productName,
             uploadDate: new Date(),
-            admissionNumber: parsedResult.admissionNumber,
-            labelVersion: parsedResult.labelVersion,
-            prescriptionDate: parsedResult.prescriptionDate,
-            activeSubstances: parsedResult.activeSubstances,
-            fileName: file.name
+            fileName: file.name,
+            admissionNumber: parsedResult.admissionNumber || undefined,
+            labelVersion: parsedResult.labelVersion || undefined,
+            prescriptionDate: parsedResult.prescriptionDate || undefined,
+            activeSubstances: parsedResult.activeSubstances || undefined,
         };
         await addUploadLog(firestore, newLog);
 
@@ -368,7 +364,8 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
 
     } catch (error: any) {
         console.error("Fout bij importeren voorschrift:", error);
-        const message = error.code ? `${error.message} (${error.code})` : 'Er is een onbekende fout opgetreden bij het verwerken van de PDF.';
-        return { success: false, message };
+        return { success: false, message: error.message };
     }
 }
+
+    
