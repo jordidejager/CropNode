@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, FileText, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, FileText } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -81,14 +81,10 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
         startImportTransition(async () => {
             let successfulImports = 0;
             let failedImports = 0;
-            const errorMessages: string[] = [];
 
             for (const file of selectedFiles) {
                 try {
-                    // 1. Extract PDF text on the client
                     const pdfText = await getPdfText(file);
-
-                    // 2. Call the server action with the text and filename
                     const result = await importVoorschrift({
                         fileName: file.name,
                         pdfText: pdfText,
@@ -99,12 +95,10 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     } else {
                         throw new Error(result.message || `Onbekende fout bij verwerken van ${file.name}`);
                     }
-
                 } catch (error: any) {
                     failedImports++;
                     const errorMessage = error.message || 'Onbekende fout.';
                     console.error(`Fout bij ${file.name}:`, errorMessage);
-                    errorMessages.push(`(${file.name}: ${errorMessage})`);
                     toast({
                         variant: 'destructive',
                         title: `Fout bij ${file.name}`,
@@ -113,18 +107,16 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                 }
             }
 
-            let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
-            if (failedImports > 0) {
-                finalMessage += ` ${failedImports} mislukt.`;
-            }
-
-            toast({
-                title: 'Import Voltooid',
-                description: finalMessage,
-            });
-            
             if (successfulImports > 0) {
-                 onImportSuccess();
+                let finalMessage = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
+                if (failedImports > 0) {
+                    finalMessage += ` ${failedImports} mislukt.`;
+                }
+                toast({
+                    title: 'Import Voltooid',
+                    description: finalMessage,
+                });
+                onImportSuccess();
             }
 
             onOpenChange(false);
@@ -451,7 +443,5 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
-
-    
 
     

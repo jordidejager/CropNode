@@ -310,75 +310,57 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     }
 }
 
-export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const filesDataString = formData.get('filesData');
+const importSchema = z.object({
+    fileName: z.string(),
+    pdfText: z.string(),
+});
+
+export async function importVoorschrift(input: { fileName: string; pdfText: string; }): Promise<{ success: boolean; message: string; }> {
+    const validation = importSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Ongeldige input.' };
+    }
     
-    if (!filesDataString || typeof filesDataString !== 'string') {
-        return { success: false, message: 'Geen bestanden geselecteerd.' };
-    }
-
-    const filesData = JSON.parse(filesDataString);
-
-    if (!Array.isArray(filesData) || filesData.length === 0) {
-      return { success: false, message: 'Geen bestanden geselecteerd.' };
-    }
-  
+    const { fileName, pdfText } = validation.data;
     const { firestore } = initializeFirebase();
-    let successfulImports = 0;
-    let failedImports = 0;
-    const errorMessages: string[] = [];
   
-    for (const fileInfo of filesData) {
-      const { fileName, pdfText } = fileInfo;
-  
-      try {
-        if (!pdfText) {
-          throw new Error(`Kon geen tekst uit ${fileName} extraheren.`);
-        }
-  
-        // Parse text with AI
-        const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
-        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-          throw new Error(`De AI kon geen geldige middelengegevens uit ${fileName} extraheren.`);
-        }
-  
-        const productName = parsedResult.middelen[0]?.product;
-        if (!productName) {
-          throw new Error(`De AI kon de productnaam niet bepalen in ${fileName}.`);
-        }
-  
-        // Add data to Firestore
-        await addMiddelen(firestore, parsedResult.middelen);
-  
-        const newLogData: Omit<UploadLog, 'id'> = {
-          productName,
-          uploadDate: new Date(),
-          fileName: fileName,
-          admissionNumber: parsedResult.admissionNumber || undefined,
-          labelVersion: parsedResult.labelVersion || undefined,
-          prescriptionDate: parsedResult.prescriptionDate || undefined,
-          activeSubstances: parsedResult.activeSubstances || undefined,
-        };
-
-        await addUploadLog(firestore, newLogData);
-        successfulImports++;
-      } catch (error: any) {
-        console.error(`Fout bij importeren van ${fileName}:`, error);
-        const errorMessage = error.message || 'Onbekende fout.';
-        failedImports++;
-        errorMessages.push(`(${fileName}: ${errorMessage})`);
+    try {
+      if (!pdfText) {
+        throw new Error(`Kon geen tekst uit ${fileName} extraheren.`);
       }
+  
+      const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
+      if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+        throw new Error(`De AI kon geen geldige middelengegevens uit ${fileName} extraheren.`);
+      }
+  
+      const productName = parsedResult.middelen[0]?.product;
+      if (!productName) {
+        throw new Error(`De AI kon de productnaam niet bepalen in ${fileName}.`);
+      }
+  
+      await addMiddelen(firestore, parsedResult.middelen);
+  
+      const newLogData: Omit<UploadLog, 'id'> = {
+        productName,
+        uploadDate: new Date(),
+        fileName: fileName,
+        admissionNumber: parsedResult.admissionNumber || undefined,
+        labelVersion: parsedResult.labelVersion || undefined,
+        prescriptionDate: parsedResult.prescriptionDate || undefined,
+        activeSubstances: parsedResult.activeSubstances || undefined,
+      };
+
+      await addUploadLog(firestore, newLogData);
+      
+      revalidatePath('/middelmatrix');
+      return { success: true, message: `${fileName} succesvol geïmporteerd.` };
+  
+    } catch (error: any) {
+      console.error(`Fout bij importeren van ${fileName}:`, error);
+      const errorMessage = error.message || 'Onbekende fout.';
+      return { success: false, message: errorMessage };
     }
-  
-    revalidatePath('/middelmatrix');
-  
-    let message = `${successfulImports} voorschrift(en) succesvol geïmporteerd.`;
-    if (failedImports > 0) {
-      message += ` ${failedImports} mislukt. Fouten: ${errorMessages.join(', ')}`;
-    }
-  
-    return {
-      success: successfulImports > 0,
-      message,
-    };
 }
+
+    
