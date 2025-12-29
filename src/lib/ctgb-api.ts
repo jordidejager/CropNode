@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import type { CtgbMiddel } from './types';
@@ -6,7 +7,7 @@ import type { CtgbMiddel } from './types';
 const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 // Base URL for the CTGB public API
-const CTGB_API_BASE_URL = "https://autorisaties.ctgb.nl/ords/ctgb_pub/toelating";
+const CTGB_API_BASE_URL = "https://toelatingen.ctgb.nl/ords/ctgb_pub/toelating";
 
 // Helper function to make cached API calls
 const fetchWithCache = async (url: string) => {
@@ -17,7 +18,7 @@ const fetchWithCache = async (url: string) => {
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`CTGB API error for ${url}: ${response.status} ${response.statusText}`, errorText);
-            throw new Error(`API returned status ${response.status}`);
+            throw new Error(`API returned status ${response.status}: ${errorText}`);
         }
         return await response.json();
     } catch (error) {
@@ -47,7 +48,6 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
         }
         return "Niet gespecificeerd";
     } catch (error) {
-         // It's possible a middel doesn't have substances, so we don't throw, just log and return a friendly message.
         console.warn(`Kon werkzame stoffen voor toelatingId ${toelatingId} niet ophalen.`, error);
         return "Kon stoffen niet ophalen";
     }
@@ -60,11 +60,19 @@ export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
     // 1. Fetch all products for "Appel" and "Peer" in parallel
     const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
     
-    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
+    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises.map(p => p.catch(e => {
+        console.error("Een van de API-aanroepen voor gewassen is mislukt:", e);
+        return []; // Return empty array on failure to not break Promise.all
+    })));
 
     // 2. Combine and deduplicate the lists based on toelating_id
     const allMiddelen = [...appelMiddelen, ...peerMiddelen];
-    const uniekeMiddelenMap = new Map(allMiddelen.map(m => [m.toelating_id, m]));
+    const uniekeMiddelenMap = new Map();
+    allMiddelen.forEach(m => {
+        if(m && m.toelating_id) {
+            uniekeMiddelenMap.set(m.toelating_id, m);
+        }
+    });
     const uniekeMiddelen = Array.from(uniekeMiddelenMap.values());
 
     // 3. Fetch active substances for the unique list of products in parallel
