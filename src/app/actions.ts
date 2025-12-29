@@ -3,9 +3,10 @@
 
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
-import { middelMatrix } from '@/lib/data';
+import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
+import { addMiddelToMatrix, middelMatrix } from '@/lib/data';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData } from '@/lib/types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Timestamp } from 'firebase/firestore';
@@ -305,6 +306,28 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: true };
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Onbekende fout.';
+        return { success: false, message };
+    }
+}
+
+
+export async function importVoorschrift(voorschriftText: string): Promise<{ success: boolean; message: string; }> {
+    try {
+        const parsedMiddelen = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
+        
+        if (!parsedMiddelen || parsedMiddelen.length === 0) {
+            return { success: false, message: 'De AI kon geen geldige middelengegevens uit de tekst extraheren.' };
+        }
+
+        addMiddelToMatrix(parsedMiddelen);
+        
+        revalidatePath('/middelmatrix');
+        
+        return { success: true, message: `${parsedMiddelen.length} middel-regel(s) succesvol geïmporteerd en toegevoegd.` };
+
+    } catch (error) {
+        console.error("Fout bij importeren voorschrift:", error);
+        const message = error instanceof Error ? error.message : 'Er is een onbekende fout opgetreden bij het analyseren van de tekst.';
         return { success: false, message };
     }
 }
