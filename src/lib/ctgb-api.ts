@@ -2,17 +2,16 @@
 
 
 
+
 'use server';
 
 import type { CtgbMiddel } from './types';
 
-const REVALIDATE_TIME_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const REVALIDATE_TIME_SECONDS = 60 * 60 * 24; // 1 day
 
-// Base URL for the CTGB public API
 const CTGB_API_BASE_URL = "https://toelatingen.ctgb.nl/ords/ctgb_pub/toelating";
 
-// Helper function to make cached API calls
-const fetchWithCache = async (url: string) => {
+const fetchWithCache = async (url: string): Promise<any> => {
     try {
         const response = await fetch(url, {
             next: { revalidate: REVALIDATE_TIME_SECONDS }
@@ -25,22 +24,20 @@ const fetchWithCache = async (url: string) => {
         return await response.json();
     } catch (error) {
         console.error(`Fetch failed for ${url}:`, error);
-        throw error; // Re-throw to be handled by the caller
+        throw error;
     }
 };
 
-// Gets all authorized products for a specific crop ("gewas")
 const getMiddelenVoorGewas = async (gewas: string): Promise<any[]> => {
     try {
         const data = await fetchWithCache(`${CTGB_API_BASE_URL}/get_toep_gewas/${gewas}/`);
         return data.items || [];
     } catch (error) {
         console.error(`Fout bij ophalen middelen voor gewas ${gewas}:`, error);
-        throw error;
+        return [];
     }
 };
 
-// Gets the active substances for a specific authorization ID
 const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     if (!toelatingId) return "Niet beschikbaar";
     try {
@@ -55,24 +52,21 @@ const getWerkzameStoffen = async (toelatingId: number): Promise<string> => {
     }
 };
 
-// Main function to be called by the server action to get all data for pit fruit
 export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
     const crops = ["Appel", "Peer"];
     
     const middelenPromises = crops.map(crop => getMiddelenVoorGewas(crop));
     
-    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises.map(p => p.catch(e => {
-        console.error("Een van de API-aanroepen voor gewassen is mislukt:", e);
-        return []; // Return empty array on failure to not break Promise.all
-    })));
+    const [appelMiddelen, peerMiddelen] = await Promise.all(middelenPromises);
 
     const allMiddelen = [...appelMiddelen, ...peerMiddelen];
-    const uniekeMiddelenMap = new Map();
+    const uniekeMiddelenMap = new Map<number, any>();
     allMiddelen.forEach(m => {
-        if(m && m.toelating_id) {
+        if (m && m.toelating_id) {
             uniekeMiddelenMap.set(m.toelating_id, m);
         }
     });
+    
     const uniekeMiddelen = Array.from(uniekeMiddelenMap.values());
 
     const resultPromises = uniekeMiddelen.map(async (middel) => {
@@ -92,4 +86,5 @@ export async function getCtgbDataFromApi(): Promise<CtgbMiddel[]> {
 
     return resultaat.sort((a, b) => a.naam.localeCompare(b.naam));
 }
+
 

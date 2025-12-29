@@ -2,6 +2,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
@@ -504,4 +505,5 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
         </>
     );
 }
+
 

@@ -7,6 +7,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
 import { staticProductsData } from './data';
@@ -32,30 +33,19 @@ export async function syncCtgbMiddelen(db: Firestore, middelen: CtgbMiddel[]): P
     if (!db) throw new Error("Database not initialized");
 
     const collectionRef = collection(db, CTGB_MIDDELEN_COLLECTION);
-    
-    // We need to fetch existing docs to delete them in the batch
     const existingDocsSnapshot = await getDocs(collectionRef);
     
     const batch = writeBatch(db);
 
-    // 1. Delete all existing documents in the collection
     existingDocsSnapshot.forEach(doc => {
         batch.delete(doc.ref);
     });
 
-    // 2. Add the new documents
     middelen.forEach(middel => {
         const docRef = doc(collectionRef); 
-        const dataToSet: Omit<CtgbMiddel, 'id'> = {
-            toelatingsnummer: middel.toelatingsnummer,
-            naam: middel.naam,
-            status: middel.status,
-            werkzameStoffen: middel.werkzameStoffen
-        };
-        batch.set(docRef, dataToSet);
+        batch.set(docRef, middel);
     });
 
-    // 3. Commit the atomic batch
     await batch.commit();
 }
 
@@ -315,4 +305,5 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
+
 

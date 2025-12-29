@@ -2,6 +2,7 @@
 
 
 
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -77,4 +78,5 @@ export type CtgbMiddel = {
     status: string;
     werkzameStoffen: string;
 };
+
 
