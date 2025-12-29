@@ -322,18 +322,12 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         return { success: false, message: 'Geen bestand geselecteerd.' };
     }
     
-    const { firestore, storage } = initializeFirebase();
+    const { firestore } = initializeFirebase();
 
     try {
         const fileBuffer = Buffer.from(await file.arrayBuffer());
 
-        // 1. Upload PDF to Firebase Storage
-        const fileName = `${uuidv4()}-${file.name}`;
-        const storageRef = ref(storage, `voorschriften/${fileName}`);
-        await uploadBytes(storageRef, fileBuffer, { contentType: file.type });
-        const pdfUrl = await getDownloadURL(storageRef);
-        
-        // 2. Extract text from PDF
+        // 1. Extract text from PDF
         const data = await pdf(fileBuffer);
         const voorschriftText = data.text;
 
@@ -341,7 +335,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: 'Kon geen tekst uit de PDF extraheren.' };
         }
         
-        // 3. Parse text with AI
+        // 2. Parse text with AI
         const parsedResult = await parseMiddelVoorschrift({ voorschrift: voorschriftText });
         
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
@@ -353,10 +347,10 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: 'De AI kon de productnaam niet bepalen.' };
         }
 
-        // 4. Save middelen to the database (this will replace old ones)
+        // 3. Save middelen to the database (this will replace old ones)
         await addMiddelen(firestore, parsedResult.middelen);
         
-        // 5. Create and save the upload log
+        // 4. Create and save the upload log
         const newLog: Omit<UploadLog, 'id'> = {
             productName: productName,
             uploadDate: new Date(),
@@ -364,7 +358,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             labelVersion: parsedResult.labelVersion,
             prescriptionDate: parsedResult.prescriptionDate,
             activeSubstances: parsedResult.activeSubstances,
-            pdfUrl: pdfUrl,
             fileName: file.name
         };
         await addUploadLog(firestore, newLog);

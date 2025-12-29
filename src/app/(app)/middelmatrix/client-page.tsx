@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -310,7 +310,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                             <TableHead>Toelating</TableHead>
                                             <TableHead>Versie</TableHead>
                                             <TableHead>Actieve Stof(fen)</TableHead>
-                                            <TableHead>PDF</TableHead>
+                                            <TableHead>PDF Bestand</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -323,12 +323,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     <TableCell>{log.labelVersion ?? '-'}</TableCell>
                                                     <TableCell className="max-w-xs truncate">{log.activeSubstances ?? '-'}</TableCell>
                                                     <TableCell>
-                                                        <Button variant="outline" size="sm" asChild>
-                                                            <a href={log.pdfUrl} target="_blank" rel="noopener noreferrer">
-                                                                <Download className="mr-2 h-4 w-4" />
-                                                                {log.fileName}
-                                                            </a>
-                                                        </Button>
+                                                        {log.fileName}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
