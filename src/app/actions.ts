@@ -9,7 +9,9 @@ import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import * as xlsx from 'xlsx';
-import { parseMiddelenData } from '@/ai/flows/parse-middelen-data';
+import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
+import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
+
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -421,7 +423,7 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
                 minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
             };
             
-            if (!baseMiddel.product || baseMiddel.maxDosage <= 0) continue;
+            if (!baseMiddel.product || baseMiddel.maxDosage < 0) continue;
 
             for (const crop of cropsToCreate) {
                 allMiddelen.push({ ...baseMiddel, crop });
@@ -450,3 +452,5 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         return { success: false, message: error.message || "Onbekende fout bij verwerken van bestand." };
     }
 }
+
+    
