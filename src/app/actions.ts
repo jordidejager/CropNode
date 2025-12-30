@@ -1,18 +1,15 @@
-
-
-
 'use server';
 
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen, addUploadLog, syncCtgbMiddelen } from '@/lib/store';
+import { parseCtgbExcel } from '@/ai/flows/parse-ctgb-excel';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen, addUploadLog } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
-import { getCtgbDataFromApi } from '@/lib/ctgb-api';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -314,58 +311,35 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     }
 }
 
-const extractTextSchema = z.object({
+const fileSchema = z.object({
     file: z.instanceof(File),
 });
 
-export async function extractPdfText(formData: FormData): Promise<{ success: boolean; text?: string; message?: string }> {
-    const validatedFields = extractTextSchema.safeParse({ file: formData.get('file') });
-    
+export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
+    const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
     if (!validatedFields.success) {
         return { success: false, message: 'Geen geldig bestand ontvangen.' };
     }
-    
     const { file } = validatedFields.data;
-
-    try {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const data = await pdf(buffer);
-        return { success: true, text: data.text };
-    } catch (error) {
-        console.error("Fout bij PDF-extractie:", error);
-        const message = error instanceof Error ? error.message : "Onbekende serverfout bij PDF-verwerking.";
-        return { success: false, message };
-    }
-}
-
-
-const importSchema = z.object({
-    fileName: z.string(),
-    pdfText: z.string(),
-});
-
-export async function importVoorschrift(input: { fileName: string; pdfText: string; }): Promise<{ success: boolean; message: string; }> {
-    const validation = importSchema.safeParse(input);
-    if (!validation.success) {
-        return { success: false, message: 'Ongeldige input.' };
-    }
-    
-    const { fileName, pdfText } = validation.data;
     const { firestore } = initializeFirebase();
   
     try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const pdfData = await pdf(buffer);
+        const pdfText = pdfData.text;
+
       if (!pdfText) {
-        throw new Error(`Kon geen tekst uit ${fileName} extraheren.`);
+        throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
       }
   
       const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
       if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-        throw new Error(`De AI kon geen geldige middelengegevens uit ${fileName} extraheren.`);
+        throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
       }
   
       const productName = parsedResult.middelen[0]?.product;
       if (!productName) {
-        throw new Error(`De AI kon de productnaam niet bepalen in ${fileName}.`);
+        throw new Error(`De AI kon de productnaam niet bepalen in ${file.name}.`);
       }
   
       await addMiddelen(firestore, parsedResult.middelen);
@@ -373,7 +347,7 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
       const newLogData: Partial<Omit<UploadLog, 'id'>> = {
         productName,
         uploadDate: new Date(),
-        fileName: fileName,
+        fileName: file.name,
         activeSubstances: parsedResult.activeSubstances || 'Niet gevonden',
       };
 
@@ -384,41 +358,49 @@ export async function importVoorschrift(input: { fileName: string; pdfText: stri
       await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
       
       revalidatePath('/middelmatrix');
-      return { success: true, message: `${fileName} succesvol geïmporteerd.` };
+      return { success: true, message: `${file.name} succesvol geïmporteerd.` };
   
     } catch (error: any) {
-      console.error(`Fout bij importeren van ${fileName}:`, error);
+      console.error(`Fout bij importeren van ${file.name}:`, error);
       const errorMessage = error.message || 'Onbekende fout.';
       return { success: false, message: errorMessage };
     }
 }
 
 
-export async function syncCtgbDatabase(): Promise<{ success: boolean, message: string, fullError?: string, count: number }> {
-    try {
-        console.log("Starting CTGB API data fetch...");
-        const middelen = await getCtgbDataFromApi();
-        console.log(`Fetched ${middelen.length} middelen from CTGB API.`);
+export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
+    const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
+    if (!validatedFields.success) {
+        return { success: false, message: 'Geen geldig bestand ontvangen.' };
+    }
+    const { file } = validatedFields.data;
+    const { firestore } = initializeFirebase();
 
-        if (middelen.length > 0) {
-            const { firestore } = initializeFirebase();
-            await syncCtgbMiddelen(firestore, middelen);
-            console.log("Successfully synced data to Firestore.");
-        } else {
-            console.log("No middelen found from API, skipping sync to Firestore.");
+    try {
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const fileBase64 = buffer.toString('base64');
+        
+        const parsedResult = await parseCtgbExcel({ excelData: fileBase64 });
+
+        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+            throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}.`);
         }
 
-        revalidatePath('/middelmatrix');
+        await addMiddelen(firestore, parsedResult.middelen);
         
-        return {
-            success: true,
-            message: `CTGB Database succesvol gesynchroniseerd. ${middelen.length} middelen verwerkt.`,
-            count: middelen.length
+        const newLogData: Omit<UploadLog, 'id'> = {
+            productName: "CTGB Excel Import",
+            uploadDate: new Date(),
+            fileName: file.name,
+            activeSubstances: `Bevat ${parsedResult.middelen.length} middelen`,
         };
-
-    } catch (error) {
-        const message = error instanceof Error ? error.message : 'Onbekende fout bij synchroniseren.';
-        console.error("Error syncing CTGB database:", error);
-        return { success: false, message, fullError: error instanceof Error ? error.stack : String(error), count: 0 };
+        await addUploadLog(firestore, newLogData);
+        
+        revalidatePath('/middelmatrix');
+        return { success: true, message: `${parsedResult.middelen.length} middelen succesvol geïmporteerd uit ${file.name}.` };
+    } catch (error: any) {
+        console.error(`Fout bij verwerken van CTGB Excel ${file.name}:`, error);
+        return { success: false, message: error.message || "Onbekende fout." };
     }
 }

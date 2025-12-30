@@ -1,21 +1,16 @@
-
-
-
-
-
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
-import type { Middel, UploadLog, CtgbMiddel } from '@/lib/types';
+import type { Middel, UploadLog } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download, RefreshCw } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, extractPdfText, syncCtgbDatabase } from '@/app/actions';
+import { importVoorschrift, parseCtgbExcelAndImport } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,110 +19,129 @@ import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [importType, setImportType] = useState<'voorschrift' | 'ctgb-excel'>('voorschrift');
     const [isImporting, startImportTransition] = useTransition();
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files) {
-            setSelectedFiles(Array.from(event.target.files));
+        if (event.target.files && event.target.files.length > 0) {
+            setSelectedFile(event.target.files[0]);
         }
     };
 
     const handleImport = () => {
-        if (selectedFiles.length === 0) {
-            toast({ variant: 'destructive', title: 'Geen bestanden', description: 'Selecteer een of meerdere PDF-bestanden om te importeren.' });
+        if (!selectedFile) {
+            toast({ variant: 'destructive', title: 'Geen bestand', description: 'Selecteer een bestand om te importeren.' });
             return;
         }
-    
+
         onOpenChange(false);
         toast({
             title: 'Import Gestart',
-            description: `Verwerking van ${selectedFiles.length} bestand(en) is op de achtergrond gestart.`,
+            description: `Verwerking van ${selectedFile.name} is op de achtergrond gestart.`,
         });
-    
-        startImportTransition(() => {
-            selectedFiles.forEach(async (file) => {
-                try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    const textResult = await extractPdfText(formData);
-    
-                    if (!textResult.success || !textResult.text) {
-                        throw new Error(textResult.message || `Kon geen tekst uit ${file.name} extraheren.`);
-                    }
-    
-                    const importResult = await importVoorschrift({
-                        fileName: file.name,
-                        pdfText: textResult.text,
-                    });
-    
-                    if (importResult.success) {
-                        toast({
-                            title: 'Import Succesvol',
-                            description: `${file.name} is succesvol geïmporteerd.`,
-                        });
-                        onImportSuccess();
-                    } else {
-                        throw new Error(importResult.message || `Onbekende fout bij verwerken van ${file.name}`);
-                    }
-                } catch (error: any) {
-                    const errorMessage = error.message || 'Onbekende fout.';
-                    console.error(`Fout bij importeren van ${file.name}:`, errorMessage);
-                    toast({
-                        variant: 'destructive',
-                        title: `Import Mislukt: ${file.name}`,
-                        description: errorMessage,
-                    });
+
+        startImportTransition(async () => {
+            try {
+                let result;
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                if (importType === 'voorschrift') {
+                    result = await importVoorschrift(formData);
+                } else {
+                    result = await parseCtgbExcelAndImport(formData);
                 }
-            });
+
+                if (result.success) {
+                    toast({
+                        title: 'Import Succesvol',
+                        description: result.message || `${selectedFile.name} is succesvol geïmporteerd.`,
+                    });
+                    onImportSuccess();
+                } else {
+                    throw new Error(result.message || `Onbekende fout bij verwerken van ${selectedFile.name}`);
+                }
+            } catch (error: any) {
+                const errorMessage = error.message || 'Onbekende fout.';
+                console.error(`Fout bij importeren van ${selectedFile.name}:`, errorMessage);
+                toast({
+                    variant: 'destructive',
+                    title: `Import Mislukt: ${selectedFile.name}`,
+                    description: errorMessage,
+                });
+            } finally {
+                setSelectedFile(null);
+            }
         });
-        
-        setSelectedFiles([]);
     };
+
+    const acceptedFileTypes = useMemo(() => {
+        return importType === 'voorschrift' ? 'application/pdf' : '.csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
+    }, [importType]);
 
     return (
         <Dialog open={open} onOpenChange={(isOpen) => {
             onOpenChange(isOpen);
-            if (!isOpen) setSelectedFiles([]);
+            if (!isOpen) setSelectedFile(null);
         }}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Importeer Voorschrift(en) via PDF</DialogTitle>
+                    <DialogTitle>Importeer Middelen</DialogTitle>
                     <DialogDescription>
-                        Upload één of meerdere PDF-bestanden van een gebruikersvoorschrift. De AI zal de gegevens extraheren en opslaan.
+                        Kies het type bestand dat je wilt importeren. De AI zal de gegevens extraheren en opslaan.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <Label htmlFor="voorschrift-pdf">PDF-bestand(en)</Label>
-                    <Input
-                        id="voorschrift-pdf"
-                        ref={fileInputRef}
-                        type="file"
-                        accept="application/pdf"
-                        onChange={handleFileChange}
-                        className="cursor-pointer"
-                        multiple
-                    />
-                    {selectedFiles.length > 0 && (
-                        <div className="flex flex-col gap-2 text-sm text-muted-foreground mt-2 max-h-32 overflow-y-auto">
-                            {selectedFiles.map((file, i) => (
-                                <div key={i} className="flex items-center gap-2">
-                                    <File className="h-4 w-4" />
-                                    <span>{file.name} ({Math.round(file.size / 1024)} KB)</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <Tabs value={importType} onValueChange={(value) => setImportType(value as 'voorschrift' | 'ctgb-excel')} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="voorschrift">Wettelijk Gebruiksvoorschrift (PDF)</TabsTrigger>
+                        <TabsTrigger value="ctgb-excel">CTGB Excel-lijst (.xlsx, .csv)</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="voorschrift">
+                         <Card className="mt-4 border-dashed">
+                             <CardContent className="p-6 text-center">
+                                <Label htmlFor="file-upload" className="cursor-pointer">
+                                  <div className="flex flex-col items-center justify-center gap-2">
+                                    <Upload className="h-8 w-8 text-muted-foreground" />
+                                    <p className="font-semibold">Sleep een PDF-bestand hierheen of klik om te selecteren</p>
+                                    <p className="text-sm text-muted-foreground">Selecteer een PDF van een gebruiksvoorschrift.</p>
+                                  </div>
+                                  <Input id="file-upload" type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                                </Label>
+                             </CardContent>
+                         </Card>
+                    </TabsContent>
+                    <TabsContent value="ctgb-excel">
+                        <Card className="mt-4 border-dashed">
+                             <CardContent className="p-6 text-center">
+                                <Label htmlFor="file-upload-excel" className="cursor-pointer">
+                                  <div className="flex flex-col items-center justify-center gap-2">
+                                    <Upload className="h-8 w-8 text-muted-foreground" />
+                                    <p className="font-semibold">Sleep een Excel-bestand hierheen of klik om te selecteren</p>
+                                    <p className="text-sm text-muted-foreground">Download de lijst van de CTGB-website en upload deze hier.</p>
+                                  </div>
+                                  <Input id="file-upload-excel" type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                                </Label>
+                             </CardContent>
+                         </Card>
+                    </TabsContent>
+                </Tabs>
+                
+                {selectedFile && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                        <File className="h-4 w-4" />
+                        <span>{selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)</span>
+                    </div>
+                )}
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="outline">Annuleren</Button>
                     </DialogClose>
-                    <Button onClick={handleImport} disabled={isImporting || selectedFiles.length === 0}>
+                    <Button onClick={handleImport} disabled={isImporting || !selectedFile}>
                         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                        {`Importeer en Analyseer (${selectedFiles.length})`}
+                        Importeer en Analyseer
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -158,104 +172,7 @@ const formatDate = (date: Date) => {
     }
 }
 
-function CtgbDatabaseClientPage({ initialCtgbData }: { initialCtgbData: CtgbMiddel[] }) {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [isSyncing, startSyncTransition] = useTransition();
-    const { toast } = useToast();
-    const router = useRouter();
-
-    const handleSync = () => {
-        startSyncTransition(async () => {
-            toast({ title: 'Synchronisatie gestart', description: 'De CTGB database wordt op de achtergrond bijgewerkt.' });
-            const result = await syncCtgbDatabase();
-            if (result.success) {
-                toast({ title: 'Synchronisatie Voltooid', description: `${result.count} middelen zijn succesvol gesynchroniseerd.` });
-                router.refresh();
-            } else {
-                toast({ 
-                    variant: 'destructive', 
-                    title: 'Synchronisatie Mislukt', 
-                    description: result.message,
-                    fullError: result.fullError 
-                });
-            }
-        });
-    };
-    
-    const filteredData = useMemo(() => {
-        if (!initialCtgbData) return [];
-        return initialCtgbData.filter(middel =>
-            middel.naam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            middel.werkzameStoffen.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [initialCtgbData, searchTerm]);
-
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <CardTitle>CTGB Databank (Pitfruit)</CardTitle>
-                        <CardDescription>
-                            Lokale kopie van de officiële database van middelen toegelaten voor Appels & Peren.
-                        </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="relative w-72">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                type="search"
-                                placeholder="Zoek op naam of werkzame stof..."
-                                className="w-full rounded-lg bg-background pl-8"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                         <Button onClick={handleSync} disabled={isSyncing} variant="outline">
-                            {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            Synchroniseer
-                        </Button>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Toelatingsnummer</TableHead>
-                                <TableHead>Naam</TableHead>
-                                <TableHead>Werkzame stoffen</TableHead>
-                                <TableHead>Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredData.length > 0 ? (
-                                filteredData.map(middel => (
-                                    <TableRow key={middel.toelatingsnummer}>
-                                        <TableCell>{middel.toelatingsnummer}</TableCell>
-                                        <TableCell className="font-medium">{middel.naam}</TableCell>
-                                        <TableCell>{middel.werkzameStoffen}</TableCell>
-                                        <TableCell>{middel.status}</TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
-                                        Geen middelen gevonden. Probeer de database te synchroniseren.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
-
-export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbData }: { initialData: Middel[], initialLogs: UploadLog[], initialCtgbData: CtgbMiddel[] }) {
+export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialData: Middel[], initialLogs: UploadLog[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
     const router = useRouter();
@@ -325,11 +242,10 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
                         <div className="flex items-center gap-4">
                             <TabsList>
                                 <TabsTrigger value="database">Mijn Middelen</TabsTrigger>
-                                <TabsTrigger value="ctgb">CTGB Database</TabsTrigger>
                                 <TabsTrigger value="log">Upload Logboek</TabsTrigger>
                             </TabsList>
                             <Button onClick={() => setIsImporting(true)}>
-                                <Upload className="mr-2 h-4 w-4" /> Voorschrift Importeren
+                                <Upload className="mr-2 h-4 w-4" /> Importeren
                             </Button>
                         </div>
                     </div>
@@ -421,7 +337,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={8} className="h-24 text-center">
-                                                    Geen middelen gevonden voor "{searchTerm}".
+                                                    Geen middelen gevonden. Importeer een PDF voorschrift of een CTGB Excel-lijst.
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -431,21 +347,18 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
                         </CardContent>
                     </Card>
                 </TabsContent>
-                <TabsContent value="ctgb">
-                    <CtgbDatabaseClientPage initialCtgbData={initialCtgbData} />
-                </TabsContent>
                 <TabsContent value="log">
                     <Card>
                         <CardHeader>
                             <CardTitle>Upload Logboek</CardTitle>
-                            <CardDescription>Overzicht van alle geïmporteerde voorschriften.</CardDescription>
+                            <CardDescription>Overzicht van alle geïmporteerde voorschriften en bestanden.</CardDescription>
                         </CardHeader>
                         <CardContent>
                              <div className="rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Middel</TableHead>
+                                            <TableHead>Middel / Bron</TableHead>
                                             <TableHead>Upload Datum</TableHead>
                                             <TableHead>Toelating</TableHead>
                                             <TableHead>Versie</TableHead>
@@ -489,7 +402,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={6} className="h-24 text-center">
-                                                    Nog geen voorschriften geïmporteerd.
+                                                    Nog geen bestanden geïmporteerd.
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -505,5 +418,3 @@ export function MiddelMatrixClientPage({ initialData, initialLogs, initialCtgbDa
         </>
     );
 }
-
-
