@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
 import { parseCtgbJson } from '@/ai/flows/parse-ctgb-json';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, getMiddelen, addMiddelen, addUploadLog } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -415,3 +415,5 @@ export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ succ
         return { success: false, message: error.message || "Onbekende fout." };
     }
 }
+
+    
