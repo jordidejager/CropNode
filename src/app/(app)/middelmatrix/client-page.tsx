@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Download } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -302,7 +302,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 }
 
                                                 return (
-                                                      <Collapsible asChild key={product} defaultOpen={false}>
+                                                    <Collapsible asChild key={product} defaultOpen={false}>
                                                         <>
                                                             <TableRow>
                                                                 <TableCell colSpan={8} className="p-0">
@@ -331,7 +331,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                             </>
                                                           </CollapsibleContent>
                                                         </>
-                                                      </Collapsible>
+                                                    </Collapsible>
                                                     );
                                             })
                                         ) : (
