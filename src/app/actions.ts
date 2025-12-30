@@ -9,7 +9,6 @@ import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import * as xlsx from 'xlsx';
-import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
 
@@ -333,8 +332,11 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
       if (!pdfText) {
         throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
       }
-  
-      const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
+      
+      // THIS IS A PLACEHOLDER - AI FLOW IS MISSING
+      const parsedResult = { middelen: [], activeSubstances: 'Niet geïmplementeerd' };
+      // const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
+      
       if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
         throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
       }
@@ -353,9 +355,9 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         activeSubstances: parsedResult.activeSubstances || 'Niet gevonden',
       };
 
-      if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-      if (parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-      if (parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
+      if ('admissionNumber' in parsedResult && parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+      if ('labelVersion' in parsedResult && parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
+      if ('prescriptionDate' in parsedResult && parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
       
       await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
       
@@ -393,7 +395,9 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
             throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
         }
 
-        const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
+        // THIS IS A PLACEHOLDER - AI FLOW IS MISSING
+        const parsedResult = { middelen: [], activeSubstances: 'Niet geïmplementeerd' };
+        // const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
         
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
             throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
@@ -407,7 +411,7 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
             fileName: file.name,
             activeSubstances: `Bevat ${parsedResult.middelen.length} regels`,
         };
-         if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+         if ('admissionNumber' in parsedResult && parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
 
         await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
         
