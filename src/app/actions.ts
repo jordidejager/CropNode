@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -367,7 +368,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     }
 }
 
-
 export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
     const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
     if (!validatedFields.success) {
@@ -380,8 +380,9 @@ export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ suc
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
         const fileBase64 = buffer.toString('base64');
+        const fileUri = `data:${file.type};base64,${fileBase64}`;
         
-        const parsedResult = await parseCtgbExcel({ excelData: fileBase64 });
+        const parsedResult = await parseCtgbExcel({ excelData: fileUri });
 
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
             throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}.`);
