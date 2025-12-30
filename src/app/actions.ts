@@ -394,29 +394,19 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
 
         const allMiddelen: Omit<Middel, 'id'>[] = [];
 
+        const parseNumber = (val: any) => {
+            if (val === undefined || val === null) return undefined;
+            const strVal = String(val).replace(',', '.');
+            const num = parseFloat(strVal);
+            return isNaN(num) ? undefined : num;
+        };
+
         for (const row of jsonData) {
             const toepassingsgebied = row['Toepassingsgebied'] as string | undefined;
             if (!toepassingsgebied) continue;
 
             const gebiedLower = toepassingsgebied.toLowerCase();
-            const cropsToCreate: ('Appel' | 'Peer')[] = [];
-
-            if (gebiedLower.includes('appel')) {
-                cropsToCreate.push('Appel');
-            }
-            if (gebiedLower.includes('peer')) {
-                cropsToCreate.push('Peer');
-            }
-
-            if (cropsToCreate.length === 0) continue;
-
-            const parseNumber = (val: any) => {
-                if (val === undefined || val === null) return undefined;
-                const strVal = String(val).replace(',', '.');
-                const num = parseFloat(strVal);
-                return isNaN(num) ? undefined : num;
-            };
-
+            
             const baseMiddel = {
                 product: row['Middelnaam'] as string,
                 disease: row['Toepassing'] as string,
@@ -427,12 +417,13 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
                 minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
             };
             
-            // Allow dosage of 0, but not undefined or negative
             if (!baseMiddel.product || baseMiddel.maxDosage === undefined || baseMiddel.maxDosage < 0) continue;
 
-
-            for (const crop of cropsToCreate) {
-                allMiddelen.push({ ...baseMiddel, crop, maxDosage: baseMiddel.maxDosage as number });
+            if (gebiedLower.includes('appel')) {
+                allMiddelen.push({ ...baseMiddel, crop: 'Appel', maxDosage: baseMiddel.maxDosage as number });
+            }
+            if (gebiedLower.includes('peer')) {
+                allMiddelen.push({ ...baseMiddel, crop: 'Peer', maxDosage: baseMiddel.maxDosage as number });
             }
         }
 
@@ -470,4 +461,5 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
     }
 }
 
+    
     
