@@ -2,8 +2,6 @@
 'use server';
 
 import { z } from 'zod';
-import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
-import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
@@ -11,6 +9,7 @@ import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import * as xlsx from 'xlsx';
+import { parseMiddelenData } from '@/ai/flows/parse-middelen-data';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -362,9 +361,9 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
       return { success: true, message: `${file.name} succesvol geïmporteerd.` };
   
     } catch (error: any) {
-      console.error(`Fout bij importeren van ${file.name}:`, error);
-      const errorMessage = error.message || 'Onbekende fout.';
-      return { success: false, message: errorMessage };
+        console.error(`Fout bij importeren van ${file.name}:`, error.message, error.stack);
+        const errorMessage = error.message || 'Onbekende fout.';
+        return { success: false, message: errorMessage };
     }
 }
 
@@ -381,33 +380,53 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const workbook = xlsx.read(buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const jsonData = xlsx.utils.sheet_to_json(sheet);
+        const jsonData: any[] = xlsx.utils.sheet_to_json(sheet);
 
         if (!jsonData || jsonData.length === 0) {
             throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
         }
 
-        const allMiddelen = jsonData
-            .map((row: any): Omit<Middel, 'id'> | null => {
-                const crop = row['Gewas'];
-                if (!crop || !(crop.toLowerCase().includes('appel') || crop.toLowerCase().includes('peer'))) {
-                    return null;
-                }
+        const allMiddelen: Omit<Middel, 'id'>[] = [];
 
-                const parseNumber = (val: any) => val ? parseFloat(String(val).replace(',', '.')) : undefined;
+        for (const row of jsonData) {
+            const toepassingsgebied = row['Toepassingsgebied'] as string | undefined;
+            if (!toepassingsgebied) continue;
 
-                return {
-                    product: row['Middelnaam'] as string,
-                    crop: crop.toLowerCase().includes('appel') ? 'Appel' : 'Peer',
-                    disease: row['Toepassing'] as string,
-                    maxDosage: parseNumber(row['Maximale dosering per toepassing']) || 0,
-                    unit: row['Eenheid maximale dosering per toepassing'] as string,
-                    safetyPeriodDays: parseNumber(row['Wachttijd (dagen) voor de oogst']),
-                    maxApplicationsPerYear: parseNumber(row['Maximaal aantal toepassingen per 12 maanden']),
-                    minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
-                };
-            })
-            .filter((middel): middel is Omit<Middel, 'id'> => middel !== null && Boolean(middel.product) && middel.maxDosage > 0);
+            const gebiedLower = toepassingsgebied.toLowerCase();
+            const cropsToCreate: ('Appel' | 'Peer')[] = [];
+
+            if (gebiedLower.includes('appel')) {
+                cropsToCreate.push('Appel');
+            }
+            if (gebiedLower.includes('peer')) {
+                cropsToCreate.push('Peer');
+            }
+
+            if (cropsToCreate.length === 0) continue;
+
+            const parseNumber = (val: any) => {
+                if (val === undefined || val === null) return undefined;
+                const strVal = String(val).replace(',', '.');
+                const num = parseFloat(strVal);
+                return isNaN(num) ? undefined : num;
+            };
+
+            const baseMiddel = {
+                product: row['Middelnaam'] as string,
+                disease: row['Toepassing'] as string,
+                maxDosage: parseNumber(row['Maximale dosering per toepassing']) || 0,
+                unit: row['Eenheid maximale dosering per toepassing'] as string,
+                safetyPeriodDays: parseNumber(row['Wachttijd (dagen) voor de oogst']),
+                maxApplicationsPerYear: parseNumber(row['Maximaal aantal toepassingen per 12 maanden']),
+                minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
+            };
+            
+            if (!baseMiddel.product || baseMiddel.maxDosage <= 0) continue;
+
+            for (const crop of cropsToCreate) {
+                allMiddelen.push({ ...baseMiddel, crop });
+            }
+        }
 
 
         if (allMiddelen.length === 0) {
