@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, CtgbMiddel } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
@@ -8,21 +8,26 @@ const PRODUCTS_COLLECTION = 'products';
 const PARCELS_COLLECTION = 'parcels';
 const MIDDELEN_COLLECTION = 'middelen';
 const UPLOAD_LOG_COLLECTION = 'uploadLog';
-const CTGB_MIDDELEN_COLLECTION = 'ctgb_middelen';
+
 
 // Upload Log Functions
 export async function getUploadLogs(db: Firestore): Promise<UploadLog[]> {
     if (!db) return [];
-    const q = query(collection(db, UPLOAD_LOG_COLLECTION), orderBy('uploadDate', 'desc'));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            uploadDate: (data.uploadDate as Timestamp).toDate(),
-        } as UploadLog;
-    });
+    try {
+        const q = query(collection(db, UPLOAD_LOG_COLLECTION), orderBy('uploadDate', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                uploadDate: (data.uploadDate as Timestamp).toDate(),
+            } as UploadLog;
+        });
+    } catch (e) {
+        console.warn("Could not fetch upload logs, collection might not exist yet.", e);
+        return [];
+    }
 }
 
 export async function addUploadLog(db: Firestore, log: Omit<UploadLog, 'id'>): Promise<void> {
@@ -34,8 +39,13 @@ export async function addUploadLog(db: Firestore, log: Omit<UploadLog, 'id'>): P
 // Middel Functions
 export async function getMiddelen(db: Firestore): Promise<Middel[]> {
   if (!db) return [];
-  const querySnapshot = await getDocs(query(collection(db, MIDDELEN_COLLECTION), orderBy('product')));
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Middel));
+  try {
+      const querySnapshot = await getDocs(query(collection(db, MIDDELEN_COLLECTION), orderBy('product')));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Middel));
+  } catch (e) {
+      console.warn("Could not fetch middelen, collection might not exist yet.", e);
+      return [];
+  }
 }
 
 export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[]): Promise<void> {
@@ -45,12 +55,14 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     const batch = writeBatch(db);
     const productsToUpdate = [...new Set(middelen.map(m => m.product))];
 
-    // Find and delete all existing entries for the products being updated
-    const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "in", productsToUpdate));
-    const existingDocsSnapshot = await getDocs(q);
-    existingDocsSnapshot.forEach(doc => {
-        batch.delete(doc.ref);
-    });
+    // Find and delete all existing entries for the products being updated to avoid duplicates
+    if (productsToUpdate.length > 0) {
+        const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "in", productsToUpdate));
+        const existingDocsSnapshot = await getDocs(q);
+        existingDocsSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+    }
     
     // Add the new entries
     middelen.forEach(newMiddel => {

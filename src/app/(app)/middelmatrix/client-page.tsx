@@ -23,6 +23,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     const [importType, setImportType] = useState<'voorschrift' | 'ctgb-excel'>('voorschrift');
     const [isImporting, startImportTransition] = useTransition();
     const { toast } = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files.length > 0) {
@@ -73,19 +74,29 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                 });
             } finally {
                 setSelectedFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
             }
         });
     };
 
     const acceptedFileTypes = useMemo(() => {
-        return importType === 'voorschrift' ? 'application/pdf' : '.csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
+        return importType === 'voorschrift' ? 'application/pdf' : '.xlsx, .csv';
     }, [importType]);
+    
+    const onDialogOpenChange = (isOpen: boolean) => {
+        onOpenChange(isOpen);
+        if (!isOpen) {
+            setSelectedFile(null);
+             if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+             }
+        }
+    }
 
     return (
-        <Dialog open={open} onOpenChange={(isOpen) => {
-            onOpenChange(isOpen);
-            if (!isOpen) setSelectedFile(null);
-        }}>
+        <Dialog open={open} onOpenChange={onDialogOpenChange}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
                     <DialogTitle>Importeer Middelen</DialogTitle>
@@ -101,13 +112,13 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                     <TabsContent value="voorschrift">
                          <Card className="mt-4 border-dashed">
                              <CardContent className="p-6 text-center">
-                                <Label htmlFor="file-upload" className="cursor-pointer">
+                                <Label htmlFor="file-upload-pdf" className="cursor-pointer">
                                   <div className="flex flex-col items-center justify-center gap-2">
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                     <p className="font-semibold">Sleep een PDF-bestand hierheen of klik om te selecteren</p>
                                     <p className="text-sm text-muted-foreground">Selecteer een PDF van een gebruiksvoorschrift.</p>
                                   </div>
-                                  <Input id="file-upload" type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                                  <Input id="file-upload-pdf" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
                                 </Label>
                              </CardContent>
                          </Card>
@@ -121,7 +132,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                                     <p className="font-semibold">Sleep een Excel-bestand hierheen of klik om te selecteren</p>
                                     <p className="text-sm text-muted-foreground">Download de lijst van de CTGB-website en upload deze hier.</p>
                                   </div>
-                                  <Input id="file-upload-excel" type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                                  <Input id="file-upload-excel" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
                                 </Label>
                              </CardContent>
                          </Card>
@@ -314,22 +325,22 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                 </CollapsibleTrigger>
                                                                 </TableCell>
                                                             </TableRow>
-                                                          <CollapsibleContent asChild>
-                                                            <>
-                                                              {regels.map((regel) => (
-                                                                <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
-                                                                  <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
-                                                                  <TableCell>{regel.crop}</TableCell>
-                                                                  <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                                  <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                                  <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                                  <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                                  <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                                  <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                                </TableRow>
-                                                              ))}
-                                                            </>
-                                                          </CollapsibleContent>
+                                                            <CollapsibleContent>
+                                                                <>
+                                                                    {regels.map((regel) => (
+                                                                    <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
+                                                                        <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
+                                                                        <TableCell>{regel.crop}</TableCell>
+                                                                        <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                                        <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                                        <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                                        <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                                        <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                                        <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                                    </TableRow>
+                                                                    ))}
+                                                                </>
+                                                            </CollapsibleContent>
                                                         </>
                                                     </Collapsible>
                                                     );
