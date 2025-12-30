@@ -2,13 +2,14 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
 import * as xlsx from 'xlsx';
+import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
 
@@ -333,9 +334,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
         throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
       }
       
-      // THIS IS A PLACEHOLDER - AI FLOW IS MISSING
-      const parsedResult = { middelen: [], activeSubstances: 'Niet geïmplementeerd' };
-      // const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
+      const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
       
       if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
         throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
@@ -370,7 +369,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
             return { success: false, message: `De AI kon de gegevens niet correct structureren. Probeer het opnieuw of controleer het document. Fout: ${errorMessage}` };
         }
         console.error(`Fout bij importeren van ${file.name}:`, errorMessage, error.stack);
-        return { success: false, message: errorMessage };
+        throw new Error(errorMessage);
     }
 }
 
@@ -395,9 +394,7 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
             throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
         }
 
-        // THIS IS A PLACEHOLDER - AI FLOW IS MISSING
-        const parsedResult = { middelen: [], activeSubstances: 'Niet geïmplementeerd' };
-        // const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
+        const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
         
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
             throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
@@ -419,7 +416,11 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         return { success: true, message: `${parsedResult.middelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
-        return { success: false, message: error.message || "Onbekende fout bij verwerken van bestand." };
+        const errorMessage = error.message || "Onbekende fout bij verwerken van bestand.";
+        if (errorMessage.includes('Could not parse JSON')) {
+            throw new Error(`De AI kon de gegevens niet correct structureren. Fout: ${errorMessage}`);
+        }
+        throw new Error(errorMessage);
     }
 }
 
@@ -434,3 +435,5 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
+
+    
