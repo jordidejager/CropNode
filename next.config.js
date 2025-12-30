@@ -34,9 +34,6 @@ const nextConfig = {
       'https://6000-firebase-studio-1766164036428.cluster-ikslh4rdsnbqsvu5nw3v4dqjj2.cloudworkstations.dev',
     ],
   },
-  devIndicators: {
-    buildActivity: false
-  },
   env: {
     NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
