@@ -316,20 +316,20 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 }
 
                                                 return (
-                                                    <Collapsible asChild key={product} defaultOpen={false}>
-                                                        <React.Fragment>
+                                                    <Collapsible key={product} >
+                                                        
                                                             <TableRow>
                                                                 <TableCell colSpan={8} className="p-0">
-                                                                <CollapsibleTrigger asChild>
+                                                                
                                                                     <button className="flex items-center gap-2 w-full text-left font-medium bg-muted/50 p-4">
                                                                     <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
                                                                     {product} ({regels.length} regels)
                                                                     </button>
-                                                                </CollapsibleTrigger>
+                                                                
                                                                 </TableCell>
                                                             </TableRow>
                                                              {regels.map((regel) => (
-                                                                <CollapsibleContent asChild key={regel.id}>
+                                                                
                                                                     <TableRow className="bg-background hover:bg-muted/50">
                                                                         <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
                                                                         <TableCell>{regel.crop}</TableCell>
@@ -340,9 +340,9 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                         <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
                                                                         <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
                                                                     </TableRow>
-                                                                </CollapsibleContent>
+                                                                
                                                              ))}
-                                                        </React.Fragment>
+                                                        
                                                     </Collapsible>
                                                     );
                                             })
@@ -388,7 +388,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     <TableCell>{log.labelVersion ?? '-'}</TableCell>
                                                     <TableCell className="max-w-xs truncate">
                                                         <Tooltip delayDuration={100}>
-                                                            <TooltipTrigger asChild>
+                                                            <TooltipTrigger >
                                                                 <p className="truncate max-w-[200px]">{log.activeSubstances ?? '-'}</p>
                                                             </TooltipTrigger>
                                                             <TooltipContent>
@@ -398,7 +398,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     </TableCell>
                                                      <TableCell>
                                                         <Tooltip delayDuration={100}>
-                                                            <TooltipTrigger asChild>
+                                                            <TooltipTrigger >
                                                                 <div className="flex items-center gap-2 text-muted-foreground">
                                                                 <File className="h-4 w-4 flex-shrink-0" />
                                                                 <span className="truncate max-w-[150px]">{log.fileName}</span>
@@ -430,5 +430,3 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
-
-    
