@@ -416,6 +416,6 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         return { success: true, message: `${allMiddelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
-        return { success: false, message: error.message || "Onbekende fout." };
+        return { success: false, message: error.message || "Onbekende fout bij verwerken van bestand." };
     }
 }
