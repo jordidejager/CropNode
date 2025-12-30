@@ -1,4 +1,5 @@
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
@@ -53,31 +54,40 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     if (!db) throw new Error("Database not initialized");
     if (middelen.length === 0) return;
 
-    // Step 1: Delete all existing documents in the collection.
-    // Firestore batches are limited to 500 operations. We fetch and delete in chunks.
+    // Group new middelen by product
+    const middelenByProduct = middelen.reduce((acc, middel) => {
+        (acc[middel.product] = acc[middel.product] || []).push(middel);
+        return acc;
+    }, {} as Record<string, Omit<Middel, 'id'>[]>);
+
+    const productNames = Object.keys(middelenByProduct);
     const middelenCollection = collection(db, MIDDELEN_COLLECTION);
-    const snapshot = await getDocs(middelenCollection);
     
-    if (!snapshot.empty) {
-        const deleteBatchSize = 500;
-        for (let i = 0; i < snapshot.docs.length; i += deleteBatchSize) {
-            const batch = writeBatch(db);
-            const chunk = snapshot.docs.slice(i, i + deleteBatchSize);
-            chunk.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-        }
-    }
-    
-    // Step 2: Add the new documents.
-    // We also do this in batches to be safe.
-    const addBatchSize = 500;
-     for (let i = 0; i < middelen.length; i += addBatchSize) {
+    // Process in batches of 30 products to stay within Firestore limits
+    const batchSize = 30;
+    for (let i = 0; i < productNames.length; i += batchSize) {
+        const productBatch = productNames.slice(i, i + batchSize);
+        
+        // Find existing documents for the current batch of products
+        const deleteQuery = query(middelenCollection, where('product', 'in', productBatch));
+        const toDeleteSnapshot = await getDocs(deleteQuery);
+        
         const batch = writeBatch(db);
-        const chunk = middelen.slice(i, i + addBatchSize);
-        chunk.forEach(newMiddel => {
-            const docRef = doc(collection(db, MIDDELEN_COLLECTION));
-            batch.set(docRef, newMiddel);
+
+        // Delete existing documents for these products
+        toDeleteSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
         });
+
+        // Add the new documents for these products
+        productBatch.forEach(productName => {
+            const newMiddelenForProduct = middelenByProduct[productName];
+            newMiddelenForProduct.forEach(newMiddel => {
+                const docRef = doc(middelenCollection);
+                batch.set(docRef, newMiddel);
+            });
+        });
+
         await batch.commit();
     }
 }
