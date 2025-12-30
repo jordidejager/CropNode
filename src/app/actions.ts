@@ -384,26 +384,43 @@ export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ suc
         const workbook = xlsx.read(buffer, { type: "buffer" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const csvData = xlsx.utils.sheet_to_csv(worksheet);
         
-        const parsedResult = await parseCtgbExcel({ excelCsvData: csvData });
+        // Convert to JSON to easily chunk it
+        const json_data = xlsx.utils.sheet_to_json(worksheet);
 
-        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+        const CHUNK_SIZE = 100;
+        let allMiddelen: Middel[] = [];
+
+        for (let i = 0; i < json_data.length; i += CHUNK_SIZE) {
+            const chunk = json_data.slice(i, i + CHUNK_SIZE);
+            
+            // Convert chunk back to CSV for the AI prompt
+            const chunkWorksheet = xlsx.utils.json_to_sheet(chunk);
+            const csvDataChunk = xlsx.utils.sheet_to_csv(chunkWorksheet);
+            
+            const parsedResult = await parseCtgbExcel({ excelCsvData: csvDataChunk });
+
+            if (parsedResult && parsedResult.middelen) {
+                allMiddelen.push(...parsedResult.middelen as Middel[]);
+            }
+        }
+
+        if (allMiddelen.length === 0) {
             throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}.`);
         }
 
-        await addMiddelen(firestore, parsedResult.middelen);
+        await addMiddelen(firestore, allMiddelen);
         
         const newLogData: Omit<UploadLog, 'id'> = {
             productName: "CTGB Excel Import",
             uploadDate: new Date(),
             fileName: file.name,
-            activeSubstances: `Bevat ${parsedResult.middelen.length} middelen`,
+            activeSubstances: `Bevat ${allMiddelen.length} regels`,
         };
         await addUploadLog(firestore, newLogData);
         
         revalidatePath('/middelmatrix');
-        return { success: true, message: `${parsedResult.middelen.length} middelen succesvol geïmporteerd uit ${file.name}.` };
+        return { success: true, message: `${allMiddelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB Excel ${file.name}:`, error);
         return { success: false, message: error.message || "Onbekende fout." };
