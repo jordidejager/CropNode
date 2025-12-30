@@ -364,7 +364,6 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
   
     } catch (error: any) {
         const errorMessage = error.message || 'Onbekende fout.';
-        // Vang de fout op die door de AI wordt gegooid als de JSON-parsing mislukt
         if (errorMessage.includes('Could not parse JSON')) {
             return { success: false, message: `De AI kon de gegevens niet correct structureren. Probeer het opnieuw of controleer het document. Fout: ${errorMessage}` };
         }
@@ -386,63 +385,34 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const workbook = xlsx.read(buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const jsonData: any[] = xlsx.utils.sheet_to_json(sheet);
+        
+        // Convert sheet to a string, keeping layout
+        const textData: string = xlsx.utils.sheet_to_csv(sheet, { FS: '\t' });
 
-        if (!jsonData || jsonData.length === 0) {
+        if (!textData) {
             throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
         }
 
-        const allMiddelen: Omit<Middel, 'id'>[] = [];
-
-        const parseNumber = (val: any) => {
-            if (val === undefined || val === null) return undefined;
-            const strVal = String(val).replace(',', '.');
-            const num = parseFloat(strVal);
-            return isNaN(num) ? undefined : num;
-        };
-
-        for (const row of jsonData) {
-            const toepassingsgebied = row['Toepassingsgebied'] as string | undefined;
-            if (!toepassingsgebied) continue;
-
-            const gebiedLower = toepassingsgebied.toLowerCase();
-            
-            const baseMiddel = {
-                product: row['Middelnaam'] as string,
-                disease: row['Toepassing'] as string,
-                maxDosage: parseNumber(row['Maximale dosering per toepassing']),
-                unit: row['Eenheid maximale dosering per toepassing'] as string,
-                safetyPeriodDays: parseNumber(row['Wachttijd (dagen) voor de oogst']),
-                maxApplicationsPerYear: parseNumber(row['Maximaal aantal toepassingen per 12 maanden']),
-                minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
-            };
-            
-            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || isNaN(baseMiddel.maxDosage) || baseMiddel.maxDosage < 0) continue;
-
-            if (gebiedLower.includes('appel')) {
-                allMiddelen.push({ ...baseMiddel, crop: 'Appel', maxDosage: baseMiddel.maxDosage as number });
-            }
-            if (gebiedLower.includes('peer')) {
-                allMiddelen.push({ ...baseMiddel, crop: 'Peer', maxDosage: baseMiddel.maxDosage as number });
-            }
-        }
-
-        if (allMiddelen.length === 0) {
-            throw new Error(`Kon geen geldige middelen voor 'Appel' of 'Peer' extraheren uit ${file.name}.`);
-        }
-
-        await addMiddelen(firestore, allMiddelen);
+        const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
         
-        const newLogData: Omit<UploadLog, 'id'> = {
+        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
+            throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
+        }
+        
+        await addMiddelen(firestore, parsedResult.middelen);
+        
+        const newLogData: Partial<Omit<UploadLog, 'id'>> = {
             productName: "CTGB Bestand Import",
             uploadDate: new Date(),
             fileName: file.name,
-            activeSubstances: `Bevat ${allMiddelen.length} regels`,
+            activeSubstances: `Bevat ${parsedResult.middelen.length} regels`,
         };
-        await addUploadLog(firestore, newLogData);
+         if (parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
+
+        await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
         
         revalidatePath('/middelmatrix');
-        return { success: true, message: `${allMiddelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
+        return { success: true, message: `${parsedResult.middelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
         return { success: false, message: error.message || "Onbekende fout bij verwerken van bestand." };
@@ -460,8 +430,3 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
-
-    
-    
-
-    
