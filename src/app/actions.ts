@@ -419,7 +419,3 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         return { success: false, message: error.message || "Onbekende fout." };
     }
 }
-
-    
-
-    
