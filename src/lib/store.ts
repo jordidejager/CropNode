@@ -1,3 +1,4 @@
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
@@ -52,14 +53,33 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     if (!db) throw new Error("Database not initialized");
     if (middelen.length === 0) return;
 
-    const batch = writeBatch(db);
+    // Step 1: Delete all existing documents in the collection.
+    // Firestore batches are limited to 500 operations. We fetch and delete in chunks.
+    const middelenCollection = collection(db, MIDDELEN_COLLECTION);
+    const snapshot = await getDocs(middelenCollection);
     
-    middelen.forEach(newMiddel => {
-        const docRef = doc(collection(db, MIDDELEN_COLLECTION));
-        batch.set(docRef, newMiddel);
-    });
+    if (!snapshot.empty) {
+        const deleteBatchSize = 500;
+        for (let i = 0; i < snapshot.docs.length; i += deleteBatchSize) {
+            const batch = writeBatch(db);
+            const chunk = snapshot.docs.slice(i, i + deleteBatchSize);
+            chunk.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
+    }
     
-    await batch.commit();
+    // Step 2: Add the new documents.
+    // We also do this in batches to be safe.
+    const addBatchSize = 500;
+     for (let i = 0; i < middelen.length; i += addBatchSize) {
+        const batch = writeBatch(db);
+        const chunk = middelen.slice(i, i + addBatchSize);
+        chunk.forEach(newMiddel => {
+            const docRef = doc(collection(db, MIDDELEN_COLLECTION));
+            batch.set(docRef, newMiddel);
+        });
+        await batch.commit();
+    }
 }
 
 
@@ -253,3 +273,5 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
+
+    
