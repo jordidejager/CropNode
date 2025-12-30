@@ -295,7 +295,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                     </TableHeader>
                                     <TableBody>
                                         {Object.keys(groupedAndFilteredMatrix).length > 0 ? (
-                                            Object.entries(groupedAndFilteredMatrix).map(([product, regels]) => {
+                                            Object.entries(groupedAndFilteredMatrix).flatMap(([product, regels]) => {
                                                 const isCollapsible = regels.length > 1;
 
                                                 if (!isCollapsible) {
@@ -316,7 +316,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
 
                                                 return (
                                                     <Collapsible asChild key={product} defaultOpen={false}>
-                                                        <>
+                                                        <React.Fragment>
                                                             <TableRow>
                                                                 <TableCell colSpan={8} className="p-0">
                                                                 <CollapsibleTrigger asChild>
@@ -341,7 +341,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                     </TableRow>
                                                                 </CollapsibleContent>
                                                              ))}
-                                                        </>
+                                                        </React.Fragment>
                                                     </Collapsible>
                                                     );
                                             })
