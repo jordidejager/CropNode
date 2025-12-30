@@ -469,3 +469,5 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
+
+    
