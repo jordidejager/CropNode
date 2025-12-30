@@ -8,10 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Trash2, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, parseCtgbFileAndImport } from '@/app/actions';
+import { importVoorschrift, parseCtgbFileAndImport, deleteAllMiddelen } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -68,12 +69,12 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                 }
             } catch (error: any) {
                 const errorMessage = error.message || 'Onbekende fout.';
-                console.error(`Fout bij importeren van ${selectedFile.name}:`, errorMessage);
+                console.error(`Fout bij importeren van ${selectedFile.name}:`, errorMessage, error);
                 toast({
                     variant: 'destructive',
                     title: `Import Mislukt: ${selectedFile.name}`,
                     description: errorMessage,
-                    fullError: errorMessage,
+                    fullError: (error.stack || errorMessage) as string,
                 });
             } finally {
                 setSelectedFile(null);
@@ -188,12 +189,33 @@ const formatDate = (date: Date) => {
 
 export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialData: Middel[], initialLogs: UploadLog[] }) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [isImporting, setIsImporting] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
+    const [isDeleting, startDeleteTransition] = useTransition();
     const [openProducts, setOpenProducts] = useState<Record<string, boolean>>({});
     const router = useRouter();
+    const { toast } = useToast();
 
     const toggleProduct = (productName: string) => {
         setOpenProducts(prev => ({ ...prev, [productName]: !prev[productName] }));
+    };
+    
+    const handleDeleteAll = () => {
+        startDeleteTransition(async () => {
+            const result = await deleteAllMiddelen();
+            if (result.success) {
+                toast({
+                    title: 'Database Geleegd',
+                    description: 'Alle middelen zijn succesvol uit de database verwijderd.',
+                });
+                router.refresh();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Verwijderen Mislukt',
+                    description: result.message,
+                });
+            }
+        });
     };
 
     const groupedAndFilteredMatrix = useMemo(() => {
@@ -258,14 +280,36 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                 Database van toegelaten middelen en upload-historie.
                             </CardDescription>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <TabsList>
+                        <div className="flex items-center gap-2">
+                             <TabsList>
                                 <TabsTrigger value="database">Mijn Middelen</TabsTrigger>
                                 <TabsTrigger value="log">Upload Logboek</TabsTrigger>
                             </TabsList>
-                            <Button onClick={() => setIsImporting(true)}>
+                            <Button onClick={() => setIsImportOpen(true)}>
                                 <Upload className="mr-2 h-4 w-4" /> Importeren
                             </Button>
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive">
+                                        <Trash2 className="mr-2 h-4 w-4" /> Verwijder Alles
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Deze actie kan niet ongedaan worden gemaakt. Dit zal de volledige middelen-database permanent verwijderen. Alle regels worden gewist.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteAll} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                            Ja, verwijder alles
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </div>
                     </div>
                 </CardHeader>
@@ -305,44 +349,48 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                 const isCollapsible = regels.length > 1;
                                                 const isOpen = openProducts[product] || false;
 
-                                                if (!isCollapsible) {
-                                                    const regel = regels[0];
-                                                    return (
-                                                        <TableRow key={regel.id}>
-                                                            <TableCell className="font-medium">{regel.product}</TableCell>
-                                                            <TableCell>{regel.crop}</TableCell>
-                                                            <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                            <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                            <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                        </TableRow>
-                                                    );
-                                                }
-
-                                                return [
-                                                    <TableRow key={product} onClick={() => toggleProduct(product)} className="cursor-pointer bg-muted/50">
-                                                        <TableCell colSpan={8}>
-                                                            <div className="flex items-center gap-2 w-full text-left font-medium">
-                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
-                                                                {product} ({regels.length} regels)
+                                                const mainRow = (
+                                                    <TableRow 
+                                                        key={product} 
+                                                        onClick={isCollapsible ? () => toggleProduct(product) : undefined}
+                                                        className={cn(isCollapsible && 'cursor-pointer hover:bg-muted/50')}
+                                                    >
+                                                        <TableCell className="font-medium">
+                                                            <div className="flex items-center gap-2">
+                                                                {isCollapsible && <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />}
+                                                                {regels[0].product}
+                                                                {isCollapsible && <span className="text-muted-foreground text-xs">({regels.length} regels)</span>}
                                                             </div>
                                                         </TableCell>
-                                                    </TableRow>,
-                                                    ...(isOpen ? regels.map((regel) => (
-                                                        <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
-                                                            <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
-                                                            <TableCell>{regel.crop}</TableCell>
-                                                            <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                            <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                            <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                            <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                        </TableRow>
-                                                    )) : [])
-                                                ];
+                                                        {!isCollapsible && (
+                                                            <>
+                                                                <TableCell>{regels[0].crop}</TableCell>
+                                                                <TableCell>{formatDisease(regels[0].disease)}</TableCell>
+                                                                <TableCell className="text-right">{`${regels[0].maxDosage.toFixed(2)} ${regels[0].unit}`}</TableCell>
+                                                                <TableCell className="text-right">{regels[0].minIntervalDays ?? '-'}</TableCell>
+                                                                <TableCell className="text-right">{regels[0].maxApplicationsPerYear ?? '-'}</TableCell>
+                                                                <TableCell className="text-right">{regels[0].maxDosePerYear ? `${regels[0].maxDosePerYear} ${regels[0].unit}` : '-'}</TableCell>
+                                                                <TableCell className="text-right">{regels[0].safetyPeriodDays ?? '-'}</TableCell>
+                                                            </>
+                                                        )}
+                                                        {isCollapsible && <TableCell colSpan={7}></TableCell>}
+                                                    </TableRow>
+                                                );
+
+                                                const subRows = isOpen && isCollapsible ? regels.map((regel) => (
+                                                    <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
+                                                        <TableCell className="pl-12">{regel.product}</TableCell>
+                                                        <TableCell>{regel.crop}</TableCell>
+                                                        <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                        <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                        <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                        <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                        <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                        <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                    </TableRow>
+                                                )) : [];
+
+                                                return [mainRow, ...subRows];
                                             })
                                         ) : (
                                             <TableRow>
@@ -424,9 +472,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                 </TabsContent>
             </Tabs>
         </TooltipProvider>
-            <ImportDialog open={isImporting} onOpenChange={setIsImporting} onImportSuccess={handleImportSuccess} />
+            <ImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} onImportSuccess={handleImportSuccess} />
         </>
     );
 }
-
-    

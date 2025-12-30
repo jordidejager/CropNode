@@ -92,6 +92,28 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     }
 }
 
+export async function deleteAllMiddelen(db: Firestore): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+
+    const middelenCollection = collection(db, MIDDELEN_COLLECTION);
+    const snapshot = await getDocs(middelenCollection);
+
+    if (snapshot.empty) {
+        return; // Nothing to delete
+    }
+
+    // Firestore allows a maximum of 500 writes per batch
+    const batchSize = 500;
+    for (let i = 0; i < snapshot.docs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = snapshot.docs.slice(i, i + batchSize);
+        chunk.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+    }
+}
+
 
 // Parcel Functions
 export async function getParcels(db: Firestore): Promise<Parcel[]> {
@@ -283,5 +305,3 @@ export async function addProduct(db: Firestore, product: string) {
         await addDoc(productsRef, { name: product });
     }
 }
-
-    

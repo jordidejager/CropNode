@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -363,8 +363,12 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
       return { success: true, message: `${file.name} succesvol geïmporteerd.` };
   
     } catch (error: any) {
-        console.error(`Fout bij importeren van ${file.name}:`, error.message, error.stack);
         const errorMessage = error.message || 'Onbekende fout.';
+        // Vang de fout op die door de AI wordt gegooid als de JSON-parsing mislukt
+        if (errorMessage.includes('Could not parse JSON')) {
+            return { success: false, message: `De AI kon de gegevens niet correct structureren. Probeer het opnieuw of controleer het document. Fout: ${errorMessage}` };
+        }
+        console.error(`Fout bij importeren van ${file.name}:`, errorMessage, error.stack);
         return { success: false, message: errorMessage };
     }
 }
@@ -416,20 +420,21 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
             const baseMiddel = {
                 product: row['Middelnaam'] as string,
                 disease: row['Toepassing'] as string,
-                maxDosage: parseNumber(row['Maximale dosering per toepassing']) || 0,
+                maxDosage: parseNumber(row['Maximale dosering per toepassing']),
                 unit: row['Eenheid maximale dosering per toepassing'] as string,
                 safetyPeriodDays: parseNumber(row['Wachttijd (dagen) voor de oogst']),
                 maxApplicationsPerYear: parseNumber(row['Maximaal aantal toepassingen per 12 maanden']),
                 minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
             };
             
-            if (!baseMiddel.product || baseMiddel.maxDosage < 0) continue;
+            // Allow dosage of 0, but not undefined or negative
+            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || baseMiddel.maxDosage < 0) continue;
+
 
             for (const crop of cropsToCreate) {
-                allMiddelen.push({ ...baseMiddel, crop });
+                allMiddelen.push({ ...baseMiddel, crop, maxDosage: baseMiddel.maxDosage as number });
             }
         }
-
 
         if (allMiddelen.length === 0) {
             throw new Error(`Kon geen geldige middelen voor 'Appel' of 'Peer' extraheren uit ${file.name}.`);
@@ -453,4 +458,14 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
     }
 }
 
-    
+export async function deleteAllMiddelen(): Promise<{ success: boolean; message: string }> {
+    const { firestore } = initializeFirebase();
+    try {
+        await dbDeleteAllMiddelen(firestore);
+        revalidatePath('/middelmatrix');
+        return { success: true, message: 'Alle middelen zijn succesvol verwijderd.' };
+    } catch (error: any) {
+        console.error('Fout bij het verwijderen van alle middelen:', error);
+        return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
+    }
+}
