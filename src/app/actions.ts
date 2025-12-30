@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
+import * as xlsx from 'xlsx';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -379,10 +380,13 @@ export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ suc
     try {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
-        const fileBase64 = buffer.toString('base64');
-        const fileUri = `data:${file.type};base64,${fileBase64}`;
         
-        const parsedResult = await parseCtgbExcel({ excelData: fileUri });
+        const workbook = xlsx.read(buffer, { type: "buffer" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const csvData = xlsx.utils.sheet_to_csv(worksheet);
+        
+        const parsedResult = await parseCtgbExcel({ excelCsvData: csvData });
 
         if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
             throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}.`);

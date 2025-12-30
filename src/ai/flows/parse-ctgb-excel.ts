@@ -12,7 +12,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const ParseCtgbExcelInputSchema = z.object({
-  excelData: z.string().describe("A Base64 encoded string of the Excel file (.xlsx or .csv)."),
+  excelCsvData: z.string().describe("A CSV string extracted from the Excel file."),
 });
 export type ParseCtgbExcelInput = z.infer<typeof ParseCtgbExcelInputSchema>;
 
@@ -41,11 +41,11 @@ const prompt = ai.definePrompt({
   name: 'parseCtgbExcelPrompt',
   input: { schema: ParseCtgbExcelInputSchema },
   output: { schema: ParseCtgbExcelOutputSchema },
-  prompt: `You are an expert in interpreting Dutch CTGB Excel files for agricultural pesticides.
-Your task is to extract very specific information from the provided file data and structure it as a JSON object.
+  prompt: `You are an expert in interpreting Dutch CTGB data for agricultural pesticides.
+Your task is to extract very specific information from the provided CSV data and structure it as a JSON object.
 
-The user has provided an Excel file (as a Base64 string). You must parse this file.
-The file contains many columns. You are interested in the following columns to extract the application rules:
+The user has provided CSV data from an Excel file. You must parse this data.
+The CSV has a header row. You are interested in the following columns to extract the application rules:
 - 'Middelnaam'
 - 'Toepassing' (This is the target disease/pest)
 - 'Gewas' (This is the crop)
@@ -56,9 +56,9 @@ The file contains many columns. You are interested in the following columns to e
 - 'Minimale interval tussen toepassingen in dagen'
 
 You must only extract information for the crops "Appel" (apple) and "Peer" (pear). Ignore all other crops mentioned in the file.
-For each relevant row in the Excel file that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
+For each relevant row in the CSV data that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
 
-From the Excel data, extract the following fields for each "Peer" or "Appel" application:
+From the CSV data, extract the following fields for each "Peer" or "Appel" application:
 - product: The name of the product from the 'Middelnaam' column.
 - crop: The crop, which must be either "Peer" or "Appel".
 - disease: The target disease or pest from the 'Toepassing' column.
@@ -70,8 +70,8 @@ From the Excel data, extract the following fields for each "Peer" or "Appel" app
 
 If a numeric value is missing or cannot be parsed from a field that should be a number (like dosage or days), omit the field from the output for that entry. Do not default to 0.
 
-Now, parse the following Excel file data:
-{{{media url=excelData}}}
+Now, parse the following CSV data:
+{{{excelCsvData}}}
 `,
 });
 
