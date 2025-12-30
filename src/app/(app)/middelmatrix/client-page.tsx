@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { importVoorschrift, parseCtgbJsonAndImport } from '@/app/actions';
@@ -19,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -189,7 +189,12 @@ const formatDate = (date: Date) => {
 export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialData: Middel[], initialLogs: UploadLog[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImporting, setIsImporting] = useState(false);
+    const [openProducts, setOpenProducts] = useState<Record<string, boolean>>({});
     const router = useRouter();
+
+    const toggleProduct = (productName: string) => {
+        setOpenProducts(prev => ({ ...prev, [productName]: !prev[productName] }));
+    };
 
     const groupedAndFilteredMatrix = useMemo(() => {
         const filtered = initialData.filter(regel =>
@@ -298,6 +303,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                         {Object.keys(groupedAndFilteredMatrix).length > 0 ? (
                                             Object.entries(groupedAndFilteredMatrix).flatMap(([product, regels]) => {
                                                 const isCollapsible = regels.length > 1;
+                                                const isOpen = openProducts[product] || false;
 
                                                 if (!isCollapsible) {
                                                     const regel = regels[0];
@@ -315,36 +321,28 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                     );
                                                 }
 
-                                                return (
-                                                    <Collapsible key={product} >
-                                                        
-                                                            <TableRow>
-                                                                <TableCell colSpan={8} className="p-0">
-                                                                
-                                                                    <button className="flex items-center gap-2 w-full text-left font-medium bg-muted/50 p-4">
-                                                                    <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                                                                    {product} ({regels.length} regels)
-                                                                    </button>
-                                                                
-                                                                </TableCell>
-                                                            </TableRow>
-                                                             {regels.map((regel) => (
-                                                                
-                                                                    <TableRow className="bg-background hover:bg-muted/50">
-                                                                        <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
-                                                                        <TableCell>{regel.crop}</TableCell>
-                                                                        <TableCell>{formatDisease(regel.disease)}</TableCell>
-                                                                        <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
-                                                                        <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
-                                                                        <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
-                                                                        <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
-                                                                        <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
-                                                                    </TableRow>
-                                                                
-                                                             ))}
-                                                        
-                                                    </Collapsible>
-                                                    );
+                                                return [
+                                                    <TableRow key={product} onClick={() => toggleProduct(product)} className="cursor-pointer bg-muted/50">
+                                                        <TableCell colSpan={8} className="p-0">
+                                                            <div className="flex items-center gap-2 w-full text-left font-medium p-4">
+                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
+                                                                {product} ({regels.length} regels)
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>,
+                                                    ...(isOpen ? regels.map((regel) => (
+                                                        <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
+                                                            <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
+                                                            <TableCell>{regel.crop}</TableCell>
+                                                            <TableCell>{formatDisease(regel.disease)}</TableCell>
+                                                            <TableCell className="text-right">{`${regel.maxDosage.toFixed(2)} ${regel.unit}`}</TableCell>
+                                                            <TableCell className="text-right">{regel.minIntervalDays ?? '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.maxApplicationsPerYear ?? '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
+                                                            <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
+                                                        </TableRow>
+                                                    )) : [])
+                                                ];
                                             })
                                         ) : (
                                             <TableRow>
