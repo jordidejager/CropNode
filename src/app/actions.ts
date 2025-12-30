@@ -385,20 +385,16 @@ export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ suc
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        // Convert to JSON to easily chunk it
-        const json_data = xlsx.utils.sheet_to_json(worksheet);
+        const jsonData = xlsx.utils.sheet_to_json(worksheet, { defval: null });
 
         const CHUNK_SIZE = 100;
         let allMiddelen: Middel[] = [];
-
-        for (let i = 0; i < json_data.length; i += CHUNK_SIZE) {
-            const chunk = json_data.slice(i, i + CHUNK_SIZE);
+        
+        for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
+            const chunk = jsonData.slice(i, i + CHUNK_SIZE);
+            const jsonChunkString = JSON.stringify(chunk);
             
-            // Convert chunk back to CSV for the AI prompt
-            const chunkWorksheet = xlsx.utils.json_to_sheet(chunk);
-            const csvDataChunk = xlsx.utils.sheet_to_csv(chunkWorksheet);
-            
-            const parsedResult = await parseCtgbExcel({ excelCsvData: csvDataChunk });
+            const parsedResult = await parseCtgbExcel({ jsonData: jsonChunkString });
 
             if (parsedResult && parsedResult.middelen) {
                 allMiddelen.push(...parsedResult.middelen as Middel[]);
@@ -406,7 +402,7 @@ export async function parseCtgbExcelAndImport(formData: FormData): Promise<{ suc
         }
 
         if (allMiddelen.length === 0) {
-            throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}.`);
+            throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}. Controleer of het bestand de juiste kolommen bevat voor 'Appel' of 'Peer'.`);
         }
 
         await addMiddelen(firestore, allMiddelen);

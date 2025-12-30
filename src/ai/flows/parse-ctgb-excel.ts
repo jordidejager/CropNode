@@ -12,7 +12,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const ParseCtgbExcelInputSchema = z.object({
-  excelCsvData: z.string().describe("A CSV string extracted from the Excel file."),
+  jsonData: z.string().describe("A JSON string representing rows from the Excel file."),
 });
 export type ParseCtgbExcelInput = z.infer<typeof ParseCtgbExcelInputSchema>;
 
@@ -42,10 +42,10 @@ const prompt = ai.definePrompt({
   input: { schema: ParseCtgbExcelInputSchema },
   output: { schema: ParseCtgbExcelOutputSchema },
   prompt: `You are an expert in interpreting Dutch CTGB data for agricultural pesticides.
-Your task is to extract very specific information from the provided CSV data and structure it as a JSON object.
+Your task is to extract very specific information from the provided JSON data and structure it as a JSON object.
 
-The user has provided CSV data from an Excel file. You must parse this data.
-The CSV has a header row. You are interested in the following columns to extract the application rules:
+The user has provided a JSON string representing rows from an Excel file. You must parse this data.
+The JSON objects have keys corresponding to the Excel columns. You are interested in the following columns to extract the application rules:
 - 'Middelnaam'
 - 'Toepassing' (This is the target disease/pest)
 - 'Gewas' (This is the crop)
@@ -56,22 +56,22 @@ The CSV has a header row. You are interested in the following columns to extract
 - 'Minimale interval tussen toepassingen in dagen'
 
 You must only extract information for the crops "Appel" (apple) and "Peer" (pear). Ignore all other crops mentioned in the file.
-For each relevant row in the CSV data that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
+For each relevant object in the JSON data that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
 
-From the CSV data, extract the following fields for each "Peer" or "Appel" application:
-- product: The name of the product from the 'Middelnaam' column.
+From the JSON data, extract the following fields for each "Peer" or "Appel" application:
+- product: The name of the product from the 'Middelnaam' field.
 - crop: The crop, which must be either "Peer" or "Appel".
-- disease: The target disease or pest from the 'Toepassing' column.
-- maxDosage: The maximum dosage per application from the 'Maximale dosering per toepassing' column.
-- unit: The unit for the dosage from the 'Eenheid maximale dosering per toepassing' column.
-- safetyPeriodDays: The safety period from the 'Wachttijd (dagen) voor de oogst' column.
-- maxApplicationsPerYear: The maximum number of applications from the 'Maximaal aantal toepassingen per 12 maanden' column.
-- minIntervalDays: The minimum interval in days from the 'Minimale interval tussen toepassingen in dagen' column.
+- disease: The target disease or pest from the 'Toepassing' field.
+- maxDosage: The maximum dosage per application from the 'Maximale dosering per toepassing' field.
+- unit: The unit for the dosage from the 'Eenheid maximale dosering per toepassing' field.
+- safetyPeriodDays: The safety period from the 'Wachttijd (dagen) voor de oogst' field.
+- maxApplicationsPerYear: The maximum number of applications from the 'Maximaal aantal toepassingen per 12 maanden' field.
+- minIntervalDays: The minimum interval in days from the 'Minimale interval tussen toepassingen in dagen' field.
 
-If a numeric value is missing or cannot be parsed from a field that should be a number (like dosage or days), omit the field from the output for that entry. Do not default to 0.
+If a numeric value is missing, cannot be parsed from a field that should be a number (like dosage or days), or is not a valid number, omit the field from the output for that entry. Do not default to 0.
 
-Now, parse the following CSV data:
-{{{excelCsvData}}}
+Now, parse the following JSON data:
+{{{jsonData}}}
 `,
 });
 
