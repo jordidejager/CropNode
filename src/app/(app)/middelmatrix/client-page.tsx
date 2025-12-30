@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useTransition, useRef } from 'react';
@@ -315,7 +316,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
 
                                                 return (
                                                     <Collapsible asChild key={product} defaultOpen={false}>
-                                                        <>
+                                                        <tbody className='w-full'>
                                                             <TableRow>
                                                                 <TableCell colSpan={8} className="p-0">
                                                                 <CollapsibleTrigger asChild>
@@ -326,7 +327,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                 </CollapsibleTrigger>
                                                                 </TableCell>
                                                             </TableRow>
-                                                            <CollapsibleContent>
+                                                            <CollapsibleContent asChild>
                                                                 <>
                                                                     {regels.map((regel) => (
                                                                     <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
@@ -342,7 +343,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                     ))}
                                                                 </>
                                                             </CollapsibleContent>
-                                                        </>
+                                                        </tbody>
                                                     </Collapsible>
                                                     );
                                             })
@@ -430,3 +431,5 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
+
+    
