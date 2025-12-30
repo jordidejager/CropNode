@@ -4,7 +4,6 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
-import { parseMiddelenData } from '@/ai/flows/parse-middelen-data';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
@@ -384,22 +383,35 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const sheet = workbook.Sheets[sheetName];
         const jsonData = xlsx.utils.sheet_to_json(sheet);
 
-        const CHUNK_SIZE = 100;
-        let allMiddelen: Middel[] = [];
-        
-        for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
-            const chunk = jsonData.slice(i, i + CHUNK_SIZE);
-            const jsonChunkString = JSON.stringify(chunk);
-            
-            const parsedResult = await parseMiddelenData({ jsonData: jsonChunkString });
-
-            if (parsedResult && parsedResult.middelen) {
-                allMiddelen.push(...parsedResult.middelen as Middel[]);
-            }
+        if (!jsonData || jsonData.length === 0) {
+            throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
         }
 
+        const allMiddelen = jsonData
+            .map((row: any): Omit<Middel, 'id'> | null => {
+                const crop = row['Gewas'];
+                if (!crop || !(crop.toLowerCase().includes('appel') || crop.toLowerCase().includes('peer'))) {
+                    return null;
+                }
+
+                const parseNumber = (val: any) => val ? parseFloat(String(val).replace(',', '.')) : undefined;
+
+                return {
+                    product: row['Middelnaam'] as string,
+                    crop: crop.toLowerCase().includes('appel') ? 'Appel' : 'Peer',
+                    disease: row['Toepassing'] as string,
+                    maxDosage: parseNumber(row['Maximale dosering per toepassing']) || 0,
+                    unit: row['Eenheid maximale dosering per toepassing'] as string,
+                    safetyPeriodDays: parseNumber(row['Wachttijd (dagen) voor de oogst']),
+                    maxApplicationsPerYear: parseNumber(row['Maximaal aantal toepassingen per 12 maanden']),
+                    minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
+                };
+            })
+            .filter((middel): middel is Omit<Middel, 'id'> => middel !== null && Boolean(middel.product) && middel.maxDosage > 0);
+
+
         if (allMiddelen.length === 0) {
-            throw new Error(`De AI kon geen geldige middelen extraheren uit ${file.name}. Controleer of het bestand de juiste kolommen bevat voor 'Appel' of 'Peer'.`);
+            throw new Error(`Kon geen geldige middelen voor 'Appel' of 'Peer' extraheren uit ${file.name}.`);
         }
 
         await addMiddelen(firestore, allMiddelen);
