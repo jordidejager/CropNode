@@ -316,7 +316,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
 
                                                 return (
                                                     <Collapsible asChild key={product} defaultOpen={false}>
-                                                        <tbody className='w-full'>
+                                                        <>
                                                             <TableRow>
                                                                 <TableCell colSpan={8} className="p-0">
                                                                 <CollapsibleTrigger asChild>
@@ -327,10 +327,9 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                 </CollapsibleTrigger>
                                                                 </TableCell>
                                                             </TableRow>
-                                                            <CollapsibleContent asChild>
-                                                                <>
-                                                                    {regels.map((regel) => (
-                                                                    <TableRow key={regel.id} className="bg-background hover:bg-muted/50">
+                                                             {regels.map((regel) => (
+                                                                <CollapsibleContent asChild key={regel.id}>
+                                                                    <TableRow className="bg-background hover:bg-muted/50">
                                                                         <TableCell className="pl-12 font-medium">{regel.product}</TableCell>
                                                                         <TableCell>{regel.crop}</TableCell>
                                                                         <TableCell>{formatDisease(regel.disease)}</TableCell>
@@ -340,10 +339,9 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                                                         <TableCell className="text-right">{regel.maxDosePerYear ? `${regel.maxDosePerYear} ${regel.unit}` : '-'}</TableCell>
                                                                         <TableCell className="text-right">{regel.safetyPeriodDays ?? '-'}</TableCell>
                                                                     </TableRow>
-                                                                    ))}
-                                                                </>
-                                                            </CollapsibleContent>
-                                                        </tbody>
+                                                                </CollapsibleContent>
+                                                             ))}
+                                                        </>
                                                     </Collapsible>
                                                     );
                                             })
