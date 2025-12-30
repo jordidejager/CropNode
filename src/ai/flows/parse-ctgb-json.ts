@@ -12,7 +12,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const ParseCtgbJsonInputSchema = z.object({
-  jsonData: z.string().describe("A JSON string representing an array of objects, where each object is a row from the original file."),
+  jsonData: z.string().describe("A JSON string representing rows from the CTGB export file."),
 });
 export type ParseCtgbJsonInput = z.infer<typeof ParseCtgbJsonInputSchema>;
 
@@ -42,35 +42,34 @@ const prompt = ai.definePrompt({
   input: { schema: ParseCtgbJsonInputSchema },
   output: { schema: ParseCtgbJsonOutputSchema },
   prompt: `You are an expert in interpreting Dutch CTGB data for agricultural pesticides.
-Your task is to extract very specific information from the provided JSON data and structure it as a JSON object.
+Your task is to extract very specific information from the provided JSON data (from an official CTGB export) and structure it as a JSON object.
 
-The user has provided a JSON string representing an array of data objects. The keys in these objects might not be consistently named (e.g., 'Middelnaam', 'column-1', etc.).
-You must first identify the correct columns based on their content. The relevant data points are:
-- The product name (e.g., "Captan", "Serenade").
-- The crop, which will be in a column named "Gewas" or similar.
-- The target disease/pest (e.g., "Schurft (Venturia spp.)"), often in a column named "Toepassing".
-- The maximum dosage per application (a numeric value).
-- The unit for the dosage (e.g., "kg/ha", "l/ha").
-- The safety period in days (a numeric value).
-- The maximum number of applications per year (a numeric value).
-- The minimum interval between applications in days (a numeric value).
+The user has provided a JSON string representing rows from the file. You are interested in the following specific JSON keys to extract the application rules:
+- 'Middelnaam'
+- 'Toepassing' (This is the target disease/pest)
+- 'Gewas' (This is the crop)
+- 'Maximale dosering per toepassing'
+- 'Eenheid maximale dosering per toepassing'
+- 'Wachttijd (dagen) voor de oogst'
+- 'Maximaal aantal toepassingen per 12 maanden'
+- 'Minimale interval tussen toepassingen in dagen'
 
-IMPORTANT: You must only extract information for the crops "Appel" (apple) and "Peer" (pear). Ignore all other crops.
-For each relevant entry in the JSON data that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
+IMPORTANT: You must only extract information for the crops "Appel" (apple) and "Peer" (pear). Ignore all other crops mentioned in the file.
+For each relevant object in the JSON data that applies to "Appel" or "Peer", create a separate object in the 'middelen' array.
 
 From the JSON data, extract the following fields for each "Peer" or "Appel" application:
-- product: The name of the product.
+- product: The name of the product from the 'Middelnaam' field.
 - crop: The crop, which must be either "Peer" or "Appel".
-- disease: The target disease or pest.
-- maxDosage: The maximum dosage per application.
-- unit: The unit for the dosage.
-- safetyPeriodDays: The safety period (wachttermijn).
-- maxApplicationsPerYear: The maximum number of applications per year.
-- minIntervalDays: The minimum interval in days between applications.
+- disease: The target disease or pest from the 'Toepassing' field.
+- maxDosage: The maximum dosage per application from the 'Maximale dosering per toepassing' field.
+- unit: The unit for the dosage from the 'Eenheid maximale dosering per toepassing' field.
+- safetyPeriodDays: The safety period from the 'Wachttijd (dagen) voor de oogst' field.
+- maxApplicationsPerYear: The maximum number of applications from the 'Maximaal aantal toepassingen per 12 maanden' field.
+- minIntervalDays: The minimum interval in days from the 'Minimale interval tussen toepassingen in dagen' field.
 
 If a numeric value is missing, cannot be parsed from a field that should be a number (like dosage or days), or is not a valid number, omit the field from the output for that entry. Do not default to 0.
 
-Now, parse the following JSON data, smartly identifying the columns regardless of their keys:
+Now, parse the following JSON data:
 {{{jsonData}}}
 `,
 });

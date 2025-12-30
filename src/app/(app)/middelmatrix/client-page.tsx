@@ -131,7 +131,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                                   <div className="flex flex-col items-center justify-center gap-2">
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                     <p className="font-semibold">Sleep een JSON-bestand hierheen of klik om te selecteren</p>
-                                    <p className="text-sm text-muted-foreground">Converteer de CTGB-lijst online naar JSON en upload deze hier.</p>
+                                    <p className="text-sm text-muted-foreground">Download de lijst als JSON van de CTGB-site en upload deze hier.</p>
                                   </div>
                                   <Input id="file-upload-json" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
                                 </Label>
