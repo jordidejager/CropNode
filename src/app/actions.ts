@@ -3,13 +3,11 @@
 
 import { z } from 'zod';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog } from '@/lib/types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
-import pdf from 'pdf-parse';
 import * as xlsx from 'xlsx';
-import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
 
@@ -317,62 +315,6 @@ const fileSchema = z.object({
     file: z.instanceof(File),
 });
 
-export async function importVoorschrift(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
-    if (!validatedFields.success) {
-        return { success: false, message: 'Geen geldig bestand ontvangen.' };
-    }
-    const { file } = validatedFields.data;
-    const { firestore } = initializeFirebase();
-  
-    try {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const pdfData = await pdf(buffer);
-        const pdfText = pdfData.text;
-
-      if (!pdfText) {
-        throw new Error(`Kon geen tekst uit ${file.name} extraheren.`);
-      }
-      
-      const parsedResult = await parseMiddelVoorschrift({ voorschrift: pdfText });
-      
-      if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-        throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
-      }
-  
-      const productName = parsedResult.middelen[0]?.product;
-      if (!productName) {
-        throw new Error(`De AI kon de productnaam niet bepalen in ${file.name}.`);
-      }
-  
-      await addMiddelen(firestore, parsedResult.middelen);
-  
-      const newLogData: Partial<Omit<UploadLog, 'id'>> = {
-        productName,
-        uploadDate: new Date(),
-        fileName: file.name,
-        activeSubstances: parsedResult.activeSubstances || 'Niet gevonden',
-      };
-
-      if ('admissionNumber' in parsedResult && parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
-      if ('labelVersion' in parsedResult && parsedResult.labelVersion) newLogData.labelVersion = parsedResult.labelVersion;
-      if ('prescriptionDate' in parsedResult && parsedResult.prescriptionDate) newLogData.prescriptionDate = parsedResult.prescriptionDate;
-      
-      await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
-      
-      revalidatePath('/middelmatrix');
-      return { success: true, message: `${file.name} succesvol geïmporteerd.` };
-  
-    } catch (error: any) {
-        const errorMessage = error.message || 'Onbekende fout.';
-        if (errorMessage.includes('Could not parse JSON')) {
-            return { success: false, message: `De AI kon de gegevens niet correct structureren. Probeer het opnieuw of controleer het document. Fout: ${errorMessage}` };
-        }
-        console.error(`Fout bij importeren van ${file.name}:`, errorMessage, error.stack);
-        throw new Error(errorMessage);
-    }
-}
-
 export async function parseCtgbFileAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
     const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
     if (!validatedFields.success) {
@@ -387,42 +329,100 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         
-        // Convert sheet to a string, keeping layout
-        const textData: string = xlsx.utils.sheet_to_csv(sheet, { FS: '\t' });
+        const jsonData: any[] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+        const headers = jsonData[0];
 
-        if (!textData) {
-            throw new Error("Het Excel-bestand is leeg of kon niet worden gelezen.");
+        const headerMapping: { [key: string]: string } = {
+            "toelatingnummer": "Toelatingnummer",
+            "middelnaam": "Middelnaam",
+            "werkzame stoffen": "Werkzame stoffen",
+            "toepassingsgebied": "Toepassingsgebied",
+            "max. dosering": "Max. dosering per toepassing",
+            "veiligheidstermijn (dagen)": "Veiligheidstermijn in dagen voor de oogst (gewas)",
+            "max. aantal toepassingen per jaar": "Max. aantal toepassingen per 12 maanden (gewas)",
+            "max. totale dosering per jaar": "Max. totale dosering per 12 maanden (gewas)",
+            "min. interval (dagen)": "Min. interval tussen toepassingen in dagen (gewas)",
+        };
+        
+        const colIndices: { [key: string]: number } = {};
+        Object.keys(headerMapping).forEach(key => {
+            const index = headers.findIndex((h: string) => h && h.toLowerCase().trim() === headerMapping[key].toLowerCase());
+            if (index !== -1) {
+                colIndices[key] = index;
+            }
+        });
+
+        const parseNumber = (value: any): number | undefined => {
+            if (value === undefined || value === null || value === "") return undefined;
+            const strValue = String(value).replace(',', '.');
+            const num = parseFloat(strValue);
+            return isNaN(num) ? undefined : num;
+        };
+        
+        const parseUnit = (value: any): string => {
+            if (typeof value !== 'string') return 'kg';
+            if (value.toLowerCase().includes('l/ha') || value.toLowerCase().includes('liter/ha')) return 'l';
+            if (value.toLowerCase().includes('kg/ha')) return 'kg';
+            if (value.toLowerCase().includes('g/ha')) return 'g';
+            return 'kg';
         }
 
-        const parsedResult = await parseMiddelVoorschrift({ voorschrift: textData });
-        
-        if (!parsedResult || !parsedResult.middelen || parsedResult.middelen.length === 0) {
-            throw new Error(`De AI kon geen geldige middelengegevens uit ${file.name} extraheren.`);
+        const middelen: Omit<Middel, 'id'>[] = [];
+
+        for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            
+            const dosageString = row[colIndices["max. dosering"]];
+            const maxDosage = parseNumber(dosageString);
+            
+            const baseMiddel = {
+                product: row[colIndices["middelnaam"]],
+                disease: row[colIndices["toepassingsgebied"]],
+                maxDosage: maxDosage,
+                unit: parseUnit(dosageString),
+                safetyPeriodDays: parseNumber(row[colIndices["veiligheidstermijn (dagen)"]]),
+                maxApplicationsPerYear: parseNumber(row[colIndices["max. aantal toepassingen per jaar"]]),
+                maxDosePerYear: parseNumber(row[colIndices["max. totale dosering per jaar"]]),
+                minIntervalDays: parseNumber(row[colIndices["min. interval (dagen)"]]),
+            };
+
+            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || isNaN(baseMiddel.maxDosage) || baseMiddel.maxDosage < 0) {
+                continue;
+            }
+
+            const toepassingsGebied = row[colIndices["toepassingsgebied"]]?.toLowerCase() || '';
+            
+            if (toepassingsGebied.includes('appel')) {
+                middelen.push({ ...baseMiddel, crop: 'Appel' });
+            }
+            if (toepassingsGebied.includes('peer')) {
+                middelen.push({ ...baseMiddel, crop: 'Peer' });
+            }
         }
         
-        await addMiddelen(firestore, parsedResult.middelen);
+        if (middelen.length === 0) {
+            throw new Error(`Kon geen geldige middelen voor 'Appel' of 'Peer' extraheren uit ${file.name}.`);
+        }
+        
+        await addMiddelen(firestore, middelen);
         
         const newLogData: Partial<Omit<UploadLog, 'id'>> = {
             productName: "CTGB Bestand Import",
             uploadDate: new Date(),
             fileName: file.name,
-            activeSubstances: `Bevat ${parsedResult.middelen.length} regels`,
+            activeSubstances: `Bevat ${middelen.length} regels`,
         };
-         if ('admissionNumber' in parsedResult && parsedResult.admissionNumber) newLogData.admissionNumber = parsedResult.admissionNumber;
 
         await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
         
         revalidatePath('/middelmatrix');
-        return { success: true, message: `${parsedResult.middelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
+        return { success: true, message: `${middelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
-        const errorMessage = error.message || "Onbekende fout bij verwerken van bestand.";
-        if (errorMessage.includes('Could not parse JSON')) {
-            throw new Error(`De AI kon de gegevens niet correct structureren. Fout: ${errorMessage}`);
-        }
-        throw new Error(errorMessage);
+        throw new Error(error.message || "Onbekende fout bij verwerken van bestand.");
     }
 }
+
 
 export async function deleteAllMiddelen(): Promise<{ success: boolean; message: string }> {
     const { firestore } = initializeFirebase();
@@ -435,5 +435,3 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
-
-    

@@ -8,11 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, ChevronRight, Upload, Loader2, File, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, ChevronRight, Upload, Loader2, File, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, parseCtgbFileAndImport, deleteAllMiddelen } from '@/app/actions';
+import { parseCtgbFileAndImport, deleteAllMiddelen } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,7 +23,6 @@ import { cn } from '@/lib/utils';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [importType, setImportType] = useState<'voorschrift' | 'ctgb-excel'>('voorschrift');
     const [isImporting, startImportTransition] = useTransition();
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,15 +47,10 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
 
         startImportTransition(async () => {
             try {
-                let result;
                 const formData = new FormData();
                 formData.append('file', selectedFile);
 
-                if (importType === 'voorschrift') {
-                    result = await importVoorschrift(formData);
-                } else {
-                    result = await parseCtgbFileAndImport(formData);
-                }
+                const result = await parseCtgbFileAndImport(formData);
 
                 if (result.success) {
                     toast({
@@ -85,9 +79,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
         });
     };
 
-    const acceptedFileTypes = useMemo(() => {
-        return importType === 'voorschrift' ? 'application/pdf' : '.csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
-    }, [importType]);
+    const acceptedFileTypes = '.csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
     
     const onDialogOpenChange = (isOpen: boolean) => {
         onOpenChange(isOpen);
@@ -103,45 +95,24 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
         <Dialog open={open} onOpenChange={onDialogOpenChange}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Importeer Middelen</DialogTitle>
+                    <DialogTitle>Importeer CTGB Lijst</DialogTitle>
                     <DialogDescription>
-                        Kies het type bestand dat je wilt importeren. De AI zal de gegevens extraheren en opslaan.
+                        Upload de Excel-lijst van de CTGB-website. De data wordt automatisch verwerkt.
                     </DialogDescription>
                 </DialogHeader>
-                <Tabs value={importType} onValueChange={(value) => setImportType(value as 'voorschrift' | 'ctgb-excel')} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="voorschrift">Wettelijk Gebruiksvoorschrift (PDF)</TabsTrigger>
-                        <TabsTrigger value="ctgb-excel">CTGB Excel-lijst</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="voorschrift">
-                         <Card className="mt-4 border-dashed">
-                             <CardContent className="p-6 text-center">
-                                <Label htmlFor="file-upload-pdf" className="cursor-pointer">
-                                  <div className="flex flex-col items-center justify-center gap-2">
-                                    <Upload className="h-8 w-8 text-muted-foreground" />
-                                    <p className="font-semibold">Sleep een PDF-bestand hierheen of klik om te selecteren</p>
-                                    <p className="text-sm text-muted-foreground">Selecteer een PDF van een gebruiksvoorschrift.</p>
-                                  </div>
-                                  <Input id="file-upload-pdf" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
-                                </Label>
-                             </CardContent>
-                         </Card>
-                    </TabsContent>
-                    <TabsContent value="ctgb-excel">
-                        <Card className="mt-4 border-dashed">
-                             <CardContent className="p-6 text-center">
-                                <Label htmlFor="file-upload-excel" className="cursor-pointer">
-                                  <div className="flex flex-col items-center justify-center gap-2">
-                                    <Upload className="h-8 w-8 text-muted-foreground" />
-                                    <p className="font-semibold">Sleep een Excel-bestand hierheen of klik om te selecteren</p>
-                                    <p className="text-sm text-muted-foreground">Download de lijst als Excel van de CTGB-site en upload deze hier.</p>
-                                  </div>
-                                  <Input id="file-upload-excel" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
-                                </Label>
-                             </CardContent>
-                         </Card>
-                    </TabsContent>
-                </Tabs>
+                
+                 <Card className="mt-4 border-dashed">
+                     <CardContent className="p-6 text-center">
+                        <Label htmlFor="file-upload-excel" className="cursor-pointer">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Upload className="h-8 w-8 text-muted-foreground" />
+                            <p className="font-semibold">Sleep een Excel-bestand hierheen of klik om te selecteren</p>
+                            <p className="text-sm text-muted-foreground">Download de lijst als Excel van de CTGB-site en upload deze hier.</p>
+                          </div>
+                          <Input id="file-upload-excel" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                        </Label>
+                     </CardContent>
+                 </Card>
                 
                 {selectedFile && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
@@ -395,7 +366,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={8} className="h-24 text-center">
-                                                    Geen middelen gevonden. Importeer een PDF voorschrift of een CTGB Excel-lijst.
+                                                    Geen middelen gevonden. Importeer een CTGB Excel-lijst.
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -409,7 +380,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                     <Card>
                         <CardHeader>
                             <CardTitle>Upload Logboek</CardTitle>
-                            <CardDescription>Overzicht van alle geïmporteerde voorschriften en bestanden.</CardDescription>
+                            <CardDescription>Overzicht van alle geïmporteerde bestanden.</CardDescription>
                         </CardHeader>
                         <CardContent>
                              <div className="rounded-md border">
