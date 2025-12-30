@@ -4,13 +4,14 @@
 import { z } from 'zod';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseMiddelVoorschrift } from '@/ai/flows/parse-middel-voorschrift';
-import { parseCtgbJson } from '@/ai/flows/parse-ctgb-json';
+import { parseMiddelenData } from '@/ai/flows/parse-middelen-data';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, Middel, UploadLog } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
 import pdf from 'pdf-parse';
+import * as xlsx from 'xlsx';
 
 const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -368,7 +369,7 @@ export async function importVoorschrift(formData: FormData): Promise<{ success: 
     }
 }
 
-export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
+export async function parseCtgbFileAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
     const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
     if (!validatedFields.success) {
         return { success: false, message: 'Geen geldig bestand ontvangen.' };
@@ -377,8 +378,11 @@ export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ succ
     const { firestore } = initializeFirebase();
 
     try {
-        const fileContent = await file.text();
-        const jsonData = JSON.parse(fileContent);
+        const buffer = await file.arrayBuffer();
+        const workbook = xlsx.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = xlsx.utils.sheet_to_json(sheet);
 
         const CHUNK_SIZE = 100;
         let allMiddelen: Middel[] = [];
@@ -387,7 +391,7 @@ export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ succ
             const chunk = jsonData.slice(i, i + CHUNK_SIZE);
             const jsonChunkString = JSON.stringify(chunk);
             
-            const parsedResult = await parseCtgbJson({ jsonData: jsonChunkString });
+            const parsedResult = await parseMiddelenData({ jsonData: jsonChunkString });
 
             if (parsedResult && parsedResult.middelen) {
                 allMiddelen.push(...parsedResult.middelen as Middel[]);
@@ -401,7 +405,7 @@ export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ succ
         await addMiddelen(firestore, allMiddelen);
         
         const newLogData: Omit<UploadLog, 'id'> = {
-            productName: "CTGB JSON Import",
+            productName: "CTGB Bestand Import",
             uploadDate: new Date(),
             fileName: file.name,
             activeSubstances: `Bevat ${allMiddelen.length} regels`,
@@ -411,9 +415,11 @@ export async function parseCtgbJsonAndImport(formData: FormData): Promise<{ succ
         revalidatePath('/middelmatrix');
         return { success: true, message: `${allMiddelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
     } catch (error: any) {
-        console.error(`Fout bij verwerken van CTGB JSON ${file.name}:`, error);
+        console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
         return { success: false, message: error.message || "Onbekende fout." };
     }
 }
+
+    
 
     

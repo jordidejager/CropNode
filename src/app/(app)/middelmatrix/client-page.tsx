@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Search, ChevronRight, Upload, Loader2, File } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { importVoorschrift, parseCtgbJsonAndImport } from '@/app/actions';
+import { importVoorschrift, parseCtgbFileAndImport } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [importType, setImportType] = useState<'voorschrift' | 'ctgb-json'>('voorschrift');
+    const [importType, setImportType] = useState<'voorschrift' | 'ctgb-excel'>('voorschrift');
     const [isImporting, startImportTransition] = useTransition();
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +54,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                 if (importType === 'voorschrift') {
                     result = await importVoorschrift(formData);
                 } else {
-                    result = await parseCtgbJsonAndImport(formData);
+                    result = await parseCtgbFileAndImport(formData);
                 }
 
                 if (result.success) {
@@ -85,7 +85,7 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     };
 
     const acceptedFileTypes = useMemo(() => {
-        return importType === 'voorschrift' ? 'application/pdf' : '.json';
+        return importType === 'voorschrift' ? 'application/pdf' : '.csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
     }, [importType]);
     
     const onDialogOpenChange = (isOpen: boolean) => {
@@ -107,10 +107,10 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                         Kies het type bestand dat je wilt importeren. De AI zal de gegevens extraheren en opslaan.
                     </DialogDescription>
                 </DialogHeader>
-                <Tabs value={importType} onValueChange={(value) => setImportType(value as 'voorschrift' | 'ctgb-json')} className="w-full">
+                <Tabs value={importType} onValueChange={(value) => setImportType(value as 'voorschrift' | 'ctgb-excel')} className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="voorschrift">Wettelijk Gebruiksvoorschrift (PDF)</TabsTrigger>
-                        <TabsTrigger value="ctgb-json">CTGB JSON-lijst (.json)</TabsTrigger>
+                        <TabsTrigger value="ctgb-excel">CTGB Excel-lijst</TabsTrigger>
                     </TabsList>
                     <TabsContent value="voorschrift">
                          <Card className="mt-4 border-dashed">
@@ -126,16 +126,16 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
                              </CardContent>
                          </Card>
                     </TabsContent>
-                    <TabsContent value="ctgb-json">
+                    <TabsContent value="ctgb-excel">
                         <Card className="mt-4 border-dashed">
                              <CardContent className="p-6 text-center">
-                                <Label htmlFor="file-upload-json" className="cursor-pointer">
+                                <Label htmlFor="file-upload-excel" className="cursor-pointer">
                                   <div className="flex flex-col items-center justify-center gap-2">
                                     <Upload className="h-8 w-8 text-muted-foreground" />
-                                    <p className="font-semibold">Sleep een JSON-bestand hierheen of klik om te selecteren</p>
-                                    <p className="text-sm text-muted-foreground">Download de lijst als JSON van de CTGB-site en upload deze hier.</p>
+                                    <p className="font-semibold">Sleep een Excel-bestand hierheen of klik om te selecteren</p>
+                                    <p className="text-sm text-muted-foreground">Download de lijst als Excel van de CTGB-site en upload deze hier.</p>
                                   </div>
-                                  <Input id="file-upload-json" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
+                                  <Input id="file-upload-excel" ref={fileInputRef} type="file" className="hidden" accept={acceptedFileTypes} onChange={handleFileChange}/>
                                 </Label>
                              </CardContent>
                          </Card>
@@ -323,8 +323,8 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
 
                                                 return [
                                                     <TableRow key={product} onClick={() => toggleProduct(product)} className="cursor-pointer bg-muted/50">
-                                                        <TableCell colSpan={8} className="p-0">
-                                                            <div className="flex items-center gap-2 w-full text-left font-medium p-4">
+                                                        <TableCell colSpan={8}>
+                                                            <div className="flex items-center gap-2 w-full text-left font-medium">
                                                                 <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
                                                                 {product} ({regels.length} regels)
                                                             </div>
@@ -347,7 +347,7 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={8} className="h-24 text-center">
-                                                    Geen middelen gevonden. Importeer een PDF voorschrift of een CTGB JSON-lijst.
+                                                    Geen middelen gevonden. Importeer een PDF voorschrift of een CTGB Excel-lijst.
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -428,3 +428,5 @@ export function MiddelMatrixClientPage({ initialData, initialLogs }: { initialDa
         </>
     );
 }
+
+    

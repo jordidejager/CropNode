@@ -1,20 +1,20 @@
 'use server';
 
 /**
- * @fileOverview Parses a CTGB JSON file for pesticides/fungicides.
+ * @fileOverview Parses CTGB JSON data for pesticides/fungicides.
  *
- * - parseCtgbJson - A function that parses the JSON data.
- * - ParseCtgbJsonInput - The input type for the function.
- * - ParseCtgbJsonOutput - The return type for the function.
+ * - parseMiddelenData - A function that parses the JSON data.
+ * - ParseMiddelenDataInput - The input type for the function.
+ * - ParseMiddelenDataOutput - The return type for the function.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
-const ParseCtgbJsonInputSchema = z.object({
+const ParseMiddelenDataInputSchema = z.object({
   jsonData: z.string().describe("A JSON string representing rows from the CTGB export file."),
 });
-export type ParseCtgbJsonInput = z.infer<typeof ParseCtgbJsonInputSchema>;
+export type ParseMiddelenDataInput = z.infer<typeof ParseMiddelenDataInputSchema>;
 
 const MiddelSchema = z.object({
   product: z.string().describe('The name of the product (Middelnaam).'),
@@ -27,20 +27,20 @@ const MiddelSchema = z.object({
   minIntervalDays: z.number().optional().describe('The minimum interval in days between applications (Minimale interval tussen toepassingen in dagen).'),
 });
 
-const ParseCtgbJsonOutputSchema = z.object({
+const ParseMiddelenDataOutputSchema = z.object({
     middelen: z.array(MiddelSchema),
 });
 
-export type ParseCtgbJsonOutput = z.infer<typeof ParseCtgbJsonOutputSchema>;
+export type ParseMiddelenDataOutput = z.infer<typeof ParseMiddelenDataOutputSchema>;
 
-export async function parseCtgbJson(input: ParseCtgbJsonInput): Promise<ParseCtgbJsonOutput> {
-  return parseCtgbJsonFlow(input);
+export async function parseMiddelenData(input: ParseMiddelenDataInput): Promise<ParseMiddelenDataOutput> {
+  return parseMiddelenDataFlow(input);
 }
 
 const prompt = ai.definePrompt({
-  name: 'parseCtgbJsonPrompt',
-  input: { schema: ParseCtgbJsonInputSchema },
-  output: { schema: ParseCtgbJsonOutputSchema },
+  name: 'parseMiddelenDataPrompt',
+  input: { schema: ParseMiddelenDataInputSchema },
+  output: { schema: ParseMiddelenDataOutputSchema },
   prompt: `You are an expert in interpreting Dutch CTGB data for agricultural pesticides.
 Your task is to extract very specific information from the provided JSON data (from an official CTGB export) and structure it as a JSON object.
 
@@ -74,14 +74,16 @@ Now, parse the following JSON data:
 `,
 });
 
-const parseCtgbJsonFlow = ai.defineFlow(
+const parseMiddelenDataFlow = ai.defineFlow(
   {
-    name: 'parseCtgbJsonFlow',
-    inputSchema: ParseCtgbJsonInputSchema,
-    outputSchema: ParseCtgbJsonOutputSchema,
+    name: 'parseMiddelenDataFlow',
+    inputSchema: ParseMiddelenDataInputSchema,
+    outputSchema: ParseMiddelenDataOutputSchema,
   },
   async (input) => {
     const { output } = await prompt(input);
     return output!;
   }
 );
+
+    
