@@ -53,15 +53,20 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     if (middelen.length === 0) return;
 
     const batch = writeBatch(db);
-    const productsToUpdate = [...new Set(middelen.map(m => m.product))];
-
-    // Find and delete all existing entries for the products being updated to avoid duplicates
-    if (productsToUpdate.length > 0) {
-        const q = query(collection(db, MIDDELEN_COLLECTION), where("product", "in", productsToUpdate));
-        const existingDocsSnapshot = await getDocs(q);
-        existingDocsSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
+    const productNames = [...new Set(middelen.map(m => m.product))];
+    
+    // To prevent hitting query limits with 'in' operator, fetch all and filter in memory
+    try {
+        const allDocsSnapshot = await getDocs(collection(db, MIDDELEN_COLLECTION));
+        allDocsSnapshot.forEach(doc => {
+            const docData = doc.data();
+            if (productNames.includes(docData.product)) {
+                batch.delete(doc.ref);
+            }
         });
+    } catch(e) {
+        console.warn("Could not query existing middelen to delete, may result in duplicates. Error: ", e);
+        // We can continue, as duplicates might be better than no data.
     }
     
     // Add the new entries
