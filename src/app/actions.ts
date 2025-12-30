@@ -417,7 +417,7 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
                 minIntervalDays: parseNumber(row['Minimale interval tussen toepassingen in dagen']),
             };
             
-            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || baseMiddel.maxDosage < 0) continue;
+            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || isNaN(baseMiddel.maxDosage) || baseMiddel.maxDosage < 0) continue;
 
             if (gebiedLower.includes('appel')) {
                 allMiddelen.push({ ...baseMiddel, crop: 'Appel', maxDosage: baseMiddel.maxDosage as number });
