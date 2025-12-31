@@ -296,6 +296,9 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         if (!entry.parsedData) {
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
+        if (entry.validationMessage) {
+            return { success: false, message: `Kan niet bevestigen. Los eerst de volgende waarschuwing op: ${entry.validationMessage}` };
+        }
 
         const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
         if (!isValid) {

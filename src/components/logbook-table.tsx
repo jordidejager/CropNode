@@ -103,7 +103,7 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {entry.status === 'Te Controleren' && (
-            <DropdownMenuItem onClick={handleConfirm} disabled={isPending}>
+            <DropdownMenuItem onClick={handleConfirm} disabled={isPending || !!entry.validationMessage}>
               <CheckCircle className="mr-2 h-4 w-4" />
               <span>Bevestigen</span>
             </DropdownMenuItem>

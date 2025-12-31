@@ -274,7 +274,7 @@ export function InvoerInterface() {
                             ) : (
                               <Button variant="outline" onClick={startEditing}><Pencil className="mr-2"/> Aanpassen</Button>
                             )}
-                            <Button onClick={handleConfirm} disabled={isEditing || isConfirming}>
+                            <Button onClick={handleConfirm} disabled={isEditing || isConfirming || !!entryToDisplay.validationMessage}>
                                 {isConfirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2"/>}
                                 Bevestigen
                             </Button>
