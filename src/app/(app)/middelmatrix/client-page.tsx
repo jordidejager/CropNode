@@ -203,7 +203,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                         sortedData.map(item => (
                                             <TableRow key={item.id} onClick={() => handleRowClick(item.id)} className="cursor-pointer">
                                                 {displayHeaders.map(header => (
-                                                    <TableCell key={`${item.id}-${header}`} className="max-w-[200px] align-top">
+                                                    <TableCell key={`${item.id}-${header}`} className="max-w-[200px] truncate align-top">
                                                        <CollapsibleCell content={String(item[header] || '-')} />
                                                     </TableCell>
                                                 ))}
