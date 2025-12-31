@@ -4,9 +4,9 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
-import { staticProductsData } from './data';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
@@ -278,31 +278,13 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 
 // Product Functions
 export async function getProducts(db: Firestore): Promise<string[]> {
-    const middelen = await getMiddelen(db);
-    const staticProducts = [...new Set(middelen.map(m => m['Middelnaam']))].filter(Boolean);
-    if (!db) {
-        return staticProducts;
-    }
+    if (!db) return [];
     try {
-        const querySnapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
-        const dbProducts = querySnapshot.docs.map(doc => doc.data().name as string);
-        const allProducts = [...new Set([...dbProducts, ...staticProducts, ...staticProductsData])];
-        return allProducts;
+        const middelen = await getMiddelen(db);
+        const productNames = [...new Set(middelen.map(m => m['Middelnaam']))].filter(Boolean) as string[];
+        return productNames;
     } catch (error) {
-        console.error("Error fetching products, falling back to static list:", error);
-        return staticProducts;
-    }
-}
-
-export async function addProduct(db: Firestore, product: string) {
-    if (!db) return;
-    const productsRef = collection(db, PRODUCTS_COLLECTION);
-    const q = query(productsRef);
-    const querySnapshot = await getDocs(q);
-    const existingProducts = querySnapshot.docs.map(d => d.data().name.toLowerCase());
-    
-    if (!existingProducts.includes(product.toLowerCase())) {
-        console.log(`Adding new product "${product}" to the database.`);
-        await addDoc(productsRef, { name: product });
+        console.error("Error fetching products from MiddelMatrix:", error);
+        return [];
     }
 }

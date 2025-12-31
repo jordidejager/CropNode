@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, addProduct, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -89,14 +89,6 @@ async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: 
     products: JSON.stringify(allProducts),
   });
 
-  for (const p of parsedDataFromAI.products) {
-      if (p.product) {
-          if (!allProducts.find(existing => existing.toLowerCase() === p.product.toLowerCase())) {
-              await addProduct(firestore, p.product);
-          }
-      }
-  }
-  
   return {
     finalParsedData: {
         plots: parsedDataFromAI.plots || [],

@@ -29,7 +29,7 @@ const SprayApplicationInputSchema = z.object({
     .describe('A JSON string representing an array of available plots with their id, name, crop and variety.'),
   products: z
     .string()
-    .describe('A JSON string representing an array of available product names.'),
+    .describe('A JSON string representing an array of available product names from the MiddelMatrix.'),
 });
 
 const SprayApplicationOutputSchema = z.object({
@@ -54,7 +54,7 @@ const prompt = ai.definePrompt({
   input: { schema: SprayApplicationInputSchema },
   output: { schema: SprayApplicationOutputSchema },
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
-You will be provided with a sentence, a list of available plots (parcels), and a list of available products.
+You will be provided with a sentence, a list of available plots (parcels), and a list of available products from the user's "MiddelMatrix".
 
 Your goal is to identify which plots were sprayed and which products were used, including their dosage and unit.
 
@@ -64,12 +64,12 @@ Here is the user's input:
 Here is the list of available plots with their ID, name, crop, and variety. Pay close attention to names and varieties to correctly identify the plots. A user might refer to 'all conference' which means all plots of the 'Conference' variety. The user might also refer to a plot by its name. You MUST use the ID of the plot in your output.
 {{{plots}}}
 
-Here is the list of available products. You MUST use a name from this list. If the user mentions a product that is not on the list, you must select the closest match from the list.
+Here is the list of available products from the user's MiddelMatrix. You MUST use a name from this list. If the user mentions a product that is not on the list, you must select the closest match from this list. Do NOT invent new product names.
 {{{products}}}
 
 Based on this information, extract the plots and products into a JSON object. The output MUST be a valid JSON object matching the provided schema.
 - For 'plots', return an array of the IDs of the sprayed plots.
-- For 'products', return an array of objects, where each object contains the product name, dosage, and unit.
+- For 'products', return an array of objects, where each object contains the product name (from the provided list), dosage, and unit.
 - Always assume the current date if no date is specified.
 - If a user says 'all X', it means all plots of variety 'X' or crop 'X'.
 - The dosage must be a number.
