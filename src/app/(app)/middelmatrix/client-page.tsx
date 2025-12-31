@@ -35,14 +35,14 @@ function CollapsibleCell({ content }: { content: string }) {
 
   return (
     <Collapsible>
-      <p>
+      <div className="truncate">
         {`${content.substring(0, 50)}...`}
         <CollapsibleTrigger asChild>
           <Button variant="link" className="p-0 pl-1 text-xs h-auto">
             meer
           </Button>
         </CollapsibleTrigger>
-      </p>
+      </div>
     </Collapsible>
   );
 }
