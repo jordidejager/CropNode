@@ -15,9 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Separator } from '@/components/ui/separator';
 
 function CollapsibleText({ text, label }: { text: string, label: string }) {
-    const isLongText = text.length > 50;
-
-    if (!isLongText) {
+    if (!text || text.length <= 50) {
         return <p className="text-foreground mt-1">{text || '-'}</p>;
     }
 
@@ -27,12 +25,14 @@ function CollapsibleText({ text, label }: { text: string, label: string }) {
                  <p className="text-foreground mt-1">{text}</p>
             </CollapsibleContent>
             <CollapsibleTrigger asChild>
-                 <p className="text-foreground mt-1 data-[state=closed]:block data-[state=open]:hidden">
-                    {`${text.substring(0, 50)}...`}
-                    <Button variant="link" className="p-0 pl-1 text-xs h-auto">
-                        meer
-                    </Button>
-                </p>
+                 <button className="text-left w-full">
+                    <p className="text-foreground mt-1 data-[state=closed]:block data-[state=open]:hidden">
+                        {`${text.substring(0, 50)}...`}
+                        <Button variant="link" className="p-0 pl-1 text-xs h-auto">
+                            meer
+                        </Button>
+                    </p>
+                 </button>
             </CollapsibleTrigger>
         </Collapsible>
     );
@@ -110,7 +110,7 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
         return null; // Should be handled by error state
     }
     
-    const primaryKeys = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)'];
+    const primaryKeys = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Max. dosering per toepassing'];
     const otherKeys = Object.keys(middel).filter(key => key !== 'id' && !primaryKeys.includes(key));
 
     return (

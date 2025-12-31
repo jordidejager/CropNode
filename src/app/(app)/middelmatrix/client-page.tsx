@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Upload, Loader2, Trash2 } from 'lucide-react';
+import { Search, Upload, Loader2, Trash2, ArrowUpDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { deleteAllMiddelen } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +19,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ImportDialog } from './import-dialog';
+
+type SortConfig = {
+  key: string;
+  direction: 'ascending' | 'descending';
+} | null;
 
 
 function CollapsibleCell({ content }: { content: string }) {
@@ -46,6 +51,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
     const [searchTerm, setSearchTerm] = useState('');
     const [isImportOpen, setIsImportOpen] = useState(false);
     const [isDeleting, startDeleteTransition] = useTransition();
+    const [sortConfig, setSortConfig] = useState<SortConfig>(null);
     const router = useRouter();
     const { toast } = useToast();
     
@@ -68,18 +74,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
         });
     };
 
-    const headers = useMemo(() => {
-        if (initialData.length === 0) {
-            return ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
-        }
-        // Dynamically get headers from the first item, but ensure the important ones are first.
-        const firstItemKeys = Object.keys(initialData[0]);
-        const preferredOrder = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
-        const otherKeys = firstItemKeys.filter(k => !preferredOrder.includes(k) && k !== 'id');
-        return [...preferredOrder, ...otherKeys];
-    }, [initialData]);
-
-    const displayHeaders = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
+    const displayHeaders = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Max. dosering per toepassing'];
     
     const filteredData = useMemo(() => {
         if (!searchTerm) return initialData;
@@ -90,6 +85,43 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
             )
         );
     }, [searchTerm, initialData]);
+
+    const sortedData = useMemo(() => {
+        let sortableItems = [...filteredData];
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                const aValue = a[sortConfig.key];
+                const bValue = b[sortConfig.key];
+
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'ascending' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'ascending' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [filteredData, sortConfig]);
+
+    const requestSort = (key: string) => {
+        let direction: 'ascending' | 'descending' = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const getSortIndicator = (key: string) => {
+        if (!sortConfig || sortConfig.key !== key) {
+            return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
+        }
+        if (sortConfig.direction === 'ascending') {
+            return <ArrowUpDown className="ml-2 h-4 w-4" />; // Or an up arrow
+        }
+        return <ArrowUpDown className="ml-2 h-4 w-4" />; // Or a down arrow
+    };
 
 
     const handleImportSuccess = () => {
@@ -156,15 +188,22 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        {displayHeaders.map(header => <TableHead key={header}>{header}</TableHead>)}
+                                        {displayHeaders.map(header => (
+                                          <TableHead key={header}>
+                                            <Button variant="ghost" onClick={() => requestSort(header)}>
+                                                {header}
+                                                {getSortIndicator(header)}
+                                            </Button>
+                                          </TableHead>
+                                        ))}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredData.length > 0 ? (
-                                        filteredData.map(item => (
+                                    {sortedData.length > 0 ? (
+                                        sortedData.map(item => (
                                             <TableRow key={item.id} onClick={() => handleRowClick(item.id)} className="cursor-pointer">
                                                 {displayHeaders.map(header => (
-                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top">
+                                                    <TableCell key={`${item.id}-${header}`} className="max-w-[200px] align-top">
                                                        <CollapsibleCell content={String(item[header] || '-')} />
                                                     </TableCell>
                                                 ))}
