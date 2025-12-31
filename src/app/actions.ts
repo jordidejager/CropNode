@@ -35,14 +35,14 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     for (const productEntry of parsedData.products) {
         let hasRuleForCrop = false;
         for (const crop of uniqueCrops) {
-            const rule = middelMatrix.find(m =>
+             const rule = middelMatrix.find(m =>
                 m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase() &&
-                m['Gewas']?.toLowerCase() === crop.toLowerCase()
+                m['Toepassingsgebied']?.toLowerCase().includes(crop.toLowerCase())
             );
 
             if (rule) {
                 hasRuleForCrop = true;
-                const maxDosageString = rule['Max. dosering per toepassing'];
+                const maxDosageString = rule['Maximum middeldosis'];
                 const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
                 
                 if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
@@ -348,7 +348,7 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
                 }
             });
             return middel;
-        }).filter(m => Object.keys(m).length > 0); // Filter out completely empty rows
+        }).filter(m => Object.keys(m).length > 0 && m['Middelnaam']); // Filter out completely empty rows and rows without a name
         
         if (middelen.length === 0) {
             throw new Error(`Kon geen geldige data extraheren uit ${file.name}. Controleer of het bestand correct is opgemaakt.`);
