@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -104,9 +105,10 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
   
   const numSelected = selectedRowIds.length;
   const canConfirmSelection = useMemo(() => {
+    if (selectedRowIds.length === 0) return false;
     return selectedRowIds.every(id => {
       const entry = entries.find(e => e.id === id);
-      return entry && entry.status === 'Te Controleren' && !entry.validationMessage;
+      return entry && (entry.status === 'Te Controleren' || entry.status === 'Nieuw') && !entry.validationMessage;
     });
   }, [selectedRowIds, entries]);
 
