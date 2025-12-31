@@ -132,37 +132,6 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     );
 }
 
-const CHAR_LIMIT = 100;
-
-const CollapsibleCell = ({ content }: { content: string }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const text = String(content ?? '-');
-  
-  if (text.length <= CHAR_LIMIT) {
-    return <>{text}</>;
-  }
-  
-  const toggleExpansion = () => {
-    setIsExpanded(!isExpanded);
-  };
-
-  return (
-    <div>
-      <p className={cn(!isExpanded && "line-clamp-2")}>
-        {text}
-      </p>
-      <button
-        onClick={toggleExpansion}
-        className="text-primary text-xs font-semibold hover:underline mt-1 flex items-center gap-1"
-      >
-        {isExpanded ? 'Lees minder' : 'Lees meer'}
-        <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
-      </button>
-    </div>
-  );
-};
-
-
 export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -189,17 +158,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
         });
     };
 
-    const headers = useMemo(() => {
-        if (initialData.length === 0) return [];
-        // Extract all unique keys from all objects, excluding 'id'
-        const allKeys = initialData.reduce((keys, item) => {
-            Object.keys(item).forEach(key => {
-                if (key !== 'id') keys.add(key);
-            });
-            return keys;
-        }, new Set<string>());
-        return Array.from(allKeys);
-    }, [initialData]);
+    const headers = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
 
     const filteredData = useMemo(() => {
         if (!searchTerm) return initialData;
@@ -212,6 +171,10 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
 
     const handleImportSuccess = () => {
         router.refresh();
+    };
+    
+    const handleRowClick = (id: string) => {
+        router.push(`/middelmatrix/${id}`);
     };
 
     return (
@@ -276,10 +239,10 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                 <TableBody>
                                     {filteredData.length > 0 ? (
                                         filteredData.map(item => (
-                                            <TableRow key={item.id}>
+                                            <TableRow key={item.id} onClick={() => handleRowClick(item.id)} className="cursor-pointer">
                                                 {headers.map(header => (
-                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top">
-                                                        <CollapsibleCell content={item[header]} />
+                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top truncate">
+                                                        {item[header] || '-'}
                                                     </TableCell>
                                                 ))}
                                             </TableRow>

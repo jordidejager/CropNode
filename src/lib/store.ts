@@ -1,6 +1,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
@@ -50,6 +51,21 @@ export async function getMiddelen(db: Firestore): Promise<Middel[]> {
       console.warn("Could not fetch middelen, collection might not exist yet.", e);
       return [];
   }
+}
+
+export async function getMiddel(db: Firestore, id: string): Promise<Middel | null> {
+    if (!db) return null;
+    try {
+        const docRef = doc(db, MIDDELEN_COLLECTION, id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() } as Middel;
+        }
+        return null;
+    } catch (e) {
+        console.error(`Error fetching middel with id ${id}:`, e);
+        return null;
+    }
 }
 
 export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[]): Promise<void> {
