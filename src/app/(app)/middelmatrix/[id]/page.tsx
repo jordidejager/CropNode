@@ -12,8 +12,9 @@ import { AlertTriangle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from '@/components/ui/separator';
 
-function CollapsibleText({ text }: { text: string }) {
+function CollapsibleText({ text, label }: { text: string, label: string }) {
     const isLongText = text.length > 50;
 
     if (!isLongText) {
@@ -36,6 +37,13 @@ function CollapsibleText({ text }: { text: string }) {
         </Collapsible>
     );
 }
+
+const DetailItem = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex flex-col border-b pb-2">
+        <p className="font-semibold text-muted-foreground">{label}</p>
+        <CollapsibleText text={value} label={label} />
+    </div>
+);
 
 export default function MiddelDetailPage({ params }: { params: { id: string } }) {
     const [middel, setMiddel] = useState<Middel | null>(null);
@@ -102,7 +110,8 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
         return null; // Should be handled by error state
     }
     
-    const relevantKeys = Object.keys(middel).filter(key => key !== 'id');
+    const primaryKeys = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)'];
+    const otherKeys = Object.keys(middel).filter(key => key !== 'id' && !primaryKeys.includes(key));
 
     return (
         <Card className="w-full max-w-4xl mx-auto">
@@ -115,13 +124,23 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
                 <CardDescription>Details voor toelatingsnummer {middel['Toelatingsnummer']}</CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6 text-sm">
-                    {relevantKeys.map(key => (
-                        <div key={key} className="flex flex-col border-b pb-2">
-                            <p className="font-semibold text-muted-foreground">{key}</p>
-                            <CollapsibleText text={String(middel[key])} />
-                        </div>
-                    ))}
+                <div className="space-y-4 text-sm">
+                    <div className="space-y-4">
+                       {primaryKeys.map(key => middel[key] && (
+                         <div key={key}>
+                             <p className="font-semibold text-muted-foreground">{key}</p>
+                             <p className="text-base text-foreground">{String(middel[key])}</p>
+                         </div>
+                       ))}
+                    </div>
+                    
+                    <Separator className="my-6" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                        {otherKeys.map(key => (
+                           <DetailItem key={key} label={key} value={String(middel[key] || '-')} />
+                        ))}
+                    </div>
                 </div>
             </CardContent>
         </Card>
