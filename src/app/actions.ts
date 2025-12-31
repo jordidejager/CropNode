@@ -299,13 +299,12 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         if (!entry.parsedData) {
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
-        if (entry.validationMessage) {
-            return { success: false, message: `Kan niet bevestigen. Los eerst de volgende waarschuwing op: ${entry.validationMessage}` };
-        }
-
+        
+        // This validation is key. Even if the button is somehow enabled, the backend will check.
         const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
+        
         if (!isValid) {
-            // Update status to 'Te Controleren' and save validation message
+            // Update status to 'Te Controleren' and save validation message just in case it wasn't there
             entry.status = 'Te Controleren';
             entry.validationMessage = validationMessage;
             await updateLogbookEntry(firestore, entry);
@@ -314,7 +313,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
         
         entry.status = 'Akkoord';
-        delete entry.validationMessage;
+        entry.validationMessage = ''; // Explicitly clear validation message on confirmation
 
         await updateLogbookEntry(firestore, entry);
 
@@ -410,3 +409,5 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
+
+    
