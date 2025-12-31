@@ -110,7 +110,7 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
         return null; // Should be handled by error state
     }
     
-    const primaryKeys = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Max. dosering per toepassing'];
+    const primaryKeys = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Maximum middeldosis'];
     const otherKeys = Object.keys(middel).filter(key => key !== 'id' && !primaryKeys.includes(key));
 
     return (

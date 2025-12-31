@@ -74,7 +74,7 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
         });
     };
 
-    const displayHeaders = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Max. dosering per toepassing'];
+    const displayHeaders = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Maximum middeldosis'];
     
     const filteredData = useMemo(() => {
         if (!searchTerm) return initialData;
