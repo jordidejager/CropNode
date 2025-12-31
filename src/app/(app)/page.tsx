@@ -5,35 +5,40 @@ import { LogbookTable } from '@/components/logbook-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFirestore } from '@/firebase';
-import { getLogbookEntries } from '@/lib/store';
-import type { LogbookEntry } from '@/lib/types';
+import { getLogbookEntries, getParcels } from '@/lib/store';
+import type { LogbookEntry, Parcel } from '@/lib/types';
 import { useEffect, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function InvoerPage() {
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
+  const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
   const db = useFirestore();
 
-  const loadEntries = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!db) return;
     setLoading(true);
-    const fetchedEntries = await getLogbookEntries(db);
+    const [fetchedEntries, fetchedParcels] = await Promise.all([
+      getLogbookEntries(db),
+      getParcels(db)
+    ]);
     setEntries(fetchedEntries);
+    setParcels(fetchedParcels);
     setLoading(false);
   }, [db]);
 
   useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
+    loadData();
+  }, [loadData]);
 
   const handleEntryDeleted = useCallback((deletedEntryId: string) => {
     setEntries(prevEntries => prevEntries.filter(entry => entry.id !== deletedEntryId));
   }, []);
   
   const handleEntryConfirmed = useCallback(() => {
-    loadEntries(); // Re-fetch all entries to show the updated status
-  }, [loadEntries])
+    loadData(); // Re-fetch all entries to show the updated status
+  }, [loadData]);
 
   return (
     <Tabs defaultValue="invoer">
@@ -64,6 +69,7 @@ export default function InvoerPage() {
               ) : (
                 <LogbookTable 
                   entries={entries} 
+                  allParcels={parcels}
                   onEntryDeleted={handleEntryDeleted} 
                   onEntryConfirmed={handleEntryConfirmed}
                 />

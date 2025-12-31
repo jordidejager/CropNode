@@ -32,13 +32,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition } from 'react';
 import { deleteLogbookEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useFirestore } from '@/firebase';
-import { getParcels } from '@/lib/store';
 
 const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Nieuw': 'outline',
@@ -176,28 +174,18 @@ function ParcelListCollapsible({ plotIds, allParcels }: { plotIds: string[] | un
 
 interface LogbookTableProps {
   entries: LogbookEntry[];
+  allParcels: Parcel[];
   onEntryDeleted: (entryId: string) => void;
   onEntryConfirmed: () => void;
 }
 
 
-export function LogbookTable({ entries, onEntryDeleted, onEntryConfirmed }: LogbookTableProps) {
-  const [allParcels, setAllParcels] = useState<Parcel[]>([]);
-  const db = useFirestore();
-
-  useEffect(() => {
-    async function loadParcels() {
-      if(db) {
-        const parcels = await getParcels(db);
-        setAllParcels(parcels);
-      }
-    }
-    loadParcels();
-  }, [db]);
-
+export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfirmed }: LogbookTableProps) {
+  
   if (!entries || entries.length === 0) {
     return <p className="text-center text-muted-foreground py-10">Nog geen invoer in het logboek.</p>;
   }
+
   return (
     <TooltipProvider>
       <div className="rounded-md border">
