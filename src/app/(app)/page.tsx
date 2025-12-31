@@ -27,13 +27,13 @@ export default function InvoerPage() {
     loadEntries();
   }, [loadEntries]);
 
-  const handleEntryDeleted = (deletedEntryId: string) => {
+  const handleEntryDeleted = useCallback((deletedEntryId: string) => {
     setEntries(prevEntries => prevEntries.filter(entry => entry.id !== deletedEntryId));
-  };
+  }, []);
   
-  const handleEntryConfirmed = () => {
+  const handleEntryConfirmed = useCallback(() => {
     loadEntries(); // Re-fetch all entries to show the updated status
-  }
+  }, [loadEntries])
 
   return (
     <Tabs defaultValue="invoer">
