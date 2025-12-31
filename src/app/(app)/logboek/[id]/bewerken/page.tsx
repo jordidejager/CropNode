@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 
 export default function EditLogbookEntryPage({ params }: { params: { id: string } }) {
   const [entry, setEntry] = useState<LogbookEntry | null>(null);
+  const [originalProducts, setOriginalProducts] = useState<ProductEntry[]>([]);
   const [allProducts, setAllProducts] = useState<string[]>([]);
   const [allParcels, setAllParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,9 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
         getParcels(db)
       ]);
       setEntry(fetchedEntry);
+      if (fetchedEntry?.parsedData?.products) {
+        setOriginalProducts(JSON.parse(JSON.stringify(fetchedEntry.parsedData.products)));
+      }
       setAllProducts(fetchedProducts);
       setAllParcels(fetchedParcels);
       setLoading(false);
@@ -71,7 +75,7 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
   const handleConfirm = () => {
     if (!entry) return;
     startConfirmTransition(async () => {
-      const result = await updateAndConfirmEntry(entry);
+      const result = await updateAndConfirmEntry(entry, originalProducts);
       toast({
         title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
         description: result.message,

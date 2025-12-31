@@ -42,6 +42,7 @@ export function InvoerInterface() {
   const [showResult, setShowResult] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editableEntry, setEditableEntry] = useState<LogbookEntry | null>(null);
+  const [originalProducts, setOriginalProducts] = useState<ProductEntry[]>([]);
   const [allProducts, setAllProducts] = useState<string[]>([]);
   const [allParcels, setAllParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,7 @@ export function InvoerInterface() {
   const handleConfirm = () => {
     if (!editableEntry) return;
     startConfirmTransition(async () => {
-      const result = await updateAndConfirmEntry(editableEntry);
+      const result = await updateAndConfirmEntry(editableEntry, originalProducts);
       toast({
         title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
         description: result.message,
@@ -105,6 +106,9 @@ export function InvoerInterface() {
   useEffect(() => {
     if (state.entry) {
        const entry = deserializeEntry(state.entry);
+       if (entry?.parsedData?.products) {
+         setOriginalProducts(JSON.parse(JSON.stringify(entry.parsedData.products)));
+       }
        setEditableEntry(entry ? JSON.parse(JSON.stringify(entry)) : null);
     }
   }, [state.entry]);

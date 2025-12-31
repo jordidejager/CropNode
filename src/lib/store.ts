@@ -5,8 +5,9 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference } from './types';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
@@ -14,6 +15,27 @@ const PRODUCTS_COLLECTION = 'products';
 const PARCELS_COLLECTION = 'parcels';
 const MIDDELEN_COLLECTION = 'middelen';
 const UPLOAD_LOG_COLLECTION = 'uploadLog';
+const USER_PREFERENCES_COLLECTION = 'userPreferences';
+
+
+// User Preference Functions
+export async function getUserPreferences(db: Firestore): Promise<UserPreference[]> {
+    if (!db) return [];
+    try {
+        const querySnapshot = await getDocs(collection(db, USER_PREFERENCES_COLLECTION));
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserPreference));
+    } catch (e) {
+        console.warn("Could not fetch user preferences, collection might not exist yet.", e);
+        return [];
+    }
+}
+
+export async function setUserPreference(db: Firestore, preference: Omit<UserPreference, 'id'>): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    // Use the alias as the document ID to easily update/overwrite it.
+    const docRef = doc(db, USER_PREFERENCES_COLLECTION, preference.alias);
+    await setDoc(docRef, preference, { merge: true });
+}
 
 
 // Upload Log Functions

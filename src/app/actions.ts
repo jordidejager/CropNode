@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
@@ -37,7 +37,7 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
         for (const crop of uniqueCrops) {
              const rule = middelMatrix.find(m =>
                 m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase() &&
-                m['Toepassingsgebied']?.toLowerCase().includes(crop.toLowerCase())
+                String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase())
             );
 
             if (rule) {
@@ -78,15 +78,17 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
 async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
   const { firestore } = initializeFirebase();
-  const [allProducts, allParcels] = await Promise.all([
+  const [allProducts, allParcels, preferences] = await Promise.all([
     getProducts(firestore),
-    getParcels(firestore)
+    getParcels(firestore),
+    getUserPreferences(firestore)
   ]);
 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
     products: JSON.stringify(allProducts),
+    preferences: JSON.stringify(preferences),
   });
 
   return {
@@ -190,7 +192,21 @@ export async function processSprayEntry(
   }
 }
 
-export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormState> {
+async function learnFromCorrection(db: Firestore, originalProduct: string, correctedProduct: string) {
+    if (originalProduct.toLowerCase() === correctedProduct.toLowerCase()) {
+        return;
+    }
+
+    // A simple way to find a common "alias" is to take the first word if it's the same.
+    const originalFirstWord = originalProduct.split(' ')[0].toLowerCase();
+    const correctedFirstWord = correctedProduct.split(' ')[0].toLowerCase();
+    
+    if (originalFirstWord === correctedFirstWord) {
+        await setUserPreference(db, { alias: originalFirstWord, preferred: correctedProduct });
+    }
+}
+
+export async function updateAndConfirmEntry(entry: LogbookEntry, originalProducts: ProductEntry[]): Promise<FormState> {
     const { firestore } = initializeFirebase();
     if (!entry.parsedData) {
         return { message: "Fout: Geen geparseerde data om op te slaan." };
@@ -214,6 +230,16 @@ export async function updateAndConfirmEntry(entry: LogbookEntry): Promise<FormSt
     const updatedEntry = updatedEntryData as LogbookEntry;
 
     await updateLogbookEntry(firestore, updatedEntry);
+
+    // Learn from corrections
+    for (let i = 0; i < updatedEntry.parsedData.products.length; i++) {
+        const original = originalProducts[i];
+        const corrected = updatedEntry.parsedData.products[i];
+        if (original && corrected) {
+           await learnFromCorrection(firestore, original.product, corrected.product);
+        }
+    }
+
 
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
         const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.map(parcelId => {

@@ -3,9 +3,9 @@
 import type { ProductEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 
 interface EditProductsProps {
   allProducts: string[];
@@ -15,6 +15,8 @@ interface EditProductsProps {
 
 export function EditProducts({ allProducts, selectedProducts, onProductsChange }: EditProductsProps) {
   
+  const productOptions: ComboboxOption[] = allProducts.map(p => ({ value: p, label: p }));
+
   const handleProductChange = (index: number, field: keyof ProductEntry, value: string | number) => {
     const newProducts = [...selectedProducts];
     if (field === 'dosage') {
@@ -41,17 +43,12 @@ export function EditProducts({ allProducts, selectedProducts, onProductsChange }
         <div key={index} className="grid grid-cols-[1fr_100px_50px_auto] gap-2 items-end">
           <div>
             <Label htmlFor={`product-select-${index}`} className="sr-only">Middel</Label>
-            <Select
+            <Combobox
+              options={productOptions}
               value={entry.product}
               onValueChange={(value) => handleProductChange(index, 'product', value)}
-            >
-              <SelectTrigger id={`product-select-${index}`}>
-                <SelectValue placeholder="Kies een middel" />
-              </SelectTrigger>
-              <SelectContent>
-                {allProducts.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              placeholder="Kies een middel"
+            />
           </div>
           <div>
             <Label htmlFor={`dosage-input-${index}`} className="sr-only">Dosering</Label>

@@ -4,6 +4,8 @@
 
 
 
+
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -72,5 +74,8 @@ export type CtgbMiddel = {
     werkzameStoffen: string;
 };
 
-
-
+export type UserPreference = {
+  id: string; // Firestore ID, same as alias
+  alias: string; // e.g., 'captan'
+  preferred: string; // e.g., 'Captan 80 WDG'
+}
