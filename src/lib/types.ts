@@ -3,6 +3,7 @@
 
 
 
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -14,15 +15,7 @@ export type Parcel = {
 
 export type Middel = {
   id: string; // Firestore ID
-  product: string;
-  crop: string;
-  disease?: string;
-  maxDosage: number;
-  unit: string;
-  safetyPeriodDays?: number;
-  maxApplicationsPerYear?: number;
-  maxDosePerYear?: number;
-  minIntervalDays?: number;
+  [key: string]: any; // Flexible structure to match any Excel column
 };
 
 export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout';
@@ -78,5 +71,6 @@ export type CtgbMiddel = {
     status: string;
     werkzameStoffen: string;
 };
+
 
 

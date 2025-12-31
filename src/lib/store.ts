@@ -1,5 +1,6 @@
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
@@ -42,7 +43,8 @@ export async function addUploadLog(db: Firestore, log: Omit<UploadLog, 'id'>): P
 export async function getMiddelen(db: Firestore): Promise<Middel[]> {
   if (!db) return [];
   try {
-      const querySnapshot = await getDocs(query(collection(db, MIDDELEN_COLLECTION), orderBy('product')));
+      const q = query(collection(db, MIDDELEN_COLLECTION));
+      const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Middel));
   } catch (e) {
       console.warn("Could not fetch middelen, collection might not exist yet.", e);
@@ -54,43 +56,24 @@ export async function addMiddelen(db: Firestore, middelen: Omit<Middel, 'id'>[])
     if (!db) throw new Error("Database not initialized");
     if (middelen.length === 0) return;
 
-    // Group new middelen by product
-    const middelenByProduct = middelen.reduce((acc, middel) => {
-        (acc[middel.product] = acc[middel.product] || []).push(middel);
-        return acc;
-    }, {} as Record<string, Omit<Middel, 'id'>[]>);
-
-    const productNames = Object.keys(middelenByProduct);
     const middelenCollection = collection(db, MIDDELEN_COLLECTION);
     
-    // Process in batches of 30 products to stay within Firestore limits
-    const batchSize = 30;
-    for (let i = 0; i < productNames.length; i += batchSize) {
-        const productBatch = productNames.slice(i, i + batchSize);
-        
-        // Find existing documents for the current batch of products
-        const deleteQuery = query(middelenCollection, where('product', 'in', productBatch));
-        const toDeleteSnapshot = await getDocs(deleteQuery);
-        
+    // First, delete all existing documents in the collection
+    await deleteAllMiddelen(db);
+
+    // Now, add the new documents in batches
+    const batchSize = 500; // Firestore batch limit
+    for (let i = 0; i < middelen.length; i += batchSize) {
         const batch = writeBatch(db);
-
-        // Delete existing documents for these products
-        toDeleteSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
+        const chunk = middelen.slice(i, i + batchSize);
+        chunk.forEach(newMiddel => {
+            const docRef = doc(middelenCollection);
+            batch.set(docRef, newMiddel);
         });
-
-        // Add the new documents for these products
-        productBatch.forEach(productName => {
-            const newMiddelenForProduct = middelenByProduct[productName];
-            newMiddelenForProduct.forEach(newMiddel => {
-                const docRef = doc(middelenCollection);
-                batch.set(docRef, newMiddel);
-            });
-        });
-
         await batch.commit();
     }
 }
+
 
 export async function deleteAllMiddelen(db: Firestore): Promise<void> {
     if (!db) throw new Error("Database not initialized");
@@ -278,7 +261,7 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
 // Product Functions
 export async function getProducts(db: Firestore): Promise<string[]> {
     const middelen = await getMiddelen(db);
-    const staticProducts = [...new Set(middelen.map(m => m.product))];
+    const staticProducts = [...new Set(middelen.map(m => m['Middelnaam']))].filter(Boolean);
     if (!db) {
         return staticProducts;
     }

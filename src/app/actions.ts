@@ -33,22 +33,31 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     const middelMatrix = await getMiddelen(db);
 
     for (const productEntry of parsedData.products) {
+        let hasRuleForCrop = false;
         for (const crop of uniqueCrops) {
             const rule = middelMatrix.find(m =>
-                m.product.toLowerCase() === productEntry.product.toLowerCase() &&
-                m.crop.toLowerCase() === crop.toLowerCase()
+                m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase() &&
+                m['Gewas']?.toLowerCase() === crop.toLowerCase()
             );
 
-            if (!rule) {
-                const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op het gewas '${crop}'.`;
-                if (!validationMessages.includes(msg)) {
-                    validationMessages.push(msg);
+            if (rule) {
+                hasRuleForCrop = true;
+                const maxDosageString = rule['Max. dosering per toepassing'];
+                const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
+                
+                if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
+                     const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
+                     if (!validationMessages.includes(msg)) {
+                         validationMessages.push(msg);
+                     }
                 }
-            } else if (productEntry.dosage > rule.maxDosage) {
-                const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' overschrijdt de maximale dosering van ${rule.maxDosage.toFixed(2)} ${rule.unit}.`;
-                if (!validationMessages.includes(msg)) {
-                    validationMessages.push(msg);
-                }
+                break; 
+            }
+        }
+         if (!hasRuleForCrop && uniqueCrops.length > 0) {
+            const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
+            if (!validationMessages.includes(msg)) {
+                validationMessages.push(msg);
             }
         }
     }
@@ -329,96 +338,38 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         
-        const jsonData: any[] = xlsx.utils.sheet_to_json(sheet, { header: 1 });
-        const headers = jsonData[0];
-
-        const headerMapping: { [key: string]: string } = {
-            "toelatingnummer": "Toelatingnummer",
-            "middelnaam": "Middelnaam",
-            "werkzame stoffen": "Werkzame stoffen",
-            "toepassingsgebied": "Toepassingsgebied",
-            "max. dosering": "Max. dosering per toepassing",
-            "veiligheidstermijn (dagen)": "Veiligheidstermijn in dagen voor de oogst (gewas)",
-            "max. aantal toepassingen per jaar": "Max. aantal toepassingen per 12 maanden (gewas)",
-            "max. totale dosering per jaar": "Max. totale dosering per 12 maanden (gewas)",
-            "min. interval (dagen)": "Min. interval tussen toepassingen in dagen (gewas)",
-        };
+        // Convert sheet to JSON, using an array of arrays and raw values
+        const jsonData: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false });
         
-        const colIndices: { [key: string]: number } = {};
-        Object.keys(headerMapping).forEach(key => {
-            const index = headers.findIndex((h: string) => h && h.toLowerCase().trim() === headerMapping[key].toLowerCase());
-            if (index !== -1) {
-                colIndices[key] = index;
-            }
-        });
-
-        const parseNumber = (value: any): number | undefined => {
-            if (value === undefined || value === null || value === "") return undefined;
-            const strValue = String(value).replace(',', '.');
-            const num = parseFloat(strValue);
-            return isNaN(num) ? undefined : num;
-        };
-        
-        const parseUnit = (value: any): string => {
-            if (typeof value !== 'string') return 'kg';
-            if (value.toLowerCase().includes('l/ha') || value.toLowerCase().includes('liter/ha')) return 'l';
-            if (value.toLowerCase().includes('kg/ha')) return 'kg';
-            if (value.toLowerCase().includes('g/ha')) return 'g';
-            return 'kg';
+        if (jsonData.length < 2) {
+            throw new Error("Het Excel-bestand is leeg of heeft geen kopteksten.");
         }
 
-        const middelen: Omit<Middel, 'id'>[] = [];
+        const headers: string[] = jsonData[0];
+        const rows = jsonData.slice(1);
 
-        for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i];
-            
-            const dosageString = row[colIndices["max. dosering"]];
-            const maxDosage = parseNumber(dosageString);
-            
-            const baseMiddel = {
-                product: row[colIndices["middelnaam"]],
-                disease: row[colIndices["toepassingsgebied"]],
-                maxDosage: maxDosage,
-                unit: parseUnit(dosageString),
-                safetyPeriodDays: parseNumber(row[colIndices["veiligheidstermijn (dagen)"]]),
-                maxApplicationsPerYear: parseNumber(row[colIndices["max. aantal toepassingen per jaar"]]),
-                maxDosePerYear: parseNumber(row[colIndices["max. totale dosering per jaar"]]),
-                minIntervalDays: parseNumber(row[colIndices["min. interval (dagen)"]]),
-            };
-
-            if (!baseMiddel.product || baseMiddel.maxDosage === undefined || isNaN(baseMiddel.maxDosage) || baseMiddel.maxDosage < 0) {
-                continue;
-            }
-
-            const toepassingsGebied = row[colIndices["toepassingsgebied"]]?.toLowerCase() || '';
-            
-            if (toepassingsGebied.includes('appel')) {
-                middelen.push({ ...baseMiddel, crop: 'Appel' });
-            }
-            if (toepassingsGebied.includes('peer')) {
-                middelen.push({ ...baseMiddel, crop: 'Peer' });
-            }
-        }
+        const middelen: Omit<Middel, 'id'>[] = rows.map(row => {
+            const middel: Omit<Middel, 'id'> = {};
+            headers.forEach((header, index) => {
+                if (header) { // Only add if header is not empty
+                    middel[header] = row[index] ?? ''; // Use empty string for undefined/null values
+                }
+            });
+            return middel;
+        }).filter(m => Object.keys(m).length > 0); // Filter out completely empty rows
         
         if (middelen.length === 0) {
-            throw new Error(`Kon geen geldige middelen voor 'Appel' of 'Peer' extraheren uit ${file.name}.`);
+            throw new Error(`Kon geen geldige data extraheren uit ${file.name}. Controleer of het bestand correct is opgemaakt.`);
         }
         
         await addMiddelen(firestore, middelen);
         
-        const newLogData: Partial<Omit<UploadLog, 'id'>> = {
-            productName: "CTGB Bestand Import",
-            uploadDate: new Date(),
-            fileName: file.name,
-            activeSubstances: `Bevat ${middelen.length} regels`,
-        };
-
-        await addUploadLog(firestore, newLogData as Omit<UploadLog, 'id'>);
-        
         revalidatePath('/middelmatrix');
-        return { success: true, message: `${middelen.length} middelregels succesvol geïmporteerd uit ${file.name}.` };
+        return { success: true, message: `${middelen.length} regels succesvol geïmporteerd uit ${file.name}.` };
+
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
+        // Re-throw the error with a more specific message to be caught by the client
         throw new Error(error.message || "Onbekende fout bij verwerken van bestand.");
     }
 }
