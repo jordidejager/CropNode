@@ -3,21 +3,20 @@
 
 import * as React from 'react';
 import { useState, useMemo, useTransition, useRef } from 'react';
-import type { Middel, UploadLog } from '@/lib/types';
+import type { Middel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Upload, Loader2, File, Trash2 } from 'lucide-react';
+import { Search, Upload, Loader2, File, Trash2, ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from '@/components/ui/label';
 import { parseCtgbFileAndImport, deleteAllMiddelen } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { nl } from 'date-fns/locale';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -133,13 +132,36 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     );
 }
 
-const formatDate = (date: Date) => {
-    try {
-        return format(date, 'dd-MM-yyyy HH:mm', { locale: nl });
-    } catch {
-        return 'Ongeldige datum';
-    }
-}
+const CHAR_LIMIT = 100;
+
+const CollapsibleCell = ({ content }: { content: string }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const text = String(content ?? '-');
+  
+  if (text.length <= CHAR_LIMIT) {
+    return <>{text}</>;
+  }
+  
+  const toggleExpansion = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  return (
+    <div>
+      <p className={cn(!isExpanded && "line-clamp-2")}>
+        {text}
+      </p>
+      <button
+        onClick={toggleExpansion}
+        className="text-primary text-xs font-semibold hover:underline mt-1 flex items-center gap-1"
+      >
+        {isExpanded ? 'Lees minder' : 'Lees meer'}
+        <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
+      </button>
+    </div>
+  );
+};
+
 
 export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -256,8 +278,8 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                         filteredData.map(item => (
                                             <TableRow key={item.id}>
                                                 {headers.map(header => (
-                                                    <TableCell key={`${item.id}-${header}`}>
-                                                        {String(item[header] ?? '-')}
+                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top">
+                                                        <CollapsibleCell content={item[header]} />
                                                     </TableCell>
                                                 ))}
                                             </TableRow>
