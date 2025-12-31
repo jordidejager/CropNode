@@ -58,7 +58,7 @@ const formatDate = (date: Date | Timestamp | undefined) => {
   }
 }
 
-function ActionsCell({ entry }: { entry: LogbookEntry }) {
+function ActionsCell({ entry, onDeleted, onConfirmed }: { entry: LogbookEntry; onDeleted: (id: string) => void; onConfirmed: () => void }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -70,6 +70,7 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
         title: 'Verwijderd',
         description: 'De logboekregel is succesvol verwijderd.',
       });
+      onDeleted(entry.id);
       setIsDeleteDialogOpen(false);
     });
   }
@@ -82,6 +83,7 @@ function ActionsCell({ entry }: { entry: LogbookEntry }) {
                 title: 'Bevestigd!',
                 description: 'De logboekregel is als "Akkoord" gemarkeerd.',
             });
+            onConfirmed();
         } else {
              toast({
                 variant: 'destructive',
@@ -172,7 +174,14 @@ function ParcelListCollapsible({ plotIds, allParcels }: { plotIds: string[] | un
     );
 }
 
-export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
+interface LogbookTableProps {
+  entries: LogbookEntry[];
+  onEntryDeleted: (entryId: string) => void;
+  onEntryConfirmed: () => void;
+}
+
+
+export function LogbookTable({ entries, onEntryDeleted, onEntryConfirmed }: LogbookTableProps) {
   const [allParcels, setAllParcels] = useState<Parcel[]>([]);
   const db = useFirestore();
 
@@ -230,7 +239,11 @@ export function LogbookTable({ entries }: { entries: LogbookEntry[] }) {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <ActionsCell entry={entry} />
+                  <ActionsCell 
+                    entry={entry} 
+                    onDeleted={onEntryDeleted}
+                    onConfirmed={onEntryConfirmed}
+                  />
                 </TableCell>
               </TableRow>
             ))}

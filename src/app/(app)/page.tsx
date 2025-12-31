@@ -7,49 +7,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFirestore } from '@/firebase';
 import { getLogbookEntries } from '@/lib/store';
 import type { LogbookEntry } from '@/lib/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-function LogboekTab() {
+export default function InvoerPage() {
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const db = useFirestore();
 
-  useEffect(() => {
-    async function loadEntries() {
-      if (!db) return;
-      setLoading(true);
-      const fetchedEntries = await getLogbookEntries(db);
-      setEntries(fetchedEntries);
-      setLoading(false);
-    }
-    loadEntries();
+  const loadEntries = useCallback(async () => {
+    if (!db) return;
+    setLoading(true);
+    const fetchedEntries = await getLogbookEntries(db);
+    setEntries(fetchedEntries);
+    setLoading(false);
   }, [db]);
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Volledig Logboek</CardTitle>
-        <CardDescription>
-          {loading ? 'Laden...' : `Totaal ${entries.length} regels, met de nieuwste bovenaan.`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : (
-          <LogbookTable entries={entries} />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
 
-export default function InvoerPage() {
+  const handleEntryDeleted = (deletedEntryId: string) => {
+    setEntries(prevEntries => prevEntries.filter(entry => entry.id !== deletedEntryId));
+  };
+  
+  const handleEntryConfirmed = () => {
+    loadEntries(); // Re-fetch all entries to show the updated status
+  }
+
   return (
     <Tabs defaultValue="invoer">
       <TabsList className="grid w-full grid-cols-2">
@@ -62,7 +47,29 @@ export default function InvoerPage() {
         </div>
       </TabsContent>
       <TabsContent value="logboek" className="mt-6">
-        <LogboekTab />
+         <Card>
+            <CardHeader>
+              <CardTitle>Volledig Logboek</CardTitle>
+              <CardDescription>
+                {loading ? 'Laden...' : `Totaal ${entries.length} regels, met de nieuwste bovenaan.`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : (
+                <LogbookTable 
+                  entries={entries} 
+                  onEntryDeleted={handleEntryDeleted} 
+                  onEntryConfirmed={handleEntryConfirmed}
+                />
+              )}
+            </CardContent>
+          </Card>
       </TabsContent>
     </Tabs>
   );
