@@ -11,6 +11,31 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+function CollapsibleText({ text }: { text: string }) {
+    const isLongText = text.length > 50;
+
+    if (!isLongText) {
+        return <p className="text-foreground mt-1">{text || '-'}</p>;
+    }
+
+    return (
+        <Collapsible>
+            <CollapsibleContent className="space-y-2">
+                 <p className="text-foreground mt-1">{text}</p>
+            </CollapsibleContent>
+            <CollapsibleTrigger asChild>
+                 <p className="text-foreground mt-1 data-[state=closed]:block data-[state=open]:hidden">
+                    {`${text.substring(0, 50)}...`}
+                    <Button variant="link" className="p-0 pl-1 text-xs h-auto">
+                        meer
+                    </Button>
+                </p>
+            </CollapsibleTrigger>
+        </Collapsible>
+    );
+}
 
 export default function MiddelDetailPage({ params }: { params: { id: string } }) {
     const [middel, setMiddel] = useState<Middel | null>(null);
@@ -94,7 +119,7 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
                     {relevantKeys.map(key => (
                         <div key={key} className="flex flex-col border-b pb-2">
                             <p className="font-semibold text-muted-foreground">{key}</p>
-                            <p className="text-foreground mt-1">{String(middel[key]) || '-'}</p>
+                            <CollapsibleText text={String(middel[key])} />
                         </div>
                     ))}
                 </div>
@@ -102,4 +127,3 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
         </Card>
     );
 }
-
