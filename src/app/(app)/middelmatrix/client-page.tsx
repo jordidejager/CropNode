@@ -17,6 +17,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
 
 function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onImportSuccess: () => void }) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -132,6 +138,28 @@ function ImportDialog({ open, onOpenChange, onImportSuccess }: { open: boolean, 
     );
 }
 
+function CollapsibleCell({ content }: { content: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isLongText = content.length > 50;
+
+  if (!isLongText) {
+    return <>{content}</>;
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <p>
+        {isOpen ? content : `${content.substring(0, 50)}...`}
+        <CollapsibleTrigger asChild>
+          <Button variant="link" className="p-0 pl-1 text-xs h-auto">
+            {isOpen ? 'minder' : 'meer'}
+          </Button>
+        </CollapsibleTrigger>
+      </p>
+    </Collapsible>
+  );
+}
+
 export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -158,23 +186,46 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
         });
     };
 
-    const headers = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
+    const groupedData = useMemo(() => {
+        const groups: { [key: string]: Middel } = {};
+        initialData.forEach(item => {
+            const key = item['Middelnaam'];
+            if (!key) return;
 
+            if (!groups[key]) {
+                groups[key] = item;
+            }
+        });
+        return Object.values(groups);
+    }, [initialData]);
+    
+    const headers = ['Toelatingsnummer', 'Middelnaam', 'Werkzame stof(fen)', 'Aard werking'];
+    
     const filteredData = useMemo(() => {
-        if (!searchTerm) return initialData;
-        return initialData.filter(item =>
-            Object.values(item).some(value =>
-                String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    }, [searchTerm, initialData]);
+        if (!searchTerm) return groupedData;
+        
+        // This search logic now needs to check against the full dataset, not just the grouped one
+        const searchLower = searchTerm.toLowerCase();
+        const matchingMiddelnamen = new Set<string>();
+
+        initialData.forEach(item => {
+             const searchableValues = Object.values(item).join(' ').toLowerCase();
+             if (searchableValues.includes(searchLower)) {
+                 matchingMiddelnamen.add(item['Middelnaam']);
+             }
+        });
+
+        return groupedData.filter(item => matchingMiddelnamen.has(item['Middelnaam']));
+    }, [searchTerm, initialData, groupedData]);
+
 
     const handleImportSuccess = () => {
         router.refresh();
     };
     
-    const handleRowClick = (id: string) => {
-        router.push(`/middelmatrix/${id}`);
+    const handleRowClick = (middelnaam: string) => {
+        // Encode the middelnaam to handle special characters in the URL
+        router.push(`/middelmatrix/${encodeURIComponent(middelnaam)}`);
     };
 
     return (
@@ -239,10 +290,10 @@ export function MiddelMatrixClientPage({ initialData }: { initialData: Middel[] 
                                 <TableBody>
                                     {filteredData.length > 0 ? (
                                         filteredData.map(item => (
-                                            <TableRow key={item.id} onClick={() => handleRowClick(item.id)} className="cursor-pointer">
+                                            <TableRow key={item.id} onClick={() => handleRowClick(item['Middelnaam'])} className="cursor-pointer">
                                                 {headers.map(header => (
-                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top truncate">
-                                                        {item[header] || '-'}
+                                                    <TableCell key={`${item.id}-${header}`} className="max-w-xs align-top">
+                                                       <CollapsibleCell content={String(item[header] || '-')} />
                                                     </TableCell>
                                                 ))}
                                             </TableRow>

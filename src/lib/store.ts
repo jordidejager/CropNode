@@ -2,6 +2,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog } from './types';
 import { staticProductsData } from './data';
@@ -52,6 +53,22 @@ export async function getMiddelen(db: Firestore): Promise<Middel[]> {
       return [];
   }
 }
+
+export async function getMiddelenByName(db: Firestore, name: string): Promise<Middel[]> {
+    if (!db) return [];
+    try {
+        const q = query(collection(db, MIDDELEN_COLLECTION), where("Middelnaam", "==", name));
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            return [];
+        }
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Middel));
+    } catch (e) {
+        console.error(`Error fetching middelen with name ${name}:`, e);
+        return [];
+    }
+}
+
 
 export async function getMiddel(db: Firestore, id: string): Promise<Middel | null> {
     if (!db) return null;
