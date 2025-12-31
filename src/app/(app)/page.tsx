@@ -32,8 +32,8 @@ export default function InvoerPage() {
     loadData();
   }, [loadData]);
 
-  const handleEntryDeleted = useCallback((deletedEntryId: string) => {
-    setEntries(prevEntries => prevEntries.filter(entry => entry.id !== deletedEntryId));
+  const handleEntryDeleted = useCallback((deletedEntryIds: string[]) => {
+    setEntries(prevEntries => prevEntries.filter(entry => !deletedEntryIds.includes(entry.id)));
   }, []);
   
   const handleEntryConfirmed = useCallback(() => {
@@ -48,7 +48,7 @@ export default function InvoerPage() {
       </TabsList>
       <TabsContent value="invoer" className="mt-6">
         <div className="flex justify-center items-center h-full">
-          <InvoerInterface />
+          <InvoerInterface onNewEntry={loadData} />
         </div>
       </TabsContent>
       <TabsContent value="logboek" className="mt-6">

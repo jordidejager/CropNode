@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference } from './types';
 
@@ -34,7 +25,6 @@ export async function getUserPreferences(db: Firestore): Promise<UserPreference[
 export async function setUserPreference(db: Firestore, preference: Omit<UserPreference, 'id'>): Promise<void> {
     if (!db) throw new Error("Database not initialized");
     // Use the alias as the document ID to easily update/overwrite it.
-    // Firestore does not allow spaces in document IDs, so we replace them.
     const docId = preference.alias.replace(/\s+/g, '-').toLowerCase();
     const docRef = doc(db, USER_PREFERENCES_COLLECTION, docId);
     await setDoc(docRef, preference, { merge: true });
@@ -237,7 +227,7 @@ export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Pr
     await setDoc(docRef, dataToSave, { merge: true });
 }
 
-export async function deleteLogbookEntry(db: Firestore, entryId: string): Promise<void> {
+export async function dbDeleteLogbookEntry(db: Firestore, entryId: string): Promise<void> {
   if (!db) throw new Error("Database not initialized");
   // Also delete related history entries
   const historyQuery = query(collection(db, HISTORY_COLLECTION), where("logId", "==", entryId));
@@ -251,6 +241,32 @@ export async function deleteLogbookEntry(db: Firestore, entryId: string): Promis
   batch.delete(logbookDocRef);
   
   await batch.commit();
+}
+
+export async function dbDeleteLogbookEntries(db: Firestore, entryIds: string[]): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    if (entryIds.length === 0) return;
+
+    const batch = writeBatch(db);
+
+    // Delete related history entries
+    // Firestore 'in' query is limited to 30 values. We need to batch this.
+    for (let i = 0; i < entryIds.length; i += 30) {
+        const chunkIds = entryIds.slice(i, i + 30);
+        const historyQuery = query(collection(db, HISTORY_COLLECTION), where("logId", "in", chunkIds));
+        const historySnapshot = await getDocs(historyQuery);
+        historySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+    }
+
+    // Delete logbook entries
+    entryIds.forEach(id => {
+        const logbookDocRef = doc(db, LOGBOOK_COLLECTION, id);
+        batch.delete(logbookDocRef);
+    });
+
+    await batch.commit();
 }
 
 

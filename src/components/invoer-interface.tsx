@@ -31,7 +31,7 @@ function deserializeEntry(serializableEntry: FormState['entry']): LogbookEntry |
 }
 
 
-export function InvoerInterface() {
+export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
   const [state, formAction] = useActionState(processSprayEntry, { message: '', errors: {} });
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -98,6 +98,7 @@ export function InvoerInterface() {
         title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
         description: result.message,
       });
+      onNewEntry();
       resetInterface();
     });
   }
@@ -121,8 +122,11 @@ export function InvoerInterface() {
        if (entry?.parsedData?.products) {
          setOriginalProducts(JSON.parse(JSON.stringify(entry.parsedData.products)));
        }
+       if (entry?.status !== 'Fout') {
+         onNewEntry();
+       }
     }
-  }, [state.entry]);
+  }, [state.entry, onNewEntry]);
 
   useEffect(() => {
     if (state.message && showResult && !isProcessing) {

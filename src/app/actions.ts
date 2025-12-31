@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, deleteLogbookEntry as dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -280,6 +280,15 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
 export async function deleteLogbookEntry(entryId: string) {
     const { firestore } = initializeFirebase();
     await dbDeleteLogbookEntry(firestore, entryId);
+    revalidatePath('/');
+    revalidatePath('/logboek');
+    revalidatePath('/perceelhistorie');
+}
+
+export async function deleteLogbookEntries(entryIds: string[]) {
+    const { firestore } = initializeFirebase();
+    await dbDeleteLogbookEntries(firestore, entryIds);
+    revalidatePath('/');
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
 }
@@ -342,6 +351,53 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: false, message };
     }
 }
+
+export async function confirmLogbookEntries(entryIds: string[]): Promise<{ success: boolean; message?: string, count: number }> {
+    const { firestore } = initializeFirebase();
+    let confirmedCount = 0;
+    try {
+        const allParcels = await getParcels(firestore);
+        
+        for (const entryId of entryIds) {
+            const entry = await getLogbookEntry(firestore, entryId);
+            if (!entry || !entry.parsedData) continue;
+            
+            const { isValid } = await validateSprayData(firestore, entry.parsedData, allParcels);
+            if (!isValid) continue; // Skip entries that are not valid
+
+            entry.status = 'Akkoord';
+            entry.validationMessage = '';
+            await updateLogbookEntry(firestore, entry);
+
+            const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.map(parcelId => {
+                return entry.parsedData!.products.map(productEntry => ({
+                    logId: entry.id,
+                    parcelId: parcelId,
+                    product: productEntry.product,
+                    dosage: productEntry.dosage,
+                    unit: productEntry.unit,
+                    date: new Date(entry.date),
+                    parcelName: '', 
+                    crop: '', 
+                    variety: ''
+                }));
+            }).flat();
+            await addParcelHistoryEntries(firestore, historyEntries, allParcels);
+            confirmedCount++;
+        }
+
+        if (confirmedCount > 0) {
+            revalidatePath('/logboek');
+            revalidatePath('/perceelhistorie');
+        }
+
+        return { success: true, count: confirmedCount };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Onbekende fout.';
+        return { success: false, message, count: 0 };
+    }
+}
+
 
 const fileSchema = z.object({
     file: z.instanceof(File),
@@ -409,5 +465,6 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
         return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
+
 
     
