@@ -203,6 +203,9 @@ async function learnFromCorrection(db: Firestore, originalProduct: string, corre
     
     if (originalFirstWord === correctedFirstWord) {
         await setUserPreference(db, { alias: originalFirstWord, preferred: correctedProduct });
+    } else {
+        // Also learn if the user typed an alias and it was corrected.
+        await setUserPreference(db, { alias: originalProduct, preferred: correctedProduct });
     }
 }
 
@@ -221,7 +224,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
 
     if (isValid) {
         updatedEntryData.status = 'Akkoord';
-        delete updatedEntryData.validationMessage;
+        updatedEntryData.validationMessage = ''; // Clear validation message
     } else {
         updatedEntryData.status = 'Te Controleren';
         updatedEntryData.validationMessage = validationMessage;

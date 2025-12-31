@@ -6,6 +6,7 @@
 
 
 
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference } from './types';
 
@@ -33,7 +34,9 @@ export async function getUserPreferences(db: Firestore): Promise<UserPreference[
 export async function setUserPreference(db: Firestore, preference: Omit<UserPreference, 'id'>): Promise<void> {
     if (!db) throw new Error("Database not initialized");
     // Use the alias as the document ID to easily update/overwrite it.
-    const docRef = doc(db, USER_PREFERENCES_COLLECTION, preference.alias);
+    // Firestore does not allow spaces in document IDs, so we replace them.
+    const docId = preference.alias.replace(/\s+/g, '-').toLowerCase();
+    const docRef = doc(db, USER_PREFERENCES_COLLECTION, docId);
     await setDoc(docRef, preference, { merge: true });
 }
 
@@ -230,7 +233,8 @@ export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Pr
     if (!db) throw new Error("Database not initialized");
     const { id, ...data } = entry;
     const docRef = doc(db, LOGBOOK_COLLECTION, id);
-    await setDoc(docRef, data, { merge: true });
+    const dataToSave = { ...data, date: Timestamp.fromDate(new Date(data.date)) };
+    await setDoc(docRef, dataToSave, { merge: true });
 }
 
 export async function deleteLogbookEntry(db: Firestore, entryId: string): Promise<void> {
@@ -281,6 +285,18 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
 export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[], parcels: Parcel[]) {
   if (!db) throw new Error("Database not initialized");
   const batch = writeBatch(db);
+  
+  // First, find all existing history entries for the logIds in this batch to prevent duplicates.
+  const logIds = [...new Set(entries.map(e => e.logId))];
+  if (logIds.length === 0) return;
+
+  const q = query(collection(db, HISTORY_COLLECTION), where('logId', 'in', logIds));
+  const existingDocs = await getDocs(q);
+  existingDocs.forEach(doc => {
+    batch.delete(doc.ref);
+  });
+
+
   entries.forEach(entry => {
     const parcel = parcels.find(p => p.id === entry.parcelId);
     if (parcel) {
