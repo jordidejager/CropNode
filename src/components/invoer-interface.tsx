@@ -41,7 +41,10 @@ export function InvoerInterface() {
 
   const [showResult, setShowResult] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  const [currentEntry, setCurrentEntry] = useState<LogbookEntry | null>(null);
   const [editableEntry, setEditableEntry] = useState<LogbookEntry | null>(null);
+  
   const [originalProducts, setOriginalProducts] = useState<ProductEntry[]>([]);
   const [allProducts, setAllProducts] = useState<string[]>([]);
   const [allParcels, setAllParcels] = useState<Parcel[]>([]);
@@ -70,6 +73,7 @@ export function InvoerInterface() {
     setShowResult(true);
     setIsEditing(false); 
     setEditableEntry(null);
+    setCurrentEntry(null);
     const textarea = formRef.current?.querySelector('textarea');
     if (textarea) {
         textarea.value = '';
@@ -81,12 +85,15 @@ export function InvoerInterface() {
     setShowResult(false);
     setIsEditing(false);
     setEditableEntry(null);
+    setCurrentEntry(null);
   }
 
   const handleConfirm = () => {
-    if (!editableEntry) return;
+    const entryToConfirm = currentEntry;
+    if (!entryToConfirm) return;
+
     startConfirmTransition(async () => {
-      const result = await updateAndConfirmEntry(editableEntry, originalProducts);
+      const result = await updateAndConfirmEntry(entryToConfirm, originalProducts);
       toast({
         title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
         description: result.message,
@@ -96,47 +103,50 @@ export function InvoerInterface() {
   }
 
   const startEditing = () => {
-    if (state.entry) {
-      const entry = deserializeEntry(state.entry);
-      setEditableEntry(entry ? JSON.parse(JSON.stringify(entry)) : null); // Deep copy
+    if (currentEntry) {
+      setEditableEntry(JSON.parse(JSON.stringify(currentEntry))); // Deep copy for editing
       setIsEditing(true);
     }
   };
   
+  const saveEditing = () => {
+    setCurrentEntry(editableEntry);
+    setIsEditing(false);
+  }
+
   useEffect(() => {
     if (state.entry) {
        const entry = deserializeEntry(state.entry);
+       setCurrentEntry(entry);
        if (entry?.parsedData?.products) {
          setOriginalProducts(JSON.parse(JSON.stringify(entry.parsedData.products)));
        }
-       setEditableEntry(entry ? JSON.parse(JSON.stringify(entry)) : null);
     }
   }, [state.entry]);
 
   useEffect(() => {
     if (state.message && showResult && !isProcessing) {
-      const entry = deserializeEntry(state.entry);
-      if (entry?.status === 'Fout') {
+      if (currentEntry?.status === 'Fout') {
         toast({
             variant: 'destructive',
             title: 'Fout bij verwerking',
-            description: entry.validationMessage || 'De AI kon de invoer niet analyseren.',
+            description: currentEntry.validationMessage || 'De AI kon de invoer niet analyseren.',
         });
-      } else if (entry) {
+      } else if (currentEntry) {
         toast({
             title: 'Analyse voltooid',
-            description: `Status: ${entry.status}. ${entry.validationMessage || ''}`,
+            description: `Status: ${currentEntry.status}. ${currentEntry.validationMessage || ''}`,
         });
       }
     }
-  }, [state, toast, showResult, isProcessing]);
+  }, [state, toast, showResult, isProcessing, currentEntry]);
 
   const getParcelNames = (plotIds: string[] = []) => {
     if (plotIds.length === 0) return 'Geen';
     return plotIds.map(id => allParcels.find(p => p.id === id)?.name || id).join(', ');
   }
   
-  const entryToDisplay = isEditing ? editableEntry : deserializeEntry(state.entry);
+  const entryToDisplay = isEditing ? editableEntry : currentEntry;
 
   const handleParcelsChange = (selectedIds: string[]) => {
     if (editableEntry && editableEntry.parsedData) {
@@ -162,8 +172,8 @@ export function InvoerInterface() {
     }
   };
 
-  const displayProducts = isEditing ? editableEntry?.parsedData?.products || [] : deserializeEntry(state.entry)?.parsedData?.products || [];
-  const displayPlots = isEditing ? editableEntry?.parsedData?.plots || [] : deserializeEntry(state.entry)?.parsedData?.plots || [];
+  const displayProducts = entryToDisplay?.parsedData?.products || [];
+  const displayPlots = entryToDisplay?.parsedData?.plots || [];
   
   if (loading) {
       return (
@@ -260,7 +270,7 @@ export function InvoerInterface() {
                         <>
                             <Button variant="ghost" onClick={resetInterface}><X className="mr-2"/> Annuleren</Button>
                             {isEditing ? (
-                              <Button onClick={() => setIsEditing(false)}><Check className="mr-2"/> Opslaan</Button>
+                              <Button onClick={saveEditing}><Check className="mr-2"/> Opslaan</Button>
                             ) : (
                               <Button variant="outline" onClick={startEditing}><Pencil className="mr-2"/> Aanpassen</Button>
                             )}
