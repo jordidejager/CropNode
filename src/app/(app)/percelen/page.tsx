@@ -7,7 +7,7 @@ import type { Parcel } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { MoreHorizontal, PlusCircle, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -36,13 +36,10 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     const wmsLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
     useEffect(() => {
-        if (!mapContainerRef.current) return;
-        if (mapRef.current) return; // Initialize map only once
+        if (!mapContainerRef.current || mapRef.current) return;
 
-        const map = L.map(mapContainerRef.current);
+        const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
         mapRef.current = map;
-        
-        map.setView([52.1326, 5.2913], 8); // Center of NL
 
         L.tileLayer(
             "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
@@ -59,44 +56,60 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
         map.addLayer(drawnItemsRef.current);
 
-        map.on('click', async (e) => {
-            if (!mapRef.current || !wmsLayerRef.current) return;
-            const map = mapRef.current;
-            const point = map.latLngToContainerPoint(e.latlng);
-            const size = map.getSize();
-            const bounds = map.getBounds();
-            
-             const params = {
+        map.on('click', async (e: L.LeafletMouseEvent) => {
+            const mapInstance = mapRef.current;
+            if (!mapInstance || !wmsLayerRef.current?.wmsParams) return;
+        
+            const point = mapInstance.latLngToContainerPoint(e.latlng, mapInstance.getZoom());
+            const size = mapInstance.getSize();
+            const bounds = mapInstance.getBounds();
+            const sw = bounds.getSouthWest();
+            const ne = bounds.getNorthEast();
+
+            const params = {
                 request: 'GetFeatureInfo',
                 service: 'WMS',
                 version: '1.3.0',
                 layers: wmsLayerRef.current.wmsParams.layers,
                 styles: '',
-                bbox: `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`,
+                bbox: `${sw.lat},${sw.lng},${ne.lat},${ne.lng}`,
                 width: size.x,
                 height: size.y,
                 query_layers: wmsLayerRef.current.wmsParams.layers,
                 info_format: 'application/json',
-                crs: 'EPSG:4326',
+                crs: 'EPSG:4326', // Request info in standard lat/lng
                 i: Math.round(point.x),
                 j: Math.round(point.y),
             };
-
+            
             const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
             
             try {
                 const response = await fetch(url);
+                if (!response.ok) throw new Error(`Server responded with ${response.status}`);
                 const data = await response.json();
-
+                
                 if (data.features && data.features.length > 0) {
                     const feature = data.features[0];
-                    const areaHectares = feature.properties.OPPERVLAKTE / 10000;
-                    const location = L.GeoJSON.geometryToLayer(feature.geometry).getLatLngs()[0].map((ll: L.LatLng) => ({ lat: ll.lat, lng: ll.lng }));
+                    const properties = feature.properties;
+                    const geometry = feature.geometry;
+
+                    const areaHectares = properties.OPPERVLAKTE / 10000;
                     
+                    // The geometry from GetFeatureInfo is in GeoJSON format.
+                    // Leaflet's GeoJSON layer can handle it directly.
+                    // We need to extract the coordinates for our own use.
+                    const geoJsonLayer = L.geoJSON(geometry);
+                    const layer = geoJsonLayer.getLayers()[0] as L.Polygon;
+                    const latLngs = layer.getLatLngs()[0] as L.LatLng[];
+                    const location = latLngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+
                     onParcelClick({
                         area: parseFloat(areaHectares.toFixed(4)),
                         location: location,
                     });
+                } else {
+                     console.log("No features found at this location.");
                 }
             } catch (error) {
                 console.error("Error fetching feature info:", error);
@@ -144,7 +157,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     }, [parcels]);
 
     return (
-        <div ref={mapContainerRef} style={{ height: '100%', width: '100%', cursor: 'pointer' }}></div>
+        <div ref={mapContainerRef} style={{ height: '100%', width: '100%', cursor: 'crosshair' }}></div>
     );
 };
 
