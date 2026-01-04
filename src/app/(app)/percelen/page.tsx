@@ -38,7 +38,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
-        const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
+        const map = L.map(mapContainerRef.current, {
+            crs: L.CRS.EPSG3857
+        }).setView([52.1326, 5.2913], 8);
         mapRef.current = map;
 
         L.tileLayer(
@@ -55,34 +57,32 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         }).addTo(map);
 
         map.addLayer(drawnItemsRef.current);
-
+        
         map.on('click', async (e: L.LeafletMouseEvent) => {
             const mapInstance = mapRef.current;
             if (!mapInstance || !wmsLayerRef.current?.wmsParams) return;
-        
-            const point = mapInstance.latLngToContainerPoint(e.latlng, mapInstance.getZoom());
+
             const size = mapInstance.getSize();
-            
-            const bounds = mapInstance.getBounds()
-            const sw = bounds.getSouthWest();
-            const ne = bounds.getNorthEast();
+            const bounds = mapInstance.getBounds();
+            const sw = mapInstance.project(bounds.getSouthWest());
+            const ne = mapInstance.project(bounds.getNorthEast());
 
             const params = {
                 request: 'GetFeatureInfo',
                 service: 'WMS',
-                version: '1.1.1',
+                version: '1.3.0',
                 layers: wmsLayerRef.current.wmsParams.layers,
                 styles: '',
-                bbox: `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`,
+                bbox: `${sw.x},${sw.y},${ne.x},${ne.y}`,
                 width: size.x,
                 height: size.y,
                 query_layers: wmsLayerRef.current.wmsParams.layers,
                 info_format: 'application/json',
-                srs: 'EPSG:4326',
-                x: Math.round(point.x),
-                y: Math.round(point.y),
+                crs: 'EPSG:3857',
+                i: Math.round(e.containerPoint.x),
+                j: Math.round(e.containerPoint.y),
             };
-            
+
             const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
             
             try {
