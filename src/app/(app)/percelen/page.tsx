@@ -38,11 +38,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
-        const map = L.map(mapContainerRef.current, {
-            crs: L.CRS.EPSG3857,
-        }).setView([52.1326, 5.2913], 8);
+        const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
         mapRef.current = map;
-
+        
         L.tileLayer(
             "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
             { attribution: 'Kaartgegevens &copy; <a href="https://www.pdok.nl/" target="_blank">PDOK</a>' }
@@ -143,7 +141,8 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
                     color: 'hsl(var(--destructive))',
                     weight: 3,
-                    fillOpacity: 0.1
+                    fillOpacity: 0.1,
+                    interactive: false // This is the key change to prevent clicks on this layer
                 }).addTo(drawnItems);
                 
                 polygon.bindTooltip(`
