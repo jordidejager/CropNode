@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -36,6 +37,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
     const selectionLayerRef = useRef<L.GeoJSON | null>(null);
 
+    const WMS_LAYER_NAME = 'brpgewaspercelen_definitief_2023';
+    const WFS_TYPE_NAME = 'brpgewaspercelen_definitief'; // Corrected TypeName
+
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
@@ -46,9 +50,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             { attribution: '&copy; OpenStreetMap contributors' }
         ).addTo(map);
-
-        const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
-        const WFS_TYPE_NAME = 'brpgewaspercelen_definitief_2023';
 
         L.tileLayer.wms('https://service.pdok.nl/rvo/brpgewaspercelen/wms/v1_0', {
             layers: WMS_LAYER_NAME,
@@ -71,8 +72,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             wfsUrl.searchParams.append('service', 'WFS');
             wfsUrl.searchParams.append('version', '2.0.0');
             wfsUrl.searchParams.append('request', 'GetFeature');
-            wfsUrl.searchParams.append('typeName', WFS_TYPE_NAME);
+            wfsUrl.searchParams.append('typeName', WFS_TYPE_NAME); // Use corrected TypeName
             wfsUrl.searchParams.append('outputFormat', 'application/json');
+            wfsUrl.searchParams.append('viewparams', 'jaar:2023');
             wfsUrl.searchParams.append('cql_filter', `INTERSECTS(geom, POINT(${lng} ${lat}))`);
 
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
@@ -94,7 +96,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     if (selectionLayerRef.current) {
                         mapInstance.removeLayer(selectionLayerRef.current);
                     }
-                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2}}).addTo(mapInstance);
+                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
                     onParcelClick({
                         area: properties.oppervlakte || 0,
@@ -146,7 +148,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
              const allLatLngs = parcelsWithLocation.flatMap(parcel => 
                 (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
             ) as L.LatLngExpression[];
-            if (allLatLngs.length > 0 && mapRef.current) {
+            if (allLatLngs.length > 0 && mapRef.current && !selectionLayerRef.current) {
                 const bounds = L.latLngBounds(allLatLngs);
                 mapRef.current.fitBounds(bounds, { padding: [50, 50] });
             }
@@ -404,5 +406,7 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
 
     
