@@ -113,9 +113,27 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    const areaString = String(properties.OPPERVLAKTE || '0').replace(',', '.');
-                    const areaInHa = parseFloat(areaString) / 10000;
+                    // 1. Haal de ruwe waarde op, probeer zowel kleine letters als hoofdletters
+                    const rawArea = properties.oppervlakte !== undefined ? properties.oppervlakte : properties.OPPERVLAKTE;
+                    let areaInHa = 0;
+
+                    // 2. Check het type en converteer veilig
+                    if (typeof rawArea === 'number') {
+                        areaInHa = rawArea;
+                    } else if (typeof rawArea === 'string') {
+                        // Vervang komma door punt en parse
+                        areaInHa = parseFloat(rawArea.replace(',', '.'));
+                    }
+
+                    // 3. Sanity check voor eenheid (m2 vs Ha)
+                    // Een perceel is zelden groter dan 500 hectare. Als het getal > 500 is, is het waarschijnlijk m2.
+                    if (areaInHa > 500) {
+                        areaInHa = areaInHa / 10000;
+                    }
                     
+                    // 4. Voeg console log toe voor debugging
+                    console.log('Gevonden perceel data:', properties, 'Berekende ha:', areaInHa);
+
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
                     
