@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -113,42 +112,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
-                    const oppWaarde = properties.oppervlakte;
-                    
-                    let area = 0;
-                    if (oppWaarde) {
-                       // Vervang komma door punt en maak er een getal van
-                       area = parseFloat(String(oppWaarde).replace(',', '.'));
-                    }
-
-                    console.log('RVO Properties Debug:', properties);
-                    console.log('Gevonden oppervlakte:', oppWaarde, '-> Converteerd:', area);
-
-                    const layer = L.geoJSON(feature);
-                    const center = layer.getBounds().getCenter();
-                    
-                    const rvoData: RvoData = {
-                        area: area,
-                        location: { lat: center.lat, lng: center.lng },
-                        geometry: feature.geometry,
-                        name: gewasNaam
-                    };
-
-                    const PopupContent = () => (
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-base">{rvoData.name}</h4>
-                        <p>Oppervlakte: {rvoData.area.toFixed(4)} ha</p>
-                        <button 
-                          onClick={() => (window as any).handleAddParcel(rvoData)}
-                          className="w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                        >
-                          Voeg perceel toe
-                        </button>
-                      </div>
-                    );
-
-                    popup.setContent(ReactDOMServer.renderToString(<PopupContent />));
+                    popup.setContent(`<pre>${JSON.stringify(properties, null, 2)}</pre>`);
                     popup.update();
 
                 } else {
@@ -460,10 +424,3 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
 }
 
     
-
-    
-
-    
-
-    
-
