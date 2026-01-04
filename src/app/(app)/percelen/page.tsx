@@ -278,7 +278,7 @@ export default function PercelenPage() {
                             </TableRow>
                           ))
                         ) : Object.keys(groupedParcels).length > 0 ? (
-                           Object.entries(groupedParcels).map(([name, subParcels]) => {
+                           Object.entries(groupedParcels).flatMap(([name, subParcels]) => {
                                 const totalArea = subParcels.reduce((sum, p) => sum + (p.area || 0), 0);
                                 const isCollapsible = subParcels.length > 1;
 
