@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
@@ -96,9 +96,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const areaHectares = properties.OPPERVLAKTE / 10000;
                     
-                    // The geometry from GetFeatureInfo is in GeoJSON format.
-                    // Leaflet's GeoJSON layer can handle it directly.
-                    // We need to extract the coordinates for our own use.
                     const geoJsonLayer = L.geoJSON(geometry);
                     const layer = geoJsonLayer.getLayers()[0] as L.Polygon;
                     const latLngs = layer.getLatLngs()[0] as L.LatLng[];
@@ -125,7 +122,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     }, [onParcelClick]);
 
     useEffect(() => {
-        // Update user-drawn parcels on the map
         const drawnItems = drawnItemsRef.current;
         drawnItems.clearLayers();
         const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
@@ -133,9 +129,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         if (parcelsWithLocation.length > 0) {
             parcelsWithLocation.forEach(parcel => {
                 const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
-                    color: 'hsl(var(--destructive))', // Red border
+                    color: 'hsl(var(--destructive))',
                     weight: 3,
-                    fillOpacity: 0.1 // Mostly transparent fill
+                    fillOpacity: 0.1
                 }).addTo(drawnItems);
                 
                 polygon.bindTooltip(`
@@ -169,6 +165,7 @@ export default function PercelenPage() {
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
   const [rvoData, setRvoData] = useState<RvoData | null>(null);
   const [activeTab, setActiveTab] = useState('list');
+  const [openStates, setOpenStates] = useState<Record<string, boolean>>({});
   
   const db = useFirestore();
   const { toast } = useToast();
@@ -234,6 +231,10 @@ export default function PercelenPage() {
     (acc[parcel.name] = acc[parcel.name] || []).push(parcel);
     return acc;
   }, {} as Record<string, Parcel[]>);
+  
+  const toggleOpen = (name: string) => {
+    setOpenStates(prev => ({...prev, [name]: !prev[name]}));
+  }
 
 
   return (
@@ -296,42 +297,37 @@ export default function PercelenPage() {
                                         </TableRow>
                                     );
                                 }
+                                
+                                const isOpen = openStates[name] || false;
 
-                                return (
-                                    <Collapsible asChild key={name} defaultOpen={false}>
-                                        <>
-                                            <TableRow className="font-medium bg-muted/50">
-                                                <TableCell>
-                                                  <CollapsibleTrigger asChild>
-                                                      <button className="flex items-center gap-2 w-full text-left">
-                                                         <ChevronRight className="h-4 w-4 transition-transform data-[state=open]:rotate-90" />
-                                                         {name}
-                                                      </button>
-                                                  </CollapsibleTrigger>
-                                                </TableCell>
-                                                <TableCell>{subParcels[0].crop}</TableCell>
-                                                <TableCell>{subParcels.length} rassen</TableCell>
-                                                <TableCell className="text-right">{totalArea.toFixed(2)}</TableCell>
-                                                <TableCell></TableCell>
-                                            </TableRow>
-                                            <CollapsibleContent asChild>
-                                                <>
-                                                    {subParcels.map((parcel, index) => (
-                                                        <TableRow key={parcel.id} className="bg-background hover:bg-muted/50">
-                                                            <TableCell className="pl-12 text-muted-foreground"></TableCell>
-                                                            <TableCell className="text-muted-foreground"></TableCell>
-                                                            <TableCell className="text-muted-foreground">{parcel.variety}</TableCell>
-                                                            <TableCell className="text-right text-muted-foreground">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
-                                                            <TableCell>
-                                                                <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </>
-                                            </CollapsibleContent>
-                                        </>
-                                    </Collapsible>
+                                const triggerRow = (
+                                    <TableRow key={`${name}-trigger`} onClick={() => toggleOpen(name)} className="font-medium bg-muted/50 cursor-pointer">
+                                        <TableCell>
+                                            <div className="flex items-center gap-2 w-full text-left">
+                                                 <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
+                                                 {name}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{subParcels[0].crop}</TableCell>
+                                        <TableCell>{subParcels.length} rassen</TableCell>
+                                        <TableCell className="text-right">{totalArea.toFixed(2)}</TableCell>
+                                        <TableCell></TableCell>
+                                    </TableRow>
                                 );
+
+                                const contentRows = isOpen ? subParcels.map((parcel) => (
+                                    <TableRow key={parcel.id} className="bg-background hover:bg-muted/50">
+                                        <TableCell className="pl-12 text-muted-foreground"></TableCell>
+                                        <TableCell className="text-muted-foreground"></TableCell>
+                                        <TableCell className="text-muted-foreground">{parcel.variety}</TableCell>
+                                        <TableCell className="text-right text-muted-foreground">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
+                                        <TableCell>
+                                            <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
+                                        </TableCell>
+                                    </TableRow>
+                                )) : [];
+
+                                return [triggerRow, ...contentRows];
                            })
                         ) : (
                           <TableRow>
