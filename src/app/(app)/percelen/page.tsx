@@ -69,17 +69,17 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             const params = {
                 request: 'GetFeatureInfo',
                 service: 'WMS',
-                version: '1.3.0',
+                version: '1.1.1', // This is the correct version for GetFeatureInfo
                 layers: wmsLayerRef.current.wmsParams.layers,
                 styles: '',
-                bbox: `${sw.lat},${sw.lng},${ne.lat},${ne.lng}`,
+                bbox: `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`,
                 width: size.x,
                 height: size.y,
                 query_layers: wmsLayerRef.current.wmsParams.layers,
                 info_format: 'application/json',
-                crs: 'EPSG:4326', // Request info in standard lat/lng
-                i: Math.round(point.x),
-                j: Math.round(point.y),
+                srs: 'EPSG:4326', // Request info in standard lat/lng
+                x: Math.round(point.x),
+                y: Math.round(point.y),
             };
             
             const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
@@ -403,3 +403,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
