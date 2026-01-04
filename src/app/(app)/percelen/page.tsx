@@ -34,12 +34,12 @@ if (typeof window !== 'undefined') {
 const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 
+
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
     const selectionLayerRef = useRef<L.GeoJSON | null>(null);
-
 
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
@@ -65,18 +65,18 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         map.on('click', async (e: L.LeafletMouseEvent) => {
             const mapInstance = mapRef.current;
             if (!mapInstance) return;
-
+            
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
 
             const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
             const params = new URLSearchParams({
                 service: 'WFS',
-                version: '1.1.0', // Correct version for this typeName
+                version: '2.0.0',
                 request: 'GetFeature',
-                typeName: WFS_TYPE_NAME, // Correct typeName with prefix
+                typeName: WFS_TYPE_NAME,
                 outputFormat: 'application/json',
-                srsname: 'EPSG:4326', // Request output in Lat/Lng
+                count: '1',
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             });
             wfsUrl.search = params.toString();
@@ -84,28 +84,35 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl.toString());
+                const response = await fetch(wfsUrl);
+                const textResponse = await response.text();
+
                 if (!response.ok) {
-                    console.error(`Server responded with ${response.status}: ${await response.text()}`);
+                    console.error(`Server responded with ${response.status}: ${textResponse}`);
                     throw new Error(`Server responded with ${response.status}`);
                 }
-                const data = await response.json();
                 
+                let data;
+                try {
+                    data = JSON.parse(textResponse);
+                } catch(e) {
+                     console.error("Failed to parse JSON:", textResponse);
+                     throw new Error("Ongeldig antwoord van de server ontvangen.");
+                }
+
                 if (data.features && data.features.length > 0) {
-                    mapInstance.closePopup();
-                    const feature = data.features[0];
-                    const properties = feature.properties;
-
                     if (selectionLayerRef.current) {
-                        mapInstance.removeLayer(selectionLayerRef.current);
+                      mapInstance.removeLayer(selectionLayerRef.current);
                     }
-                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
+                    selectionLayerRef.current = L.geoJSON(data.features[0], {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
+                    const properties = data.features[0].properties;
                     onParcelClick({
-                        area: properties.OPPERVLAKTE || 0,
-                        location: L.GeoJSON.coordsToLatLngs(feature.geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
+                        area: properties.OPPERVLAKTE ? parseFloat(properties.OPPERVLAKTE.replace(',', '.')) : 0,
+                        location: L.GeoJSON.coordsToLatLngs(data.features[0].geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
                         name: properties.GEWASCODE || ''
                     });
+                     mapInstance.closePopup();
 
                 } else {
                      mapInstance.closePopup();
@@ -114,6 +121,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             } catch (error) {
                 console.error("Error fetching WFS data:", error);
                 mapInstance.closePopup();
+                alert(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
             }
         });
 
@@ -152,8 +160,12 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
             ) as L.LatLngExpression[];
             if (allLatLngs.length > 0 && mapRef.current && !selectionLayerRef.current) {
-                const bounds = L.latLngBounds(allLatLngs);
-                mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+                try {
+                    const bounds = L.latLngBounds(allLatLngs);
+                    mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+                } catch (e) {
+                    console.error("Could not set bounds:", e);
+                }
             }
         }
     }, [parcels]);
