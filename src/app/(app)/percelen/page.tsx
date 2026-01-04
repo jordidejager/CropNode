@@ -47,7 +47,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         ).addTo(map);
 
         const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
-        const WFS_TYPE_NAME = 'brpgewaspercelen_definitief_2023';
+        const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 
         L.tileLayer.wms('https://service.pdok.nl/rvo/brpgewaspercelen/wms/v1_0', {
             layers: WMS_LAYER_NAME,
