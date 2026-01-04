@@ -40,10 +40,12 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/pdok-wms',
-        destination: 'https://geodata.nationaalgeoregister.nl/brpgewaspercelen/wms',
+        destination: 'https://service.pdok.nl/brpgewaspercelen/wms',
       },
     ]
   },
 };
 
 export default nextConfig;
+
+    

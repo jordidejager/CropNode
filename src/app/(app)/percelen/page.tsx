@@ -53,6 +53,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             layers: 'brpgewaspercelen',
             format: 'image/png',
             transparent: true,
+            version: '1.3.0',
             attribution: 'BRP Gewaspercelen &copy; RVO'
         }).addTo(map);
 
@@ -65,20 +66,20 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             const size = map.getSize();
             const bounds = map.getBounds();
             
-            const params = {
+             const params = {
                 request: 'GetFeatureInfo',
                 service: 'WMS',
-                version: wmsLayerRef.current.wmsParams.version || '1.1.1',
+                version: '1.3.0',
                 layers: wmsLayerRef.current.wmsParams.layers,
                 styles: '',
-                bbox: bounds.toBBoxString(),
+                bbox: `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`,
                 width: size.x,
                 height: size.y,
                 query_layers: wmsLayerRef.current.wmsParams.layers,
                 info_format: 'application/json',
-                srs: 'EPSG:4326',
-                x: Math.round(point.x),
-                y: Math.round(point.y),
+                crs: 'EPSG:4326',
+                i: Math.round(point.x),
+                j: Math.round(point.y),
             };
 
             const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
@@ -393,3 +394,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
