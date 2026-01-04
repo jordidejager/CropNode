@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
+import ReactDOMServer from 'react-dom/server';
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -63,6 +64,14 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         
         map.addLayer(drawnItemsRef.current);
         
+        const popup = L.popup();
+
+        const handleAddParcel = (rvoData: RvoData) => {
+          onParcelClick(rvoData);
+        }
+
+        (window as any).handleAddParcel = handleAddParcel;
+        
         map.on('click', async (e: L.LeafletMouseEvent) => {
             const mapInstance = mapRef.current;
             if (!mapInstance) return;
@@ -83,7 +92,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             }).toString();
 
-            const popup = L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
+            popup.setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
                 const response = await fetch(wfsUrl.toString());
@@ -115,22 +124,35 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
                     
-                    onParcelClick({
+                    const rvoData: RvoData = {
                         area: areaInHa,
                         location: { lat: center.lat, lng: center.lng },
                         geometry: feature.geometry,
                         name: properties.GEWASCODE || ''
-                    });
-                     popup.close();
+                    };
+
+                    const PopupContent = () => (
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-base">{rvoData.name}</h4>
+                        <p>Oppervlakte: {rvoData.area.toFixed(3)} ha</p>
+                        <button 
+                          onClick={() => (window as any).handleAddParcel(rvoData)}
+                          className="w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        >
+                          Voeg perceel toe
+                        </button>
+                      </div>
+                    );
+
+                    popup.setContent(ReactDOMServer.renderToString(<PopupContent />));
+                    popup.update();
 
                 } else {
-                     popup.close();
-                     alert("Geen landbouwperceel gevonden op deze locatie.");
+                     popup.setContent("Geen landbouwperceel gevonden op deze locatie.");
                 }
             } catch (error) {
                 console.error("Error fetching WFS data:", error);
-                popup.close();
-                alert(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
+                popup.setContent(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
             }
         });
 
@@ -431,3 +453,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
