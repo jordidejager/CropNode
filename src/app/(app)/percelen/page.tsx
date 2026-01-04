@@ -80,10 +80,10 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             }).toString();
 
-            L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
+            const popup = L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl);
+                const response = await fetch(wfsUrl.toString());
                 const textResponse = await response.text();
 
                 if (!response.ok) {
@@ -113,15 +113,15 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                         location: L.GeoJSON.coordsToLatLngs(data.features[0].geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
                         name: properties.GEWASCODE || ''
                     });
-                     mapInstance.closePopup();
+                     popup.close();
 
                 } else {
-                     mapInstance.closePopup();
+                     popup.close();
                      alert("Geen landbouwperceel gevonden op deze locatie.");
                 }
             } catch (error) {
                 console.error("Error fetching WFS data:", error);
-                mapInstance.closePopup();
+                popup.close();
                 alert(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
             }
         });
