@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
@@ -33,7 +34,8 @@ const ParcelDrawingMap = dynamic(() => import('./parcel-drawing-map').then(mod =
 
 export type RvoData = {
     area: number;
-    location: { lat: number, lng: number }[];
+    location: { lat: number, lng: number };
+    geometry: any;
     name: string;
 }
 
@@ -44,7 +46,8 @@ const formSchema = z.object({
   crop: z.string().min(1, "Gewas is verplicht"),
   variety: z.string().min(1, "Ras is verplicht"),
   area: z.coerce.number().min(0.01, "Oppervlakte moet groter dan 0 zijn"),
-  location: z.array(z.object({ lat: z.number(), lng: z.number() })).optional(),
+  location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  geometry: z.any().optional(),
 })
 
 type ParcelFormValues = z.infer<typeof formSchema>
@@ -81,7 +84,8 @@ export function ParcelFormDialog({
       crop: "",
       variety: "",
       area: 0.0,
-      location: [],
+      location: undefined,
+      geometry: undefined
     },
   })
 
@@ -101,7 +105,7 @@ export function ParcelFormDialog({
   useEffect(() => {
     if (isOpen) {
       if (parcel) {
-        reset({ ...parcel, location: parcel.location || [] });
+        reset({ ...parcel, location: parcel.location || undefined, geometry: parcel.geometry || undefined });
       } else if (rvoData) {
         reset({
           id: undefined,
@@ -110,6 +114,7 @@ export function ParcelFormDialog({
           variety: "",
           area: rvoData.area,
           location: rvoData.location,
+          geometry: rvoData.geometry
         });
       } else {
         reset({
@@ -118,7 +123,8 @@ export function ParcelFormDialog({
           crop: "",
           variety: "",
           area: 0.0,
-          location: [],
+          location: undefined,
+          geometry: undefined
         })
       }
     }
@@ -141,7 +147,16 @@ export function ParcelFormDialog({
   }
   
   const handleMapSave = (coordinates: { lat: number; lng: number }[]) => {
-    setValue('location', coordinates);
+    // This is simplified, for drawing a new shape, we might need a proper GeoJSON structure
+    if (coordinates.length > 0) {
+      const layer = L.polygon(coordinates);
+      const center = layer.getBounds().getCenter();
+      setValue('location', {lat: center.lat, lng: center.lng});
+      setValue('geometry', layer.toGeoJSON().geometry);
+    } else {
+       setValue('location', undefined);
+       setValue('geometry', undefined);
+    }
     setIsMapOpen(false);
   };
   
@@ -265,7 +280,7 @@ export function ParcelFormDialog({
                 <div className="col-span-3">
                   <Button type="button" variant="outline" onClick={openMap} className="w-full">
                     <MapPin className="mr-2 h-4 w-4" /> 
-                    {getValues('location') && getValues('location').length > 0 ? 'Locatie Bewerken' : 'Teken op kaart'}
+                    {getValues('geometry') ? 'Locatie Bewerken' : 'Teken op kaart'}
                   </Button>
                 </div>
             </div>

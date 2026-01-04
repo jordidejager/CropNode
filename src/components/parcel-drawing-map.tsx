@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useRef } from 'react';
@@ -20,7 +21,7 @@ if (typeof window !== 'undefined') {
 }
 
 interface ParcelDrawingMapProps {
-  parcel?: Parcel | null;
+  parcel?: Partial<Parcel> | null;
   onSave: (coordinates: { lat: number; lng: number }[]) => void;
 }
 
@@ -44,18 +45,20 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
         
         let initialBounds: L.LatLngBounds | null = null;
 
-        if (parcel?.location && parcel.location.length > 0) {
-            const latLngs = parcel.location.map(loc => [loc.lat, loc.lng]) as L.LatLngExpression[];
-            const polygon: L.Polygon = L.polygon(latLngs, {
-                color: 'hsl(var(--primary))',
-                fillColor: 'hsl(var(--primary))',
-                fillOpacity: 0.5,
+        if (parcel?.geometry) {
+            const featureLayer = L.geoJSON(parcel.geometry, {
+                style: {
+                    color: 'hsl(var(--primary))',
+                    fillColor: 'hsl(var(--primary))',
+                    fillOpacity: 0.5,
+                }
             });
-            drawnItems.addLayer(polygon);
-            initialBounds = polygon.getBounds();
+            drawnItems.addLayer(featureLayer);
+            initialBounds = featureLayer.getBounds();
         }
 
-        if (initialBounds) {
+
+        if (initialBounds && initialBounds.isValid()) {
             map.fitBounds(initialBounds);
         } else {
             map.setView(defaultCenter, 8);

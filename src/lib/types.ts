@@ -1,18 +1,12 @@
 
-
-
-
-
-
-
-
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
   crop: string;
   variety: string;
   area: number; // in hectares
-  location?: { lat: number; lng: number }[]; // Array of coordinates for polygon
+  location?: { lat: number; lng: number }; // Center point of the parcel
+  geometry?: any; // Full GeoJSON geometry for drawing
 };
 
 export type Middel = {

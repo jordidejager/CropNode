@@ -103,17 +103,22 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 }
 
                 if (data.features && data.features.length > 0) {
+                    const feature = data.features[0];
                     if (selectionLayerRef.current) {
                       mapInstance.removeLayer(selectionLayerRef.current);
                     }
-                    selectionLayerRef.current = L.geoJSON(data.features[0], {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
+                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
-                    const properties = data.features[0].properties;
+                    const properties = feature.properties;
                     const areaInHa = properties.OPPERVLAKTE ? parseFloat(properties.OPPERVLAKTE.replace(',', '.')) / 10000 : 0;
+                    
+                    const layer = L.geoJSON(feature);
+                    const center = layer.getBounds().getCenter();
                     
                     onParcelClick({
                         area: areaInHa,
-                        location: L.GeoJSON.coordsToLatLngs(data.features[0].geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
+                        location: { lat: center.lat, lng: center.lng },
+                        geometry: feature.geometry,
                         name: properties.GEWASCODE || ''
                     });
                      popup.close();
@@ -141,18 +146,20 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     useEffect(() => {
         const drawnItems = drawnItemsRef.current;
         drawnItems.clearLayers();
-        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+        const parcelsWithGeometry = parcels.filter(p => p.geometry);
 
-        if (parcelsWithLocation.length > 0) {
-            parcelsWithLocation.forEach(parcel => {
-                const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
-                    color: 'hsl(var(--destructive))',
-                    weight: 3,
-                    fillOpacity: 0.1,
-                    interactive: false 
+        if (parcelsWithGeometry.length > 0) {
+            parcelsWithGeometry.forEach(parcel => {
+                const geoJsonLayer = L.geoJSON(parcel.geometry, {
+                    style: {
+                        color: 'hsl(var(--destructive))',
+                        weight: 3,
+                        fillOpacity: 0.1,
+                        interactive: false 
+                    }
                 }).addTo(drawnItems);
                 
-                polygon.bindTooltip(`
+                geoJsonLayer.bindTooltip(`
                     <div class="text-center">
                         <p class="font-bold">${parcel.name}</p>
                         <p>${parcel.variety}</p>
@@ -160,13 +167,12 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     </div>
                 `);
             });
-             const allLatLngs = parcelsWithLocation.flatMap(parcel => 
-                (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
-            ) as L.LatLngExpression[];
-            if (allLatLngs.length > 0 && mapRef.current && !selectionLayerRef.current) {
+             const allBounds = parcelsWithGeometry.map(parcel => L.geoJSON(parcel.geometry).getBounds());
+
+             if (allBounds.length > 0 && mapRef.current && !selectionLayerRef.current) {
                 try {
-                    const bounds = L.latLngBounds(allLatLngs);
-                    mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+                    const groupBounds = allBounds.reduce((bounds, b) => bounds.extend(b), allBounds[0]);
+                    mapRef.current.fitBounds(groupBounds, { padding: [50, 50] });
                 } catch (e) {
                     console.error("Could not set bounds:", e);
                 }
