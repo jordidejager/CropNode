@@ -113,41 +113,26 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    // 1. HULPFUNCTIE: Zoek een property ongeacht voorvoegsels of hoofdletters
-                    // Dit lost het probleem op als de key 'brpgewaspercelen:oppervlakte' heet.
-                    const findProperty = (props: any, searchStr: string) => {
-                      if (!props) return undefined;
-                      const key = Object.keys(props).find(k => k.toLowerCase().includes(searchStr.toLowerCase()));
-                      return key ? props[key] : undefined;
-                    };
+                    const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
+                    const oppWaarde = properties.oppervlakte;
                     
-                    // 2. GEBRUIK DE HULPFUNCTIE
-                    const rawArea = findProperty(properties, 'oppervlakte');
-                    const rawCrop = findProperty(properties, 'gewas') || findProperty(properties, 'gewascode');
-
-                    // 3. VEILIGE CONVERSIE (Zoals eerder, maar nu met de gevonden waarde)
-                    let areaInHa = 0;
-                    if (rawArea !== undefined && rawArea !== null) {
-                      let val = rawArea;
-                      if (typeof val === 'string') val = parseFloat(val.replace(',', '.'));
-                      if (!isNaN(val)) {
-                        // RVO sanity check: Is het > 500? Dan is het m2. Anders ha.
-                        areaInHa = val > 500 ? val / 10000 : val;
-                      }
+                    let area = 0;
+                    if (oppWaarde) {
+                       // Vervang komma door punt en maak er een getal van
+                       area = parseFloat(String(oppWaarde).replace(',', '.'));
                     }
 
-                    // 4. LOG DE DATA (Zodat we in de console kunnen zien wat de ECHTE keys zijn)
                     console.log('RVO Properties Debug:', properties);
-                    console.log('Gevonden oppervlakte:', rawArea, '-> Converteerd:', areaInHa);
+                    console.log('Gevonden oppervlakte:', oppWaarde, '-> Converteerd:', area);
 
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
                     
                     const rvoData: RvoData = {
-                        area: areaInHa,
+                        area: area,
                         location: { lat: center.lat, lng: center.lng },
                         geometry: feature.geometry,
-                        name: rawCrop || ''
+                        name: gewasNaam
                     };
 
                     const PopupContent = () => (
@@ -481,3 +466,4 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     
 
     
+
