@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -94,14 +95,14 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
             try {
                 const response = await fetch(wfsUrl.toString());
-                const textResponse = await response.text();
-
+                
                 if (!response.ok) {
+                    const textResponse = await response.text();
                     console.error(`Server responded with ${response.status}: ${textResponse}`);
                     throw new Error(`Server responded with ${response.status}`);
                 }
                 
-                const data = JSON.parse(textResponse);
+                const data = await response.json();
                 
                 if (data.features && data.features.length > 0) {
                     const feature = data.features[0];
@@ -112,7 +113,33 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    popup.setContent(`<pre>${JSON.stringify(properties, null, 2)}</pre>`);
+                    const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
+                    const oppWaarde = properties.oppervlakte;
+                    let area = 0;
+                    if (oppWaarde) {
+                       area = parseFloat(String(oppWaarde).replace(',', '.'));
+                    }
+                    
+                    const displayArea = oppWaarde ? `${area.toFixed(4)} ha` : 'Onbekend (niet in data)';
+
+                    const rvoDataForPopup: RvoData = {
+                        area: area,
+                        location: { lat: e.latlng.lat, lng: e.latlng.lng },
+                        geometry: feature.geometry,
+                        name: gewasNaam,
+                    };
+                    
+                    const popupContent = `
+                        <div class="p-1">
+                            <p class="font-semibold text-base">${gewasNaam}</p>
+                            <p class="text-sm">Oppervlakte: ${displayArea}</p>
+                            <button onclick="window.handleAddParcel(${JSON.stringify(rvoDataForPopup).replace(/"/g, '&quot;')})" class="mt-2 w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90">
+                                Voeg perceel toe
+                            </button>
+                        </div>
+                    `;
+
+                    popup.setContent(popupContent);
                     popup.update();
 
                 } else {
