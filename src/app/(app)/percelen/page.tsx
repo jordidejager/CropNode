@@ -39,7 +39,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         if (!mapContainerRef.current || mapRef.current) return;
 
         const map = L.map(mapContainerRef.current, {
-            crs: L.CRS.EPSG3857
+            crs: L.CRS.EPSG3857,
         }).setView([52.1326, 5.2913], 8);
         mapRef.current = map;
 
@@ -64,8 +64,10 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
             const size = mapInstance.getSize();
             const bounds = mapInstance.getBounds();
-            const sw = mapInstance.project(bounds.getSouthWest());
-            const ne = mapInstance.project(bounds.getNorthEast());
+            const sw = mapInstance.options.crs?.project(bounds.getSouthWest());
+            const ne = mapInstance.options.crs?.project(bounds.getNorthEast());
+
+            if (!sw || !ne) return;
 
             const params = {
                 request: 'GetFeatureInfo',
@@ -82,25 +84,27 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 i: Math.round(e.containerPoint.x),
                 j: Math.round(e.containerPoint.y),
             };
-
+            
             const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
             
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+                if (!response.ok) {
+                    console.error(`Server responded with ${response.status}: ${await response.text()}`);
+                    throw new Error(`Server responded with ${response.status}`);
+                }
                 const data = await response.json();
                 
                 if (data.features && data.features.length > 0) {
                     const feature = data.features[0];
                     const properties = feature.properties;
                     const geometry = feature.geometry;
-
+                    
                     const areaHectares = properties.OPPERVLAKTE / 10000;
                     
                     const geoJsonLayer = L.geoJSON(geometry);
                     const layer = geoJsonLayer.getLayers()[0] as L.Polygon;
                     
-                    // The coordinates from RVO can be deeply nested.
                     let coords = layer.getLatLngs();
                     while(Array.isArray(coords) && Array.isArray(coords[0])) {
                         coords = coords[0] as any;
@@ -126,7 +130,8 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 mapRef.current = null;
             }
         };
-    }, [onParcelClick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         const drawnItems = drawnItemsRef.current;
@@ -410,3 +415,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
