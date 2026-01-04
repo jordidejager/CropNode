@@ -113,7 +113,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    const areaString = String(properties.OPPERVLAKTE).replace(',', '.');
+                    const areaString = String(properties.OPPERVLAKTE || '0').replace(',', '.');
                     const areaInHa = parseFloat(areaString) / 10000;
                     
                     const layer = L.geoJSON(feature);
