@@ -32,8 +32,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const WMS_LAYER_NAME = 'brpgewaspercelen_definitief';
-const WFS_TYPE_NAME = 'brpgewaspercelen:BrpGewas';
+const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
+const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
 const JAAR = 2024;
 
 
@@ -46,7 +46,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
-        const map = L.map(mapContainerRef.current).setView([52.1326, 5.2913], 8);
+        const map = L.map(mapContainerRef.current).setView([51.488, 3.955], 13); // Center on Kapelle
         mapRef.current = map;
         
         L.tileLayer(
@@ -58,8 +58,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             layers: WMS_LAYER_NAME,
             format: 'image/png',
             transparent: true,
-            version: '1.3.0',
-            viewparams: `jaar:${JAAR}`,
+            version: '1.1.0',
             attribution: `BRP Gewaspercelen &copy; RVO ${JAAR}`
         }).addTo(map);
         
@@ -89,7 +88,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 srsName: 'EPSG:4326',
                 count: '1',
-                viewparams: `jaar:${JAAR}`,
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             }).toString();
 
@@ -97,14 +95,14 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
             try {
                 const response = await fetch(wfsUrl.toString());
-                
+                const textResponse = await response.text();
+
                 if (!response.ok) {
-                    const textResponse = await response.text();
                     console.error(`Server responded with ${response.status}: ${textResponse}`);
                     throw new Error(`Server responded with ${response.status}`);
                 }
                 
-                const data = await response.json();
+                const data = JSON.parse(textResponse);
                 
                 if (data.features && data.features.length > 0) {
                     const feature = data.features[0];
@@ -114,7 +112,10 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
                     const properties = feature.properties;
-                    const areaInHa = properties.OPPERVLAKTE ? properties.OPPERVLAKTE / 10000 : 0;
+                    
+                    // Correctly parse the area which comes as a string with a comma decimal separator
+                    const areaString = String(properties.OPPERVLAKTE).replace(',', '.');
+                    const areaInHa = parseFloat(areaString) / 10000;
                     
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
@@ -129,7 +130,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     const PopupContent = () => (
                       <div className="space-y-2">
                         <h4 className="font-bold text-base">{rvoData.name}</h4>
-                        <p>Oppervlakte: {rvoData.area.toFixed(3)} ha</p>
+                        <p>Oppervlakte: {rvoData.area.toFixed(4)} ha</p>
                         <button 
                           onClick={() => (window as any).handleAddParcel(rvoData)}
                           className="w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -336,7 +337,7 @@ export default function PercelenPage() {
                                             <TableCell className="font-medium">{parcel.name}</TableCell>
                                             <TableCell>{parcel.crop}</TableCell>
                                             <TableCell>{parcel.variety}</TableCell>
-                                            <TableCell className="text-right">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
+                                            <TableCell className="text-right">{parcel.area?.toFixed(4) || '0.0000'}</TableCell>
                                             <TableCell>
                                                  <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
                                             </TableCell>
@@ -356,7 +357,7 @@ export default function PercelenPage() {
                                         </TableCell>
                                         <TableCell>{subParcels[0].crop}</TableCell>
                                         <TableCell>{subParcels.length} rassen</TableCell>
-                                        <TableCell className="text-right">{totalArea.toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">{totalArea.toFixed(4)}</TableCell>
                                         <TableCell></TableCell>
                                     </TableRow>
                                 );
@@ -366,7 +367,7 @@ export default function PercelenPage() {
                                         <TableCell className="pl-12 text-muted-foreground"></TableCell>
                                         <TableCell className="text-muted-foreground"></TableCell>
                                         <TableCell className="text-muted-foreground">{parcel.variety}</TableCell>
-                                        <TableCell className="text-right text-muted-foreground">{parcel.area?.toFixed(2) || '0.00'}</TableCell>
+                                        <TableCell className="text-right text-muted-foreground">{parcel.area?.toFixed(4) || '0.0000'}</TableCell>
                                         <TableCell>
                                             <ActionsMenu parcel={parcel} onEdit={handleEdit} onDelete={handleDelete} />
                                         </TableCell>
@@ -449,6 +450,8 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
 
     
 
