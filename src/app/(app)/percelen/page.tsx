@@ -299,7 +299,7 @@ export default function PercelenPage() {
 
                                 return (
                                     <Collapsible asChild key={name} defaultOpen={false}>
-                                        <tbody>
+                                        <>
                                             <TableRow className="font-medium bg-muted/50">
                                                 <TableCell>
                                                   <CollapsibleTrigger asChild>
@@ -329,7 +329,7 @@ export default function PercelenPage() {
                                                     ))}
                                                 </>
                                             </CollapsibleContent>
-                                        </tbody>
+                                        </>
                                     </Collapsible>
                                 );
                            })
