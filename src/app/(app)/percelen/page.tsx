@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -69,7 +70,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             const lng = e.latlng.lng;
             
             const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
-            const params = new URLSearchParams({
+            wfsUrl.search = new URLSearchParams({
                 service: 'WFS',
                 version: '2.0.0',
                 request: 'GetFeature',
@@ -77,8 +78,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 count: '1',
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
-            });
-            wfsUrl.search = params.toString();
+            }).toString();
 
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
