@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
@@ -31,8 +31,9 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
-const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
+const WMS_LAYER_NAME = 'brpgewaspercelen_definitief';
+const WFS_TYPE_NAME = 'brpgewaspercelen:BrpGewas';
+const JAAR = 2024;
 
 
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
@@ -57,7 +58,8 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             format: 'image/png',
             transparent: true,
             version: '1.3.0',
-            attribution: 'BRP Gewaspercelen &copy; RVO'
+            viewparams: `jaar:${JAAR}`,
+            attribution: `BRP Gewaspercelen &copy; RVO ${JAAR}`
         }).addTo(map);
         
         map.addLayer(drawnItemsRef.current);
@@ -76,7 +78,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 request: 'GetFeature',
                 typeName: WFS_TYPE_NAME,
                 outputFormat: 'application/json',
+                srsName: 'EPSG:4326',
                 count: '1',
+                viewparams: `jaar:${JAAR}`,
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             }).toString();
 
@@ -85,7 +89,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             try {
                 const response = await fetch(wfsUrl.toString());
                 const textResponse = await response.text();
-
+                
                 if (!response.ok) {
                     console.error(`Server responded with ${response.status}: ${textResponse}`);
                     throw new Error(`Server responded with ${response.status}`);
@@ -426,3 +430,4 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     
 
     
+
