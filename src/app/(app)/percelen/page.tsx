@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -13,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogTrigger, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
@@ -119,7 +120,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
                     const properties = feature.properties;
-                    const areaInHa = properties.OPPERVLAKTE ? parseFloat(properties.OPPERVLAKTE.replace(',', '.')) / 10000 : 0;
+                    const areaInHa = properties.OPPERVLAKTE ? properties.OPPERVLAKTE / 10000 : 0;
                     
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
@@ -453,5 +454,7 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
 
     
