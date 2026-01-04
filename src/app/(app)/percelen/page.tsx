@@ -113,26 +113,32 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    // 1. Haal de ruwe waarde op, probeer zowel kleine letters als hoofdletters
-                    const rawArea = properties.oppervlakte !== undefined ? properties.oppervlakte : properties.OPPERVLAKTE;
-                    let areaInHa = 0;
-
-                    // 2. Check het type en converteer veilig
-                    if (typeof rawArea === 'number') {
-                        areaInHa = rawArea;
-                    } else if (typeof rawArea === 'string') {
-                        // Vervang komma door punt en parse
-                        areaInHa = parseFloat(rawArea.replace(',', '.'));
-                    }
-
-                    // 3. Sanity check voor eenheid (m2 vs Ha)
-                    // Een perceel is zelden groter dan 500 hectare. Als het getal > 500 is, is het waarschijnlijk m2.
-                    if (areaInHa > 500) {
-                        areaInHa = areaInHa / 10000;
-                    }
+                    // 1. HULPFUNCTIE: Zoek een property ongeacht voorvoegsels of hoofdletters
+                    // Dit lost het probleem op als de key 'brpgewaspercelen:oppervlakte' heet.
+                    const findProperty = (props: any, searchStr: string) => {
+                      if (!props) return undefined;
+                      const key = Object.keys(props).find(k => k.toLowerCase().includes(searchStr.toLowerCase()));
+                      return key ? props[key] : undefined;
+                    };
                     
-                    // 4. Voeg console log toe voor debugging
-                    console.log('Gevonden perceel data:', properties, 'Berekende ha:', areaInHa);
+                    // 2. GEBRUIK DE HULPFUNCTIE
+                    const rawArea = findProperty(properties, 'oppervlakte');
+                    const rawCrop = findProperty(properties, 'gewas') || findProperty(properties, 'gewascode');
+
+                    // 3. VEILIGE CONVERSIE (Zoals eerder, maar nu met de gevonden waarde)
+                    let areaInHa = 0;
+                    if (rawArea !== undefined && rawArea !== null) {
+                      let val = rawArea;
+                      if (typeof val === 'string') val = parseFloat(val.replace(',', '.'));
+                      if (!isNaN(val)) {
+                        // RVO sanity check: Is het > 500? Dan is het m2. Anders ha.
+                        areaInHa = val > 500 ? val / 10000 : val;
+                      }
+                    }
+
+                    // 4. LOG DE DATA (Zodat we in de console kunnen zien wat de ECHTE keys zijn)
+                    console.log('RVO Properties Debug:', properties);
+                    console.log('Gevonden oppervlakte:', rawArea, '-> Converteerd:', areaInHa);
 
                     const layer = L.geoJSON(feature);
                     const center = layer.getBounds().getCenter();
@@ -141,7 +147,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                         area: areaInHa,
                         location: { lat: center.lat, lng: center.lng },
                         geometry: feature.geometry,
-                        name: properties.GEWASCODE || ''
+                        name: rawCrop || ''
                     };
 
                     const PopupContent = () => (
