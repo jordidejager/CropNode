@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
@@ -47,7 +47,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         ).addTo(map);
 
         const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
-        const WFS_TYPE_NAME = 'brpgewaspercelen_definitief_2023'; 
+        const WFS_TYPE_NAME = 'brpgewaspercelen_definitief_2023';
 
         L.tileLayer.wms('https://service.pdok.nl/rvo/brpgewaspercelen/wms/v1_0', {
             layers: WMS_LAYER_NAME,
@@ -97,7 +97,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     onParcelClick({
                         area: properties.oppervlakte || 0,
-                        location: L.GeoJSON.coordsToLatLngs(geometry.coordinates, 2),
+                        location: L.GeoJSON.coordsToLatLngs(geometry.coordinates[0][0]).map(c => ({ lat: c.lat, lng: c.lng })),
                         name: properties.gewas || ''
                     });
 
