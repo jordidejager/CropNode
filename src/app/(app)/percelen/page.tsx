@@ -33,7 +33,7 @@ if (typeof window !== 'undefined') {
 }
 
 const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
-const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
+const WFS_TYPE_NAME = 'brpgewaspercelen:BrpGewas';
 const JAAR = 2024;
 
 
@@ -88,7 +88,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 srsName: 'EPSG:4326',
                 count: '1',
-                cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
+                cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
             }).toString();
 
             popup.setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
@@ -113,7 +113,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                     const properties = feature.properties;
                     
-                    // Correctly parse the area which comes as a string with a comma decimal separator
                     const areaString = String(properties.OPPERVLAKTE).replace(',', '.');
                     const areaInHa = parseFloat(areaString) / 10000;
                     
