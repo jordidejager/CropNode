@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useFirestore } from "@/firebase";
 import { getParcels, addParcel, updateParcel, deleteParcel } from "@/lib/store";
 import type { Parcel } from "@/lib/types";
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, PlusCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ParcelFormDialog } from "@/components/parcel-form-dialog";
+import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -18,7 +18,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
-
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -30,72 +29,121 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const MapView = ({ parcels }: { parcels: Parcel[] }) => {
+const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
+    const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
+    const wmsLayerRef = useRef<L.TileLayer.WMS | null>(null);
 
     useEffect(() => {
         if (!mapContainerRef.current) return;
+        if (mapRef.current) return; // Initialize map only once
 
-        // Cleanup previous map instance if it exists
-        if (mapRef.current) {
-            mapRef.current.remove();
-            mapRef.current = null;
-        }
-
-        // Initialize map
         const map = L.map(mapContainerRef.current);
         mapRef.current = map;
+        
+        map.setView([52.1326, 5.2913], 8); // Center of NL
 
         L.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            { attribution: "Tiles &copy; Esri" }
+            "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
+            { attribution: 'Kaartgegevens &copy; <a href="https://www.pdok.nl/" target="_blank">PDOK</a>' }
         ).addTo(map);
 
-        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+        wmsLayerRef.current = L.tileLayer.wms('/pdok-wms', {
+            layers: 'brpgewaspercelen',
+            format: 'image/png',
+            transparent: true,
+            attribution: 'BRP Gewaspercelen &copy; RVO'
+        }).addTo(map);
 
-        if (parcelsWithLocation.length > 0) {
-            const allLatLngs = parcelsWithLocation.flatMap(parcel => 
-                (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
-            ) as L.LatLngExpression[];
+        map.addLayer(drawnItemsRef.current);
 
-            if (allLatLngs.length > 0) {
-                const bounds = L.latLngBounds(allLatLngs);
-                map.fitBounds(bounds, { padding: [50, 50] });
+        map.on('click', async (e) => {
+            if (!mapRef.current || !wmsLayerRef.current) return;
+            const map = mapRef.current;
+            const point = map.latLngToContainerPoint(e.latlng);
+            const size = map.getSize();
+            const bounds = map.getBounds();
+            
+            const params = {
+                request: 'GetFeatureInfo',
+                service: 'WMS',
+                version: wmsLayerRef.current.wmsParams.version || '1.1.1',
+                layers: wmsLayerRef.current.wmsParams.layers,
+                styles: '',
+                bbox: bounds.toBBoxString(),
+                width: size.x,
+                height: size.y,
+                query_layers: wmsLayerRef.current.wmsParams.layers,
+                info_format: 'application/json',
+                srs: 'EPSG:4326',
+                x: Math.round(point.x),
+                y: Math.round(point.y),
+            };
 
-                parcelsWithLocation.forEach(parcel => {
-                    const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
-                        color: 'hsl(var(--primary))',
-                        fillColor: 'hsl(var(--primary))',
-                        fillOpacity: 0.4
-                    }).addTo(map);
+            const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.features && data.features.length > 0) {
+                    const feature = data.features[0];
+                    const areaHectares = feature.properties.OPPERVLAKTE / 10000;
+                    const location = L.GeoJSON.geometryToLayer(feature.geometry).getLatLngs()[0].map((ll: L.LatLng) => ({ lat: ll.lat, lng: ll.lng }));
                     
-                    polygon.bindTooltip(`
-                        <div class="text-center">
-                            <p class="font-bold">${parcel.name}</p>
-                            <p>${parcel.variety}</p>
-                            <p>${parcel.area} ha</p>
-                        </div>
-                    `);
-                });
+                    onParcelClick({
+                        area: parseFloat(areaHectares.toFixed(4)),
+                        location: location,
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching feature info:", error);
             }
-        } else {
-            // Default view if no parcels have locations
-            map.setView([52.1326, 5.2913], 8);
-        }
+        });
 
-        // Cleanup function
         return () => {
             if (mapRef.current) {
                 mapRef.current.remove();
                 mapRef.current = null;
             }
         };
+    }, [onParcelClick]);
 
+    useEffect(() => {
+        // Update user-drawn parcels on the map
+        const drawnItems = drawnItemsRef.current;
+        drawnItems.clearLayers();
+        const parcelsWithLocation = parcels.filter(p => p.location && p.location.length > 0);
+
+        if (parcelsWithLocation.length > 0) {
+            parcelsWithLocation.forEach(parcel => {
+                const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
+                    color: 'hsl(var(--destructive))',
+                    fillColor: 'hsl(var(--destructive))',
+                    fillOpacity: 0.4
+                }).addTo(drawnItems);
+                
+                polygon.bindTooltip(`
+                    <div class="text-center">
+                        <p class="font-bold">${parcel.name}</p>
+                        <p>${parcel.variety}</p>
+                        <p>${parcel.area} ha</p>
+                    </div>
+                `);
+            });
+             const allLatLngs = parcelsWithLocation.flatMap(parcel => 
+                (parcel.location as { lat: number; lng: number }[]).map(loc => [loc.lat, loc.lng])
+            ) as L.LatLngExpression[];
+            if (allLatLngs.length > 0 && mapRef.current) {
+                const bounds = L.latLngBounds(allLatLngs);
+                mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
     }, [parcels]);
 
     return (
-        <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }}></div>
+        <div ref={mapContainerRef} style={{ height: '100%', width: '100%', cursor: 'pointer' }}></div>
     );
 };
 
@@ -105,32 +153,39 @@ export default function PercelenPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
+  const [rvoData, setRvoData] = useState<RvoData | null>(null);
   const [activeTab, setActiveTab] = useState('list');
   
   const db = useFirestore();
   const { toast } = useToast();
 
-  async function loadParcels() {
+  const loadParcels = useCallback(async () => {
     if (!db) return;
     setLoading(true);
     const fetchedParcels = await getParcels(db);
     setParcels(fetchedParcels);
     setLoading(false);
-  }
-
-  useEffect(() => {
-    if(db) {
-      loadParcels();
-    }
   }, [db]);
 
+  useEffect(() => {
+    loadParcels();
+  }, [loadParcels]);
+
   const handleAdd = () => {
+    setEditingParcel(null);
+    setRvoData(null);
+    setIsFormOpen(true);
+  };
+  
+  const handleParcelClick = (data: RvoData) => {
+    setRvoData(data);
     setEditingParcel(null);
     setIsFormOpen(true);
   };
 
   const handleEdit = (parcel: Parcel) => {
     setEditingParcel(parcel);
+    setRvoData(null);
     setIsFormOpen(true);
   };
 
@@ -143,7 +198,6 @@ export default function PercelenPage() {
 
   const handleFormSubmit = async (values: Omit<Parcel, 'id'> & { id?: string }) => {
     if (!db) return;
-
     const parcelData = { ...values };
 
     try {
@@ -151,7 +205,7 @@ export default function PercelenPage() {
         await updateParcel(db, parcelData as Parcel);
         toast({ title: 'Succesvol bijgewerkt', description: 'De perceelgegevens zijn opgeslagen.' });
       } else {
-        const { id, ...addData } = parcelData; // remove id for add operation
+        const { id, ...addData } = parcelData;
         await addParcel(db, addData);
         toast({ title: 'Succesvol toegevoegd', description: 'Het nieuwe perceel is opgeslagen.' });
       }
@@ -283,12 +337,12 @@ export default function PercelenPage() {
                 <CardHeader>
                     <CardTitle>Kaartoverzicht</CardTitle>
                     <CardDescription>
-                        {parcels.filter(p => p.location && p.location.length > 0).length} van de {parcels.length} percelen hebben een locatie en zijn zichtbaar.
+                        Klik op een perceel op de kaart om deze toe te voegen aan uw lijst. Uw eigen percelen worden in rood weergegeven.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="h-[600px] w-full rounded-md border overflow-hidden">
-                       {activeTab === 'map' && <MapView parcels={parcels} />}
+                       {activeTab === 'map' && <MapView parcels={parcels} onParcelClick={handleParcelClick} />}
                     </div>
                 </CardContent>
             </Card>
@@ -299,6 +353,7 @@ export default function PercelenPage() {
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
         parcel={editingParcel}
+        rvoData={rvoData}
         onSubmit={handleFormSubmit}
       />
     </>

@@ -31,6 +31,11 @@ const ParcelDrawingMap = dynamic(() => import('./parcel-drawing-map').then(mod =
   ssr: false,
 });
 
+export type RvoData = {
+    area: number;
+    location: { lat: number, lng: number }[];
+}
+
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -47,6 +52,7 @@ interface ParcelFormDialogProps {
   isOpen: boolean
   onOpenChange: (isOpen: boolean) => void
   parcel: Parcel | null
+  rvoData?: RvoData | null
   onSubmit: (data: ParcelFormValues) => Promise<void>
 }
 
@@ -54,6 +60,7 @@ export function ParcelFormDialog({
   isOpen,
   onOpenChange,
   parcel,
+  rvoData,
   onSubmit,
 }: ParcelFormDialogProps) {
   const {
@@ -94,6 +101,15 @@ export function ParcelFormDialog({
     if (isOpen) {
       if (parcel) {
         reset({ ...parcel, location: parcel.location || [] });
+      } else if (rvoData) {
+        reset({
+          id: undefined,
+          name: "",
+          crop: "",
+          variety: "",
+          area: rvoData.area,
+          location: rvoData.location,
+        });
       } else {
         reset({
           id: undefined,
@@ -105,7 +121,7 @@ export function ParcelFormDialog({
         })
       }
     }
-  }, [parcel, isOpen, reset])
+  }, [parcel, rvoData, isOpen, reset])
 
   useEffect(() => {
     const currentVariety = getValues("variety");
@@ -148,9 +164,7 @@ export function ParcelFormDialog({
               {parcel ? "Perceel Aanpassen" : "Nieuw Perceel Toevoegen"}
             </DialogTitle>
             <DialogDescription>
-              {parcel
-                ? "Pas de gegevens van het perceel aan."
-                : "Voer de gegevens voor het nieuwe perceel in."}
+              {rvoData ? "Vul de perceelgegevens aan. De locatie en oppervlakte zijn overgenomen van RVO." : (parcel ? "Pas de gegevens van het perceel aan." : "Voer de gegevens voor het nieuwe perceel in.")}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(processSubmit)} className="grid gap-4 py-4">
@@ -232,9 +246,10 @@ export function ParcelFormDialog({
                 <Input
                   id="area"
                   type="number"
-                  step="0.01"
+                  step="0.0001"
                   {...register("area")}
                   className="w-full"
+                  readOnly={!!rvoData}
                 />
                 {errors.area && (
                   <p className="text-red-500 text-xs mt-1">

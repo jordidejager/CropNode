@@ -34,6 +34,14 @@ const nextConfig = {
       },
     ],
   },
+   async rewrites() {
+    return [
+      {
+        source: '/pdok-wms',
+        destination: 'https://geodata.nationaalgeoregister.nl/brpgewaspercelen/wms',
+      },
+    ]
+  },
   env: {
     NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
