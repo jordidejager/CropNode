@@ -32,7 +32,7 @@ if (typeof window !== 'undefined') {
 }
 
 const WMS_LAYER_NAME = 'brpgewaspercelen_definitief_2023';
-const WFS_TYPE_NAME = 'brpgewaspercelen_definitief';
+const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
     const mapRef = useRef<L.Map | null>(null);
@@ -69,19 +69,23 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
 
-            const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
-            wfsUrl.searchParams.append('service', 'WFS');
-            wfsUrl.searchParams.append('version', '2.0.0');
-            wfsUrl.searchParams.append('request', 'GetFeature');
-            wfsUrl.searchParams.append('typeName', WFS_TYPE_NAME);
-            wfsUrl.searchParams.append('outputFormat', 'application/json');
-            wfsUrl.searchParams.append('viewparams', 'jaar:2023');
-            wfsUrl.searchParams.append('cql_filter', `INTERSECTS(geom, POINT(${lng} ${lat}))`);
+            const baseUrl = 'https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0';
+            const params = new URLSearchParams({
+                service: 'WFS',
+                version: '2.0.0',
+                request: 'GetFeature',
+                typeName: WFS_TYPE_NAME,
+                outputFormat: 'application/json',
+                count: '1',
+                cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
+            });
+
+            const wfsUrl = `${baseUrl}?${params.toString()}`;
 
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl.toString());
+                const response = await fetch(wfsUrl);
                 if (!response.ok) {
                     console.error(`Server responded with ${response.status}: ${await response.text()}`);
                     throw new Error(`Server responded with ${response.status}`);
@@ -407,7 +411,3 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
-
-    
-
-    
