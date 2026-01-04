@@ -31,7 +31,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const WMS_LAYER_NAME = 'brpgewaspercelen_definitief_2023';
+const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
 
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
@@ -411,3 +411,4 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
