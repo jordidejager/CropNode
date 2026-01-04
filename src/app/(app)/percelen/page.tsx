@@ -21,6 +21,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from 'leaflet';
 import ReactDOMServer from 'react-dom/server';
+import area from '@turf/area';
 
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
@@ -114,16 +115,14 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     const properties = feature.properties;
                     
                     const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
-                    const oppWaarde = properties.oppervlakte;
-                    let area = 0;
-                    if (oppWaarde) {
-                       area = parseFloat(String(oppWaarde).replace(',', '.'));
-                    }
                     
-                    const displayArea = oppWaarde ? `${area.toFixed(4)} ha` : 'Onbekend (niet in data)';
+                    const calculatedAreaM2 = area(feature);
+                    const calculatedAreaHa = calculatedAreaM2 / 10000;
+
+                    const displayArea = `${calculatedAreaHa.toFixed(4)} ha`;
 
                     const rvoDataForPopup: RvoData = {
-                        area: area,
+                        area: calculatedAreaHa,
                         location: { lat: e.latlng.lat, lng: e.latlng.lng },
                         geometry: feature.geometry,
                         name: gewasNaam,
