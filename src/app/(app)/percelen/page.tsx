@@ -69,23 +69,22 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
 
-            const baseUrl = 'https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0';
+            const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
             const params = new URLSearchParams({
                 service: 'WFS',
-                version: '2.0.0',
+                version: '1.1.0', // Correct version for this typeName
                 request: 'GetFeature',
-                typeName: WFS_TYPE_NAME,
+                typeName: WFS_TYPE_NAME, // Correct typeName with prefix
                 outputFormat: 'application/json',
-                count: '1',
+                srsname: 'EPSG:4326', // Request output in Lat/Lng
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat}))`
             });
-
-            const wfsUrl = `${baseUrl}?${params.toString()}`;
+            wfsUrl.search = params.toString();
 
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl);
+                const response = await fetch(wfsUrl.toString());
                 if (!response.ok) {
                     console.error(`Server responded with ${response.status}: ${await response.text()}`);
                     throw new Error(`Server responded with ${response.status}`);
@@ -96,7 +95,6 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     mapInstance.closePopup();
                     const feature = data.features[0];
                     const properties = feature.properties;
-                    const geometry = feature.geometry;
 
                     if (selectionLayerRef.current) {
                         mapInstance.removeLayer(selectionLayerRef.current);
@@ -104,9 +102,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
                     onParcelClick({
-                        area: properties.oppervlakte || 0,
-                        location: L.GeoJSON.coordsToLatLngs(geometry.coordinates[0][0]).map(c => ({ lat: c.lat, lng: c.lng })),
-                        name: properties.gewas || ''
+                        area: properties.OPPERVLAKTE || 0,
+                        location: L.GeoJSON.coordsToLatLngs(feature.geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
+                        name: properties.GEWASCODE || ''
                     });
 
                 } else {
@@ -411,4 +409,3 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
-
