@@ -31,14 +31,15 @@ if (typeof window !== 'undefined') {
   });
 }
 
+const WMS_LAYER_NAME = 'brpgewaspercelen_definitief_2023';
+const WFS_TYPE_NAME = 'brpgewaspercelen_definitief';
+
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
     const selectionLayerRef = useRef<L.GeoJSON | null>(null);
 
-    const WMS_LAYER_NAME = 'brpgewaspercelen_definitief_2023';
-    const WFS_TYPE_NAME = 'brpgewaspercelen_definitief'; // Corrected TypeName
 
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
@@ -72,7 +73,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             wfsUrl.searchParams.append('service', 'WFS');
             wfsUrl.searchParams.append('version', '2.0.0');
             wfsUrl.searchParams.append('request', 'GetFeature');
-            wfsUrl.searchParams.append('typeName', WFS_TYPE_NAME); // Use corrected TypeName
+            wfsUrl.searchParams.append('typeName', WFS_TYPE_NAME);
             wfsUrl.searchParams.append('outputFormat', 'application/json');
             wfsUrl.searchParams.append('viewparams', 'jaar:2023');
             wfsUrl.searchParams.append('cql_filter', `INTERSECTS(geom, POINT(${lng} ${lat}))`);
