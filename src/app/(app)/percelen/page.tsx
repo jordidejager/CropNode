@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
@@ -31,8 +30,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
-const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
+const WMS_LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
+const WFS_TYPE_NAME = 'brpgewaspercelen:brpgewaspercelen_concept_2024';
 
 
 const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick: (data: RvoData) => void }) => {
@@ -68,7 +67,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
-
+            
             const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
             const params = new URLSearchParams({
                 service: 'WFS',
@@ -423,3 +422,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
