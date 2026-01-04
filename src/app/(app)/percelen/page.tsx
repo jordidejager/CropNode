@@ -62,14 +62,15 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         
             const point = mapInstance.latLngToContainerPoint(e.latlng, mapInstance.getZoom());
             const size = mapInstance.getSize();
-            const bounds = mapInstance.getBounds();
+            
+            const bounds = mapInstance.getBounds()
             const sw = bounds.getSouthWest();
             const ne = bounds.getNorthEast();
 
             const params = {
                 request: 'GetFeatureInfo',
                 service: 'WMS',
-                version: '1.1.1', // This is the correct version for GetFeatureInfo
+                version: '1.1.1',
                 layers: wmsLayerRef.current.wmsParams.layers,
                 styles: '',
                 bbox: `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`,
@@ -77,7 +78,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 height: size.y,
                 query_layers: wmsLayerRef.current.wmsParams.layers,
                 info_format: 'application/json',
-                srs: 'EPSG:4326', // Request info in standard lat/lng
+                srs: 'EPSG:4326',
                 x: Math.round(point.x),
                 y: Math.round(point.y),
             };
@@ -98,8 +99,14 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     
                     const geoJsonLayer = L.geoJSON(geometry);
                     const layer = geoJsonLayer.getLayers()[0] as L.Polygon;
-                    const latLngs = layer.getLatLngs()[0] as L.LatLng[];
-                    const location = latLngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+                    
+                    // The coordinates from RVO can be deeply nested.
+                    let coords = layer.getLatLngs();
+                    while(Array.isArray(coords) && Array.isArray(coords[0])) {
+                        coords = coords[0] as any;
+                    }
+                    
+                    const location = (coords as L.LatLng[]).map(ll => ({ lat: ll.lat, lng: ll.lng }));
 
                     onParcelClick({
                         area: parseFloat(areaHectares.toFixed(4)),
@@ -403,5 +410,3 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
-
-    
