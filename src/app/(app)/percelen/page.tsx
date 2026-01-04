@@ -92,6 +92,8 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
             }).toString();
 
+            console.log('Fetching for:', lat, lng, 'URL:', wfsUrl.toString());
+
             popup.setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
@@ -448,5 +450,7 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
 
     
