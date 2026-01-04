@@ -84,7 +84,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl.toString());
+                const response = await fetch(wfsUrl);
                 const textResponse = await response.text();
 
                 if (!response.ok) {
@@ -107,8 +107,10 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     selectionLayerRef.current = L.geoJSON(data.features[0], {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
                     const properties = data.features[0].properties;
+                    const areaInHa = properties.OPPERVLAKTE ? parseFloat(properties.OPPERVLAKTE.replace(',', '.')) / 10000 : 0;
+                    
                     onParcelClick({
-                        area: properties.OPPERVLAKTE ? parseFloat(properties.OPPERVLAKTE.replace(',', '.')) : 0,
+                        area: areaInHa,
                         location: L.GeoJSON.coordsToLatLngs(data.features[0].geometry.coordinates[0][0]).map((c: any) => ({ lat: c.lat, lng: c.lng })),
                         name: properties.GEWASCODE || ''
                     });
