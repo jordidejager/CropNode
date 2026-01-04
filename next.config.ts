@@ -10,9 +10,6 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    // This allows the Next.js dev server to accept requests from the
-    // Firebase Studio environment.
-    allowedDevOrigins: ["*.cloudworkstations.dev"],
   },
   images: {
     remotePatterns: [
@@ -35,14 +32,6 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-  },
-   async rewrites() {
-    return [
-      {
-        source: '/pdok-wms',
-        destination: 'https://service.pdok.nl/brpgewaspercelen/wms',
-      },
-    ]
   },
 };
 

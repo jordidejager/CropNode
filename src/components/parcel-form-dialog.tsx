@@ -34,6 +34,7 @@ const ParcelDrawingMap = dynamic(() => import('./parcel-drawing-map').then(mod =
 export type RvoData = {
     area: number;
     location: { lat: number, lng: number }[];
+    name: string;
 }
 
 
@@ -104,8 +105,8 @@ export function ParcelFormDialog({
       } else if (rvoData) {
         reset({
           id: undefined,
-          name: "",
-          crop: "",
+          name: rvoData.name,
+          crop: rvoData.name, // Try to guess crop from name
           variety: "",
           area: rvoData.area,
           location: rvoData.location,
@@ -249,7 +250,6 @@ export function ParcelFormDialog({
                   step="0.0001"
                   {...register("area")}
                   className="w-full"
-                  readOnly={!!rvoData}
                 />
                 {errors.area && (
                   <p className="text-red-500 text-xs mt-1">

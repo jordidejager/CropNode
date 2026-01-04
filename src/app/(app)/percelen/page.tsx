@@ -33,7 +33,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const drawnItemsRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
-    const wmsLayerRef = useRef<L.TileLayer.WMS | null>(null);
+    const selectionLayerRef = useRef<L.GeoJSON | null>(null);
 
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
@@ -46,47 +46,37 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             { attribution: 'Kaartgegevens &copy; <a href="https://www.pdok.nl/" target="_blank">PDOK</a>' }
         ).addTo(map);
 
-        wmsLayerRef.current = L.tileLayer.wms('/pdok-wms', {
-            layers: 'brpgewaspercelen',
+        const LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
+
+        L.tileLayer.wms('https://service.pdok.nl/rvo/brpgewaspercelen/wms/v1_0', {
+            layers: LAYER_NAME,
             format: 'image/png',
             transparent: true,
             version: '1.3.0',
             attribution: 'BRP Gewaspercelen &copy; RVO'
         }).addTo(map);
-
+        
         map.addLayer(drawnItemsRef.current);
         
         map.on('click', async (e: L.LeafletMouseEvent) => {
             const mapInstance = mapRef.current;
-            if (!mapInstance || !wmsLayerRef.current?.wmsParams) return;
+            if (!mapInstance) return;
 
-            const size = mapInstance.getSize();
-            const bounds = mapInstance.getBounds();
-            const sw = mapInstance.options.crs?.project(bounds.getSouthWest());
-            const ne = mapInstance.options.crs?.project(bounds.getNorthEast());
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
 
-            if (!sw || !ne) return;
+            const wfsUrl = new URL('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0');
+            wfsUrl.searchParams.append('service', 'WFS');
+            wfsUrl.searchParams.append('version', '2.0.0');
+            wfsUrl.searchParams.append('request', 'GetFeature');
+            wfsUrl.searchParams.append('typeName', LAYER_NAME);
+            wfsUrl.searchParams.append('outputFormat', 'application/json');
+            wfsUrl.searchParams.append('cql_filter', `INTERSECTS(geom, POINT(${lng} ${lat}))`);
 
-            const params = {
-                request: 'GetFeatureInfo',
-                service: 'WMS',
-                version: '1.3.0',
-                layers: wmsLayerRef.current.wmsParams.layers,
-                styles: '',
-                bbox: `${sw.x},${sw.y},${ne.x},${ne.y}`,
-                width: size.x,
-                height: size.y,
-                query_layers: wmsLayerRef.current.wmsParams.layers,
-                info_format: 'application/json',
-                crs: 'EPSG:3857',
-                i: Math.round(e.containerPoint.x),
-                j: Math.round(e.containerPoint.y),
-            };
-            
-            const url = `/pdok-wms?${new URLSearchParams(params as any).toString()}`;
-            
+            L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
+
             try {
-                const response = await fetch(url);
+                const response = await fetch(wfsUrl.toString());
                 if (!response.ok) {
                     console.error(`Server responded with ${response.status}: ${await response.text()}`);
                     throw new Error(`Server responded with ${response.status}`);
@@ -94,31 +84,29 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 const data = await response.json();
                 
                 if (data.features && data.features.length > 0) {
+                    mapInstance.closePopup();
                     const feature = data.features[0];
                     const properties = feature.properties;
                     const geometry = feature.geometry;
-                    
-                    const areaHectares = properties.OPPERVLAKTE / 10000;
-                    
-                    const geoJsonLayer = L.geoJSON(geometry);
-                    const layer = geoJsonLayer.getLayers()[0] as L.Polygon;
-                    
-                    let coords = layer.getLatLngs();
-                    while(Array.isArray(coords) && Array.isArray(coords[0])) {
-                        coords = coords[0] as any;
+
+                    if (selectionLayerRef.current) {
+                        mapInstance.removeLayer(selectionLayerRef.current);
                     }
-                    
-                    const location = (coords as L.LatLng[]).map(ll => ({ lat: ll.lat, lng: ll.lng }));
+                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2}}).addTo(mapInstance);
 
                     onParcelClick({
-                        area: parseFloat(areaHectares.toFixed(4)),
-                        location: location,
+                        area: properties.oppervlakte || 0,
+                        location: L.GeoJSON.coordsToLatLngs(geometry.coordinates, 2),
+                        name: properties.gewas || ''
                     });
+
                 } else {
-                     console.log("No features found at this location.");
+                     mapInstance.closePopup();
+                     alert("Geen landbouwperceel gevonden op deze locatie.");
                 }
             } catch (error) {
-                console.error("Error fetching feature info:", error);
+                console.error("Error fetching WFS data:", error);
+                mapInstance.closePopup();
             }
         });
 
@@ -142,7 +130,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                     color: 'hsl(var(--destructive))',
                     weight: 3,
                     fillOpacity: 0.1,
-                    interactive: false // This is the key change to prevent clicks on this layer
+                    interactive: false 
                 }).addTo(drawnItems);
                 
                 polygon.bindTooltip(`
@@ -404,7 +392,7 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
             <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
             <AlertDialogDescription>
               Deze actie kan niet ongedaan worden gemaakt. Dit zal het perceel permanent verwijderen.
-            </AlertDialogDescription>
+            </AlexDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuleren</AlertDialogCancel>
