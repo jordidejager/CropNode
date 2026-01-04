@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
@@ -97,21 +97,15 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
             try {
                 const response = await fetch(wfsUrl.toString());
-                const textResponse = await response.text();
                 
                 if (!response.ok) {
+                    const textResponse = await response.text();
                     console.error(`Server responded with ${response.status}: ${textResponse}`);
                     throw new Error(`Server responded with ${response.status}`);
                 }
                 
-                let data;
-                try {
-                    data = JSON.parse(textResponse);
-                } catch(e) {
-                     console.error("Failed to parse JSON:", textResponse);
-                     throw new Error("Ongeldig antwoord van de server ontvangen.");
-                }
-
+                const data = await response.json();
+                
                 if (data.features && data.features.length > 0) {
                     const feature = data.features[0];
                     if (selectionLayerRef.current) {
@@ -162,6 +156,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 mapRef.current.remove();
                 mapRef.current = null;
             }
+            delete (window as any).handleAddParcel;
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -454,6 +449,8 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     </AlertDialog>
   );
 }
+
+    
 
     
 
