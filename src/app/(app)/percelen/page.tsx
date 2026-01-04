@@ -84,7 +84,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
             L.popup().setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
             try {
-                const response = await fetch(wfsUrl);
+                const response = await fetch(wfsUrl.toString());
                 const textResponse = await response.text();
 
                 if (!response.ok) {
