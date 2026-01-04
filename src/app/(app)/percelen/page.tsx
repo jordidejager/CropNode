@@ -42,8 +42,8 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         mapRef.current = map;
         
         L.tileLayer(
-            "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
-            { attribution: 'Kaartgegevens &copy; <a href="https://www.pdok.nl/" target="_blank">PDOK</a>' }
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            { attribution: '&copy; OpenStreetMap contributors' }
         ).addTo(map);
 
         const LAYER_NAME = 'brpgewaspercelen:brpgewaspercelen_definitief_2023';
@@ -392,7 +392,7 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
             <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
             <AlertDialogDescription>
               Deze actie kan niet ongedaan worden gemaakt. Dit zal het perceel permanent verwijderen.
-            </AlexDescription>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuleren</AlertDialogCancel>
