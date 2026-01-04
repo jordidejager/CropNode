@@ -119,9 +119,9 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
         if (parcelsWithLocation.length > 0) {
             parcelsWithLocation.forEach(parcel => {
                 const polygon = L.polygon(parcel.location as L.LatLngExpression[], {
-                    color: 'hsl(var(--destructive))',
-                    fillColor: 'hsl(var(--destructive))',
-                    fillOpacity: 0.4
+                    color: 'hsl(var(--destructive))', // Red border
+                    weight: 3,
+                    fillOpacity: 0.1 // Mostly transparent fill
                 }).addTo(drawnItems);
                 
                 polygon.bindTooltip(`
