@@ -227,6 +227,13 @@ export default function PercelenPage() {
 
   useEffect(() => {
     loadParcels();
+    // Debug fetch to check the schema
+    fetch('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0?request=DescribeFeatureType&service=WFS&version=2.0.0&typeName=brpgewaspercelen:BrpGewas')
+      .then(response => response.text())
+      .then(textResponse => {
+        console.log('SCHEMA CHECK:', textResponse);
+      })
+      .catch(error => console.error('Error fetching schema:', error));
   }, [loadParcels]);
 
   const handleAdd = () => {
@@ -459,3 +466,4 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
 
 
     
+
