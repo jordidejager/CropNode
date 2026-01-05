@@ -73,7 +73,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
         (window as any).handleAddParcel = handleAddParcel;
         
-        map.on('click', async (e: L.LeafletMouseEvent) => {
+        map.on('click', (e: L.LeafletMouseEvent) => {
             const mapInstance = mapRef.current;
             if (!mapInstance) return;
             
@@ -96,60 +96,59 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
             popup.setLatLng(e.latlng).setContent("Data ophalen...").openOn(mapInstance);
 
-            try {
-                const response = await fetch(wfsUrl.toString());
-                
-                if (!response.ok) {
-                    const textResponse = await response.text();
-                    console.error(`Server responded with ${response.status}: ${textResponse}`);
-                    throw new Error(`Server responded with ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.features && data.features.length > 0) {
-                    const feature = data.features[0];
-                    if (selectionLayerRef.current) {
-                      mapInstance.removeLayer(selectionLayerRef.current);
+            fetch(wfsUrl.toString())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                             console.error(`Server responded with ${response.status}: ${text}`);
+                             throw new Error(`Server responded with ${response.status}`);
+                        });
                     }
-                    selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.features && data.features.length > 0) {
+                        const feature = data.features[0];
+                        if (selectionLayerRef.current) {
+                          mapInstance.removeLayer(selectionLayerRef.current);
+                        }
+                        selectionLayerRef.current = L.geoJSON(feature, {style: {color: 'hsl(var(--primary))', weight: 3, fillOpacity: 0.2, interactive: false }}).addTo(mapInstance);
 
-                    const properties = feature.properties;
-                    
-                    const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
-                    
-                    const calculatedAreaM2 = area(feature);
-                    const calculatedAreaHa = calculatedAreaM2 / 10000;
+                        const properties = feature.properties;
+                        
+                        const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
+                        
+                        const calculatedAreaM2 = area(feature);
+                        const calculatedAreaHa = calculatedAreaM2 / 10000;
 
-                    const displayArea = `${calculatedAreaHa.toFixed(4)} ha`;
+                        const displayArea = `${calculatedAreaHa.toFixed(4)} ha`;
 
-                    const rvoDataForPopup: RvoData = {
-                        area: calculatedAreaHa,
-                        location: { lat: e.latlng.lat, lng: e.latlng.lng },
-                        geometry: feature.geometry,
-                        name: gewasNaam,
-                    };
-                    
-                    const popupContent = `
-                        <div class="p-1">
-                            <p class="font-semibold text-base">${gewasNaam}</p>
-                            <p class="text-sm">Oppervlakte: ${displayArea}</p>
-                            <button onclick="window.handleAddParcel(${JSON.stringify(rvoDataForPopup).replace(/"/g, '&quot;')})" class="mt-2 w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90">
-                                Voeg perceel toe
-                            </button>
-                        </div>
-                    `;
+                        const rvoDataForPopup: RvoData = {
+                            area: calculatedAreaHa,
+                            location: { lat: e.latlng.lat, lng: e.latlng.lng },
+                            geometry: feature.geometry,
+                            name: gewasNaam,
+                        };
+                        
+                        const popupContent = `
+                            <div class="p-1">
+                                <p class="font-semibold text-base">${gewasNaam}</p>
+                                <p class="text-sm">Oppervlakte: ${displayArea}</p>
+                                <button onclick="window.handleAddParcel(${JSON.stringify(rvoDataForPopup).replace(/"/g, '&quot;')})" class="mt-2 w-full text-center px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90">
+                                    Voeg perceel toe
+                                </button>
+                            </div>
+                        `;
 
-                    popup.setContent(popupContent);
-                    popup.update();
-
-                } else {
-                     popup.setContent("Geen landbouwperceel gevonden op deze locatie.");
-                }
-            } catch (error) {
-                console.error("Error fetching WFS data:", error);
-                popup.setContent(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
-            }
+                        popup.setContent(popupContent);
+                    } else {
+                         popup.setContent("Geen landbouwperceel gevonden op deze locatie.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching WFS data:", error);
+                    popup.setContent(`Fout bij ophalen van data: ${error instanceof Error ? error.message : 'Onbekende fout'}`);
+                });
         });
 
         return () => {
@@ -164,6 +163,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
     useEffect(() => {
         const drawnItems = drawnItemsRef.current;
+        if (!drawnItems) return;
         drawnItems.clearLayers();
         const parcelsWithGeometry = parcels.filter(p => p.geometry);
 
@@ -454,4 +454,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     
 
     
+
 
