@@ -89,7 +89,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 srsName: 'EPSG:4326',
                 count: '1',
-                cql_filter: `INTERSECTS(geom, POINT(${lat} ${lng})) AND jaar = ${JAAR}`
+                cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
             }).toString();
 
             console.log('Fetching for:', lat, lng, 'URL:', wfsUrl.toString());
