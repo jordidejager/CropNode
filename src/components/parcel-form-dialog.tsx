@@ -110,9 +110,9 @@ export function ParcelFormDialog({
         reset({
           id: undefined,
           name: rvoData.name,
-          crop: rvoData.name, // Try to guess crop from name
+          crop: "",
           variety: "",
-          area: rvoData.area,
+          area: 0,
           location: rvoData.location,
           geometry: rvoData.geometry
         });
@@ -141,29 +141,7 @@ export function ParcelFormDialog({
   const handleClose = () => {
     onOpenChange(false)
   }
-
-  const openMap = () => {
-    setIsMapOpen(true);
-  }
   
-  const handleMapSave = (coordinates: { lat: number; lng: number }[]) => {
-    // This is simplified, for drawing a new shape, we might need a proper GeoJSON structure
-    if (coordinates.length > 0) {
-      const layer = L.polygon(coordinates);
-      const center = layer.getBounds().getCenter();
-      setValue('location', {lat: center.lat, lng: center.lng});
-      setValue('geometry', layer.toGeoJSON().geometry);
-    } else {
-       setValue('location', undefined);
-       setValue('geometry', undefined);
-    }
-    setIsMapOpen(false);
-  };
-  
-  const handleMapCancel = () => {
-    setIsMapOpen(false);
-  };
-
   const processSubmit: SubmitHandler<ParcelFormValues> = async (data) => {
     setIsSubmitting(true)
     await onSubmit(data)
@@ -180,7 +158,7 @@ export function ParcelFormDialog({
               {parcel ? "Perceel Aanpassen" : "Nieuw Perceel Toevoegen"}
             </DialogTitle>
             <DialogDescription>
-              {rvoData ? "Vul de perceelgegevens aan. De locatie en oppervlakte zijn overgenomen van RVO." : (parcel ? "Pas de gegevens van het perceel aan." : "Voer de gegevens voor het nieuwe perceel in.")}
+              {parcel ? "Pas de gegevens van het perceel aan." : "Voer de gegevens voor het nieuwe perceel in."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(processSubmit)} className="grid gap-4 py-4">
@@ -273,17 +251,6 @@ export function ParcelFormDialog({
                 )}
               </div>
             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">
-                  Locatie
-                </Label>
-                <div className="col-span-3">
-                  <Button type="button" variant="outline" onClick={openMap} className="w-full">
-                    <MapPin className="mr-2 h-4 w-4" /> 
-                    {getValues('geometry') ? 'Locatie Bewerken' : 'Teken op kaart'}
-                  </Button>
-                </div>
-            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleClose}>
                 Annuleren
@@ -294,33 +261,6 @@ export function ParcelFormDialog({
             </DialogFooter>
           </form>
         </DialogContent>
-      </Dialog>
-      
-      <Dialog open={isMapOpen} onOpenChange={setIsMapOpen}>
-          <DialogContent className="max-w-4xl h-[80vh]">
-              <DialogHeader>
-                  <DialogTitle>Teken perceel op de kaart</DialogTitle>
-                  <DialogDescription>
-                      Teken de omtrek van het perceel op de kaart. Klik op 'Opslaan' als je klaar bent of 'Annuleren' om te sluiten.
-                  </DialogDescription>
-              </DialogHeader>
-              <div className="h-[calc(80vh-200px)] w-full">
-                {isMapOpen && (
-                    <ParcelDrawingMap
-                        parcel={getValues()}
-                        onSave={handleMapSave}
-                    />
-                )}
-              </div>
-               <DialogFooter>
-                  <Button type="button" variant="outline" onClick={handleMapCancel}>
-                    Annuleren
-                  </Button>
-                  <Button type="button" onClick={() => setIsMapOpen(false)}>
-                    Coördinaten Opslaan
-                  </Button>
-              </DialogFooter>
-          </DialogContent>
       </Dialog>
     </>
   )
