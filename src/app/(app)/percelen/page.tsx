@@ -89,7 +89,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 srsName: 'EPSG:4326',
                 count: '1',
-                cql_filter: `INTERSECTS(geom, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
+                cql_filter: `INTERSECTS(geometrie, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
             }).toString();
 
             console.log('Fetching for:', lat, lng, 'URL:', wfsUrl.toString());
@@ -116,11 +116,11 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
 
                         const properties = feature.properties;
                         
-                        const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
-                        
                         const calculatedAreaM2 = area(feature);
                         const calculatedAreaHa = calculatedAreaM2 / 10000;
 
+                        const gewasNaam = properties.gewas || properties.omschrijving_gewas || 'Onbekend';
+                        
                         const displayArea = `${calculatedAreaHa.toFixed(4)} ha`;
 
                         const rvoDataForPopup: RvoData = {
@@ -456,3 +456,6 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
     
 
 
+
+
+    
