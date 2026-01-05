@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
@@ -89,7 +89,7 @@ const MapView = ({ parcels, onParcelClick }: { parcels: Parcel[], onParcelClick:
                 outputFormat: 'application/json',
                 srsName: 'EPSG:4326',
                 count: '1',
-                cql_filter: `INTERSECTS(geometrie, POINT(${lng} ${lat})) AND jaar = ${JAAR}`
+                cql_filter: `INTERSECTS(geom, POINT(${lat} ${lng})) AND jaar = ${JAAR}`
             }).toString();
 
             console.log('Fetching for:', lat, lng, 'URL:', wfsUrl.toString());
@@ -227,13 +227,6 @@ export default function PercelenPage() {
 
   useEffect(() => {
     loadParcels();
-    // Debug fetch to check the schema
-    fetch('https://service.pdok.nl/rvo/brpgewaspercelen/wfs/v1_0?request=DescribeFeatureType&service=WFS&version=2.0.0&typeName=brpgewaspercelen:BrpGewas')
-      .then(response => response.text())
-      .then(textResponse => {
-        console.log('SCHEMA CHECK:', textResponse);
-      })
-      .catch(error => console.error('Error fetching schema:', error));
   }, [loadParcels]);
 
   const handleAdd = () => {
@@ -466,4 +459,5 @@ function ActionsMenu({ parcel, onEdit, onDelete }: { parcel: Parcel, onEdit: (p:
 
 
     
+
 
