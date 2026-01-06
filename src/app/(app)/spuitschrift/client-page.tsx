@@ -77,10 +77,15 @@ export function SpuitschriftClientPage({ initialEntries, allParcels }: Spuitschr
                                 </AccordionTrigger>
                                 <AccordionContent className="px-4 pt-2 pb-4 space-y-4 bg-muted/50 rounded-b-md">
                                     <div>
-                                        <h4 className="font-semibold mb-1">Percelen ({totalArea.toFixed(4)} ha totaal)</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            {selectedParcels.map(p => p.name).join(', ')}
-                                        </p>
+                                        <h4 className="font-semibold mb-2">Percelen ({totalArea.toFixed(4)} ha totaal)</h4>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            {selectedParcels.map(p => (
+                                                <div key={p.id} className="flex justify-between">
+                                                    <span>{p.name} <span className="text-xs">({p.variety})</span></span>
+                                                    <span>{p.area.toFixed(4)} ha</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                     <div>
                                         <h4 className="font-semibold mb-2">Middelen</h4>
