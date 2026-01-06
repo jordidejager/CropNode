@@ -6,6 +6,7 @@ import { HistoryDashboard } from '@/components/history-dashboard';
 import type { Parcel, ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFirestore } from '@/firebase';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function PerceelHistoriePage() {
   const [historyEntries, setHistoryEntries] = useState<ParcelHistoryEntry[]>([]);
@@ -46,10 +47,14 @@ export default function PerceelHistoriePage() {
   }
 
   return (
-     <HistoryDashboard 
-        entries={historyEntries}
-        initialVarieties={cropVarieties}
-        initialParcels={parcelNames}
-      />
+    <Card>
+      <CardHeader>
+        <CardTitle>Perceelhistorie</CardTitle>
+        <CardDescription>Deze pagina is niet meer in gebruik. De functionaliteit is verplaatst naar het Spuitschrift.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-muted-foreground">Ga naar het Spuitschrift om de historie per perceel te bekijken.</p>
+      </CardContent>
+    </Card>
   );
 }

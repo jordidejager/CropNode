@@ -20,7 +20,6 @@ import { ActivePath } from '@/components/active-path';
 
 const menuItems = [
   { href: '/', label: 'Slimme Invoer', icon: Tractor },
-  { href: '/perceelhistorie', label: 'Perceelhistorie', icon: Map },
   { href: '/percelen', label: 'Percelen', icon: Map },
   { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
