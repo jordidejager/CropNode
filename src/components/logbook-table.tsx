@@ -141,7 +141,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     );
   };
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = (checked: boolean | string) => {
     setSelectedRowIds(checked ? entries.map(entry => entry.id) : []);
   };
   
@@ -215,7 +215,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                 <TableHead className="w-[40px]">
                   <Checkbox
                     checked={numSelected === entries.length && entries.length > 0}
-                    indeterminate={numSelected > 0 && numSelected < entries.length}
+                    indeterminate={numSelected > 0 && numSelected < entries.length ? true : undefined}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
                   />
