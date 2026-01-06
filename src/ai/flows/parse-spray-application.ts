@@ -56,6 +56,11 @@ const prompt = ai.definePrompt({
   name: 'sprayApplicationPrompt',
   input: { schema: SprayApplicationInputSchema },
   output: { schema: SprayApplicationOutputSchema },
+  config: {
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
+  },
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
 You will be provided with a sentence, a list of available plots (parcels), a list of available products from the user's "MiddelMatrix", and a list of user preferences for product names.
 
