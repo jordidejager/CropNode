@@ -79,10 +79,7 @@ Based on this information, extract the plots and products into a JSON object. Th
 - Always assume the current date if no date is specified.
 - If a user says 'all X', it means all plots of variety 'X' or crop 'X'.
 - The dosage must be a number.
-`,
-  config: {
-    responseMimeType: 'application/json',
-  },
+`
 });
 
 const parseSprayApplicationFlow = ai.defineFlow(
