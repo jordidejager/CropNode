@@ -61,6 +61,8 @@ You will be provided with a sentence, a list of available plots (parcels), a lis
 
 Your goal is to identify which plots were sprayed and which products were used, including their dosage and unit.
 
+Return the answer ONLY as a valid JSON string, without any markdown code blocks.
+
 Here is the user's input:
 "{{{naturalLanguageInput}}}"
 
@@ -89,7 +91,25 @@ const parseSprayApplicationFlow = ai.defineFlow(
     outputSchema: SprayApplicationOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
-    return output!;
+    const llmResponse = await prompt(input);
+    
+    // Clean the output to remove markdown and ensure it's a valid JSON string.
+    let cleanedOutput = llmResponse.text;
+    const jsonMatch = cleanedOutput.match(/```json\n([\s\S]*?)\n```/);
+    if (jsonMatch && jsonMatch[1]) {
+      cleanedOutput = jsonMatch[1];
+    }
+    
+    // Trim whitespace and attempt to parse.
+    try {
+      const parsedJson = JSON.parse(cleanedOutput.trim());
+      // Validate the parsed JSON with Zod before returning.
+      return SprayApplicationOutputSchema.parse(parsedJson);
+    } catch (e) {
+      console.error("Failed to parse cleaned AI output:", e);
+      console.error("Cleaned output was:", cleanedOutput);
+      // If parsing fails, throw an error to be handled by the caller.
+      throw new Error("AI returned invalid JSON format after cleaning.");
+    }
   }
 );
