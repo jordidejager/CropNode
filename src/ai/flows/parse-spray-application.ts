@@ -80,6 +80,11 @@ Based on this information, extract the plots and products into a JSON object. Th
 - If a user says 'all X', it means all plots of variety 'X' or crop 'X'.
 - The dosage must be a number.
 `,
+  config: {
+    generationConfig: {
+      responseMimeType: 'application/json',
+    }
+  },
 });
 
 const parseSprayApplicationFlow = ai.defineFlow(
