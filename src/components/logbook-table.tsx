@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useTransition, useMemo } from 'react';
@@ -51,12 +52,18 @@ function ProductListCollapsible({ products }: { products: ProductEntry[] | undef
     }
 
     const count = products.length;
-    const firstProduct = products[0];
-    const firstProductText = `${firstProduct.product} (${firstProduct.dosage} ${firstProduct.unit})`;
+    const getProductText = (p: ProductEntry) => `${p.product} (${p.dosage} ${p.unit})`;
 
-    if (count === 1) {
-      return <span>{firstProductText}</span>;
+    if (count < 4) {
+        return (
+            <div className="flex flex-col gap-1">
+                {products.map((p, i) => <span key={i}>{getProductText(p)}</span>)}
+            </div>
+        );
     }
+    
+    // Logic for 4 or more products (collapsible)
+    const firstProductText = getProductText(products[0]);
 
     return (
         <Collapsible>
@@ -71,7 +78,7 @@ function ProductListCollapsible({ products }: { products: ProductEntry[] | undef
             <CollapsibleContent>
                 <ul className="list-disc pl-5 mt-2 space-y-1 text-xs text-muted-foreground">
                     {products.slice(1).map((product, index) => (
-                        <li key={index}>{product.product} ({product.dosage} {product.unit})</li>
+                        <li key={index}>{getProductText(product)}</li>
                     ))}
                 </ul>
             </CollapsibleContent>
@@ -215,8 +222,8 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                 </TableHead>
                 <TableHead className="w-[150px]">Datum</TableHead>
                 <TableHead>Invoer</TableHead>
-                <TableHead>Middelen</TableHead>
                 <TableHead>Percelen</TableHead>
+                <TableHead>Middelen</TableHead>
                 <TableHead className="w-[150px]">Status</TableHead>
                 <TableHead className="w-[50px] text-right"></TableHead>
               </TableRow>
@@ -240,10 +247,10 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                       {entry.validationMessage && <p className="text-xs text-destructive truncate max-w-[200px] md:max-w-xs" title={entry.validationMessage}>{entry.validationMessage}</p>}
                   </TableCell>
                   <TableCell className="text-sm">
-                      <ProductListCollapsible products={entry.parsedData?.products} />
-                  </TableCell>
-                  <TableCell className="text-sm">
                       <ParcelListCollapsible plotIds={entry.parsedData?.plots} allParcels={allParcels} />
+                  </TableCell>
+                  <TableCell className="text-sm align-top">
+                      <ProductListCollapsible products={entry.parsedData?.products} />
                   </TableCell>
                   <TableCell>
                     <Badge
