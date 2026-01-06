@@ -80,7 +80,7 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
         title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
         description: result.message,
       });
-      router.push('/logboek');
+      router.push('/');
     });
   };
 
@@ -153,7 +153,7 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
 
       </CardContent>
       <CardFooter className="gap-2 justify-end flex-wrap">
-        <Button variant="ghost" onClick={() => router.push('/logboek')}>
+        <Button variant="ghost" onClick={() => router.push('/')}>
           <X className="mr-2" /> Annuleren
         </Button>
         <Button onClick={handleConfirm} disabled={!entry.parsedData || isConfirming}>
