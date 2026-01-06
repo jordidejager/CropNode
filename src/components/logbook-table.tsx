@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import type { LogbookEntry, Parcel, LogStatus } from '@/lib/types';
+import type { LogbookEntry, Parcel, LogStatus, ProductEntry } from '@/lib/types';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,41 @@ const formatDate = (date: Date | Timestamp | undefined) => {
     return 'Ongeldige datum';
   }
 }
+
+function ProductListCollapsible({ products }: { products: ProductEntry[] | undefined }) {
+    if (!products || products.length === 0) {
+        return <span>-</span>;
+    }
+
+    const count = products.length;
+    const firstProduct = products[0];
+    const firstProductText = `${firstProduct.product} (${firstProduct.dosage} ${firstProduct.unit})`;
+
+    if (count === 1) {
+      return <span>{firstProductText}</span>;
+    }
+
+    return (
+        <Collapsible>
+            <div className="flex items-center space-x-2">
+                <span className="text-sm truncate max-w-[200px]" title={firstProductText}>{firstProductText}</span>
+                 <CollapsibleTrigger asChild>
+                    <span className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+                        en {count - 1} ander{count - 2 === 0 ? '' : 'e'}
+                    </span>
+                 </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+                <ul className="list-disc pl-5 mt-2 space-y-1 text-xs text-muted-foreground">
+                    {products.slice(1).map((product, index) => (
+                        <li key={index}>{product.product} ({product.dosage} {product.unit})</li>
+                    ))}
+                </ul>
+            </CollapsibleContent>
+        </Collapsible>
+    );
+}
+
 
 function ParcelListCollapsible({ plotIds, allParcels }: { plotIds: string[] | undefined, allParcels: Parcel[] }) {
     if (!plotIds || plotIds.length === 0) {
@@ -180,6 +215,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                 </TableHead>
                 <TableHead className="w-[150px]">Datum</TableHead>
                 <TableHead>Invoer</TableHead>
+                <TableHead>Middelen</TableHead>
                 <TableHead>Percelen</TableHead>
                 <TableHead className="w-[150px]">Status</TableHead>
                 <TableHead className="w-[50px] text-right"></TableHead>
@@ -202,6 +238,9 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   <TableCell>
                       <p className="truncate max-w-[200px] md:max-w-xs font-medium" title={entry.rawInput}>{entry.rawInput}</p>
                       {entry.validationMessage && <p className="text-xs text-destructive truncate max-w-[200px] md:max-w-xs" title={entry.validationMessage}>{entry.validationMessage}</p>}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                      <ProductListCollapsible products={entry.parsedData?.products} />
                   </TableCell>
                   <TableCell className="text-sm">
                       <ParcelListCollapsible plotIds={entry.parsedData?.plots} allParcels={allParcels} />

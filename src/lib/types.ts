@@ -1,4 +1,3 @@
-
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
