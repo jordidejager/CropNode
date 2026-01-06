@@ -23,6 +23,7 @@ const menuItems = [
   { href: '/perceelhistorie', label: 'Perceelhistorie', icon: Map },
   { href: '/percelen', label: 'Percelen', icon: Map },
   { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
+  { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
 ];
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
