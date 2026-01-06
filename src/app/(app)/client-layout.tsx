@@ -12,7 +12,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Leaf, Bell, BookOpen, Tractor, Map, TestTubeDiagonal } from 'lucide-react';
+import { Leaf, Bell, BookOpen, Tractor, Map, TestTubeDiagonal, Boxes } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -23,6 +23,7 @@ const menuItems = [
   { href: '/percelen', label: 'Percelen', icon: Map },
   { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
+  { href: '/voorraad', label: 'Voorraad', icon: Boxes },
 ];
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {

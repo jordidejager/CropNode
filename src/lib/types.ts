@@ -72,3 +72,14 @@ export type UserPreference = {
   alias: string; // e.g., 'captan'
   preferred: string; // e.g., 'Captan 80 WDG'
 }
+
+export type InventoryMovement = {
+    id: string;
+    productName: string;
+    quantity: number;
+    unit: string;
+    type: 'addition' | 'usage' | 'correction';
+    date: Date;
+    description: string;
+    referenceId?: string; // e.g., logId or a manual entry ID
+}

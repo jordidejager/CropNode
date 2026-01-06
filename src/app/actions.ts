@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
@@ -166,6 +166,8 @@ export async function processSprayEntry(
     revalidatePath('/');
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
+    revalidatePath('/spuitschrift');
+    revalidatePath('/voorraad');
 
     return {
       message: 'Invoer succesvol verwerkt.',
@@ -265,6 +267,8 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     revalidatePath('/');
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
+    revalidatePath('/spuitschrift');
+    revalidatePath('/voorraad');
 
     const dateToReturn = updatedEntry.date instanceof Timestamp 
       ? updatedEntry.date.toDate() 
@@ -283,6 +287,8 @@ export async function deleteLogbookEntry(entryId: string) {
     revalidatePath('/');
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
+    revalidatePath('/spuitschrift');
+    revalidatePath('/voorraad');
 }
 
 export async function deleteLogbookEntries(entryIds: string[]) {
@@ -291,6 +297,8 @@ export async function deleteLogbookEntries(entryIds: string[]) {
     revalidatePath('/');
     revalidatePath('/logboek');
     revalidatePath('/perceelhistorie');
+    revalidatePath('/spuitschrift');
+    revalidatePath('/voorraad');
 }
 
 
@@ -344,6 +352,8 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
         revalidatePath('/logboek');
         revalidatePath('/perceelhistorie');
+        revalidatePath('/spuitschrift');
+        revalidatePath('/voorraad');
 
         return { success: true };
     } catch (error) {
@@ -389,6 +399,8 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
         if (confirmedCount > 0) {
             revalidatePath('/logboek');
             revalidatePath('/perceelhistorie');
+            revalidatePath('/spuitschrift');
+            revalidatePath('/voorraad');
         }
 
         return { success: true, count: confirmedCount };
@@ -466,7 +478,40 @@ export async function deleteAllMiddelen(): Promise<{ success: boolean; message: 
     }
 }
 
+const addStockSchema = z.object({
+  productName: z.string().min(1, 'Productnaam is verplicht'),
+  quantity: z.coerce.number().min(0.001, 'Hoeveelheid moet groter dan 0 zijn'),
+  unit: z.string().min(1, 'Eenheid is verplicht'),
+});
 
-    
+export async function addNewStock(formData: FormData): Promise<{ success: boolean; message: string }> {
+  const validatedFields = addStockSchema.safeParse({
+    productName: formData.get('productName'),
+    quantity: formData.get('quantity'),
+    unit: formData.get('unit'),
+  });
 
-    
+  if (!validatedFields.success) {
+    return { success: false, message: validatedFields.error.flatten().fieldErrors.productName?.[0] || validatedFields.error.flatten().fieldErrors.quantity?.[0] || 'Validatiefout.' };
+  }
+
+  const { productName, quantity, unit } = validatedFields.data;
+  const { firestore } = initializeFirebase();
+
+  try {
+    const newMovement: Omit<InventoryMovement, 'id'> = {
+      productName,
+      quantity,
+      unit,
+      type: 'addition',
+      date: new Date(),
+      description: 'Handmatige toevoeging (levering)',
+    };
+    await addInventoryMovement(firestore, newMovement);
+    revalidatePath('/voorraad');
+    return { success: true, message: `${quantity} ${unit} van ${productName} succesvol toegevoegd aan de voorraad.` };
+  } catch (error: any) {
+    console.error('Fout bij het toevoegen van voorraad:', error);
+    return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
+  }
+}
