@@ -81,9 +81,7 @@ Based on this information, extract the plots and products into a JSON object. Th
 - The dosage must be a number.
 `,
   config: {
-    generationConfig: {
-      responseMimeType: 'application/json',
-    }
+    responseMimeType: 'application/json',
   },
 });
 
