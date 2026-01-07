@@ -10,8 +10,8 @@ import { nl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
-import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown } from 'lucide-react';
-import { deleteLogbookEntries, confirmLogbookEntries } from '@/app/actions';
+import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown, RefreshCcw } from 'lucide-react';
+import { deleteLogbookEntries, confirmLogbookEntries, retryAnalysis } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -144,6 +144,17 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
   const handleSelectAll = (checked: boolean | string) => {
     setSelectedRowIds(checked ? entries.map(entry => entry.id) : []);
   };
+
+  const handleRetry = (entryId: string) => {
+    startTransition(async () => {
+        const result = await retryAnalysis(entryId);
+        if (result.success) {
+            toast({ title: 'Analyse gestart', description: 'De invoer wordt opnieuw geanalyseerd.' });
+        } else {
+            toast({ variant: 'destructive', title: 'Opnieuw proberen mislukt', description: result.message });
+        }
+    });
+  }
   
   const numSelected = selectedRowIds.length;
   const canConfirmSelection = useMemo(() => {
@@ -215,7 +226,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                 <TableHead className="w-[40px]">
                   <Checkbox
                     checked={numSelected === entries.length && entries.length > 0}
-                    indeterminate={numSelected > 0 && numSelected < entries.length ? true : undefined}
+                    indeterminate={numSelected > 0 && numSelected < entries.length ? "indeterminate" : false}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
                   />
@@ -261,22 +272,28 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <Link href={`/logboek/${entry.id}/bewerken`} passHref>
-                           <DropdownMenuItem>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              <span>Bewerken</span>
-                            </DropdownMenuItem>
-                        </Link>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {entry.status === 'Fout' ? (
+                       <Button variant="ghost" size="icon" onClick={() => handleRetry(entry.id)} disabled={isPending} title="Opnieuw proberen">
+                           <RefreshCcw className="h-4 w-4" />
+                       </Button>
+                    ) : (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0" disabled={entry.status === 'Analyseren...'}>
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <Link href={`/logboek/${entry.id}/bewerken`} passHref>
+                             <DropdownMenuItem disabled={entry.status === 'Analyseren...'}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                <span>Bewerken</span>
+                              </DropdownMenuItem>
+                          </Link>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

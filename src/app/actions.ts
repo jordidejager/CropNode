@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement } from '@/lib/types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement, LogStatus } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp } from 'firebase/firestore';
@@ -15,11 +15,8 @@ const formSchema = z.object({
   rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
 });
 
-type SerializableLogbookEntry = Omit<LogbookEntry, 'date'> & { date: string };
-
-export type FormState = {
+export type InitialState = {
   message: string;
-  entry?: SerializableLogbookEntry;
   errors?: {
     rawInput?: string[];
   };
@@ -32,16 +29,26 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     )];
     const middelMatrix = await getMiddelen(db);
     
-    const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products)); // Deep copy
+    const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products));
 
     for (let i = 0; i < updatedProducts.length; i++) {
         const productEntry = updatedProducts[i];
         
-        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
+        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(productEntry.product.toLowerCase()));
 
         if (matchingRules.length === 0) {
             validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`);
-            continue; // Skip to next product
+            continue; 
+        }
+
+        let officialProductName: string;
+        if (matchingRules.length > 1) {
+            validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
+            continue;
+        } else {
+            officialProductName = matchingRules[0]['Middelnaam'];
+            // Update the product name to the official one for validation and saving
+            updatedProducts[i].product = officialProductName;
         }
         
         let productAllowedOnAnySelectedCrop = false;
@@ -53,7 +60,7 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
                 if (maxDosageString) {
                     const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
                     if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
-                         const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
+                         const msg = `⚠️ Dosering voor ${officialProductName} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
                          if (!validationMessages.includes(msg)) validationMessages.push(msg);
                     }
                 }
@@ -61,7 +68,7 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
         }
 
         if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
-            const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
+            const msg = `⚠️ ${officialProductName} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
             if (!validationMessages.includes(msg)) validationMessages.push(msg);
         }
     }
@@ -81,37 +88,70 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     };
 }
 
+async function performAnalysis(db: Firestore, entry: LogbookEntry) {
+    let finalStatus: LogStatus = 'Fout';
+    let finalValidationMessage: string | undefined = 'Onbekende fout.';
+    let finalParsedData: ParsedSprayData | undefined = undefined;
 
-async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
-  const { firestore } = initializeFirebase();
-  const [allParcels, allProductNames] = await Promise.all([
-    getParcels(firestore),
-    getProducts(firestore)
-  ]);
+    try {
+        const [allParcels, allProductNames] = await Promise.all([
+          getParcels(db),
+          getProducts(db)
+        ]);
 
-  const llmResponse = await parseSprayApplication({
-    naturalLanguageInput: rawInput,
-    plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
-    productNames: allProductNames
-  });
-  
-  // Clean potential markdown
-  const cleanedOutput = llmResponse.plots ? llmResponse : JSON.parse(JSON.stringify(llmResponse).replace(/```json/g, '').replace(/```/g, ''));
+        const llmResponse = await parseSprayApplication({
+            naturalLanguageInput: entry.rawInput,
+            plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
+            productNames: allProductNames
+        });
+        
+        const cleanedOutput = llmResponse.plots ? llmResponse : JSON.parse(JSON.stringify(llmResponse).replace(/```json/g, '').replace(/```/g, ''));
+        finalParsedData = {
+            plots: cleanedOutput.plots || [],
+            products: cleanedOutput.products || []
+        };
+        
+        if (!finalParsedData || finalParsedData.plots.length === 0) {
+            throw new Error("AI kon geen geldige percelen identificeren in de output.");
+        }
+        if (finalParsedData.products.length === 0) {
+            throw new Error("AI kon geen geldige middelen identificeren in de output.");
+        }
+        
+        const { isValid, validationMessage, updatedProducts } = await validateSprayData(db, finalParsedData, allParcels);
 
-  return {
-    finalParsedData: {
-        plots: cleanedOutput.plots || [],
-        products: cleanedOutput.products || []
-    },
-    parcels: allParcels
-  };
+        if (updatedProducts) {
+            finalParsedData.products = updatedProducts;
+        }
+
+        finalStatus = isValid ? 'Akkoord' : 'Te Controleren';
+        finalValidationMessage = validationMessage || '';
+
+        if (isValid) {
+            await addParcelHistoryEntries(db, {
+                logbookEntry: { ...entry, parsedData: finalParsedData, status: finalStatus },
+                parcels: allParcels,
+            });
+        }
+    } catch (error: any) {
+        finalStatus = 'Fout';
+        finalValidationMessage = error.message && error.message.includes("The model is overloaded")
+            ? "De AI is momenteel overbelast. Probeer het later opnieuw."
+            : `Analyse mislukt: ${error.message || 'Onbekende fout'}`;
+        finalParsedData = undefined; // Clear parsed data on error
+    }
+
+    const updatedEntryData: Partial<LogbookEntry> = {
+        ...entry,
+        status: finalStatus,
+        validationMessage: finalValidationMessage,
+        parsedData: finalParsedData,
+    };
+    await updateLogbookEntry(db, updatedEntryData as LogbookEntry);
 }
 
 
-export async function processSprayEntry(
-  prevState: FormState,
-  formData: FormData
-): Promise<FormState> {
+export async function createInitialSprayEntry(prevState: InitialState, formData: FormData): Promise<InitialState> {
   const validatedFields = formSchema.safeParse({
     rawInput: formData.get('rawInput'),
   });
@@ -127,86 +167,73 @@ export async function processSprayEntry(
   const { firestore } = initializeFirebase();
   const newDate = new Date();
 
-  try {
-    let { finalParsedData, parcels } = await getFinalParsedData(rawInput);
+  const initialEntryData: Omit<LogbookEntry, 'id'> = {
+    rawInput,
+    status: 'Analyseren...',
+    date: newDate,
+  };
 
-    if (!finalParsedData || finalParsedData.plots.length === 0) {
-        throw new Error("AI kon geen geldige percelen identificeren in de output.");
-    }
-     if (finalParsedData.products.length === 0) {
-        throw new Error("AI kon geen geldige middelen identificeren in de output.");
-    }
-    
-    const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, finalParsedData, parcels);
+  const newEntry = await addLogbookEntry(firestore, initialEntryData);
 
-    if (updatedProducts) {
-        finalParsedData.products = updatedProducts;
-    }
-
-    const newEntryData: Omit<LogbookEntry, 'id'> = {
-      rawInput,
-      status: isValid ? 'Akkoord' : 'Te Controleren',
-      date: newDate,
-      parsedData: finalParsedData,
-    };
-    
-    if (validationMessage) {
-        newEntryData.validationMessage = validationMessage;
-    }
-
-    const newEntry = await addLogbookEntry(firestore, newEntryData);
-
-    if (isValid) {
-      await addParcelHistoryEntries(firestore, {
-        logbookEntry: newEntry,
-        parcels: parcels,
-      });
-    }
-    
+  // Perform analysis in the background. Don't await this.
+  performAnalysis(firestore, newEntry).then(() => {
     revalidatePath('/');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
+  });
 
-    return {
-      message: 'Invoer succesvol verwerkt.',
-      entry: { ...newEntry, date: newEntry.date.toISOString() },
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Onbekende fout van AI.';
-    
-    const errorEntryData: Omit<LogbookEntry, 'id'> = {
-      rawInput,
-      status: 'Fout',
-      date: newDate,
-      validationMessage: `Analyse mislukt: ${errorMessage}`,
-    };
+  revalidatePath('/');
 
-    const errorEntry = await addLogbookEntry(firestore, errorEntryData);
-    revalidatePath('/');
-
-    return {
-      message: `Fout bij verwerken: ${errorMessage}`,
-      entry: { ...errorEntry, date: newDate.toISOString() },
-    };
-  }
+  return {
+    message: 'Invoer wordt verwerkt...',
+  };
 }
+
+export async function retryAnalysis(entryId: string): Promise<{ success: boolean; message: string }> {
+    const { firestore } = initializeFirebase();
+    try {
+        const entry = await getLogbookEntry(firestore, entryId);
+        if (!entry) {
+            return { success: false, message: "Logboekregel niet gevonden." };
+        }
+
+        // Set status to 'Analyseren...' before starting
+        await updateLogbookEntry(firestore, { ...entry, status: 'Analyseren...' });
+        revalidatePath('/');
+
+        // Perform analysis in the background.
+        performAnalysis(firestore, entry).then(() => {
+            revalidatePath('/');
+            revalidatePath('/spuitschrift');
+            revalidatePath('/voorraad');
+        });
+
+        return { success: true, message: "Analyse opnieuw gestart." };
+    } catch (error: any) {
+        return { success: false, message: error.message || "Onbekende fout." };
+    }
+}
+
 
 async function learnFromCorrection(db: Firestore, originalProduct: string, correctedProduct: string) {
     if (originalProduct.toLowerCase() === correctedProduct.toLowerCase()) {
         return;
     }
-
-    // A simple way to find a common "alias" is to take the first word if it's the same.
     const originalFirstWord = originalProduct.split(' ')[0].toLowerCase();
     const correctedFirstWord = correctedProduct.split(' ')[0].toLowerCase();
     
     if (originalFirstWord === correctedFirstWord) {
         await setUserPreference(db, { alias: originalFirstWord, preferred: correctedProduct });
     } else {
-        // Also learn if the user typed an alias and it was corrected.
         await setUserPreference(db, { alias: originalProduct, preferred: correctedProduct });
     }
 }
+
+type FormState = {
+  message: string;
+  entry?: LogbookEntry;
+};
+
 
 export async function updateAndConfirmEntry(entry: LogbookEntry, originalProducts: ProductEntry[]): Promise<FormState> {
     const { firestore } = initializeFirebase();
@@ -266,7 +293,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
 
     return {
         message: 'Bespuiting definitief opgeslagen.',
-        entry: { ...updatedEntry, date: dateToReturn.toISOString() },
+        entry: { ...updatedEntry, date: dateToReturn.toISOString() } as any, // HACK: for type compatibility with form state
     };
 }
 
@@ -303,7 +330,6 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
         
-        // This validation is key. Even if the button is somehow enabled, the backend will check.
         const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
         
         if (updatedProducts) {
@@ -311,7 +337,6 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
 
         if (!isValid) {
-            // Update status to 'Te Controleren' and save validation message just in case it wasn't there
             entry.status = 'Te Controleren';
             entry.validationMessage = validationMessage;
             await updateLogbookEntry(firestore, entry);
@@ -400,7 +425,6 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         
-        // Convert sheet to JSON, using an array of arrays and raw values
         const jsonData: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false });
         
         if (jsonData.length < 2) {
@@ -413,12 +437,12 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
         const middelen: Omit<Middel, 'id'>[] = rows.map(row => {
             const middel: Omit<Middel, 'id'> = {};
             headers.forEach((header, index) => {
-                if (header) { // Only add if header is not empty
-                    middel[header] = row[index] ?? ''; // Use empty string for undefined/null values
+                if (header) { 
+                    middel[header] = row[index] ?? ''; 
                 }
             });
             return middel;
-        }).filter(m => Object.keys(m).length > 0 && m['Middelnaam']); // Filter out completely empty rows and rows without a name
+        }).filter(m => Object.keys(m).length > 0 && m['Middelnaam']); 
         
         if (middelen.length === 0) {
             throw new Error(`Kon geen geldige data extraheren uit ${file.name}. Controleer of het bestand correct is opgemaakt.`);
@@ -431,7 +455,6 @@ export async function parseCtgbFileAndImport(formData: FormData): Promise<{ succ
 
     } catch (error: any) {
         console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
-        // Re-throw the error with a more specific message to be caught by the client
         throw new Error(error.message || "Onbekende fout bij verwerken van bestand.");
     }
 }
@@ -486,6 +509,3 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
 }
-
-
-    
