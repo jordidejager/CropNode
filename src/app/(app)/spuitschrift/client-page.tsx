@@ -35,11 +35,19 @@ function ChronologicalView({ entries, allParcels }: { entries: LogbookEntry[], a
 
         return { selectedParcels, totalArea, productsWithTotals };
     };
+
+    const generateProductSummary = (entry: LogbookEntry) => {
+        if (!entry.parsedData || !entry.parsedData.products || entry.parsedData.products.length === 0) {
+            return entry.rawInput;
+        }
+        return entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit}/ha)`).join(', ');
+    };
     
     return (
         <Accordion type="single" collapsible className="w-full">
             {entries.map(entry => {
                 const { selectedParcels, totalArea, productsWithTotals } = calculateTotals(entry);
+                const productSummary = generateProductSummary(entry);
                 
                 return (
                     <AccordionItem value={entry.id} key={entry.id}>
@@ -47,8 +55,8 @@ function ChronologicalView({ entries, allParcels }: { entries: LogbookEntry[], a
                             <div className="flex justify-between items-center w-full pr-4">
                                 <div className="text-left">
                                     <p className="font-semibold">{formatDate(entry.date)}</p>
-                                    <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={entry.rawInput}>
-                                        {entry.rawInput}
+                                    <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={productSummary}>
+                                        {productSummary}
                                     </p>
                                 </div>
                                 <div className="text-right hidden sm:block">
