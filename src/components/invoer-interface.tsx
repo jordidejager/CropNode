@@ -56,9 +56,9 @@ export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
          </div>
       </div>
 
-      <div ref={formRef} className="py-4">
+      <div className="py-4">
         <div className="bg-card border rounded-lg p-2 w-full">
-            <InvoerForm onFormSubmit={formAction} isProcessing={isProcessing} />
+            <InvoerForm ref={formRef} onFormSubmit={formAction} isProcessing={isProcessing} />
         </div>
       </div>
     </div>
