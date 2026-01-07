@@ -27,9 +27,6 @@ const SprayApplicationInputSchema = z.object({
   plots: z
     .string()
     .describe('A JSON string representing an array of available plots with their id, name, crop and variety.'),
-  products: z
-    .string()
-    .describe('A JSON string representing an array of available product names from the MiddelMatrix.'),
   preferences: z
     .string()
     .describe('A JSON string representing an array of user preferences for product names. If the user mentions a name from the "alias" field, prefer using the corresponding "preferred" product name in the output.')
@@ -57,7 +54,7 @@ const prompt = ai.definePrompt({
   input: { schema: SprayApplicationInputSchema },
   output: { schema: SprayApplicationOutputSchema },
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
-You will be provided with a sentence, a list of available plots (parcels), a list of available products from the user's "MiddelMatrix", and a list of user preferences for product names.
+You will be provided with a sentence, a list of available plots (parcels) and a list of user preferences for product names.
 
 Your goal is to identify which plots were sprayed and which products were used, including their dosage and unit.
 
@@ -69,16 +66,12 @@ Here is the user's input:
 Here is the list of available plots with their ID, name, crop, and variety. Pay close attention to names and varieties to correctly identify the plots. A user might refer to 'all conference' which means all plots of the 'Conference' variety. The user might also refer to a plot by its name. You MUST use the ID of the plot in your output.
 {{{plots}}}
 
-Here is the list of available products from the user's MiddelMatrix. You MUST use a name from this list. If the user mentions a product that is not on the list, you must select the closest match from this list. Do NOT invent new product names.
-{{{products}}}
-
 Here is a list of user preferences. The user has previously corrected a product name. If the user input contains an 'alias', you should strongly prefer to use the 'preferred' product name in your output.
 {{{preferences}}}
 
 Based on this information, extract the plots and products into a JSON object. The output MUST be a valid JSON object matching the provided schema.
 - For 'plots', return an array of the IDs of the sprayed plots.
-- For 'products', return an array of objects, where each object contains the product name (from the provided list), dosage, and unit.
-- Always assume the current date if no date is specified.
+- For 'products', return an array of objects, where each object contains the product name, dosage, and unit.
 - If a user says 'all X', it means all plots of variety 'X' or crop 'X'.
 - The dosage must be a number.
 `
@@ -92,24 +85,7 @@ const parseSprayApplicationFlow = ai.defineFlow(
   },
   async (input) => {
     const llmResponse = await prompt(input);
-    
-    // Clean the output to remove markdown and ensure it's a valid JSON string.
-    let cleanedOutput = llmResponse.text;
-    const jsonMatch = cleanedOutput.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-      cleanedOutput = jsonMatch[1];
-    }
-    
-    // Trim whitespace and attempt to parse.
-    try {
-      const parsedJson = JSON.parse(cleanedOutput.trim());
-      // Validate the parsed JSON with Zod before returning.
-      return SprayApplicationOutputSchema.parse(parsedJson);
-    } catch (e) {
-      console.error("Failed to parse cleaned AI output:", e);
-      console.error("Cleaned output was:", cleanedOutput);
-      // If parsing fails, throw an error to be handled by the caller.
-      throw new Error("AI returned invalid JSON format after cleaning.");
-    }
+    return llmResponse.output!;
   }
 );
+

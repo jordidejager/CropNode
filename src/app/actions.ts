@@ -34,31 +34,48 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
     for (const productEntry of parsedData.products) {
         let hasRuleForCrop = false;
-        for (const crop of uniqueCrops) {
-             const rule = middelMatrix.find(m =>
-                m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase() &&
-                String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase())
-            );
+        let productFoundInMatrix = false;
+        
+        // Find all matching products in the matrix (could be multiple with same name)
+        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
 
-            if (rule) {
-                hasRuleForCrop = true;
-                const maxDosageString = rule['Maximum middeldosis'];
-                const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
+        if (matchingRules.length > 0) {
+            productFoundInMatrix = true;
+            let productAllowedOnAnySelectedCrop = false;
+
+            for (const crop of uniqueCrops) {
+                // Check if any of the matching rules is valid for the current crop
+                const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
                 
-                if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
-                     const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
-                     if (!validationMessages.includes(msg)) {
-                         validationMessages.push(msg);
-                     }
+                if (ruleForCrop) {
+                    productAllowedOnAnySelectedCrop = true;
+                    hasRuleForCrop = true; // Mark that we found a valid rule for at least one crop
+                    
+                    const maxDosageString = ruleForCrop['Maximum middeldosis'];
+                    if (maxDosageString) {
+                        const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
+                        
+                        if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
+                             const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
+                             if (!validationMessages.includes(msg)) {
+                                 validationMessages.push(msg);
+                             }
+                        }
+                    }
                 }
-                break; 
             }
-        }
-         if (!hasRuleForCrop && uniqueCrops.length > 0) {
-            const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
-            if (!validationMessages.includes(msg)) {
+             if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
+                const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
+                if (!validationMessages.includes(msg)) {
+                    validationMessages.push(msg);
+                }
+            }
+
+        } else {
+             const msg = `⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`;
+             if (!validationMessages.includes(msg)) {
                 validationMessages.push(msg);
-            }
+             }
         }
     }
 
@@ -78,8 +95,7 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
 async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
   const { firestore } = initializeFirebase();
-  const [allProducts, allParcels, preferences] = await Promise.all([
-    getProducts(firestore),
+  const [allParcels, preferences] = await Promise.all([
     getParcels(firestore),
     getUserPreferences(firestore)
   ]);
@@ -87,7 +103,6 @@ async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: 
   const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
-    products: JSON.stringify(allProducts),
     preferences: JSON.stringify(preferences),
   });
 
@@ -123,7 +138,7 @@ export async function processSprayEntry(
   try {
     const { finalParsedData, parcels } = await getFinalParsedData(rawInput);
 
-    if (finalParsedData.plots.length === 0) {
+    if (!finalParsedData || finalParsedData.plots.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");
     }
      if (finalParsedData.products.length === 0) {
@@ -164,8 +179,6 @@ export async function processSprayEntry(
     }
     
     revalidatePath('/');
-    revalidatePath('/logboek');
-    revalidatePath('/perceelhistorie');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
 
@@ -185,7 +198,6 @@ export async function processSprayEntry(
 
     const errorEntry = await addLogbookEntry(firestore, errorEntryData);
     revalidatePath('/');
-    revalidatePath('/logboek');
 
     return {
       message: `Fout bij verwerken: ${errorMessage}`,
@@ -265,8 +277,6 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
 
     revalidatePath('/');
-    revalidatePath('/logboek');
-    revalidatePath('/perceelhistorie');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
 
@@ -285,8 +295,6 @@ export async function deleteLogbookEntry(entryId: string) {
     const { firestore } = initializeFirebase();
     await dbDeleteLogbookEntry(firestore, entryId);
     revalidatePath('/');
-    revalidatePath('/logboek');
-    revalidatePath('/perceelhistorie');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
 }
@@ -295,8 +303,6 @@ export async function deleteLogbookEntries(entryIds: string[]) {
     const { firestore } = initializeFirebase();
     await dbDeleteLogbookEntries(firestore, entryIds);
     revalidatePath('/');
-    revalidatePath('/logboek');
-    revalidatePath('/perceelhistorie');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
 }
@@ -325,7 +331,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             entry.status = 'Te Controleren';
             entry.validationMessage = validationMessage;
             await updateLogbookEntry(firestore, entry);
-            revalidatePath('/logboek');
+            revalidatePath('/');
             return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
         }
         
@@ -350,8 +356,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }).flat();
         await addParcelHistoryEntries(firestore, historyEntries, allParcels);
 
-        revalidatePath('/logboek');
-        revalidatePath('/perceelhistorie');
+        revalidatePath('/');
         revalidatePath('/spuitschrift');
         revalidatePath('/voorraad');
 
@@ -397,8 +402,7 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
         }
 
         if (confirmedCount > 0) {
-            revalidatePath('/logboek');
-            revalidatePath('/perceelhistorie');
+            revalidatePath('/');
             revalidatePath('/spuitschrift');
             revalidatePath('/voorraad');
         }
