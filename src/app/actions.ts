@@ -30,89 +30,39 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
     )];
-    const [middelMatrix, history] = await Promise.all([getMiddelen(db), getParcelHistoryEntries(db)]);
+    const middelMatrix = await getMiddelen(db);
+    
     const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products)); // Deep copy
 
     for (let i = 0; i < updatedProducts.length; i++) {
         const productEntry = updatedProducts[i];
-        const inputProductLower = productEntry.product.toLowerCase();
+        
+        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
 
-        // Step 1: Find all potential matches in the database (fuzzy search)
-        let potentialMatches = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(inputProductLower));
-
-        if (potentialMatches.length === 0) {
+        if (matchingRules.length === 0) {
             validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`);
             continue; // Skip to next product
         }
         
-        let bestMatch: Middel | null = null;
-
-        if (potentialMatches.length === 1) {
-            // If there's only one match, that's our best match.
-            bestMatch = potentialMatches[0];
-        } else {
-            // Step 2: Use usage history to find the most popular match
-            const usageCounts: { [key: string]: number } = {};
-            history.forEach(entry => {
-                if (usageCounts[entry.product]) {
-                    usageCounts[entry.product]++;
-                } else {
-                    usageCounts[entry.product] = 1;
-                }
-            });
-
-            // Filter potential matches based on popularity
-            potentialMatches.sort((a, b) => (usageCounts[b['Middelnaam']] || 0) - (usageCounts[a['Middelnaam']] || 0));
-
-            const mostPopularCount = usageCounts[potentialMatches[0]['Middelnaam']] || 0;
-            const areTopMatchesEquallyPopular = potentialMatches.length > 1 &&
-                mostPopularCount > 0 &&
-                mostPopularCount === (usageCounts[potentialMatches[1]['Middelnaam']] || 0);
-
-            if (!areTopMatchesEquallyPopular && mostPopularCount > 0) {
-                bestMatch = potentialMatches[0];
-            } else if (areTopMatchesEquallyPopular) {
-                const popularNames = potentialMatches.filter(p => (usageCounts[p['Middelnaam']] || 0) === mostPopularCount).map(p => p['Middelnaam']);
-                 validationMessages.push(`⚠️ Meerdere populaire producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${popularNames.join(', ')}).`);
-                 continue;
-            }
-        }
-        
-        if (!bestMatch && potentialMatches.length > 0) {
-             const potentialNames = [...new Set(potentialMatches.map(m => m['Middelnaam']))];
-             validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${potentialNames.slice(0, 2).join(', ')}).`);
-             continue; // Skip to next product
-        }
-
-
-        if (bestMatch && bestMatch['Middelnaam']) {
-             // Update the product name to the official one for the rest of the validation.
-            productEntry.product = bestMatch['Middelnaam'];
-            const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
-
-            let productAllowedOnAnySelectedCrop = false;
-            for (const crop of uniqueCrops) {
-                const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
-                if (ruleForCrop) {
-                    productAllowedOnAnySelectedCrop = true;
-                    const maxDosageString = ruleForCrop['Maximum middeldosis'];
-                    if (maxDosageString) {
-                        const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
-                        if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
-                             const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
-                             if (!validationMessages.includes(msg)) validationMessages.push(msg);
-                        }
+        let productAllowedOnAnySelectedCrop = false;
+        for (const crop of uniqueCrops) {
+            const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
+            if (ruleForCrop) {
+                productAllowedOnAnySelectedCrop = true;
+                const maxDosageString = ruleForCrop['Maximum middeldosis'];
+                if (maxDosageString) {
+                    const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
+                    if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
+                         const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
+                         if (!validationMessages.includes(msg)) validationMessages.push(msg);
                     }
                 }
             }
+        }
 
-            if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
-                const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
-                if (!validationMessages.includes(msg)) validationMessages.push(msg);
-            }
-        } else {
-             const msg = `⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`;
-             if (!validationMessages.includes(msg)) validationMessages.push(msg);
+        if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
+            const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
+            if (!validationMessages.includes(msg)) validationMessages.push(msg);
         }
     }
 
@@ -134,11 +84,15 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
 async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
   const { firestore } = initializeFirebase();
-  const allParcels = await getParcels(firestore);
+  const [allParcels, allProductNames] = await Promise.all([
+    getParcels(firestore),
+    getProducts(firestore)
+  ]);
 
   const llmResponse = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
+    productNames: allProductNames
   });
   
   // Clean potential markdown
