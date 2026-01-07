@@ -1,9 +1,9 @@
+
 'use server';
 
 import React from 'react';
 import { initializeFirebase } from '@/firebase';
 import { getInventoryMovements } from '@/lib/store';
-import { InventoryMovement } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -19,9 +19,8 @@ const formatDate = (date: Date | Timestamp) => {
     return format(d, 'dd-MM-yyyy HH:mm', { locale: nl });
 };
 
-// This is a server component, but we're extracting the logic to a separate
-// component to use `use` hook for params.
-const VoorraadMutatieContent = async ({ productName }: { productName: string }) => {
+export default async function VoorraadMutatiePage({ params }: { params: { id: string } }) {
+    const productName = decodeURIComponent(params.id);
     const { firestore } = initializeFirebase();
     const allMovements = await getInventoryMovements(firestore);
     
@@ -98,12 +97,4 @@ const VoorraadMutatieContent = async ({ productName }: { productName: string }) 
             </CardContent>
         </Card>
     );
-};
-
-
-export default function VoorraadMutatiePage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = React.use(params);
-    const productName = decodeURIComponent(id);
-    
-    return <VoorraadMutatieContent productName={productName} />;
 }
