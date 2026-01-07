@@ -15,7 +15,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const ProductEntrySchema = z.object({
-  product: z.string().describe('The name of the product used.'),
+  product: z.string().describe('The name of the product used, as mentioned by the user.'),
   dosage: z.number().describe('The dosage of the product.'),
   unit: z.string().describe('The unit of measurement for the dosage (e.g., "kg", "l").'),
 });
@@ -27,9 +27,6 @@ const SprayApplicationInputSchema = z.object({
   plots: z
     .string()
     .describe('A JSON string representing an array of available plots with their id, name, crop and variety.'),
-  preferences: z
-    .string()
-    .describe('A JSON string representing an array of user preferences for product names. If the user mentions a name from the "alias" field, prefer using the corresponding "preferred" product name in the output.')
 });
 
 const SprayApplicationOutputSchema = z.object({
@@ -38,7 +35,7 @@ const SprayApplicationOutputSchema = z.object({
     .describe('An array of plot IDs that were sprayed. This MUST be an ID from the provided plots list.'),
   products: z
     .array(ProductEntrySchema)
-    .describe('An array of products that were used in the spray application.'),
+    .describe('An array of products that were used in the spray application, based on the user text.'),
 });
 
 export type SprayApplicationInput = z.infer<typeof SprayApplicationInputSchema>;
@@ -54,9 +51,9 @@ const prompt = ai.definePrompt({
   input: { schema: SprayApplicationInputSchema },
   output: { schema: SprayApplicationOutputSchema },
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
-You will be provided with a sentence, a list of available plots (parcels) and a list of user preferences for product names.
+You will be provided with a sentence and a list of available plots (parcels).
 
-Your goal is to identify which plots were sprayed and which products were used, including their dosage and unit.
+Your goal is to identify which plots were sprayed and which products were used, including their dosage and unit, based purely on the user's text.
 
 Return the answer ONLY as a valid JSON string, without any markdown code blocks.
 
@@ -66,12 +63,9 @@ Here is the user's input:
 Here is the list of available plots with their ID, name, crop, and variety. Pay close attention to names and varieties to correctly identify the plots. A user might refer to 'all conference' which means all plots of the 'Conference' variety. The user might also refer to a plot by its name. You MUST use the ID of the plot in your output.
 {{{plots}}}
 
-Here is a list of user preferences. The user has previously corrected a product name. If the user input contains an 'alias', you should strongly prefer to use the 'preferred' product name in your output.
-{{{preferences}}}
-
 Based on this information, extract the plots and products into a JSON object. The output MUST be a valid JSON object matching the provided schema.
 - For 'plots', return an array of the IDs of the sprayed plots.
-- For 'products', return an array of objects, where each object contains the product name, dosage, and unit.
+- For 'products', return an array of objects, where each object contains the product name as mentioned, dosage, and unit.
 - If a user says 'all X', it means all plots of variety 'X' or crop 'X'.
 - The dosage must be a number.
 `
@@ -85,7 +79,10 @@ const parseSprayApplicationFlow = ai.defineFlow(
   },
   async (input) => {
     const llmResponse = await prompt(input);
-    return llmResponse.output!;
+    const output = llmResponse.output;
+    if (!output) {
+      throw new Error('AI did not return a valid output.');
+    }
+    return output;
   }
 );
-

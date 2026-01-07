@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -30,45 +30,74 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
     )];
-    const middelMatrix = await getMiddelen(db);
+    const [middelMatrix, history] = await Promise.all([getMiddelen(db), getParcelHistoryEntries(db)]);
     const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products)); // Deep copy
 
     for (let i = 0; i < updatedProducts.length; i++) {
         const productEntry = updatedProducts[i];
         const inputProductLower = productEntry.product.toLowerCase();
 
-        // Flexible matching: find if the input product is a substring of any full product name.
-        const potentialMatches = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(inputProductLower));
-        
-        // Get unique names from potential matches
-        const uniqueMatchingNames = [...new Set(potentialMatches.map(m => m['Middelnaam']))];
+        // Step 1: Find all potential matches in the database (fuzzy search)
+        let potentialMatches = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(inputProductLower));
 
-        let bestMatch: string | null = null;
-
-        if (uniqueMatchingNames.length === 1) {
-            bestMatch = uniqueMatchingNames[0];
-            // Update the product name to the official one for the rest of the validation.
-            productEntry.product = bestMatch;
-        } else if (uniqueMatchingNames.length > 1) {
-            validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${uniqueMatchingNames.slice(0, 2).join(', ')}).`);
+        if (potentialMatches.length === 0) {
+            validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`);
             continue; // Skip to next product
         }
+        
+        let bestMatch: Middel | null = null;
 
-        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
+        if (potentialMatches.length === 1) {
+            // If there's only one match, that's our best match.
+            bestMatch = potentialMatches[0];
+        } else {
+            // Step 2: Use usage history to find the most popular match
+            const usageCounts: { [key: string]: number } = {};
+            history.forEach(entry => {
+                if (usageCounts[entry.product]) {
+                    usageCounts[entry.product]++;
+                } else {
+                    usageCounts[entry.product] = 1;
+                }
+            });
 
-        if (matchingRules.length > 0) {
+            // Filter potential matches based on popularity
+            potentialMatches.sort((a, b) => (usageCounts[b['Middelnaam']] || 0) - (usageCounts[a['Middelnaam']] || 0));
+
+            const mostPopularCount = usageCounts[potentialMatches[0]['Middelnaam']] || 0;
+            const areTopMatchesEquallyPopular = potentialMatches.length > 1 &&
+                mostPopularCount > 0 &&
+                mostPopularCount === (usageCounts[potentialMatches[1]['Middelnaam']] || 0);
+
+            if (!areTopMatchesEquallyPopular && mostPopularCount > 0) {
+                bestMatch = potentialMatches[0];
+            } else if (areTopMatchesEquallyPopular) {
+                const popularNames = potentialMatches.filter(p => (usageCounts[p['Middelnaam']] || 0) === mostPopularCount).map(p => p['Middelnaam']);
+                 validationMessages.push(`⚠️ Meerdere populaire producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${popularNames.join(', ')}).`);
+                 continue;
+            }
+        }
+        
+        if (!bestMatch && potentialMatches.length > 0) {
+             const potentialNames = [...new Set(potentialMatches.map(m => m['Middelnaam']))];
+             validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${potentialNames.slice(0, 2).join(', ')}).`);
+             continue; // Skip to next product
+        }
+
+
+        if (bestMatch && bestMatch['Middelnaam']) {
+             // Update the product name to the official one for the rest of the validation.
+            productEntry.product = bestMatch['Middelnaam'];
+            const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
+
             let productAllowedOnAnySelectedCrop = false;
-
             for (const crop of uniqueCrops) {
                 const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
-                
                 if (ruleForCrop) {
                     productAllowedOnAnySelectedCrop = true;
-                    
                     const maxDosageString = ruleForCrop['Maximum middeldosis'];
                     if (maxDosageString) {
                         const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
-                        
                         if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
                              const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
                              if (!validationMessages.includes(msg)) validationMessages.push(msg);
@@ -76,11 +105,11 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
                     }
                 }
             }
-             if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
+
+            if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
                 const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
                 if (!validationMessages.includes(msg)) validationMessages.push(msg);
             }
-
         } else {
              const msg = `⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`;
              if (!validationMessages.includes(msg)) validationMessages.push(msg);
@@ -91,6 +120,7 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
         return {
             isValid: false,
             validationMessage: validationMessages.join(' '),
+            updatedProducts: updatedProducts,
         };
     }
 
@@ -104,15 +134,11 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
 async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: ParsedSprayData, parcels: Parcel[]}> {
   const { firestore } = initializeFirebase();
-  const [allParcels, preferences] = await Promise.all([
-    getParcels(firestore),
-    getUserPreferences(firestore)
-  ]);
+  const allParcels = await getParcels(firestore);
 
   const llmResponse = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
-    preferences: JSON.stringify(preferences),
   });
   
   // Clean potential markdown
@@ -177,21 +203,10 @@ export async function processSprayEntry(
     const newEntry = await addLogbookEntry(firestore, newEntryData);
 
     if (isValid) {
-      const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = finalParsedData.plots.map(parcelId => {
-        return finalParsedData.products.map(productEntry => ({
-          logId: newEntry.id,
-          parcelId: parcelId,
-          product: productEntry.product,
-          dosage: productEntry.dosage,
-          unit: productEntry.unit,
-          date: newDate,
-          // These fields will be populated by addParcelHistoryEntries
-          parcelName: '', 
-          crop: '', 
-          variety: ''
-        }));
-      }).flat();
-      await addParcelHistoryEntries(firestore, historyEntries, parcels);
+      await addParcelHistoryEntries(firestore, {
+        logbookEntry: newEntry,
+        parcels: parcels,
+      });
     }
     
     revalidatePath('/');
@@ -281,21 +296,10 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
 
 
     if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
-        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = updatedEntry.parsedData.plots.map(parcelId => {
-            return updatedEntry.parsedData!.products.map(productEntry => ({
-                logId: updatedEntry.id,
-                parcelId: parcelId,
-                product: productEntry.product,
-                dosage: productEntry.dosage,
-                unit: productEntry.unit,
-                date: new Date(updatedEntry.date),
-                // These fields will be populated by addParcelHistoryEntries
-                parcelName: '', 
-                crop: '', 
-                variety: ''
-            }));
-        }).flat();
-        await addParcelHistoryEntries(firestore, historyEntries, allParcels);
+        await addParcelHistoryEntries(firestore, {
+            logbookEntry: updatedEntry,
+            parcels: allParcels,
+        });
     }
 
     revalidatePath('/');
@@ -366,21 +370,10 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
         await updateLogbookEntry(firestore, entry);
 
-        const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.map(parcelId => {
-            return entry.parsedData!.products.map(productEntry => ({
-                logId: entry.id,
-                parcelId: parcelId,
-                product: productEntry.product,
-                dosage: productEntry.dosage,
-                unit: productEntry.unit,
-                date: new Date(entry.date),
-                // These fields will be populated by addParcelHistoryEntries
-                parcelName: '', 
-                crop: '', 
-                variety: ''
-            }));
-        }).flat();
-        await addParcelHistoryEntries(firestore, historyEntries, allParcels);
+        await addParcelHistoryEntries(firestore, {
+            logbookEntry: entry,
+            parcels: allParcels,
+        });
 
         revalidatePath('/');
         revalidatePath('/spuitschrift');
@@ -414,20 +407,10 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
             entry.validationMessage = '';
             await updateLogbookEntry(firestore, entry);
 
-            const historyEntries: Omit<ParcelHistoryEntry, 'id'>[] = entry.parsedData.plots.map(parcelId => {
-                return entry.parsedData!.products.map(productEntry => ({
-                    logId: entry.id,
-                    parcelId: parcelId,
-                    product: productEntry.product,
-                    dosage: productEntry.dosage,
-                    unit: productEntry.unit,
-                    date: new Date(entry.date),
-                    parcelName: '', 
-                    crop: '', 
-                    variety: ''
-                }));
-            }).flat();
-            await addParcelHistoryEntries(firestore, historyEntries, allParcels);
+            await addParcelHistoryEntries(firestore, {
+                logbookEntry: entry,
+                parcels: allParcels
+            });
             confirmedCount++;
         }
 

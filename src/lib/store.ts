@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where, collectionGroup, QueryConstraint } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference, InventoryMovement } from './types';
 
 const LOGBOOK_COLLECTION = 'logbook';
@@ -327,17 +327,18 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   });
 }
 
-export async function addParcelHistoryEntries(db: Firestore, entries: Omit<ParcelHistoryEntry, 'id'>[], parcels: Parcel[]) {
+export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels }: { logbookEntry: LogbookEntry, parcels: Parcel[] }) {
     if (!db) throw new Error("Database not initialized");
-    const batch = writeBatch(db);
+    if (!logbookEntry.parsedData) return;
 
-    const logIds = [...new Set(entries.map(e => e.logId))];
-    if (logIds.length === 0) return;
+    const batch = writeBatch(db);
+    const { id: logId, parsedData } = logbookEntry;
+    const { plots, products } = parsedData;
 
     // --- Delete old related entries ---
-    const historyQuery = query(collection(db, HISTORY_COLLECTION), where('logId', 'in', logIds));
-    const inventoryQuery = query(collection(db, INVENTORY_MOVEMENTS_COLLECTION), where('referenceId', 'in', logIds));
-
+    const historyQuery = query(collection(db, HISTORY_COLLECTION), where('logId', '==', logId));
+    const inventoryQuery = query(collection(db, INVENTORY_MOVEMENTS_COLLECTION), where('referenceId', '==', logId));
+    
     const [existingHistoryDocs, existingInventoryDocs] = await Promise.all([
         getDocs(historyQuery),
         getDocs(inventoryQuery)
@@ -346,73 +347,59 @@ export async function addParcelHistoryEntries(db: Firestore, entries: Omit<Parce
     existingHistoryDocs.forEach(doc => batch.delete(doc.ref));
     existingInventoryDocs.forEach(doc => batch.delete(doc.ref));
 
+    // --- Create new Parcel History entries AND calculate total usage per product ---
+    const productUsage: Record<string, { totalAmount: number; unit: string; parcelIds: Set<string> }> = {};
 
-    // --- Create new Parcel History entries ---
-    entries.forEach(entry => {
-        const parcel = parcels.find(p => p.id === entry.parcelId);
-        if (parcel) {
+    plots.forEach(parcelId => {
+        const parcel = parcels.find(p => p.id === parcelId);
+        if (!parcel) return;
+
+        products.forEach(productEntry => {
+            // Create history entry for each parcel
             const historyDocRef = doc(collection(db, HISTORY_COLLECTION));
             const historyEntry: Omit<ParcelHistoryEntry, 'id'> = {
-                ...entry,
+                logId,
+                parcelId: parcel.id,
                 parcelName: parcel.name,
                 crop: parcel.crop,
                 variety: parcel.variety,
+                product: productEntry.product,
+                dosage: productEntry.dosage,
+                unit: productEntry.unit,
+                date: new Date(logbookEntry.date),
             };
             batch.set(historyDocRef, historyEntry);
-        }
-    });
 
-    // --- Create new consolidated Inventory Movement entries ---
-    const productUsageByLog = entries.reduce((acc, entry) => {
-        const parcel = parcels.find(p => p.id === entry.parcelId);
-        if (!parcel || !parcel.area) return acc;
-
-        // Ensure the logId entry exists
-        if (!acc[entry.logId]) {
-            acc[entry.logId] = {};
-        }
-
-        // Ensure the product entry exists for the logId
-        if (!acc[entry.logId][entry.product]) {
-            acc[entry.logId][entry.product] = {
-                totalAmount: 0,
-                unit: entry.unit,
-                date: entry.date,
-                parcelIds: new Set<string>()
-            };
-        }
-
-        // Add to total amount and track parcel
-        const usage = acc[entry.logId][entry.product];
-        usage.totalAmount += entry.dosage * parcel.area;
-        usage.parcelIds.add(parcel.id);
-        
-        return acc;
-    }, {} as Record<string, Record<string, { totalAmount: number; unit: string; date: Date, parcelIds: Set<string> }>>);
-
-
-    Object.entries(productUsageByLog).forEach(([logId, products]) => {
-        Object.entries(products).forEach(([productName, usage]) => {
-            if (usage.totalAmount > 0) {
-                const inventoryDocRef = doc(collection(db, INVENTORY_MOVEMENTS_COLLECTION));
-                const inventoryMovement: Omit<InventoryMovement, 'id'> = {
-                    productName: productName,
-                    quantity: -usage.totalAmount, // Negative for usage
-                    unit: usage.unit,
-                    type: 'usage',
-                    date: new Date(usage.date),
-                    description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
-                    referenceId: logId, // Link to the original log entry
-                };
-                batch.set(inventoryDocRef, inventoryMovement);
+            // Aggregate product usage
+            if (!productUsage[productEntry.product]) {
+                productUsage[productEntry.product] = { totalAmount: 0, unit: productEntry.unit, parcelIds: new Set() };
             }
+            if(parcel.area) {
+                productUsage[productEntry.product].totalAmount += productEntry.dosage * parcel.area;
+            }
+            productUsage[productEntry.product].parcelIds.add(parcelId);
         });
     });
 
+    // --- Create new consolidated Inventory Movement entries ---
+    Object.entries(productUsage).forEach(([productName, usage]) => {
+        if (usage.totalAmount > 0) {
+            const inventoryDocRef = doc(collection(db, INVENTORY_MOVEMENTS_COLLECTION));
+            const inventoryMovement: Omit<InventoryMovement, 'id'> = {
+                productName,
+                quantity: -usage.totalAmount, // Negative for usage
+                unit: usage.unit,
+                type: 'usage',
+                date: new Date(logbookEntry.date),
+                description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
+                referenceId: logId, // Link to the original log entry
+            };
+            batch.set(inventoryDocRef, inventoryMovement);
+        }
+    });
 
     await batch.commit();
 }
-
 
 
 // Product Functions
