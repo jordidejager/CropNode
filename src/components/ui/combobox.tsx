@@ -50,6 +50,12 @@ export function Combobox({
     options.find((option) => option.value.toLowerCase() === currentValue.toLowerCase())
       ?.label || currentValue
 
+  const filteredOptions = search
+    ? options.filter(option =>
+        option.label.toLowerCase().includes(search.toLowerCase())
+      )
+    : options
+
   const showCreateOption =
     creatable &&
     search &&
@@ -72,14 +78,9 @@ export function Combobox({
       </PopoverTrigger>
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"
-        
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <Command
-           filter={(itemValue, searchValue) => {
-            if (itemValue.toLowerCase().includes(searchValue.toLowerCase())) return 1
-            return 0
-          }}
-        >
+        <Command shouldFilter={false}>
           <CommandInput
             placeholder="Zoek of maak nieuw..."
             value={search}
@@ -90,8 +91,8 @@ export function Combobox({
               {showCreateOption ? (
                 <CommandItem
                   value={search}
-                  onSelect={(currentValue) => {
-                    onValueChange(currentValue)
+                  onSelect={() => {
+                    onValueChange(search)
                     setSearch("")
                     setOpen(false)
                   }}
@@ -104,28 +105,26 @@ export function Combobox({
               )}
             </CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label}
-                  onSelect={() => {
-                    onValueChange(option.value);
-                    setSearch('');
-                    setOpen(false);
+                  value={option.value}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue === value ? "" : currentValue)
+                    setSearch("")
+                    setOpen(false)
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      currentValue.toLowerCase() === option.value.toLowerCase()
-                        ? "opacity-100"
-                        : "opacity-0"
+                      value === option.value ? "opacity-100" : "opacity-0"
                     )}
                   />
                   {option.label}
                 </CommandItem>
               ))}
-              {showCreateOption && (
+               {showCreateOption && (
                  <CommandItem
                   value={search}
                   onSelect={() => {
