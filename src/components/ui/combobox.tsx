@@ -42,25 +42,28 @@ export function Combobox({
   creatable = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  
-  const currentValue = value || ""
+  const [inputValue, setInputValue] = React.useState("")
 
-  const currentLabel =
-    options.find((option) => option.value.toLowerCase() === currentValue.toLowerCase())
-      ?.label || currentValue
+  const currentLabel = options.find((option) => option.value.toLowerCase() === value?.toLowerCase())?.label || value;
 
-  const filteredOptions = search
-    ? options.filter(option =>
-        option.label.toLowerCase().includes(search.toLowerCase())
-      )
-    : options
+  const handleSelect = (selectedValue: string) => {
+    onValueChange(selectedValue)
+    setOpen(false)
+    setInputValue("")
+  }
+
+  const filteredOptions =
+    inputValue === ""
+      ? options
+      : options.filter((option) =>
+          option.label.toLowerCase().includes(inputValue.toLowerCase())
+        )
 
   const showCreateOption =
     creatable &&
-    search &&
-    !options.some(
-      (option) => option.label.toLowerCase() === search.toLowerCase()
+    inputValue &&
+    !filteredOptions.some(
+      (option) => option.label.toLowerCase() === inputValue.toLowerCase()
     )
 
   return (
@@ -80,25 +83,21 @@ export function Combobox({
         className="w-[--radix-popover-trigger-width] p-0"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <Command shouldFilter={false}>
+        <Command>
           <CommandInput
             placeholder="Zoek of maak nieuw..."
-            value={search}
-            onValueChange={setSearch}
+            value={inputValue}
+            onValueChange={setInputValue}
           />
           <CommandList>
             <CommandEmpty>
               {showCreateOption ? (
-                <CommandItem
-                  value={search}
-                  onSelect={() => {
-                    onValueChange(search)
-                    setSearch("")
-                    setOpen(false)
-                  }}
+                 <CommandItem
+                  value={inputValue}
+                  onSelect={() => handleSelect(inputValue)}
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Maak "{search}" aan
+                  Maak "{inputValue}" aan
                 </CommandItem>
               ) : (
                 "Geen resultaten gevonden."
@@ -108,12 +107,8 @@ export function Combobox({
               {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={(currentValue) => {
-                    onValueChange(currentValue === value ? "" : currentValue)
-                    setSearch("")
-                    setOpen(false)
-                  }}
+                  value={option.label}
+                  onSelect={() => handleSelect(option.value)}
                 >
                   <Check
                     className={cn(
@@ -124,17 +119,13 @@ export function Combobox({
                   {option.label}
                 </CommandItem>
               ))}
-               {showCreateOption && (
-                 <CommandItem
-                  value={search}
-                  onSelect={() => {
-                    onValueChange(search)
-                    setSearch("")
-                    setOpen(false)
-                  }}
+              {showCreateOption && (
+                <CommandItem
+                  value={inputValue}
+                  onSelect={() => handleSelect(inputValue)}
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Maak "{search}" aan
+                  Maak "{inputValue}" aan
                 </CommandItem>
               )}
             </CommandGroup>
