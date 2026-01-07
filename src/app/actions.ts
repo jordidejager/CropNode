@@ -25,31 +25,45 @@ export type FormState = {
   };
 };
 
-async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string }> {
+async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string, updatedProducts?: ProductEntry[] }> {
     const validationMessages: string[] = [];
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
     )];
     const middelMatrix = await getMiddelen(db);
+    const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products)); // Deep copy
 
-    for (const productEntry of parsedData.products) {
-        let hasRuleForCrop = false;
-        let productFoundInMatrix = false;
+    for (let i = 0; i < updatedProducts.length; i++) {
+        const productEntry = updatedProducts[i];
+        const inputProductLower = productEntry.product.toLowerCase();
+
+        // Flexible matching: find if the input product is a substring of any full product name.
+        const potentialMatches = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(inputProductLower));
         
-        // Find all matching products in the matrix (could be multiple with same name)
+        // Get unique names from potential matches
+        const uniqueMatchingNames = [...new Set(potentialMatches.map(m => m['Middelnaam']))];
+
+        let bestMatch: string | null = null;
+
+        if (uniqueMatchingNames.length === 1) {
+            bestMatch = uniqueMatchingNames[0];
+            // Update the product name to the official one for the rest of the validation.
+            productEntry.product = bestMatch;
+        } else if (uniqueMatchingNames.length > 1) {
+            validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker (bv. ${uniqueMatchingNames.slice(0, 2).join(', ')}).`);
+            continue; // Skip to next product
+        }
+
         const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase() === productEntry.product.toLowerCase());
 
         if (matchingRules.length > 0) {
-            productFoundInMatrix = true;
             let productAllowedOnAnySelectedCrop = false;
 
             for (const crop of uniqueCrops) {
-                // Check if any of the matching rules is valid for the current crop
                 const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
                 
                 if (ruleForCrop) {
                     productAllowedOnAnySelectedCrop = true;
-                    hasRuleForCrop = true; // Mark that we found a valid rule for at least one crop
                     
                     const maxDosageString = ruleForCrop['Maximum middeldosis'];
                     if (maxDosageString) {
@@ -57,38 +71,33 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
                         
                         if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
                              const msg = `⚠️ Dosering voor ${productEntry.product} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
-                             if (!validationMessages.includes(msg)) {
-                                 validationMessages.push(msg);
-                             }
+                             if (!validationMessages.includes(msg)) validationMessages.push(msg);
                         }
                     }
                 }
             }
              if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
                 const msg = `⚠️ ${productEntry.product} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
-                if (!validationMessages.includes(msg)) {
-                    validationMessages.push(msg);
-                }
+                if (!validationMessages.includes(msg)) validationMessages.push(msg);
             }
 
         } else {
              const msg = `⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`;
-             if (!validationMessages.includes(msg)) {
-                validationMessages.push(msg);
-             }
+             if (!validationMessages.includes(msg)) validationMessages.push(msg);
         }
     }
 
     if (validationMessages.length > 0) {
         return {
             isValid: false,
-            validationMessage: validationMessages.join(' ')
+            validationMessage: validationMessages.join(' '),
         };
     }
 
     return {
         isValid: true,
-        validationMessage: ''
+        validationMessage: '',
+        updatedProducts: updatedProducts
     };
 }
 
@@ -100,16 +109,19 @@ async function getFinalParsedData(rawInput: string): Promise<{ finalParsedData: 
     getUserPreferences(firestore)
   ]);
 
-  const parsedDataFromAI: ParsedSprayData = await parseSprayApplication({
+  const llmResponse = await parseSprayApplication({
     naturalLanguageInput: rawInput,
     plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
     preferences: JSON.stringify(preferences),
   });
+  
+  // Clean potential markdown
+  const cleanedOutput = llmResponse.plots ? llmResponse : JSON.parse(JSON.stringify(llmResponse).replace(/```json/g, '').replace(/```/g, ''));
 
   return {
     finalParsedData: {
-        plots: parsedDataFromAI.plots || [],
-        products: parsedDataFromAI.products || []
+        plots: cleanedOutput.plots || [],
+        products: cleanedOutput.products || []
     },
     parcels: allParcels
   };
@@ -136,7 +148,7 @@ export async function processSprayEntry(
   const newDate = new Date();
 
   try {
-    const { finalParsedData, parcels } = await getFinalParsedData(rawInput);
+    let { finalParsedData, parcels } = await getFinalParsedData(rawInput);
 
     if (!finalParsedData || finalParsedData.plots.length === 0) {
         throw new Error("AI kon geen geldige percelen identificeren in de output.");
@@ -145,7 +157,11 @@ export async function processSprayEntry(
         throw new Error("AI kon geen geldige middelen identificeren in de output.");
     }
     
-    const { isValid, validationMessage } = await validateSprayData(firestore, finalParsedData, parcels);
+    const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, finalParsedData, parcels);
+
+    if (updatedProducts) {
+        finalParsedData.products = updatedProducts;
+    }
 
     const newEntryData: Omit<LogbookEntry, 'id'> = {
       rawInput,
@@ -230,7 +246,11 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
     
     const allParcels = await getParcels(firestore);
-    const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
+    const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
+    
+    if (updatedProducts) {
+        entry.parsedData.products = updatedProducts;
+    }
     
     const updatedEntryData: Partial<LogbookEntry> = {
         ...entry,
@@ -249,11 +269,13 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     await updateLogbookEntry(firestore, updatedEntry);
 
     // Learn from corrections
-    for (let i = 0; i < updatedEntry.parsedData.products.length; i++) {
-        const original = originalProducts[i];
-        const corrected = updatedEntry.parsedData.products[i];
-        if (original && corrected) {
-           await learnFromCorrection(firestore, original.product, corrected.product);
+    if (updatedEntry.parsedData?.products) {
+        for (let i = 0; i < updatedEntry.parsedData.products.length; i++) {
+            const original = originalProducts[i];
+            const corrected = updatedEntry.parsedData.products[i];
+            if (original && corrected) {
+               await learnFromCorrection(firestore, original.product, corrected.product);
+            }
         }
     }
 
@@ -311,7 +333,7 @@ export async function deleteLogbookEntries(entryIds: string[]) {
 export async function confirmLogbookEntry(entryId: string): Promise<{ success: boolean; message?: string }> {
     const { firestore } = initializeFirebase();
     try {
-        const [entry, allParcels] = await Promise.all([
+        let [entry, allParcels] = await Promise.all([
           getLogbookEntry(firestore, entryId),
           getParcels(firestore),
         ]);
@@ -324,8 +346,12 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
         
         // This validation is key. Even if the button is somehow enabled, the backend will check.
-        const { isValid, validationMessage } = await validateSprayData(firestore, entry.parsedData, allParcels);
+        const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
         
+        if (updatedProducts) {
+            entry.parsedData.products = updatedProducts;
+        }
+
         if (!isValid) {
             // Update status to 'Te Controleren' and save validation message just in case it wasn't there
             entry.status = 'Te Controleren';
@@ -377,7 +403,11 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
             const entry = await getLogbookEntry(firestore, entryId);
             if (!entry || !entry.parsedData) continue;
             
-            const { isValid } = await validateSprayData(firestore, entry.parsedData, allParcels);
+            const { isValid, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
+            if (updatedProducts) {
+                entry.parsedData.products = updatedProducts;
+            }
+            
             if (!isValid) continue; // Skip entries that are not valid
 
             entry.status = 'Akkoord';
@@ -519,3 +549,6 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
 }
+
+
+    
