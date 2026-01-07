@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, use } from 'react';
 import { getLogbookEntry, getProducts, getParcels } from '@/lib/store';
 import type { LogbookEntry, Parcel, ProductEntry } from '@/lib/types';
 import { useFirestore } from '@/firebase';
@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 export default function EditLogbookEntryPage({ params }: { params: { id: string } }) {
+  const { id } = use(params);
   const [entry, setEntry] = useState<LogbookEntry | null>(null);
   const [originalProducts, setOriginalProducts] = useState<ProductEntry[]>([]);
   const [allProducts, setAllProducts] = useState<string[]>([]);
@@ -28,12 +29,12 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
   const router = useRouter();
 
   useEffect(() => {
-    if (!db || !params.id) return;
+    if (!db || !id) return;
 
     async function loadData() {
       setLoading(true);
       const [fetchedEntry, fetchedProducts, fetchedParcels] = await Promise.all([
-        getLogbookEntry(db, params.id),
+        getLogbookEntry(db, id),
         getProducts(db),
         getParcels(db)
       ]);
@@ -46,7 +47,7 @@ export default function EditLogbookEntryPage({ params }: { params: { id: string 
       setLoading(false);
     }
     loadData();
-  }, [db, params.id]);
+  }, [db, id]);
 
   const handleParcelsChange = (selectedIds: string[]) => {
     if (entry && entry.parsedData) {

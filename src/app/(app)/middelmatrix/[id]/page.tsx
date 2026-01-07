@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useFirestore } from '@/firebase';
 import { getMiddel } from '@/lib/store';
 import type { Middel } from '@/lib/types';
@@ -46,6 +46,7 @@ const DetailItem = ({ label, value }: { label: string; value: string }) => (
 );
 
 export default function MiddelDetailPage({ params }: { params: { id: string } }) {
+    const { id } = use(params);
     const [middel, setMiddel] = useState<Middel | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -53,13 +54,13 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
     const router = useRouter();
 
     useEffect(() => {
-        if (!db || !params.id) return;
+        if (!db || !id) return;
 
         async function loadMiddel() {
             setLoading(true);
             setError(null);
             try {
-                const fetchedMiddel = await getMiddel(db, params.id);
+                const fetchedMiddel = await getMiddel(db, id);
                 if (fetchedMiddel) {
                     setMiddel(fetchedMiddel);
                 } else {
@@ -72,7 +73,7 @@ export default function MiddelDetailPage({ params }: { params: { id: string } })
             }
         }
         loadMiddel();
-    }, [db, params.id]);
+    }, [db, id]);
     
     if (loading) {
         return (
