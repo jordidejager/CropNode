@@ -22,7 +22,7 @@ const menuItems = [
   { href: '/', label: 'Slimme Invoer', icon: Tractor },
   { href: '/percelen', label: 'Percelen', icon: Map },
   { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
-  { href: '/ctgb', label: 'CTGB Zoeken', icon: Search },
+  { href: '/middelenoverzicht', label: 'Middelenoverzicht', icon: Search },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
   { href: '/voorraad', label: 'Voorraad', icon: Boxes },
 ];
