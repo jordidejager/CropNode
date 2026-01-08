@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFirestore } from '@/firebase';
+import { searchCtgbProducts, getCtgbSyncStats } from '@/lib/store';
+import type { CtgbProduct } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Loader2, AlertTriangle, Sprout, TestTube } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { CtgbSearchResponse, CtgbSearchResult } from '@/lib/ctgb-types';
+import { format, parseISO } from 'date-fns';
+import { nl } from 'date-fns/locale';
 
 const useDebounce = (value: string, delay: number) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -24,7 +28,7 @@ const useDebounce = (value: string, delay: number) => {
   return debouncedValue;
 };
 
-function DetailView({ middel }: { middel: CtgbSearchResult }) {
+function DetailView({ middel }: { middel: CtgbProduct | null }) {
   if (!middel) {
     return (
       <div className="flex h-full items-center justify-center text-center text-muted-foreground">
@@ -105,34 +109,30 @@ function DetailView({ middel }: { middel: CtgbSearchResult }) {
 
 export function CtgbSearch() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [results, setResults] = useState<CtgbSearchResult[]>([]);
-  const [selectedMiddel, setSelectedMiddel] = useState<CtgbSearchResult | null>(null);
+  const [results, setResults] = useState<CtgbProduct[]>([]);
+  const [selectedMiddel, setSelectedMiddel] = useState<CtgbProduct | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncStats, setSyncStats] = useState<{ count: number; lastSynced?: string } | null>(null);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const db = useFirestore();
 
   useEffect(() => {
+    if (!db) return;
+
+    getCtgbSyncStats(db).then(stats => setSyncStats(stats));
+
     if (debouncedSearchTerm && debouncedSearchTerm.length > 2) {
       setLoading(true);
       setError(null);
-      fetch(`/api/ctgb/search?query=${debouncedSearchTerm}`)
-        .then(res => {
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            return res.json()
-        })
-        .then((data: CtgbSearchResponse) => {
-          if (data.success) {
-            setResults(data.results);
-          } else {
-            throw new Error(data.error || 'Er is een fout opgetreden bij het zoeken.');
-          }
+      searchCtgbProducts(db, debouncedSearchTerm)
+        .then(data => {
+          setResults(data);
         })
         .catch(err => {
           console.error(err);
-          setError(err.message || 'Kon geen verbinding maken met de server.');
+          setError(err.message || 'Kon geen verbinding maken met de database.');
         })
         .finally(() => {
           setLoading(false);
@@ -140,13 +140,13 @@ export function CtgbSearch() {
     } else {
       setResults([]);
     }
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, db]);
 
   return (
     <Card className="h-[calc(100vh-10rem)] flex flex-col">
         <CardHeader>
-            <CardTitle>CTGB Middelen Database</CardTitle>
-            <CardDescription>Zoek direct in de officiële database van het College voor de toelating van gewasbeschermingsmiddelen en biociden.</CardDescription>
+            <CardTitle>CTGB Database</CardTitle>
+            <CardDescription>Zoek direct in de lokaal gesynchroniseerde CTGB database.</CardDescription>
         </CardHeader>
         <CardContent className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden">
             {/* Left Column: Search and Results */}
@@ -163,9 +163,16 @@ export function CtgbSearch() {
                      {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-primary" />}
                 </div>
 
-                <p className="text-xs text-muted-foreground px-1">
-                    {results.length > 0 && `${results.length} resultaten gevonden voor "${debouncedSearchTerm}"`}
-                </p>
+                <div className="text-xs text-muted-foreground px-1 flex justify-between">
+                     <span>
+                        {results.length > 0 && `${results.length} resultaten`}
+                     </span>
+                     {syncStats?.lastSynced && (
+                        <span>
+                            Database geüpdatet: {format(parseISO(syncStats.lastSynced), 'dd-MM-yyyy HH:mm', { locale: nl })}
+                        </span>
+                     )}
+                </div>
                 
                 <ScrollArea className="flex-grow border rounded-md">
                     <div className="p-2">
@@ -199,7 +206,7 @@ export function CtgbSearch() {
 
             {/* Right Column: Details */}
             <div className="md:col-span-2 border rounded-lg h-full overflow-hidden">
-                <DetailView middel={selectedMiddel!} />
+                <DetailView middel={selectedMiddel} />
             </div>
         </CardContent>
     </Card>

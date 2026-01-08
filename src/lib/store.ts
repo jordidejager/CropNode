@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where, collectionGroup, QueryConstraint } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference, InventoryMovement } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference, InventoryMovement, CtgbProduct, CtgbSyncStats } from './types';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
@@ -9,6 +9,7 @@ const MIDDELEN_COLLECTION = 'middelen';
 const UPLOAD_LOG_COLLECTION = 'uploadLog';
 const USER_PREFERENCES_COLLECTION = 'userPreferences';
 const INVENTORY_MOVEMENTS_COLLECTION = 'inventoryMovements';
+const CTGB_PRODUCTS_COLLECTION = 'ctgb_products';
 
 // Inventory Movement Functions
 export async function getInventoryMovements(db: Firestore): Promise<InventoryMovement[]> {
@@ -251,8 +252,13 @@ export async function addLogbookEntry(db: Firestore, entry: Omit<LogbookEntry, '
 export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Promise<void> {
     if (!db) throw new Error("Database not initialized");
     const { id, ...data } = entry;
-    const docRef = doc(db, LOGBOOK_COLLECTION, id);
     const dataToSave = { ...data, date: Timestamp.fromDate(new Date(data.date)) };
+    if (!id) {
+        // This case should ideally not happen if types are correct
+        console.error("updateLogbookEntry called without an ID", entry);
+        throw new Error("Logbook entry ID is missing");
+    }
+    const docRef = doc(db, LOGBOOK_COLLECTION, id);
     await setDoc(docRef, dataToSave, { merge: true });
 }
 
@@ -412,5 +418,140 @@ export async function getProducts(db: Firestore): Promise<string[]> {
     } catch (error) {
         console.error("Error fetching products from MiddelMatrix:", error);
         return [];
+    }
+}
+
+
+// ============================================
+// CTGB Products Functions (synced from MST API)
+// ============================================
+
+/**
+ * Search CTGB products by keyword using the searchKeywords array
+ * This uses Firestore's array-contains for efficient partial text matching
+ */
+export async function searchCtgbProducts(db: Firestore, searchTerm: string): Promise<CtgbProduct[]> {
+    if (!db) return [];
+    if (!searchTerm || searchTerm.length < 2) return [];
+
+    try {
+        const normalizedSearch = searchTerm.toLowerCase().trim();
+        const q = query(
+            collection(db, CTGB_PRODUCTS_COLLECTION),
+            where('searchKeywords', 'array-contains', normalizedSearch)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ ...doc.data() } as CtgbProduct));
+    } catch (error) {
+        console.error("Error searching CTGB products:", error);
+        return [];
+    }
+}
+
+/**
+ * Get a single CTGB product by toelatingsnummer
+ */
+export async function getCtgbProductByNumber(db: Firestore, toelatingsnummer: string): Promise<CtgbProduct | null> {
+    if (!db || !toelatingsnummer) return null;
+
+    try {
+        const docRef = doc(db, CTGB_PRODUCTS_COLLECTION, toelatingsnummer);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as CtgbProduct;
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching CTGB product ${toelatingsnummer}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Get a CTGB product by exact name match
+ */
+export async function getCtgbProductByName(db: Firestore, naam: string): Promise<CtgbProduct | null> {
+    if (!db || !naam) return null;
+
+    try {
+        const q = query(
+            collection(db, CTGB_PRODUCTS_COLLECTION),
+            where('naam', '==', naam)
+        );
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            return snapshot.docs[0].data() as CtgbProduct;
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching CTGB product by name ${naam}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Get all CTGB products (use with caution - can be large)
+ */
+export async function getAllCtgbProducts(db: Firestore): Promise<CtgbProduct[]> {
+    if (!db) return [];
+
+    try {
+        const q = query(collection(db, CTGB_PRODUCTS_COLLECTION), orderBy('naam'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ ...doc.data() } as CtgbProduct));
+    } catch (error) {
+        console.error("Error fetching all CTGB products:", error);
+        return [];
+    }
+}
+
+/**
+ * Get CTGB products by werkzame stof (active substance)
+ */
+export async function getCtgbProductsBySubstance(db: Firestore, substance: string): Promise<CtgbProduct[]> {
+    if (!db || !substance) return [];
+
+    try {
+        const q = query(
+            collection(db, CTGB_PRODUCTS_COLLECTION),
+            where('werkzameStoffen', 'array-contains', substance)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ ...doc.data() } as CtgbProduct));
+    } catch (error) {
+        console.error(`Error fetching CTGB products by substance ${substance}:`, error);
+        return [];
+    }
+}
+
+/**
+ * Get the count and last sync date of CTGB products
+ */
+export async function getCtgbSyncStats(db: Firestore): Promise<CtgbSyncStats> {
+    if (!db) return { count: 0 };
+
+    try {
+        const snapshot = await getDocs(collection(db, CTGB_PRODUCTS_COLLECTION));
+        if (snapshot.empty) return { count: 0 };
+
+        // Get the most recent lastSyncedAt by querying for the last synced item
+        const lastSyncedQuery = query(collection(db, CTGB_PRODUCTS_COLLECTION), orderBy('lastSyncedAt', 'desc'), where('lastSyncedAt', '!=', null));
+        const lastSyncedSnapshot = await getDocs(lastSyncedQuery);
+        
+        let lastSynced: string | undefined;
+        if (!lastSyncedSnapshot.empty) {
+            lastSynced = lastSyncedSnapshot.docs[0].data().lastSyncedAt;
+        }
+
+        return { count: snapshot.size, lastSynced };
+    } catch (error) {
+        console.warn("Could not fetch CTGB sync stats. This might be because the collection is empty or the 'lastSyncedAt' field is missing on some documents.", error);
+        // Fallback for when the query fails (e.g. no index)
+        try {
+            const snapshot = await getDocs(collection(db, CTGB_PRODUCTS_COLLECTION));
+            return { count: snapshot.size };
+        } catch {
+            return { count: 0 };
+        }
     }
 }

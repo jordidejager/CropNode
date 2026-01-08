@@ -83,3 +83,57 @@ export type InventoryMovement = {
     description: string;
     referenceId?: string; // e.g., logId or a manual entry ID
 }
+
+// ============================================
+// CTGB Product Types (synced from MST API)
+// ============================================
+
+export type CtgbStof = {
+  naam: string;
+  concentratie?: string;
+  casNummer?: string;
+};
+
+export type CtgbGebruiksvoorschrift = {
+  gewas: string;
+  doelorganisme?: string;
+  locatie?: string;
+  toepassingsmethode?: string;
+  dosering?: string;
+  maxToepassingen?: number;
+  veiligheidstermijn?: string;
+  interval?: string;
+  opmerkingen?: string[];
+  wCodes?: string[];
+};
+
+export type CtgbEtikettering = {
+  ghsSymbolen?: string[];
+  hZinnen?: { code: string; tekst: string }[];
+  pZinnen?: { code: string; tekst: string }[];
+  signaalwoord?: string;
+};
+
+export type CtgbProduct = {
+  id: string;
+  toelatingsnummer: string;
+  naam: string;
+  status: string;
+  vervaldatum: string;
+  categorie: string;
+  toelatingshouder?: string;
+  werkzameStoffen: string[];
+  samenstelling?: {
+    formuleringstype?: string;
+    stoffen: CtgbStof[];
+  };
+  gebruiksvoorschriften: CtgbGebruiksvoorschrift[];
+  etikettering?: CtgbEtikettering;
+  searchKeywords: string[];
+  lastSyncedAt: string;
+};
+
+export type CtgbSyncStats = {
+    count: number;
+    lastSynced?: string;
+}
