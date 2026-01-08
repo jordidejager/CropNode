@@ -12,7 +12,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Leaf, Bell, BookOpen, Tractor, Map, TestTubeDiagonal, Boxes } from 'lucide-react';
+import { Leaf, Bell, BookOpen, Tractor, Map, TestTubeDiagonal, Boxes, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -22,6 +22,7 @@ const menuItems = [
   { href: '/', label: 'Slimme Invoer', icon: Tractor },
   { href: '/percelen', label: 'Percelen', icon: Map },
   { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
+  { href: '/ctgb', label: 'CTGB Zoeken', icon: Search },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
   { href: '/voorraad', label: 'Voorraad', icon: Boxes },
 ];
