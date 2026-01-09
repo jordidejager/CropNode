@@ -143,7 +143,7 @@ const LogbookTableRow = ({
 }: { 
     entry: LogbookEntry, 
     allParcels: Parcel[], 
-    onSelectRow: (id: string, isEditing: boolean) => void, 
+    onSelectRow: (id: string) => void, 
     isSelected: boolean,
     allProducts: string[]
 }) => {
@@ -170,9 +170,7 @@ const LogbookTableRow = ({
     }
     
     const handleEditToggle = () => {
-        const newIsEditing = !isEditing;
-        setIsEditing(newIsEditing);
-        onSelectRow(entry.id, newIsEditing);
+        setIsEditing(prev => !prev);
     }
 
     const handleParcelsChange = (selectedIds: string[]) => {
@@ -201,7 +199,6 @@ const LogbookTableRow = ({
                 description: result.message,
             });
             setIsEditing(false);
-            onSelectRow(entry.id, false);
         });
     }
     
@@ -212,8 +209,8 @@ const LogbookTableRow = ({
         >
             <TableCell>
                 <Checkbox
-                    checked={isSelected && !isEditing}
-                    onCheckedChange={() => onSelectRow(entry.id, false)}
+                    checked={isSelected}
+                    onCheckedChange={() => onSelectRow(entry.id)}
                     aria-label={`Selecteer rij ${entry.id}`}
                     disabled={isEditing}
                 />
@@ -326,18 +323,19 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     loadProducts();
   }, [db]);
   
-  const handleSelectRow = (id: string, isEditing: boolean) => {
-    if (isEditing) {
-        setSelectedRowIds([]);
-    } else {
-        setSelectedRowIds(prev =>
-            prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
-        );
-    }
+  const handleSelectRow = (id: string) => {
+    setSelectedRowIds(prev =>
+        prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+    );
   };
 
   const handleSelectAll = (checked: boolean | string) => {
-    setSelectedRowIds(checked ? entries.map(entry => entry.id) : []);
+    const selectableIds = entries.filter(e => e.status !== 'Analyseren...').map(e => e.id);
+    if (checked) {
+        setSelectedRowIds(selectableIds);
+    } else {
+        setSelectedRowIds([]);
+    }
   };
 
   const numSelected = selectedRowIds.length;
@@ -409,8 +407,8 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
               <TableRow>
                 <TableHead className="w-[40px]">
                   <Checkbox
-                    checked={numSelected === entries.length && entries.length > 0}
-                    indeterminate={numSelected > 0 && numSelected < entries.length ? "indeterminate" : false}
+                    checked={numSelected > 0 && numSelected === entries.filter(e => e.status !== 'Analyseren...').length}
+                    indeterminate={numSelected > 0 && numSelected < entries.filter(e => e.status !== 'Analyseren...').length ? "indeterminate" : false}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
                   />
@@ -455,3 +453,5 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
       </div>
   );
 }
+
+    
