@@ -1,6 +1,7 @@
+
 'use server';
 
-import { getAllCtgbProducts } from "@/lib/store";
+import { getAllCtgbProducts, getParcelHistoryEntries } from "@/lib/store";
 import { initializeFirebase } from "@/firebase";
 import { MiddelenOverzichtClientPage } from "./client-page";
 import type { CtgbProduct } from "@/lib/types";
@@ -11,13 +12,19 @@ const getMaxDosageForPomeFruit = (product: CtgbProduct): string => {
         return '-';
     }
 
-    const relevantCrops = ['appel', 'peer', 'pitvruchten', 'vruchtbomen'];
+    // Only look at specific pome fruit crops, case-insensitive
+    const relevantCrops = ['appel', 'peer', 'pitvruchten'];
     let maxDosage = 0;
     let unit = '';
 
     for (const gebruik of product.gebruiksvoorschriften) {
         const gewasLower = gebruik.gewas?.toLowerCase() || '';
-        const isRelevant = relevantCrops.some(crop => gewasLower.includes(crop));
+        
+        // Ensure the crop name is one of the relevant ones, and not part of a larger word
+        const isRelevant = relevantCrops.some(crop => {
+            const regex = new RegExp(`\\b${crop}\\b`);
+            return regex.test(gewasLower);
+        });
         
         if (isRelevant && gebruik.dosering) {
             // Match a number (integer or float with comma/dot) and optional unit
@@ -38,7 +45,16 @@ const getMaxDosageForPomeFruit = (product: CtgbProduct): string => {
 
 export default async function MiddelenOverzichtPage() {
     const { firestore } = initializeFirebase();
-    const allProducts = await getAllCtgbProducts(firestore);
+    const [allProducts, history] = await Promise.all([
+        getAllCtgbProducts(firestore),
+        getParcelHistoryEntries(firestore)
+    ]);
+    
+    // Calculate popularity scores
+    const popularity: Record<string, number> = {};
+    for (const entry of history) {
+        popularity[entry.product] = (popularity[entry.product] || 0) + 1;
+    }
 
     const HARD_FRUIT_CROPS = ['appel', 'peer', 'pitvruchten', 'vruchtbomen'];
 
@@ -56,8 +72,16 @@ export default async function MiddelenOverzichtPage() {
             naam: product.naam,
             werkzameStoffen: product.werkzameStoffen,
             maxDosering: getMaxDosageForPomeFruit(product),
-            status: product.status
-        }));
+            status: product.status,
+            popularity: popularity[product.naam] || 0
+        }))
+        .sort((a, b) => {
+            // Sort by popularity descending, then by name ascending
+            if (a.popularity !== b.popularity) {
+                return b.popularity - a.popularity;
+            }
+            return a.naam.localeCompare(b.naam);
+        });
     
     return <MiddelenOverzichtClientPage products={filteredProducts} />;
 }
