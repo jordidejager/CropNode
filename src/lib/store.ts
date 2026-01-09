@@ -313,7 +313,7 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
     const dateValue = data.date;
-    
+
     let date;
     if (dateValue instanceof Timestamp) {
       date = dateValue.toDate();
@@ -326,11 +326,128 @@ export async function getParcelHistoryEntries(db: Firestore): Promise<ParcelHist
     }
 
     return {
-       id: doc.id, 
+       id: doc.id,
        ...data,
        date,
     } as ParcelHistoryEntry
   });
+}
+
+/**
+ * Get parcel history for a specific parcel within a season (date range)
+ * Used by ValidationService for cumulative active substance tracking
+ *
+ * NOTE: Requires Firestore composite index on parcelHistory: (parcelId, date)
+ */
+export async function getParcelSeasonHistory(
+  db: Firestore,
+  parcelId: string,
+  seasonStart: Date,
+  seasonEnd: Date
+): Promise<ParcelHistoryEntry[]> {
+  if (!db) return [];
+
+  try {
+    const q = query(
+      collection(db, HISTORY_COLLECTION),
+      where('parcelId', '==', parcelId),
+      where('date', '>=', Timestamp.fromDate(seasonStart)),
+      where('date', '<=', Timestamp.fromDate(seasonEnd)),
+      orderBy('date', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      const dateValue = data.date;
+
+      let date;
+      if (dateValue instanceof Timestamp) {
+        date = dateValue.toDate();
+      } else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } else if (dateValue && typeof dateValue.toDate === 'function') {
+        date = dateValue.toDate();
+      } else {
+        date = new Date();
+      }
+
+      return {
+        id: doc.id,
+        ...data,
+        date,
+      } as ParcelHistoryEntry;
+    });
+  } catch (error) {
+    console.error(`[store] Error fetching parcel season history for ${parcelId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get season history for multiple parcels at once (batch query)
+ * More efficient than calling getParcelSeasonHistory multiple times
+ */
+export async function getBatchParcelSeasonHistory(
+  db: Firestore,
+  parcelIds: string[],
+  seasonStart: Date,
+  seasonEnd: Date
+): Promise<Map<string, ParcelHistoryEntry[]>> {
+  if (!db || parcelIds.length === 0) return new Map();
+
+  const resultMap = new Map<string, ParcelHistoryEntry[]>();
+
+  // Initialize empty arrays for all parcel IDs
+  for (const id of parcelIds) {
+    resultMap.set(id, []);
+  }
+
+  try {
+    // Firestore 'in' query is limited to 30 values, so we batch
+    for (let i = 0; i < parcelIds.length; i += 30) {
+      const chunk = parcelIds.slice(i, i + 30);
+
+      const q = query(
+        collection(db, HISTORY_COLLECTION),
+        where('parcelId', 'in', chunk),
+        where('date', '>=', Timestamp.fromDate(seasonStart)),
+        where('date', '<=', Timestamp.fromDate(seasonEnd)),
+        orderBy('date', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+
+      for (const docSnap of querySnapshot.docs) {
+        const data = docSnap.data();
+        const parcelId = data.parcelId as string;
+        const dateValue = data.date;
+
+        let date;
+        if (dateValue instanceof Timestamp) {
+          date = dateValue.toDate();
+        } else if (typeof dateValue === 'string') {
+          date = new Date(dateValue);
+        } else if (dateValue && typeof dateValue.toDate === 'function') {
+          date = dateValue.toDate();
+        } else {
+          date = new Date();
+        }
+
+        const entry: ParcelHistoryEntry = {
+          id: docSnap.id,
+          ...data,
+          date,
+        } as ParcelHistoryEntry;
+
+        resultMap.get(parcelId)?.push(entry);
+      }
+    }
+  } catch (error) {
+    console.error('[store] Error fetching batch parcel season history:', error);
+  }
+
+  return resultMap;
 }
 
 export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels }: { logbookEntry: LogbookEntry, parcels: Parcel[] }) {

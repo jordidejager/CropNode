@@ -22,46 +22,56 @@ export type InitialState = {
   };
 };
 
-async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string, updatedProducts?: ProductEntry[] }> {
-    const validationMessages: string[] = [];
+async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string | null, errorCount: number, warningCount: number, updatedProducts?: ProductEntry[] }> {
+    const allCtgbProducts = await getAllCtgbProducts(db);
     const uniqueCrops = [...new Set(
         parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
     )];
-    const middelMatrix = await getMiddelen(db);
     
     const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products));
+    const validationMessages: string[] = [];
+    let errorCount = 0;
+    let warningCount = 0;
 
     for (let i = 0; i < updatedProducts.length; i++) {
         const productEntry = updatedProducts[i];
         
-        const matchingRules = middelMatrix.filter(m => m['Middelnaam']?.toLowerCase().includes(productEntry.product.toLowerCase()));
+        const matchingRules = allCtgbProducts.filter(m => m.naam?.toLowerCase().includes(productEntry.product.toLowerCase()));
 
         if (matchingRules.length === 0) {
             validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`);
+            warningCount++;
             continue; 
         }
 
         let officialProductName: string;
         if (matchingRules.length > 1) {
             validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
+            warningCount++;
             continue;
         } else {
-            officialProductName = matchingRules[0]['Middelnaam'];
-            // Update the product name to the official one for validation and saving
+            officialProductName = matchingRules[0]['naam'];
             updatedProducts[i].product = officialProductName;
         }
         
+        // This is a simplified validation. The new validation-service is more powerful.
+        // This part is kept for server-side checks before confirming an entry.
         let productAllowedOnAnySelectedCrop = false;
         for (const crop of uniqueCrops) {
-            const ruleForCrop = matchingRules.find(m => String(m['Toepassingsgebied']).toLowerCase().includes(crop.toLowerCase()));
+            const ruleForCrop = matchingRules.find(m => m.gebruiksvoorschriften?.some(g => g.gewas?.toLowerCase().includes(crop.toLowerCase())));
             if (ruleForCrop) {
                 productAllowedOnAnySelectedCrop = true;
-                const maxDosageString = ruleForCrop['Maximum middeldosis'];
+                const voorschrift = ruleForCrop.gebruiksvoorschriften.find(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
+                const maxDosageString = voorschrift?.dosering;
+
                 if (maxDosageString) {
-                    const maxDosage = parseFloat(String(maxDosageString).replace(',', '.'));
+                    const maxDosage = parseFloat(String(maxDosageString).replace(/,.*$/, '').replace(',', '.'));
                     if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
                          const msg = `⚠️ Dosering voor ${officialProductName} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
-                         if (!validationMessages.includes(msg)) validationMessages.push(msg);
+                         if (!validationMessages.includes(msg)) {
+                             validationMessages.push(msg);
+                             warningCount++;
+                         }
                     }
                 }
             }
@@ -69,22 +79,19 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
         if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
             const msg = `⚠️ ${officialProductName} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
-            if (!validationMessages.includes(msg)) validationMessages.push(msg);
+            if (!validationMessages.includes(msg)) {
+                validationMessages.push(msg);
+                warningCount++;
+            }
         }
     }
 
-    if (validationMessages.length > 0) {
-        return {
-            isValid: false,
-            validationMessage: validationMessages.join(' '),
-            updatedProducts: updatedProducts,
-        };
-    }
-
     return {
-        isValid: true,
-        validationMessage: '',
-        updatedProducts: updatedProducts
+        isValid: errorCount === 0,
+        validationMessage: validationMessages.length > 0 ? validationMessages.join(' ') : null,
+        errorCount,
+        warningCount,
+        updatedProducts,
     };
 }
 
@@ -96,7 +103,7 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
     try {
         const [allParcels, allProductNames] = await Promise.all([
           getParcels(db),
-          getProducts(db)
+          getAllCtgbProducts(db).then(products => products.map(p => p.naam))
         ]);
 
         const llmResponse = await parseSprayApplication({
@@ -118,16 +125,23 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
             throw new Error("AI kon geen geldige middelen identificeren in de output.");
         }
         
-        const { isValid, validationMessage, updatedProducts } = await validateSprayData(db, finalParsedData, allParcels);
+        const { isValid, validationMessage, errorCount, warningCount, updatedProducts } = await validateSprayData(db, finalParsedData, allParcels);
 
         if (updatedProducts) {
             finalParsedData.products = updatedProducts;
         }
+        
+        if (errorCount > 0) {
+            finalStatus = 'Afgekeurd';
+        } else if (warningCount > 0) {
+            finalStatus = 'Waarschuwing';
+        } else {
+            finalStatus = 'Akkoord';
+        }
 
-        finalStatus = isValid ? 'Akkoord' : 'Te Controleren';
         finalValidationMessage = validationMessage || '';
 
-        if (isValid) {
+        if (finalStatus === 'Akkoord') {
             await addParcelHistoryEntries(db, {
                 logbookEntry: { ...entry, parsedData: finalParsedData, status: finalStatus },
                 parcels: allParcels,
@@ -242,7 +256,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
     
     const allParcels = await getParcels(firestore);
-    const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
+    const { isValid, validationMessage, updatedProducts, errorCount, warningCount } = await validateSprayData(firestore, entry.parsedData, allParcels);
     
     if (updatedProducts) {
         entry.parsedData.products = updatedProducts;
@@ -252,13 +266,17 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
         ...entry,
     };
 
-    if (isValid) {
+    if (errorCount > 0) {
+        updatedEntryData.status = 'Afgekeurd';
+        updatedEntryData.validationMessage = validationMessage || 'Validatie mislukt met fouten.';
+    } else if (warningCount > 0) {
+        updatedEntryData.status = 'Waarschuwing';
+        updatedEntryData.validationMessage = validationMessage || 'Validatie succesvol met waarschuwingen.';
+    } else {
         updatedEntryData.status = 'Akkoord';
         updatedEntryData.validationMessage = ''; // Clear validation message
-    } else {
-        updatedEntryData.status = 'Te Controleren';
-        updatedEntryData.validationMessage = validationMessage;
     }
+
 
     const updatedEntry = updatedEntryData as LogbookEntry;
 
@@ -338,7 +356,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
 
         if (!isValid) {
             entry.status = 'Te Controleren';
-            entry.validationMessage = validationMessage;
+            entry.validationMessage = validationMessage || 'Kon niet bevestigen vanwege validatiefouten.';
             await updateLogbookEntry(firestore, entry);
             revalidatePath('/');
             return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
@@ -508,4 +526,14 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     console.error('Fout bij het toevoegen van voorraad:', error);
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
+}
+
+async function getAllCtgbProducts(db: Firestore) {
+    if (!db) return [];
+    try {
+        const snapshot = await getDocs(collection(db, 'ctgb_products'));
+        return snapshot.docs.map(doc => doc.data() as Middel);
+    } catch {
+        return [];
+    }
 }

@@ -10,7 +10,7 @@ import { nl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
-import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown, RefreshCcw } from 'lucide-react';
+import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown, RefreshCcw, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { deleteLogbookEntries, confirmLogbookEntries, retryAnalysis } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -28,13 +28,16 @@ import {
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-const statusVariant: Record<LogStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  'Nieuw': 'outline',
-  'Analyseren...': 'secondary',
-  'Te Controleren': 'secondary',
-  'Akkoord': 'default',
-  'Fout': 'destructive',
+const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
+  'Nieuw': { variant: 'outline', label: 'Nieuw', colorClass: '' },
+  'Analyseren...': { variant: 'secondary', label: 'Analyseren...', colorClass: '' },
+  'Te Controleren': { variant: 'secondary', label: 'Te Controleren', colorClass: 'text-yellow-400', icon: AlertTriangle },
+  'Waarschuwing': { variant: 'secondary', label: 'Waarschuwing', colorClass: 'text-yellow-400', icon: AlertTriangle },
+  'Akkoord': { variant: 'default', label: 'Akkoord', colorClass: 'bg-green-600 text-primary-foreground', icon: CheckCircle },
+  'Fout': { variant: 'destructive', label: 'Fout', colorClass: '', icon: AlertTriangle },
+  'Afgekeurd': { variant: 'destructive', label: 'Afgekeurd', colorClass: '', icon: ShieldAlert },
 };
+
 
 const formatDate = (date: Date | Timestamp | undefined) => {
   if (!date) return '';
@@ -161,7 +164,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     if (selectedRowIds.length === 0) return false;
     return selectedRowIds.every(id => {
       const entry = entries.find(e => e.id === id);
-      return entry && (entry.status === 'Te Controleren' || entry.status === 'Nieuw') && !entry.validationMessage;
+      return entry && (entry.status === 'Te Controleren' || entry.status === 'Waarschuwing') && !entry.validationMessage?.includes('overschrijdt');
     });
   }, [selectedRowIds, entries]);
 
@@ -240,7 +243,9 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => (
+              {entries.map((entry) => {
+                const config = statusConfig[entry.status] || statusConfig['Fout'];
+                return (
                 <TableRow 
                     key={entry.id}
                     data-state={selectedRowIds.includes(entry.id) ? 'selected' : undefined}
@@ -255,7 +260,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   <TableCell className="text-muted-foreground text-sm">{formatDate(entry.date)}</TableCell>
                   <TableCell>
                       <p className="truncate max-w-[200px] md:max-w-xs font-medium" title={entry.rawInput}>{entry.rawInput}</p>
-                      {entry.validationMessage && <p className="text-xs text-destructive truncate max-w-[200px] md:max-w-xs" title={entry.validationMessage}>{entry.validationMessage}</p>}
+                      {entry.validationMessage && <p className={cn("text-xs truncate max-w-[200px] md:max-w-xs", entry.status === 'Afgekeurd' ? 'text-destructive' : 'text-yellow-400')} title={entry.validationMessage}>{entry.validationMessage}</p>}
                   </TableCell>
                   <TableCell className="text-sm">
                       <ParcelListCollapsible plotIds={entry.parsedData?.plots} allParcels={allParcels} />
@@ -265,10 +270,11 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={statusVariant[entry.status]}
-                      className={cn('capitalize', entry.status === 'Analyseren...' && 'animate-pulse')}
+                      variant={config.variant}
+                      className={cn('capitalize', entry.status === 'Analyseren...' && 'animate-pulse', config.colorClass)}
                     >
-                      {entry.status}
+                      {config.icon && <config.icon className="mr-1.5 h-3 w-3"/>}
+                      {config.label}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -296,7 +302,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         </div>

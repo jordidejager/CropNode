@@ -13,7 +13,7 @@ export type Middel = {
   [key: string]: any; // Flexible structure to match any Excel column
 };
 
-export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout';
+export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout' | 'Waarschuwing' | 'Afgekeurd';
 
 export type ProductEntry = {
     product: string;
