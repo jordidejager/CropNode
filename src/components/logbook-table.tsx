@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { getProducts } from '@/lib/store';
+import { getProducts, getAllCtgbProducts } from '@/lib/store';
 import { useFirestore } from '@/firebase';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
@@ -238,7 +238,7 @@ const LogbookTableRow = ({
                             </Button>
                             <Button onClick={handleSave} disabled={!editedEntry.parsedData || isPending}>
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2"/>}
-                                Bevestigen en Opslaan
+                                Opslaan & Bevestigen
                             </Button>
                         </div>
                     </div>
@@ -293,7 +293,7 @@ const LogbookTableRow = ({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onClick={() => onEditToggle(entry.id)}>
+                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onSelect={() => onEditToggle(entry.id)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             <span>Bewerken</span>
                         </DropdownMenuItem>
@@ -318,8 +318,8 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
   useEffect(() => {
     async function loadProducts() {
         if (db) {
-            const products = await getProducts(db);
-            setAllProducts(products);
+            const products = await getAllCtgbProducts(db);
+            setAllProducts(products.map(p => p.naam));
         }
     }
     loadProducts();
@@ -459,3 +459,4 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
       </div>
   );
 }
+

@@ -2,11 +2,11 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries, getAllCtgbProducts } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement, LogStatus } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
-import { Firestore, Timestamp } from 'firebase/firestore';
+import { Firestore, Timestamp, getDocs, collection } from 'firebase/firestore';
 import * as xlsx from 'xlsx';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
@@ -46,22 +46,32 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
 
         let officialProductName: string;
         if (matchingRules.length > 1) {
-            validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
-            warningCount++;
-            continue;
+            // Try a more exact match
+            const exactMatch = matchingRules.find(m => m.naam?.toLowerCase() === productEntry.product.toLowerCase());
+            if (exactMatch) {
+              officialProductName = exactMatch.naam;
+            } else {
+              validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
+              warningCount++;
+              continue;
+            }
         } else {
             officialProductName = matchingRules[0]['naam'];
-            updatedProducts[i].product = officialProductName;
         }
+        updatedProducts[i].product = officialProductName;
         
-        // This is a simplified validation. The new validation-service is more powerful.
-        // This part is kept for server-side checks before confirming an entry.
+        const matchingProduct = allCtgbProducts.find(m => m.naam === officialProductName);
+        if (!matchingProduct) {
+          // This should not happen if logic above is correct
+          continue;
+        }
+
         let productAllowedOnAnySelectedCrop = false;
         for (const crop of uniqueCrops) {
-            const ruleForCrop = matchingRules.find(m => m.gebruiksvoorschriften?.some(g => g.gewas?.toLowerCase().includes(crop.toLowerCase())));
+            const ruleForCrop = matchingProduct.gebruiksvoorschriften?.some(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
             if (ruleForCrop) {
                 productAllowedOnAnySelectedCrop = true;
-                const voorschrift = ruleForCrop.gebruiksvoorschriften.find(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
+                const voorschrift = matchingProduct.gebruiksvoorschriften.find(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
                 const maxDosageString = voorschrift?.dosering;
 
                 if (maxDosageString) {
@@ -526,14 +536,4 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     console.error('Fout bij het toevoegen van voorraad:', error);
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
-}
-
-async function getAllCtgbProducts(db: Firestore) {
-    if (!db) return [];
-    try {
-        const snapshot = await getDocs(collection(db, 'ctgb_products'));
-        return snapshot.docs.map(doc => doc.data() as Middel);
-    } catch {
-        return [];
-    }
 }
