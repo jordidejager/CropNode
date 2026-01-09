@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { getProducts, getAllCtgbProducts } from '@/lib/store';
+import { getAllCtgbProducts } from '@/lib/store';
 import { useFirestore } from '@/firebase';
 import { EditParcels } from './edit-parcels';
 import { EditProducts } from './edit-products';
@@ -139,19 +139,16 @@ const LogbookTableRow = ({
     allParcels, 
     onSelectRow, 
     isSelected, 
-    isEditing, 
-    onEditToggle,
     allProducts 
 }: { 
     entry: LogbookEntry, 
     allParcels: Parcel[], 
-    onSelectRow: (id: string) => void, 
+    onSelectRow: (id: string, isEditing: boolean) => void, 
     isSelected: boolean,
-    isEditing: boolean,
-    onEditToggle: (id: string | null) => void,
     allProducts: string[]
 }) => {
     const [isPending, startTransition] = useTransition();
+    const [isEditing, setIsEditing] = useState(false);
     const [editedEntry, setEditedEntry] = useState<LogbookEntry>(entry);
     const { toast } = useToast();
 
@@ -170,6 +167,12 @@ const LogbookTableRow = ({
                 toast({ variant: 'destructive', title: 'Opnieuw proberen mislukt', description: result.message });
             }
         });
+    }
+    
+    const handleEditToggle = () => {
+        const newIsEditing = !isEditing;
+        setIsEditing(newIsEditing);
+        onSelectRow(entry.id, newIsEditing);
     }
 
     const handleParcelsChange = (selectedIds: string[]) => {
@@ -197,66 +200,22 @@ const LogbookTableRow = ({
                 title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
                 description: result.message,
             });
-            onEditToggle(null);
+            setIsEditing(false);
+            onSelectRow(entry.id, false);
         });
     }
-
-    if (isEditing) {
-        return (
-            <TableRow data-state="selected">
-                <TableCell colSpan={7} className="p-0">
-                    <div className="p-4 space-y-4">
-                        <h4 className="font-semibold">Logboekregel bewerken</h4>
-                        <p className="text-sm text-muted-foreground">{entry.rawInput}</p>
-                        {allProducts.length === 0 ? <Skeleton className="h-40 w-full" /> : (
-                            <div className="grid md:grid-cols-2 gap-6">
-                                {editedEntry.parsedData && allProducts.length > 0 && (
-                                    <>
-                                    <EditProducts
-                                        allProducts={allProducts}
-                                        selectedProducts={editedEntry.parsedData.products}
-                                        onProductsChange={handleProductsChange}
-                                    />
-                                    <EditParcels
-                                        allParcels={allParcels}
-                                        selectedParcelIds={editedEntry.parsedData.plots}
-                                        onSelectionChange={handleParcelsChange}
-                                    />
-                                    </>
-                                )}
-                            </div>
-                        )}
-                        {entry.validationMessage && (
-                            <div className={cn("flex items-start gap-3 rounded-md border p-3 text-sm border-yellow-500/50 bg-yellow-500/10 text-yellow-200")}>
-                                <AlertTriangle className="size-5 mt-0.5" />
-                                <p className="flex-1">{entry.validationMessage}</p>
-                            </div>
-                        )}
-                        <div className="flex justify-end gap-2">
-                            <Button variant="ghost" onClick={() => onEditToggle(null)} disabled={isPending}>
-                                <X className="mr-2" /> Annuleren
-                            </Button>
-                            <Button onClick={handleSave} disabled={!editedEntry.parsedData || isPending}>
-                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2"/>}
-                                Opslaan & Bevestigen
-                            </Button>
-                        </div>
-                    </div>
-                </TableCell>
-            </TableRow>
-        );
-    }
-
+    
     return (
+      <React.Fragment>
         <TableRow
-            key={entry.id}
-            data-state={isSelected ? 'selected' : undefined}
+            data-state={isSelected || isEditing ? 'selected' : undefined}
         >
             <TableCell>
                 <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => onSelectRow(entry.id)}
+                    checked={isSelected && !isEditing}
+                    onCheckedChange={() => onSelectRow(entry.id, false)}
                     aria-label={`Selecteer rij ${entry.id}`}
+                    disabled={isEditing}
                 />
             </TableCell>
             <TableCell className="text-muted-foreground text-sm">{formatDate(entry.date)}</TableCell>
@@ -293,7 +252,7 @@ const LogbookTableRow = ({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onSelect={() => onEditToggle(entry.id)}>
+                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onSelect={handleEditToggle}>
                             <Pencil className="mr-2 h-4 w-4" />
                             <span>Bewerken</span>
                         </DropdownMenuItem>
@@ -302,12 +261,54 @@ const LogbookTableRow = ({
                 )}
             </TableCell>
         </TableRow>
+        {isEditing && (
+            <TableRow data-state="selected">
+                <TableCell colSpan={7} className="p-0">
+                    <div className="p-4 space-y-4 bg-muted/30">
+                        <h4 className="font-semibold">Logboekregel bewerken</h4>
+                        {allProducts.length === 0 ? <Skeleton className="h-40 w-full" /> : (
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {editedEntry.parsedData && allProducts.length > 0 ? (
+                                    <>
+                                    <EditProducts
+                                        allProducts={allProducts}
+                                        selectedProducts={editedEntry.parsedData.products}
+                                        onProductsChange={handleProductsChange}
+                                    />
+                                    <EditParcels
+                                        allParcels={allParcels}
+                                        selectedParcelIds={editedEntry.parsedData.plots}
+                                        onSelectionChange={handleParcelsChange}
+                                    />
+                                    </>
+                                ) : <p>Analyse data niet gevonden, kan niet bewerken.</p>}
+                            </div>
+                        )}
+                        {entry.validationMessage && (
+                            <div className={cn("flex items-start gap-3 rounded-md border p-3 text-sm border-yellow-500/50 bg-yellow-500/10 text-yellow-200")}>
+                                <AlertTriangle className="size-5 mt-0.5" />
+                                <p className="flex-1">{entry.validationMessage}</p>
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={handleEditToggle} disabled={isPending}>
+                                <X className="mr-2 h-4 w-4" /> Annuleren
+                            </Button>
+                            <Button onClick={handleSave} disabled={!editedEntry.parsedData || isPending}>
+                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4"/>}
+                                Opslaan & Bevestigen
+                            </Button>
+                        </div>
+                    </div>
+                </TableCell>
+            </TableRow>
+        )}
+      </React.Fragment>
     );
 };
 
 export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfirmed }: LogbookTableProps) {
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [allProducts, setAllProducts] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -325,20 +326,17 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     loadProducts();
   }, [db]);
   
-  const handleSelectRow = (id: string) => {
-    setEditingRowId(null); // Exit edit mode when selecting
-    setSelectedRowIds(prev =>
-      prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
-    );
+  const handleSelectRow = (id: string, isEditing: boolean) => {
+    if (isEditing) {
+        setSelectedRowIds([]);
+    } else {
+        setSelectedRowIds(prev =>
+            prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+        );
+    }
   };
 
-  const handleEditToggle = (id: string | null) => {
-    setSelectedRowIds([]); // Deselect rows when entering edit mode
-    setEditingRowId(id);
-  }
-
   const handleSelectAll = (checked: boolean | string) => {
-    setEditingRowId(null); // Exit edit mode
     setSelectedRowIds(checked ? entries.map(entry => entry.id) : []);
   };
 
@@ -411,7 +409,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
               <TableRow>
                 <TableHead className="w-[40px]">
                   <Checkbox
-                    checked={numSelected === entries.length && entries.length > 0 && editingRowId === null}
+                    checked={numSelected === entries.length && entries.length > 0}
                     indeterminate={numSelected > 0 && numSelected < entries.length ? "indeterminate" : false}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
@@ -433,8 +431,6 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   allParcels={allParcels}
                   isSelected={selectedRowIds.includes(entry.id)}
                   onSelectRow={handleSelectRow}
-                  isEditing={editingRowId === entry.id}
-                  onEditToggle={handleEditToggle}
                   allProducts={allProducts}
                 />
               ))}
@@ -459,4 +455,3 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
       </div>
   );
 }
-
