@@ -9,19 +9,63 @@ import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import type { CtgbGebruiksvoorschrift } from '@/lib/types';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { ChevronDown } from 'lucide-react';
+
 
 type ProductInList = {
     id: string;
     toelatingsnummer: string;
     naam: string;
     werkzameStoffen: string[];
-    maxDosering: string;
     status: string;
+    gebruiksvoorschriften: CtgbGebruiksvoorschrift[];
 };
 
 interface MiddelenOverzichtClientPageProps {
     products: ProductInList[];
 }
+
+
+const DosageSelector: React.FC<{ voorschriften: CtgbGebruiksvoorschrift[] }> = ({ voorschriften }) => {
+    const relevantCrops = ['appel', 'peer', 'pitvruchten'];
+    
+    const pomeFruitVoorschriften = voorschriften.filter(v => 
+        v.gewas && relevantCrops.some(crop => v.gewas.toLowerCase().includes(crop))
+    );
+
+    const allVoorschriften = pomeFruitVoorschriften.length > 0 ? pomeFruitVoorschriften : voorschriften;
+
+    const [selectedVoorschrift, setSelectedVoorschrift] = React.useState(allVoorschriften[0]);
+
+    if (!selectedVoorschrift) {
+        return <span className="text-muted-foreground">-</span>;
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="font-mono text-primary font-semibold h-auto p-1 -ml-1">
+                    {selectedVoorschrift.dosering || '-'}
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+                {allVoorschriften.map((item, index) => (
+                    <DropdownMenuItem key={index} onSelect={() => setSelectedVoorschrift(item)}>
+                       <div className="flex flex-col">
+                           <span className="font-semibold">{item.gewas}</span>
+                           <span className="text-muted-foreground">{item.dosering}</span>
+                       </div>
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+};
+
 
 export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClientPageProps) {
     const [searchTerm, setSearchTerm] = React.useState('');
@@ -68,7 +112,7 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Middel</TableHead>
-                                    <TableHead>Max. Dosering (Appel/Peer)</TableHead>
+                                    <TableHead>Dosering (Appel/Peer)</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -81,7 +125,7 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                                                 <div className="text-xs text-muted-foreground truncate max-w-xs">{product.werkzameStoffen.join(', ')}</div>
                                             </TableCell>
                                             <TableCell>
-                                                <span className="font-mono text-primary font-semibold">{product.maxDosering}</span>
+                                                <DosageSelector voorschriften={product.gebruiksvoorschriften} />
                                             </TableCell>
                                             <TableCell className="text-right">
                                                  <Badge variant={product.status === 'Valid' ? 'default' : 'destructive'} className={cn(product.status === 'Valid' && 'bg-green-600')}>{product.status}</Badge>
