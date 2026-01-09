@@ -58,6 +58,7 @@ const DosageSelector: React.FC<{ voorschriften: CtgbGebruiksvoorschrift[] }> = (
                        <div className="flex flex-col">
                            <span className="font-semibold">{item.gewas}</span>
                            <span className="text-muted-foreground">{item.dosering}</span>
+                           {item.maxToepassingen && <span className="text-xs text-muted-foreground/80">Max. {item.maxToepassingen}x per jaar</span>}
                        </div>
                     </DropdownMenuItem>
                 ))}
