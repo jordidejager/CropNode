@@ -134,13 +134,25 @@ interface LogbookTableProps {
   onEntryConfirmed: () => void;
 }
 
-const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry: LogbookEntry, allParcels: Parcel[], onSelectRow: (id: string) => void, isSelected: boolean }) => {
-    const [isEditing, setIsEditing] = useState(false);
+const LogbookTableRow = ({ 
+    entry, 
+    allParcels, 
+    onSelectRow, 
+    isSelected, 
+    isEditing, 
+    onEditToggle,
+    allProducts 
+}: { 
+    entry: LogbookEntry, 
+    allParcels: Parcel[], 
+    onSelectRow: (id: string) => void, 
+    isSelected: boolean,
+    isEditing: boolean,
+    onEditToggle: (id: string | null) => void,
+    allProducts: string[]
+}) => {
     const [isPending, startTransition] = useTransition();
     const [editedEntry, setEditedEntry] = useState<LogbookEntry>(entry);
-    const [allProducts, setAllProducts] = useState<string[]>([]);
-    const [loadingProducts, setLoadingProducts] = useState(false);
-    const db = useFirestore();
     const { toast } = useToast();
 
     const config = statusConfig[entry.status] || statusConfig['Fout'];
@@ -159,16 +171,6 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
             }
         });
     }
-
-    const handleEditToggle = async () => {
-        if (!isEditing) {
-            setLoadingProducts(true);
-            const products = await getProducts(db);
-            setAllProducts(products);
-            setLoadingProducts(false);
-        }
-        setIsEditing(!isEditing);
-    };
 
     const handleParcelsChange = (selectedIds: string[]) => {
         if (editedEntry && editedEntry.parsedData) {
@@ -195,7 +197,7 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
                 title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
                 description: result.message,
             });
-            setIsEditing(false);
+            onEditToggle(null);
         });
     }
 
@@ -206,7 +208,7 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
                     <div className="p-4 space-y-4">
                         <h4 className="font-semibold">Logboekregel bewerken</h4>
                         <p className="text-sm text-muted-foreground">{entry.rawInput}</p>
-                        {loadingProducts ? <Skeleton className="h-40 w-full" /> : (
+                        {allProducts.length === 0 ? <Skeleton className="h-40 w-full" /> : (
                             <div className="grid md:grid-cols-2 gap-6">
                                 {editedEntry.parsedData && allProducts.length > 0 && (
                                     <>
@@ -231,7 +233,7 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
                             </div>
                         )}
                         <div className="flex justify-end gap-2">
-                            <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={isPending}>
+                            <Button variant="ghost" onClick={() => onEditToggle(null)} disabled={isPending}>
                                 <X className="mr-2" /> Annuleren
                             </Button>
                             <Button onClick={handleSave} disabled={!editedEntry.parsedData || isPending}>
@@ -291,7 +293,7 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onClick={handleEditToggle}>
+                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onClick={() => onEditToggle(entry.id)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             <span>Bewerken</span>
                         </DropdownMenuItem>
@@ -305,18 +307,38 @@ const LogbookTableRow = ({ entry, allParcels, onSelectRow, isSelected }: { entry
 
 export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfirmed }: LogbookTableProps) {
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [allProducts, setAllProducts] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertContent, setAlertContent] = useState({ title: '', description: '', onConfirm: () => {} });
   const { toast } = useToast();
+  const db = useFirestore();
 
+  useEffect(() => {
+    async function loadProducts() {
+        if (db) {
+            const products = await getProducts(db);
+            setAllProducts(products);
+        }
+    }
+    loadProducts();
+  }, [db]);
+  
   const handleSelectRow = (id: string) => {
+    setEditingRowId(null); // Exit edit mode when selecting
     setSelectedRowIds(prev =>
       prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
     );
   };
 
+  const handleEditToggle = (id: string | null) => {
+    setSelectedRowIds([]); // Deselect rows when entering edit mode
+    setEditingRowId(id);
+  }
+
   const handleSelectAll = (checked: boolean | string) => {
+    setEditingRowId(null); // Exit edit mode
     setSelectedRowIds(checked ? entries.map(entry => entry.id) : []);
   };
 
@@ -389,7 +411,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
               <TableRow>
                 <TableHead className="w-[40px]">
                   <Checkbox
-                    checked={numSelected === entries.length && entries.length > 0}
+                    checked={numSelected === entries.length && entries.length > 0 && editingRowId === null}
                     indeterminate={numSelected > 0 && numSelected < entries.length ? "indeterminate" : false}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
@@ -411,6 +433,9 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   allParcels={allParcels}
                   isSelected={selectedRowIds.includes(entry.id)}
                   onSelectRow={handleSelectRow}
+                  isEditing={editingRowId === entry.id}
+                  onEditToggle={handleEditToggle}
+                  allProducts={allProducts}
                 />
               ))}
             </TableBody>
