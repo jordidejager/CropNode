@@ -280,8 +280,8 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
             date: entry.date,
             plots: entry.parsedData.plots,
             products: entry.parsedData.products,
-            validationMessage: validationMessage || undefined,
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
+            ...(validationMessage && { validationMessage }),
         };
         await addSpuitschriftEntry(firestore, spuitschriftEntry);
         await dbDeleteLogbookEntry(firestore, entry.id);
@@ -365,8 +365,8 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             date: entry.date,
             plots: entry.parsedData.plots,
             products: entry.parsedData.products,
-            validationMessage: validationMessage || undefined,
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
+            ...(validationMessage && { validationMessage }),
         };
         await addSpuitschriftEntry(firestore, spuitschriftEntry);
 
@@ -469,3 +469,5 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
 }
+
+    
