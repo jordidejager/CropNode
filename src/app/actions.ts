@@ -274,17 +274,9 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
         updatedEntryData.validationMessage = validationMessage || 'Validatie mislukt met fouten.';
          await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
     } else {
-        // Status is 'Akkoord' of 'Waarschuwing', we kunnen doorgaan met bevestigen.
-        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id'> = {
-            originalRawInput: entry.rawInput,
-            date: entry.date,
-            plots: entry.parsedData.plots,
-            products: entry.parsedData.products,
-            status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
-            ...(validationMessage && { validationMessage }),
-        };
-        await addSpuitschriftEntry(firestore, spuitschriftEntry);
-        await dbDeleteLogbookEntry(firestore, entry.id);
+        updatedEntryData.status = warningCount > 0 ? 'Waarschuwing' : 'Akkoord';
+        updatedEntryData.validationMessage = validationMessage || '';
+        await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
     }
 
     // Learn from corrections
@@ -307,7 +299,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
       : new Date(entry.date);
 
     return {
-        message: 'Bespuiting definitief opgeslagen.',
+        message: 'Wijzigingen opgeslagen.',
         entry: { ...entry, date: dateToReturn.toISOString() } as any, // HACK: for type compatibility with form state
     };
 }

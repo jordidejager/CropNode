@@ -121,7 +121,7 @@ const LogbookTableRow = ({
         startSaveTransition(async () => {
             const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
             toast({
-                title: result.entry?.status === 'Akkoord' ? 'Opgeslagen & Bevestigd!' : 'Wijzigingen opgeslagen',
+                title: 'Wijzigingen opgeslagen',
                 description: result.message,
             });
             setIsEditing(false);
@@ -142,28 +142,33 @@ const LogbookTableRow = ({
                 <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top">
                    {formatDate(entry.date)}
                 </TableCell>
-                <TableCell className="align-top">
+                <TableCell className="align-top max-w-sm">
                     <p className="font-medium text-sm whitespace-pre-wrap break-words" title={entry.rawInput}>
                         {entry.rawInput}
                     </p>
                     {entry.validationMessage && (
                         <p className={cn(
-                            "text-xs",
+                            "text-xs mt-1",
                             entry.status === 'Afgekeurd' || entry.status === 'Fout' ? 'text-destructive' : 'text-yellow-400'
                         )} title={entry.validationMessage}>
                             {entry.validationMessage}
                         </p>
                     )}
                 </TableCell>
-                 <TableCell className="min-w-[200px] max-w-[200px] align-top whitespace-pre-wrap break-words">
+                 <TableCell className="min-w-[200px] max-w-xs align-top whitespace-pre-wrap break-words">
                     {entry.parsedData?.plots?.map(id =>
                         allParcels.find(p => p.id === id)?.name || id
                     ).join(', ') || '-'}
                 </TableCell>
-                <TableCell className="min-w-[280px] max-w-[300px] align-top whitespace-pre-wrap break-words">
-                    {entry.parsedData?.products?.map(p =>
-                        `${p.product} (${p.dosage} ${p.unit})`
-                    ).join(', ') || '-'}
+                <TableCell className="min-w-[300px] max-w-md align-top">
+                     {entry.parsedData?.products && allProducts.length > 0 ? (
+                        <InlineEditProducts
+                            allProducts={allProducts}
+                            selectedProducts={editedProducts}
+                            onProductsChange={setEditedProducts}
+                            isEditing={isEditing}
+                        />
+                    ) : (entry.parsedData?.products ? <span>{entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
                 </TableCell>
                 <TableCell className="align-top">
                     <Badge
@@ -217,6 +222,7 @@ const LogbookTableRow = ({
                                             allProducts={allProducts}
                                             selectedProducts={editedProducts}
                                             onProductsChange={setEditedProducts}
+                                            isEditing={true}
                                         />
                                     ) : (
                                         <Skeleton className="h-9 w-full" />
@@ -227,7 +233,7 @@ const LogbookTableRow = ({
                                 <Button variant="ghost" onClick={handleCancel} disabled={isSaving}>Annuleren</Button>
                                 <Button onClick={handleSave} disabled={isSaving}>
                                     {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                                    Opslaan & Bevestigen
+                                    Wijzigingen Opslaan
                                 </Button>
                             </div>
                         </div>
