@@ -40,7 +40,7 @@ export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
 
   if (!db) {
       return (
-          <div className="w-full max-w-3xl mx-auto flex flex-col h-full items-center justify-center">
+          <div className="w-full max-w-3xl flex flex-col h-full items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <p className="mt-4 text-muted-foreground">Data laden...</p>
           </div>
@@ -48,9 +48,9 @@ export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto flex flex-col h-full">
-      <div className="flex-grow flex flex-col items-center justify-center">
-         <div className="text-center mb-8">
+    <div className="w-full max-w-3xl flex flex-col h-full">
+      <div className="flex-grow flex flex-col items-start justify-center">
+         <div className="text-left mb-8">
             <h1 className="text-4xl font-bold tracking-tight mb-2">Hallo Jordi</h1>
             <p className="text-2xl text-muted-foreground">Waar zullen we mee beginnen?</p>
          </div>

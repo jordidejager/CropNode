@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
 import { Trash2, CheckCircle, RefreshCcw, AlertTriangle, ShieldAlert, Loader2, Edit } from 'lucide-react';
-import { deleteLogbookEntries, retryAnalysis, updateAndConfirmEntry, confirmLogbookEntry } from '@/app/actions';
+import { deleteLogbookEntry, retryAnalysis, updateAndConfirmEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -138,33 +138,33 @@ const LogbookTableRow = ({
     return (
         <>
             <TableRow data-state={isEditing ? 'selected' : undefined}>
-                <TableCell className="min-w-[140px] text-muted-foreground text-sm whitespace-nowrap">
+                <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top">
                    {formatDate(entry.date)}
                 </TableCell>
-                <TableCell>
-                    <p className="truncate max-w-[200px] font-medium text-sm" title={entry.rawInput}>
+                <TableCell className="align-top">
+                    <p className="font-medium text-sm" title={entry.rawInput}>
                         {entry.rawInput}
                     </p>
                     {entry.validationMessage && (
                         <p className={cn(
-                            "text-xs truncate max-w-[200px]",
+                            "text-xs",
                             entry.status === 'Afgekeurd' || entry.status === 'Fout' ? 'text-destructive' : 'text-yellow-400'
                         )} title={entry.validationMessage}>
                             {entry.validationMessage}
                         </p>
                     )}
                 </TableCell>
-                 <TableCell className="min-w-[200px]">
+                 <TableCell className="min-w-[200px] align-top">
                     {entry.parsedData?.plots?.map(id =>
                         allParcels.find(p => p.id === id)?.name || id
                     ).join(', ') || '-'}
                 </TableCell>
-                <TableCell className="min-w-[280px]">
+                <TableCell className="min-w-[280px] align-top">
                     {entry.parsedData?.products?.map(p =>
                         `${p.product} (${p.dosage} ${p.unit})`
                     ).join(', ') || '-'}
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
                     <Badge
                         variant={config.variant}
                         className={cn('capitalize whitespace-nowrap', entry.status === 'Analyseren...' && 'animate-pulse', config.colorClass)}
@@ -173,7 +173,7 @@ const LogbookTableRow = ({
                         {config.label}
                     </Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right align-top">
                     <div className="flex items-center justify-end gap-1">
                        {entry.status === 'Fout' && (
                             <Button variant="ghost" size="icon" onClick={() => handleRetry(entry.id)} disabled={isPending} title="Opnieuw proberen" className="h-8 w-8">
@@ -266,7 +266,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
         description: `Deze actie kan niet ongedaan gemaakt worden. Dit zal deze logboekregel permanent verwijderen.`,
         onConfirm: () => {
           startTransition(async () => {
-            await deleteLogbookEntries([id]);
+            await deleteLogbookEntry(id);
             toast({ title: `Regel verwijderd` });
             onEntryDeleted([id]);
           });
@@ -287,10 +287,10 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
               <TableRow>
                 <TableHead className="min-w-[140px]">Datum</TableHead>
                 <TableHead className="w-full">Invoer</TableHead>
-                <TableHead className="min-w-[200px]">Percelen</TableHead>
-                <TableHead className="min-w-[280px]">Middelen</TableHead>
-                <TableHead className="w-[130px]">Status</TableHead>
-                <TableHead className="w-[120px] text-right">Acties</TableHead>
+                <TableHead>Percelen</TableHead>
+                <TableHead>Middelen</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[150px] text-right">Acties</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
