@@ -1,19 +1,17 @@
 
 'use client';
 
-import React, { useState, useTransition, useMemo, useEffect } from 'react';
+import React, { useState, useTransition, useMemo, useEffect, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { LogbookEntry, Parcel, LogStatus, ProductEntry } from '@/lib/types';
 import { format } from 'date-fns';
-import { nl } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
-import { MoreHorizontal, Trash2, Pencil, CheckCircle, ChevronDown, RefreshCcw, AlertTriangle, ShieldAlert, X, Loader2, Check } from 'lucide-react';
+import { Trash2, CheckCircle, RefreshCcw, AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react';
 import { deleteLogbookEntries, confirmLogbookEntries, retryAnalysis, updateAndConfirmEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
@@ -25,11 +23,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { getAllCtgbProducts } from '@/lib/store';
 import { useFirestore } from '@/firebase';
-import { EditParcels } from './edit-parcels';
-import { EditProducts } from './edit-products';
+import { InlineEditParcels } from './inline-edit-parcels';
+import { InlineEditProducts } from './inline-edit-products';
+import { InlineEditDate } from './inline-edit-date';
 import { Skeleton } from './ui/skeleton';
 
 const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
@@ -42,89 +40,14 @@ const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'dest
   'Afgekeurd': { variant: 'destructive', label: 'Afgekeurd', colorClass: '', icon: ShieldAlert },
 };
 
-
 const formatDate = (date: Date | Timestamp | undefined) => {
   if (!date) return '';
   const validDate = date instanceof Timestamp ? date.toDate() : new Date(date);
   try {
     return format(validDate, 'dd-MM-yyyy HH:mm');
-  } catch (e) {
+  } catch {
     return 'Ongeldige datum';
   }
-}
-
-function ProductListCollapsible({ products }: { products: ProductEntry[] | undefined }) {
-    if (!products || products.length === 0) {
-        return <span>-</span>;
-    }
-
-    const count = products.length;
-    const getProductText = (p: ProductEntry) => `${p.product} (${p.dosage} ${p.unit})`;
-
-    if (count < 4) {
-        return (
-            <div className="flex flex-col gap-1">
-                {products.map((p, i) => <span key={i}>{getProductText(p)}</span>)}
-            </div>
-        );
-    }
-    
-    const firstProductText = getProductText(products[0]);
-
-    return (
-        <Collapsible>
-            <div className="flex items-center space-x-2">
-                <span className="text-sm truncate max-w-[200px]" title={firstProductText}>{firstProductText}</span>
-                 <CollapsibleTrigger asChild>
-                    <span className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
-                        en {count - 1} ander{count - 2 === 0 ? '' : 'e'}
-                    </span>
-                 </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent>
-                <ul className="list-disc pl-5 mt-2 space-y-1 text-xs text-muted-foreground">
-                    {products.slice(1).map((product, index) => (
-                        <li key={index}>{getProductText(product)}</li>
-                    ))}
-                </ul>
-            </CollapsibleContent>
-        </Collapsible>
-    );
-}
-
-
-function ParcelListCollapsible({ plotIds, allParcels }: { plotIds: string[] | undefined, allParcels: Parcel[] }) {
-    if (!plotIds || plotIds.length === 0) {
-        return <span>-</span>;
-    }
-
-    const parcelNames = plotIds.map(id => allParcels.find(p => p.id === id)?.name || id);
-    const count = parcelNames.length;
-
-    if (count <= 2) {
-      return <span>{parcelNames.join(', ')}</span>;
-    }
-
-    return (
-        <Collapsible>
-            <div className="flex items-center space-x-2">
-                <span className="text-sm">{count} perce{count > 1 ? 'len' : 'el'}</span>
-                <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6">
-                        <ChevronDown className="h-4 w-4 transition-transform [&[data-state=open]]:rotate-180" />
-                        <span className="sr-only">{count} percelen</span>
-                    </Button>
-                </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent>
-                <ul className="list-disc pl-5 mt-2 space-y-1 text-xs text-muted-foreground">
-                    {parcelNames.map((name, index) => (
-                        <li key={index}>{name}</li>
-                    ))}
-                </ul>
-            </CollapsibleContent>
-        </Collapsible>
-    );
 }
 
 interface LogbookTableProps {
@@ -134,29 +57,56 @@ interface LogbookTableProps {
   onEntryConfirmed: () => void;
 }
 
-const LogbookTableRow = ({ 
-    entry, 
-    allParcels, 
-    onSelectRow, 
-    isSelected, 
-    allProducts 
-}: { 
-    entry: LogbookEntry, 
-    allParcels: Parcel[], 
-    onSelectRow: (id: string) => void, 
+const LogbookTableRow = ({
+    entry,
+    allParcels,
+    onSelectRow,
+    isSelected,
+    allProducts,
+    onDelete
+}: {
+    entry: LogbookEntry,
+    allParcels: Parcel[],
+    onSelectRow: (id: string) => void,
     isSelected: boolean,
-    allProducts: string[]
+    allProducts: string[],
+    onDelete: (id: string) => void
 }) => {
     const [isPending, startTransition] = useTransition();
-    const [isEditing, setIsEditing] = useState(false);
-    const [editedEntry, setEditedEntry] = useState<LogbookEntry>(entry);
+    const [editedParcels, setEditedParcels] = useState<string[]>(entry.parsedData?.plots || []);
+    const [editedProducts, setEditedProducts] = useState<ProductEntry[]>(entry.parsedData?.products || []);
+    const [editedDate, setEditedDate] = useState<Date | undefined>(() => {
+        if (!entry.date) return undefined;
+        return entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+    });
     const { toast } = useToast();
 
     const config = statusConfig[entry.status] || statusConfig['Fout'];
 
+    // Check if row is editable (not analyzing)
+    const isEditable = entry.status !== 'Analyseren...' && entry.parsedData;
+
+    // Sync state when entry changes (e.g., after save)
     useEffect(() => {
-        setEditedEntry(entry);
+        setEditedParcels(entry.parsedData?.plots || []);
+        setEditedProducts(entry.parsedData?.products || []);
+        if (entry.date) {
+            setEditedDate(entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date));
+        }
     }, [entry]);
+
+    // Check if there are unsaved changes
+    const hasChanges = useMemo(() => {
+        if (!entry.parsedData) return false;
+
+        const parcelsChanged = JSON.stringify(editedParcels.sort()) !== JSON.stringify((entry.parsedData.plots || []).sort());
+        const productsChanged = JSON.stringify(editedProducts) !== JSON.stringify(entry.parsedData.products || []);
+
+        const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : entry.date ? new Date(entry.date) : undefined;
+        const dateChanged = editedDate?.getTime() !== originalDate?.getTime();
+
+        return parcelsChanged || productsChanged || dateChanged;
+    }, [editedParcels, editedProducts, editedDate, entry.parsedData, entry.date]);
 
     const handleRetry = (entryId: string) => {
         startTransition(async () => {
@@ -168,139 +118,148 @@ const LogbookTableRow = ({
             }
         });
     }
-    
-    const handleEditToggle = () => {
-        setIsEditing(prev => !prev);
-    }
 
-    const handleParcelsChange = (selectedIds: string[]) => {
-        if (editedEntry && editedEntry.parsedData) {
-            setEditedEntry({
-                ...editedEntry,
-                parsedData: { ...editedEntry.parsedData, plots: selectedIds }
-            });
-        }
-    };
+    const handleSave = useCallback(() => {
+        if (!entry.parsedData) return;
 
-    const handleProductsChange = (products: ProductEntry[]) => {
-        if (editedEntry && editedEntry.parsedData) {
-            setEditedEntry({
-                ...editedEntry,
-                parsedData: { ...editedEntry.parsedData, products: products }
-            });
-        }
-    };
+        const updatedEntry: LogbookEntry = {
+            ...entry,
+            date: editedDate ?? entry.date,
+            parsedData: {
+                ...entry.parsedData,
+                plots: editedParcels,
+                products: editedProducts
+            }
+        };
 
-    const handleSave = () => {
         startTransition(async () => {
-            const result = await updateAndConfirmEntry(editedEntry, entry.parsedData?.products || []);
+            const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
             toast({
                 title: result.entry?.status === 'Akkoord' ? 'Opgeslagen!' : 'Bijgewerkt',
                 description: result.message,
             });
-            setIsEditing(false);
         });
-    }
-    
+    }, [entry, editedParcels, editedProducts, editedDate, toast]);
+
     return (
-      <React.Fragment>
-        <TableRow
-            data-state={isSelected || isEditing ? 'selected' : undefined}
-        >
+        <TableRow data-state={isSelected ? 'selected' : undefined}>
             <TableCell>
                 <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onSelectRow(entry.id)}
                     aria-label={`Selecteer rij ${entry.id}`}
-                    disabled={isEditing}
+                    disabled={entry.status === 'Analyseren...'}
                 />
             </TableCell>
-            <TableCell className="text-muted-foreground text-sm">{formatDate(entry.date)}</TableCell>
+            <TableCell className="min-w-[180px]">
+                {isEditable ? (
+                    <InlineEditDate
+                        date={editedDate}
+                        onDateChange={setEditedDate}
+                    />
+                ) : (
+                    <span className="text-muted-foreground text-sm whitespace-nowrap">
+                        {formatDate(entry.date)}
+                    </span>
+                )}
+            </TableCell>
             <TableCell>
-                <p className="truncate max-w-[200px] md:max-w-xs font-medium" title={entry.rawInput}>{entry.rawInput}</p>
-                {entry.validationMessage && <p className={cn("text-xs truncate max-w-[200px] md:max-w-xs", entry.status === 'Afgekeurd' ? 'text-destructive' : 'text-yellow-400')} title={entry.validationMessage}>{entry.validationMessage}</p>}
+                <p className="truncate max-w-[150px] font-medium text-sm" title={entry.rawInput}>
+                    {entry.rawInput}
+                </p>
+                {entry.validationMessage && (
+                    <p className={cn(
+                        "text-xs truncate max-w-[150px]",
+                        entry.status === 'Afgekeurd' ? 'text-destructive' : 'text-yellow-400'
+                    )} title={entry.validationMessage}>
+                        {entry.validationMessage}
+                    </p>
+                )}
             </TableCell>
-            <TableCell className="text-sm">
-                <ParcelListCollapsible plotIds={entry.parsedData?.plots} allParcels={allParcels} />
+            <TableCell className="min-w-[200px]">
+                {isEditable ? (
+                    <InlineEditParcels
+                        allParcels={allParcels}
+                        selectedParcelIds={editedParcels}
+                        onSelectionChange={setEditedParcels}
+                    />
+                ) : (
+                    <span className="text-sm text-muted-foreground">
+                        {entry.parsedData?.plots?.map(id =>
+                            allParcels.find(p => p.id === id)?.name || id
+                        ).join(', ') || '-'}
+                    </span>
+                )}
             </TableCell>
-            <TableCell className="text-sm align-top">
-                <ProductListCollapsible products={entry.parsedData?.products} />
+            <TableCell className="min-w-[280px]">
+                {isEditable && allProducts.length > 0 ? (
+                    <InlineEditProducts
+                        allProducts={allProducts}
+                        selectedProducts={editedProducts}
+                        onProductsChange={setEditedProducts}
+                    />
+                ) : allProducts.length === 0 && isEditable ? (
+                    <Skeleton className="h-8 w-full" />
+                ) : (
+                    <span className="text-sm text-muted-foreground">
+                        {entry.parsedData?.products?.map(p =>
+                            `${p.product} (${p.dosage} ${p.unit})`
+                        ).join(', ') || '-'}
+                    </span>
+                )}
             </TableCell>
             <TableCell>
                 <Badge
                     variant={config.variant}
-                    className={cn('capitalize', entry.status === 'Analyseren...' && 'animate-pulse', config.colorClass)}
+                    className={cn('capitalize whitespace-nowrap', entry.status === 'Analyseren...' && 'animate-pulse', config.colorClass)}
                 >
                     {config.icon && <config.icon className="mr-1.5 h-3 w-3"/>}
                     {config.label}
                 </Badge>
             </TableCell>
             <TableCell className="text-right">
-                {entry.status === 'Fout' ? (
-                    <Button variant="ghost" size="icon" onClick={() => handleRetry(entry.id)} disabled={isPending} title="Opnieuw proberen">
-                        <RefreshCcw className="h-4 w-4" />
-                    </Button>
-                ) : (
-                    <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0" disabled={entry.status === 'Analyseren...'}>
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
+                <div className="flex items-center justify-end gap-1">
+                    {entry.status === 'Fout' && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRetry(entry.id)}
+                            disabled={isPending}
+                            title="Opnieuw proberen"
+                            className="h-8 w-8"
+                        >
+                            <RefreshCcw className="h-4 w-4" />
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled={entry.status === 'Analyseren...'} onSelect={handleEditToggle}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            <span>Bewerken</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
+                    )}
+                    {isEditable && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleSave}
+                            disabled={isPending}
+                            title="Bevestigen"
+                            className="h-8 w-8 text-green-600 hover:text-green-600"
+                        >
+                            {isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <CheckCircle className="h-4 w-4" />
+                            )}
+                        </Button>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDelete(entry.id)}
+                        disabled={isPending || entry.status === 'Analyseren...'}
+                        title="Verwijderen"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </div>
             </TableCell>
         </TableRow>
-        {isEditing && (
-            <TableRow data-state="selected">
-                <TableCell colSpan={7} className="p-0">
-                    <div className="p-4 space-y-4 bg-muted/30">
-                        <h4 className="font-semibold">Logboekregel bewerken</h4>
-                        {allProducts.length === 0 ? <Skeleton className="h-40 w-full" /> : (
-                            <div className="grid md:grid-cols-2 gap-6">
-                                {editedEntry.parsedData && allProducts.length > 0 ? (
-                                    <>
-                                    <EditProducts
-                                        allProducts={allProducts}
-                                        selectedProducts={editedEntry.parsedData.products}
-                                        onProductsChange={handleProductsChange}
-                                    />
-                                    <EditParcels
-                                        allParcels={allParcels}
-                                        selectedParcelIds={editedEntry.parsedData.plots}
-                                        onSelectionChange={handleParcelsChange}
-                                    />
-                                    </>
-                                ) : <p>Analyse data niet gevonden, kan niet bewerken.</p>}
-                            </div>
-                        )}
-                        {entry.validationMessage && (
-                            <div className={cn("flex items-start gap-3 rounded-md border p-3 text-sm border-yellow-500/50 bg-yellow-500/10 text-yellow-200")}>
-                                <AlertTriangle className="size-5 mt-0.5" />
-                                <p className="flex-1">{entry.validationMessage}</p>
-                            </div>
-                        )}
-                        <div className="flex justify-end gap-2">
-                            <Button variant="ghost" onClick={handleEditToggle} disabled={isPending}>
-                                <X className="mr-2 h-4 w-4" /> Annuleren
-                            </Button>
-                            <Button onClick={handleSave} disabled={!editedEntry.parsedData || isPending}>
-                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4"/>}
-                                Opslaan & Bevestigen
-                            </Button>
-                        </div>
-                    </div>
-                </TableCell>
-            </TableRow>
-        )}
-      </React.Fragment>
     );
 };
 
@@ -322,7 +281,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     }
     loadProducts();
   }, [db]);
-  
+
   const handleSelectRow = (id: string) => {
     setSelectedRowIds(prev =>
         prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
@@ -347,6 +306,22 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
     });
   }, [selectedRowIds, entries]);
 
+
+  const handleSingleDelete = (id: string) => {
+    setAlertContent({
+        title: `Weet u het zeker?`,
+        description: `Deze actie kan niet ongedaan gemaakt worden. Dit zal deze logboekregel permanent verwijderen.`,
+        onConfirm: () => {
+          startTransition(async () => {
+            await deleteLogbookEntries([id]);
+            toast({ title: `Regel verwijderd` });
+            onEntryDeleted([id]);
+            setSelectedRowIds(prev => prev.filter(rowId => rowId !== id));
+          });
+        }
+    });
+    setIsAlertOpen(true);
+  }
 
   const bulkDelete = () => {
     setAlertContent({
@@ -401,24 +376,23 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                  </Button>
              </div>
         )}
-        <div className="rounded-md border">
+        <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[40px]">
                   <Checkbox
                     checked={numSelected > 0 && numSelected === entries.filter(e => e.status !== 'Analyseren...').length}
-                    indeterminate={numSelected > 0 && numSelected < entries.filter(e => e.status !== 'Analyseren...').length ? "indeterminate" : false}
                     onCheckedChange={handleSelectAll}
                     aria-label="Selecteer alle rijen"
                   />
                 </TableHead>
-                <TableHead className="w-[150px]">Datum</TableHead>
-                <TableHead>Invoer</TableHead>
-                <TableHead>Percelen</TableHead>
-                <TableHead>Middelen</TableHead>
-                <TableHead className="w-[150px]">Status</TableHead>
-                <TableHead className="w-[50px] text-right"></TableHead>
+                <TableHead className="min-w-[180px]">Datum</TableHead>
+                <TableHead className="w-[150px]">Invoer</TableHead>
+                <TableHead className="min-w-[200px]">Percelen</TableHead>
+                <TableHead className="min-w-[280px]">Middelen</TableHead>
+                <TableHead className="w-[130px]">Status</TableHead>
+                <TableHead className="w-[100px] text-right">Acties</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -430,6 +404,7 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
                   isSelected={selectedRowIds.includes(entry.id)}
                   onSelectRow={handleSelectRow}
                   allProducts={allProducts}
+                  onDelete={handleSingleDelete}
                 />
               ))}
             </TableBody>
@@ -453,5 +428,3 @@ export function LogbookTable({ entries, allParcels, onEntryDeleted, onEntryConfi
       </div>
   );
 }
-
-    
