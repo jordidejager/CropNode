@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
 import { Trash2, CheckCircle, RefreshCcw, AlertTriangle, ShieldAlert, Loader2, Edit } from 'lucide-react';
-import { deleteLogbookEntries, retryAnalysis, updateAndConfirmEntry } from '@/app/actions';
+import { deleteLogbookEntries, retryAnalysis, updateAndConfirmEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -28,7 +28,6 @@ import { InlineEditParcels } from './inline-edit-parcels';
 import { InlineEditProducts } from './inline-edit-products';
 import { InlineEditDate } from './inline-edit-date';
 import { Skeleton } from './ui/skeleton';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
 const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
   'Nieuw': { variant: 'outline', label: 'Nieuw', colorClass: '' },
@@ -92,6 +91,18 @@ const LogbookTableRow = ({
             if (result.success) onUpdate();
         });
     }
+
+    const handleConfirm = (entryId: string) => {
+        startActionTransition(async () => {
+            const result = await confirmLogbookEntry(entryId);
+            toast({
+                title: result.success ? 'Regel Bevestigd' : 'Bevestigen Mislukt',
+                description: result.message,
+                variant: result.success ? 'default' : 'destructive',
+            });
+            if (result.success) onUpdate();
+        });
+    };
 
     const handleSave = useCallback(() => {
         if (!entry.parsedData) return;
@@ -169,11 +180,12 @@ const LogbookTableRow = ({
                                 <RefreshCcw className="h-4 w-4" />
                             </Button>
                         )}
-                        {entry.status !== 'Analyseren...' && entry.status !== 'Akkoord' && (
-                            <Button variant="ghost" size="icon" onClick={() => setIsEditing(prev => !prev)} disabled={isPending} title="Bewerken" className="h-8 w-8">
-                                <Edit className="h-4 w-4" />
-                            </Button>
-                        )}
+                        <Button variant="ghost" size="icon" onClick={() => handleConfirm(entry.id)} disabled={isPending} title="Bevestigen" className="h-8 w-8 text-green-500 hover:text-green-600">
+                           <CheckCircle className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setIsEditing(prev => !prev)} disabled={isPending} title="Bewerken" className="h-8 w-8">
+                            <Edit className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => onDelete(entry.id)} disabled={isPending} title="Verwijderen" className="h-8 w-8 text-destructive hover:text-destructive">
                             <Trash2 className="h-4 w-4" />
                         </Button>
