@@ -159,10 +159,12 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
     }
 
     const updatedEntryData: Partial<LogbookEntry> = {
-        ...entry,
+        id: entry.id,
         status: finalStatus,
         validationMessage: finalValidationMessage,
         parsedData: finalParsedData,
+        rawInput: entry.rawInput,
+        date: entry.date,
     };
     await updateLogbookEntry(db, updatedEntryData as LogbookEntry);
 }
@@ -266,18 +268,21 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
     
     const updatedEntryData: Partial<LogbookEntry> = {
-        ...entry,
+        id: entry.id,
+        rawInput: entry.rawInput,
+        date: entry.date,
+        parsedData: entry.parsedData,
     };
 
     if (errorCount > 0) {
         updatedEntryData.status = 'Afgekeurd';
         updatedEntryData.validationMessage = validationMessage || 'Validatie mislukt met fouten.';
-         await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
     } else {
         updatedEntryData.status = warningCount > 0 ? 'Waarschuwing' : 'Akkoord';
         updatedEntryData.validationMessage = validationMessage || '';
-        await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
     }
+    await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
+
 
     // Learn from corrections
     if (entry.parsedData?.products) {
@@ -291,8 +296,6 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
 
     revalidatePath('/');
-    revalidatePath('/spuitschrift');
-    revalidatePath('/voorraad');
     
     const dateToReturn = entry.date instanceof Timestamp 
       ? entry.date.toDate() 

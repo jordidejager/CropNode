@@ -40,16 +40,6 @@ const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'dest
   'Afgekeurd': { variant: 'destructive', label: 'Afgekeurd', colorClass: '', icon: ShieldAlert },
 };
 
-const formatDate = (date: Date | Timestamp | undefined) => {
-  if (!date) return '';
-  const validDate = date instanceof Timestamp ? date.toDate() : new Date(date);
-  try {
-    return format(validDate, 'dd-MM-yyyy HH:mm');
-  } catch {
-    return 'Ongeldige datum';
-  }
-}
-
 const LogbookTableRow = ({
     entry,
     allParcels,
@@ -69,7 +59,7 @@ const LogbookTableRow = ({
 
     const [editedParcels, setEditedParcels] = useState<string[]>([]);
     const [editedProducts, setEditedProducts] = useState<ProductEntry[]>([]);
-    const [editedDate, setEditedDate] = useState<Date | undefined>();
+    const [editedDate, setEditedDate] = useState<Date | Timestamp | undefined>();
     
     const { toast } = useToast();
 
@@ -79,10 +69,8 @@ const LogbookTableRow = ({
             setEditedParcels(entry.parsedData.plots || []);
             setEditedProducts(entry.parsedData.products || []);
         }
-        if (entry.date) {
-            setEditedDate(entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date));
-        }
-    }, [entry, isEditing]);
+        setEditedDate(entry.date);
+    }, [entry]);
 
 
     const handleRetry = (entryId: string) => {
@@ -110,7 +98,7 @@ const LogbookTableRow = ({
 
         const updatedEntry: LogbookEntry = {
             ...entry,
-            date: editedDate ?? entry.date,
+            date: editedDate ? (editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate)) : new Date(),
             parsedData: {
                 ...entry.parsedData,
                 plots: editedParcels,
@@ -122,7 +110,7 @@ const LogbookTableRow = ({
             const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
             toast({
                 title: 'Wijzigingen opgeslagen',
-                description: result.message,
+                description: 'De regel is opnieuw gevalideerd en opgeslagen.',
             });
             setIsEditing(false);
             onUpdate();
@@ -131,16 +119,35 @@ const LogbookTableRow = ({
     
     const handleCancel = () => {
         setIsEditing(false);
+        // Reset state to original entry
+        if (entry.parsedData) {
+            setEditedParcels(entry.parsedData.plots || []);
+            setEditedProducts(entry.parsedData.products || []);
+        }
+        setEditedDate(entry.date);
     }
 
     const config = statusConfig[entry.status] || statusConfig['Fout'];
     const isPending = isSaving || isActionPending;
 
+    const hasChanged = useMemo(() => {
+        if (!entry.parsedData || !editedDate) return false;
+        const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+        const newDate = editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate);
+        
+        const dateChanged = originalDate.getTime() !== newDate.getTime();
+        const parcelsChanged = JSON.stringify(entry.parsedData.plots.sort()) !== JSON.stringify(editedParcels.sort());
+        const productsChanged = JSON.stringify(entry.parsedData.products) !== JSON.stringify(editedProducts);
+
+        return dateChanged || parcelsChanged || productsChanged;
+
+    }, [entry, editedDate, editedParcels, editedProducts]);
+
     return (
         <>
             <TableRow data-state={isEditing ? 'selected' : undefined}>
                 <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top whitespace-pre-wrap">
-                   {formatDate(entry.date)}
+                   <InlineEditDate date={editedDate} onDateChange={setEditedDate} />
                 </TableCell>
                 <TableCell className="align-top max-w-sm">
                     <p className="font-medium text-sm whitespace-pre-wrap break-words">
@@ -156,9 +163,13 @@ const LogbookTableRow = ({
                     )}
                 </TableCell>
                  <TableCell className="min-w-[200px] max-w-xs align-top whitespace-pre-wrap break-words">
-                    {entry.parsedData?.plots?.map(id =>
-                        allParcels.find(p => p.id === id)?.name || id
-                    ).join(', ') || '-'}
+                    {entry.parsedData ? (
+                        <InlineEditParcels 
+                            allParcels={allParcels}
+                            selectedParcelIds={editedParcels}
+                            onSelectionChange={setEditedParcels}
+                        />
+                    ) : '-'}
                 </TableCell>
                 <TableCell className="min-w-[300px] max-w-md align-top">
                      {entry.parsedData?.products && allProducts.length > 0 ? (
@@ -166,7 +177,7 @@ const LogbookTableRow = ({
                             allProducts={allProducts}
                             selectedProducts={editedProducts}
                             onProductsChange={setEditedProducts}
-                            isEditing={false}
+                            isEditing={false} // Always use popover mode
                         />
                     ) : (entry.parsedData?.products ? <span className="whitespace-pre-wrap">{entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
                 </TableCell>
@@ -186,60 +197,21 @@ const LogbookTableRow = ({
                                 <RefreshCcw className="h-4 w-4" />
                             </Button>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => handleConfirm(entry.id)} disabled={isPending} title="Bevestigen" className="h-8 w-8 text-green-500 hover:text-green-600">
-                           <CheckCircle className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setIsEditing(prev => !prev)} disabled={isPending} title="Bewerken" className="h-8 w-8">
-                            <Edit className="h-4 w-4" />
-                        </Button>
+                        {hasChanged ? (
+                           <Button variant="ghost" size="icon" onClick={handleSave} disabled={isSaving} title="Wijzigingen Opslaan" className="h-8 w-8 text-green-500 hover:text-green-600">
+                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                           </Button>
+                        ) : (
+                            <Button variant="ghost" size="icon" onClick={() => handleConfirm(entry.id)} disabled={isPending} title="Bevestigen" className="h-8 w-8 text-green-500 hover:text-green-600">
+                               <CheckCircle className="h-4 w-4" />
+                            </Button>
+                        )}
                         <Button variant="ghost" size="icon" onClick={() => onDelete(entry.id)} disabled={isPending} title="Verwijderen" className="h-8 w-8 text-destructive hover:text-destructive">
                             <Trash2 className="h-4 w-4" />
                         </Button>
                     </div>
                 </TableCell>
             </TableRow>
-            {isEditing && (
-                <TableRow>
-                    <TableCell colSpan={6} className="p-0">
-                        <div className="p-4 bg-muted/50 space-y-4">
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                               <div className="space-y-2">
-                                   <Label>Datum & Tijd</Label>
-                                   <InlineEditDate date={editedDate} onDateChange={setEditedDate} />
-                               </div>
-                                <div className="space-y-2">
-                                    <Label>Percelen</Label>
-                                    <InlineEditParcels
-                                        allParcels={allParcels}
-                                        selectedParcelIds={editedParcels}
-                                        onSelectionChange={setEditedParcels}
-                                    />
-                                </div>
-                                 <div className="space-y-2">
-                                    <Label>Middelen</Label>
-                                    {allProducts.length > 0 ? (
-                                        <InlineEditProducts
-                                            allProducts={allProducts}
-                                            selectedProducts={editedProducts}
-                                            onProductsChange={setEditedProducts}
-                                            isEditing={true}
-                                        />
-                                    ) : (
-                                        <Skeleton className="h-9 w-full" />
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="ghost" onClick={handleCancel} disabled={isSaving}>Annuleren</Button>
-                                <Button onClick={handleSave} disabled={isSaving}>
-                                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                                    Wijzigingen Opslaan
-                                </Button>
-                            </div>
-                        </div>
-                    </TableCell>
-                </TableRow>
-            )}
         </>
     );
 };
