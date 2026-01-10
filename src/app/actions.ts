@@ -461,5 +461,3 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
     return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
   }
 }
-
-    

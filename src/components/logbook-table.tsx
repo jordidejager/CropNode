@@ -139,11 +139,11 @@ const LogbookTableRow = ({
     return (
         <>
             <TableRow data-state={isEditing ? 'selected' : undefined}>
-                <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top">
+                <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top whitespace-pre-wrap">
                    {formatDate(entry.date)}
                 </TableCell>
                 <TableCell className="align-top max-w-sm">
-                    <p className="font-medium text-sm whitespace-pre-wrap break-words" title={entry.rawInput}>
+                    <p className="font-medium text-sm whitespace-pre-wrap break-words">
                         {entry.rawInput}
                     </p>
                     {entry.validationMessage && (
@@ -166,9 +166,9 @@ const LogbookTableRow = ({
                             allProducts={allProducts}
                             selectedProducts={editedProducts}
                             onProductsChange={setEditedProducts}
-                            isEditing={isEditing}
+                            isEditing={false}
                         />
-                    ) : (entry.parsedData?.products ? <span>{entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
+                    ) : (entry.parsedData?.products ? <span className="whitespace-pre-wrap">{entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
                 </TableCell>
                 <TableCell className="align-top">
                     <Badge
