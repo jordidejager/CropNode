@@ -1,5 +1,5 @@
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where, collectionGroup, QueryConstraint } from 'firebase/firestore';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference, InventoryMovement, CtgbProduct, CtgbSyncStats } from './types';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, Middel, UploadLog, UserPreference, InventoryMovement, CtgbProduct, CtgbSyncStats, SpuitschriftEntry } from './types';
 
 const LOGBOOK_COLLECTION = 'logbook';
 const HISTORY_COLLECTION = 'parcelHistory';
@@ -10,6 +10,37 @@ const UPLOAD_LOG_COLLECTION = 'uploadLog';
 const USER_PREFERENCES_COLLECTION = 'userPreferences';
 const INVENTORY_MOVEMENTS_COLLECTION = 'inventoryMovements';
 const CTGB_PRODUCTS_COLLECTION = 'ctgb_products';
+const SPUITSCHRIFT_COLLECTION = 'spuitschrift';
+
+
+// Spuitschrift Functions
+export async function getSpuitschriftEntries(db: Firestore): Promise<SpuitschriftEntry[]> {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, SPUITSCHRIFT_COLLECTION), orderBy('date', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        date: (data.date as Timestamp).toDate(),
+      } as SpuitschriftEntry;
+    });
+  } catch (e) {
+    console.warn("Could not fetch spuitschrift entries, collection might not exist yet.", e);
+    return [];
+  }
+}
+
+export async function addSpuitschriftEntry(db: Firestore, entry: Omit<SpuitschriftEntry, 'id'>): Promise<void> {
+  if (!db) throw new Error("Database not initialized");
+  await addDoc(collection(db, SPUITSCHRIFT_COLLECTION), {
+    ...entry,
+    date: Timestamp.fromDate(new Date(entry.date)),
+  });
+}
+
 
 // Inventory Movement Functions
 export async function getInventoryMovements(db: Firestore): Promise<InventoryMovement[]> {
@@ -450,7 +481,7 @@ export async function getBatchParcelSeasonHistory(
   return resultMap;
 }
 
-export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels }: { logbookEntry: LogbookEntry, parcels: Parcel[] }) {
+export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels, isConfirmation = false }: { logbookEntry: LogbookEntry, parcels: Parcel[], isConfirmation?: boolean }) {
     if (!db) throw new Error("Database not initialized");
     if (!logbookEntry.parsedData) return;
 
@@ -458,19 +489,20 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
     const { id: logId, parsedData } = logbookEntry;
     const { plots, products } = parsedData;
 
-    // --- Delete old related entries ---
-    const historyQuery = query(collection(db, HISTORY_COLLECTION), where('logId', '==', logId));
-    const inventoryQuery = query(collection(db, INVENTORY_MOVEMENTS_COLLECTION), where('referenceId', '==', logId));
-    
-    const [existingHistoryDocs, existingInventoryDocs] = await Promise.all([
-        getDocs(historyQuery),
-        getDocs(inventoryQuery)
-    ]);
+    if (!isConfirmation) {
+        const historyQuery = query(collection(db, HISTORY_COLLECTION), where('logId', '==', logId));
+        const inventoryQuery = query(collection(db, INVENTORY_MOVEMENTS_COLLECTION), where('referenceId', '==', logId));
+        
+        const [existingHistoryDocs, existingInventoryDocs] = await Promise.all([
+            getDocs(historyQuery),
+            getDocs(inventoryQuery)
+        ]);
 
-    existingHistoryDocs.forEach(doc => batch.delete(doc.ref));
-    existingInventoryDocs.forEach(doc => batch.delete(doc.ref));
+        existingHistoryDocs.forEach(doc => batch.delete(doc.ref));
+        existingInventoryDocs.forEach(doc => batch.delete(doc.ref));
+    }
 
-    // --- Create new Parcel History entries AND calculate total usage per product ---
+
     const productUsage: Record<string, { totalAmount: number; unit: string; parcelIds: Set<string> }> = {};
 
     plots.forEach(parcelId => {
@@ -478,22 +510,22 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
         if (!parcel) return;
 
         products.forEach(productEntry => {
-            // Create history entry for each parcel
-            const historyDocRef = doc(collection(db, HISTORY_COLLECTION));
-            const historyEntry: Omit<ParcelHistoryEntry, 'id'> = {
-                logId,
-                parcelId: parcel.id,
-                parcelName: parcel.name,
-                crop: parcel.crop,
-                variety: parcel.variety,
-                product: productEntry.product,
-                dosage: productEntry.dosage,
-                unit: productEntry.unit,
-                date: new Date(logbookEntry.date),
-            };
-            batch.set(historyDocRef, historyEntry);
-
-            // Aggregate product usage
+            if (isConfirmation) {
+                 const historyDocRef = doc(collection(db, HISTORY_COLLECTION));
+                const historyEntry: Omit<ParcelHistoryEntry, 'id'> = {
+                    logId,
+                    parcelId: parcel.id,
+                    parcelName: parcel.name,
+                    crop: parcel.crop,
+                    variety: parcel.variety,
+                    product: productEntry.product,
+                    dosage: productEntry.dosage,
+                    unit: productEntry.unit,
+                    date: new Date(logbookEntry.date),
+                };
+                batch.set(historyDocRef, historyEntry);
+            }
+            
             if (!productUsage[productEntry.product]) {
                 productUsage[productEntry.product] = { totalAmount: 0, unit: productEntry.unit, parcelIds: new Set() };
             }
@@ -504,7 +536,6 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
         });
     });
 
-    // --- Create new consolidated Inventory Movement entries ---
     Object.entries(productUsage).forEach(([productName, usage]) => {
         if (usage.totalAmount > 0) {
             const inventoryDocRef = doc(collection(db, INVENTORY_MOVEMENTS_COLLECTION));
@@ -515,7 +546,7 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
                 type: 'usage',
                 date: new Date(logbookEntry.date),
                 description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
-                referenceId: logId, // Link to the original log entry
+                referenceId: logId, 
             };
             batch.set(inventoryDocRef, inventoryMovement);
         }

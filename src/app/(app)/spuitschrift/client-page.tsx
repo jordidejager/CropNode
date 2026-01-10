@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { LogbookEntry, Parcel } from '@/lib/types';
+import { SpuitschriftEntry, Parcel } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { format } from 'date-fns';
@@ -10,7 +10,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getParcelHistoryEntries } from '@/lib/store';
+import { getSpuitschriftEntries } from '@/lib/store';
 import { useFirestore } from '@/firebase';
 
 const formatDate = (date: Date | Timestamp) => {
@@ -19,16 +19,16 @@ const formatDate = (date: Date | Timestamp) => {
 };
 
 interface SpuitschriftClientPageProps {
-    initialEntries: LogbookEntry[];
+    initialEntries: SpuitschriftEntry[];
     allParcels: Parcel[];
 }
 
-function ChronologicalView({ entries, allParcels }: { entries: LogbookEntry[], allParcels: Parcel[] }) {
-    const calculateTotals = (entry: LogbookEntry) => {
-        const selectedParcels = allParcels.filter(p => entry.parsedData?.plots.includes(p.id));
+function ChronologicalView({ entries, allParcels }: { entries: SpuitschriftEntry[], allParcels: Parcel[] }) {
+    const calculateTotals = (entry: SpuitschriftEntry) => {
+        const selectedParcels = allParcels.filter(p => entry.plots.includes(p.id));
         const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
 
-        const productsWithTotals = entry.parsedData?.products.map(product => ({
+        const productsWithTotals = entry.products.map(product => ({
             ...product,
             totalUsed: (product.dosage * totalArea).toFixed(3)
         })) || [];
@@ -36,11 +36,11 @@ function ChronologicalView({ entries, allParcels }: { entries: LogbookEntry[], a
         return { selectedParcels, totalArea, productsWithTotals };
     };
 
-    const generateProductSummary = (entry: LogbookEntry) => {
-        if (!entry.parsedData || !entry.parsedData.products || entry.parsedData.products.length === 0) {
-            return entry.rawInput;
+    const generateProductSummary = (entry: SpuitschriftEntry) => {
+        if (!entry.products || entry.products.length === 0) {
+            return 'Geen middelen';
         }
-        return entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit}/ha)`).join(', ');
+        return entry.products.map(p => `${p.product} (${p.dosage} ${p.unit}/ha)`).join(', ');
     };
     
     return (
@@ -108,28 +108,26 @@ function ChronologicalView({ entries, allParcels }: { entries: LogbookEntry[], a
     );
 }
 
-function ParcelHistoryView({ allParcels }: { allParcels: Parcel[] }) {
+function ParcelHistoryView({ allParcels, initialEntries }: { allParcels: Parcel[], initialEntries: SpuitschriftEntry[] }) {
     const [selectedParcelId, setSelectedParcelId] = React.useState<string | null>(null);
-    const [history, setHistory] = React.useState<any[]>([]);
-    const [loading, setLoading] = React.useState(false);
-    const db = useFirestore();
+    
+    const history = React.useMemo(() => {
+        if (!selectedParcelId) return [];
 
-    React.useEffect(() => {
-        if (!selectedParcelId || !db) {
-            setHistory([]);
-            return;
-        };
-
-        async function fetchHistory() {
-            setLoading(true);
-            const allHistory = await getParcelHistoryEntries(db);
-            const parcelHistory = allHistory.filter(h => h.parcelId === selectedParcelId);
-            setHistory(parcelHistory);
-            setLoading(false);
-        }
-
-        fetchHistory();
-    }, [selectedParcelId, db]);
+        return initialEntries
+            .filter(entry => entry.plots.includes(selectedParcelId))
+            .flatMap(entry => 
+                entry.products.map(product => ({
+                    id: `${entry.id}-${product.product}`,
+                    date: entry.date,
+                    product: product.product,
+                    dosage: product.dosage,
+                    unit: product.unit,
+                }))
+            )
+            .sort((a, b) => (b.date instanceof Timestamp ? b.date.toMillis() : new Date(b.date).getTime()) - (a.date instanceof Timestamp ? a.date.toMillis() : new Date(a.date).getTime()));
+            
+    }, [selectedParcelId, initialEntries]);
     
     return (
          <div className="space-y-4">
@@ -146,15 +144,19 @@ function ParcelHistoryView({ allParcels }: { allParcels: Parcel[] }) {
               </SelectContent>
             </Select>
 
-            {loading && <p>Historie laden...</p>}
+            {!selectedParcelId && (
+                <div className="text-center text-muted-foreground py-10">
+                    <p>Kies een perceel om de historie te bekijken.</p>
+                </div>
+            )}
 
-            {!loading && selectedParcelId && history.length === 0 && (
+            {selectedParcelId && history.length === 0 && (
                 <div className="text-center text-muted-foreground py-10">
                     <p>Geen bespuitingen gevonden voor dit perceel.</p>
                 </div>
             )}
 
-            {!loading && history.length > 0 && (
+            {history.length > 0 && (
                 <div className="rounded-md border">
                     <Table>
                         <TableHeader>
@@ -167,7 +169,7 @@ function ParcelHistoryView({ allParcels }: { allParcels: Parcel[] }) {
                         <TableBody>
                             {history.map(item => (
                                 <TableRow key={item.id}>
-                                    <TableCell>{format(item.date, 'dd-MM-yyyy')}</TableCell>
+                                    <TableCell>{format(item.date instanceof Timestamp ? item.date.toDate() : item.date, 'dd-MM-yyyy')}</TableCell>
                                     <TableCell className="font-medium">{item.product}</TableCell>
                                     <TableCell className="text-right">{item.dosage} {item.unit}/ha</TableCell>
                                 </TableRow>
@@ -220,7 +222,7 @@ export function SpuitschriftClientPage({ initialEntries, allParcels }: Spuitschr
                         )}
                     </TabsContent>
                     <TabsContent value="by_parcel" className="mt-6">
-                       <ParcelHistoryView allParcels={allParcels} />
+                       <ParcelHistoryView allParcels={allParcels} initialEntries={initialEntries} />
                     </TabsContent>
                 </Tabs>
             </CardContent>

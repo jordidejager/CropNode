@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries, getAllCtgbProducts } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement, LogStatus } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries, getAllCtgbProducts, addSpuitschriftEntry } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement, LogStatus, SpuitschriftEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
 import { Firestore, Timestamp, getDocs, collection } from 'firebase/firestore';
@@ -151,12 +151,6 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
 
         finalValidationMessage = validationMessage || '';
 
-        if (finalStatus === 'Akkoord') {
-            await addParcelHistoryEntries(db, {
-                logbookEntry: { ...entry, parsedData: finalParsedData, status: finalStatus },
-                parcels: allParcels,
-            });
-        }
     } catch (error: any) {
         finalStatus = 'Fout';
         finalValidationMessage = error.message && error.message.includes("The model is overloaded")
@@ -279,49 +273,43 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     if (errorCount > 0) {
         updatedEntryData.status = 'Afgekeurd';
         updatedEntryData.validationMessage = validationMessage || 'Validatie mislukt met fouten.';
-    } else if (warningCount > 0) {
-        updatedEntryData.status = 'Waarschuwing';
-        updatedEntryData.validationMessage = validationMessage || 'Validatie succesvol met waarschuwingen.';
+         await updateLogbookEntry(firestore, updatedEntryData as LogbookEntry);
     } else {
-        updatedEntryData.status = 'Akkoord';
-        updatedEntryData.validationMessage = ''; // Clear validation message
+        // Status is 'Akkoord' of 'Waarschuwing', we kunnen doorgaan met bevestigen.
+        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id'> = {
+            originalRawInput: entry.rawInput,
+            date: entry.date,
+            plots: entry.parsedData.plots,
+            products: entry.parsedData.products,
+            validationMessage: validationMessage || undefined,
+            status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
+        };
+        await addSpuitschriftEntry(firestore, spuitschriftEntry);
+        await dbDeleteLogbookEntry(firestore, entry.id);
     }
 
-
-    const updatedEntry = updatedEntryData as LogbookEntry;
-
-    await updateLogbookEntry(firestore, updatedEntry);
-
     // Learn from corrections
-    if (updatedEntry.parsedData?.products) {
-        for (let i = 0; i < updatedEntry.parsedData.products.length; i++) {
+    if (entry.parsedData?.products) {
+        for (let i = 0; i < entry.parsedData.products.length; i++) {
             const original = originalProducts[i];
-            const corrected = updatedEntry.parsedData.products[i];
+            const corrected = entry.parsedData.products[i];
             if (original && corrected) {
                await learnFromCorrection(firestore, original.product, corrected.product);
             }
         }
     }
 
-
-    if (updatedEntry.status === 'Akkoord' && updatedEntry.parsedData) {
-        await addParcelHistoryEntries(firestore, {
-            logbookEntry: updatedEntry,
-            parcels: allParcels,
-        });
-    }
-
     revalidatePath('/');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
-
-    const dateToReturn = updatedEntry.date instanceof Timestamp 
-      ? updatedEntry.date.toDate() 
-      : new Date(updatedEntry.date);
+    
+    const dateToReturn = entry.date instanceof Timestamp 
+      ? entry.date.toDate() 
+      : new Date(entry.date);
 
     return {
         message: 'Bespuiting definitief opgeslagen.',
-        entry: { ...updatedEntry, date: dateToReturn.toISOString() } as any, // HACK: for type compatibility with form state
+        entry: { ...entry, date: dateToReturn.toISOString() } as any, // HACK: for type compatibility with form state
     };
 }
 
@@ -358,29 +346,40 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
         
-        const { isValid, validationMessage, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
+        const { isValid, validationMessage, updatedProducts, errorCount, warningCount } = await validateSprayData(firestore, entry.parsedData, allParcels);
         
         if (updatedProducts) {
             entry.parsedData.products = updatedProducts;
         }
 
-        if (!isValid) {
-            entry.status = 'Te Controleren';
+        if (errorCount > 0) {
+            entry.status = 'Afgekeurd';
             entry.validationMessage = validationMessage || 'Kon niet bevestigen vanwege validatiefouten.';
             await updateLogbookEntry(firestore, entry);
             revalidatePath('/');
             return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
         }
         
-        entry.status = 'Akkoord';
-        entry.validationMessage = ''; // Explicitly clear validation message on confirmation
+        // Maak een nieuwe Spuitschrift entry
+        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id'> = {
+            originalRawInput: entry.rawInput,
+            date: entry.date,
+            plots: entry.parsedData.plots,
+            products: entry.parsedData.products,
+            validationMessage: validationMessage || undefined,
+            status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
+        };
+        await addSpuitschriftEntry(firestore, spuitschriftEntry);
 
-        await updateLogbookEntry(firestore, entry);
-
+        // Verwerk de voorraadmutaties
         await addParcelHistoryEntries(firestore, {
             logbookEntry: entry,
             parcels: allParcels,
+            isConfirmation: true, // Geef aan dat dit een bevestiging is
         });
+        
+        // Verwijder de logboekregel
+        await dbDeleteLogbookEntry(firestore, entryId);
 
         revalidatePath('/');
         revalidatePath('/spuitschrift');

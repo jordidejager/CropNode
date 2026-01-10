@@ -35,6 +35,16 @@ export type LogbookEntry = {
   validationMessage?: string;
 };
 
+export type SpuitschriftEntry = {
+  id: string; // Firestore ID
+  originalRawInput: string;
+  date: Date;
+  plots: string[];
+  products: ProductEntry[];
+  validationMessage?: string;
+  status: 'Akkoord' | 'Waarschuwing';
+}
+
 export type ParcelHistoryEntry = {
   id: string; // Firestore ID
   logId: string;

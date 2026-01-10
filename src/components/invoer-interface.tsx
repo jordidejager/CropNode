@@ -48,18 +48,14 @@ export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
   }
 
   return (
-    <div className="w-full max-w-3xl flex flex-col h-full">
-      <div className="flex-grow flex flex-col items-start justify-center">
-         <div className="text-left mb-8">
-            <h1 className="text-4xl font-bold tracking-tight mb-2">Hallo Jordi</h1>
-            <p className="text-2xl text-muted-foreground">Waar zullen we mee beginnen?</p>
-         </div>
+    <div className="w-full">
+      <div className="text-left mb-4">
+        <h1 className="text-2xl font-bold tracking-tight">Slimme Invoer</h1>
+        <p className="text-muted-foreground">Omschrijf een bespuiting in natuurlijke taal.</p>
       </div>
 
-      <div className="py-4">
-        <div className="bg-card border rounded-lg p-2 w-full">
-            <InvoerForm ref={formRef} onFormSubmit={formAction} isProcessing={isProcessing} />
-        </div>
+      <div className="bg-card border rounded-lg p-2 w-full">
+          <InvoerForm ref={formRef} onFormSubmit={formAction} isProcessing={isProcessing} />
       </div>
     </div>
   );
