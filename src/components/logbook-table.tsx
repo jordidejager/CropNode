@@ -28,6 +28,7 @@ import { InlineEditParcels } from './inline-edit-parcels';
 import { InlineEditProducts } from './inline-edit-products';
 import { InlineEditDate } from './inline-edit-date';
 import { Skeleton } from './ui/skeleton';
+import { Label } from './ui/label';
 
 const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
   'Nieuw': { variant: 'outline', label: 'Nieuw', colorClass: '' },
@@ -142,7 +143,7 @@ const LogbookTableRow = ({
                    {formatDate(entry.date)}
                 </TableCell>
                 <TableCell className="align-top">
-                    <p className="font-medium text-sm" title={entry.rawInput}>
+                    <p className="font-medium text-sm whitespace-pre-wrap break-words" title={entry.rawInput}>
                         {entry.rawInput}
                     </p>
                     {entry.validationMessage && (
@@ -154,12 +155,12 @@ const LogbookTableRow = ({
                         </p>
                     )}
                 </TableCell>
-                 <TableCell className="min-w-[200px] align-top">
+                 <TableCell className="min-w-[200px] max-w-[200px] align-top whitespace-pre-wrap break-words">
                     {entry.parsedData?.plots?.map(id =>
                         allParcels.find(p => p.id === id)?.name || id
                     ).join(', ') || '-'}
                 </TableCell>
-                <TableCell className="min-w-[280px] align-top">
+                <TableCell className="min-w-[280px] max-w-[300px] align-top whitespace-pre-wrap break-words">
                     {entry.parsedData?.products?.map(p =>
                         `${p.product} (${p.dosage} ${p.unit})`
                     ).join(', ') || '-'}
