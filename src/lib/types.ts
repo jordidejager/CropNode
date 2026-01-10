@@ -8,11 +8,6 @@ export type Parcel = {
   geometry?: any; // Full GeoJSON geometry for drawing
 };
 
-export type Middel = {
-  id: string; // Firestore ID
-  [key: string]: any; // Flexible structure to match any Excel column
-};
-
 export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout' | 'Waarschuwing' | 'Afgekeurd';
 
 export type ProductEntry = {
@@ -56,25 +51,6 @@ export type ParcelHistoryEntry = {
   dosage: number;
   unit: string;
   date: Date;
-};
-
-export type UploadLog = {
-    id: string; // Firestore ID
-    productName: string;
-    uploadDate: Date;
-    admissionNumber?: string;
-    labelVersion?: string;
-    prescriptionDate?: string;
-    activeSubstances: string;
-    fileName: string;
-};
-
-export type CtgbMiddel = {
-    id?: string; // Firestore ID, optional here but present in DB
-    toelatingsnummer: string;
-    naam: string;
-    status: string;
-    werkzameStoffen: string;
 };
 
 export type UserPreference = {

@@ -22,7 +22,6 @@ import { ActivePath } from '@/components/active-path';
 const menuItems = [
   { href: '/', label: 'Slimme Invoer', icon: Tractor },
   { href: '/percelen', label: 'Percelen', icon: Map },
-  { href: '/middelmatrix', label: 'MiddelMatrix', icon: TestTubeDiagonal },
   { href: '/middelenoverzicht', label: 'Middelenoverzicht', icon: Search },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
   { href: '/voorraad', label: 'Voorraad', icon: Boxes },

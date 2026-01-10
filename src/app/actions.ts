@@ -2,12 +2,11 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, getProducts, dbDeleteLogbookEntry, getLogbookEntry, getParcels, addMiddelen, addUploadLog, deleteAllMiddelen as dbDeleteAllMiddelen, getMiddelen, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getParcelHistoryEntries, getAllCtgbProducts, addSpuitschriftEntry } from '@/lib/store';
-import type { LogbookEntry, Parcel, ParcelHistoryEntry, ParsedSprayData, UploadLog, Middel, ProductEntry, InventoryMovement, LogStatus, SpuitschriftEntry } from '@/lib/types';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, dbDeleteLogbookEntry, getLogbookEntry, getParcels, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getAllCtgbProducts, addSpuitschriftEntry } from '@/lib/store';
+import type { LogbookEntry, Parcel, ParsedSprayData, ProductEntry, InventoryMovement, LogStatus, SpuitschriftEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
-import { Firestore, Timestamp, getDocs, collection } from 'firebase/firestore';
-import * as xlsx from 'xlsx';
+import { Firestore, Timestamp } from 'firebase/firestore';
 import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
 
@@ -430,72 +429,6 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Onbekende fout.';
         return { success: false, message, count: 0 };
-    }
-}
-
-
-const fileSchema = z.object({
-    file: z.instanceof(File),
-});
-
-export async function parseCtgbFileAndImport(formData: FormData): Promise<{ success: boolean; message: string }> {
-    const validatedFields = fileSchema.safeParse({ file: formData.get('file') });
-    if (!validatedFields.success) {
-        return { success: false, message: 'Geen geldig bestand ontvangen.' };
-    }
-    const { file } = validatedFields.data;
-    const { firestore } = initializeFirebase();
-
-    try {
-        const buffer = await file.arrayBuffer();
-        const workbook = xlsx.read(buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        
-        const jsonData: any[][] = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false });
-        
-        if (jsonData.length < 2) {
-            throw new Error("Het Excel-bestand is leeg of heeft geen kopteksten.");
-        }
-
-        const headers: string[] = jsonData[0];
-        const rows = jsonData.slice(1);
-
-        const middelen: Omit<Middel, 'id'>[] = rows.map(row => {
-            const middel: Omit<Middel, 'id'> = {};
-            headers.forEach((header, index) => {
-                if (header) { 
-                    middel[header] = row[index] ?? ''; 
-                }
-            });
-            return middel;
-        }).filter(m => Object.keys(m).length > 0 && m['Middelnaam']); 
-        
-        if (middelen.length === 0) {
-            throw new Error(`Kon geen geldige data extraheren uit ${file.name}. Controleer of het bestand correct is opgemaakt.`);
-        }
-        
-        await addMiddelen(firestore, middelen);
-        
-        revalidatePath('/middelmatrix');
-        return { success: true, message: `${middelen.length} regels succesvol geïmporteerd uit ${file.name}.` };
-
-    } catch (error: any) {
-        console.error(`Fout bij verwerken van CTGB bestand ${file.name}:`, error);
-        throw new Error(error.message || "Onbekende fout bij verwerken van bestand.");
-    }
-}
-
-
-export async function deleteAllMiddelen(): Promise<{ success: boolean; message: string }> {
-    const { firestore } = initializeFirebase();
-    try {
-        await dbDeleteAllMiddelen(firestore);
-        revalidatePath('/middelmatrix');
-        return { success: true, message: 'Alle middelen zijn succesvol verwijderd.' };
-    } catch (error: any) {
-        console.error('Fout bij het verwijderen van alle middelen:', error);
-        return { success: false, message: error.message || 'Onbekende fout bij het verwijderen van de middelen.' };
     }
 }
 
