@@ -98,7 +98,7 @@ export default function RvoKaartPage() {
   );
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full">
+    <div className="h-full w-full relative">
       <RvoMap
         onParcelSelect={handleParcelSelect}
         selectedParcel={selectedParcel}

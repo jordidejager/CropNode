@@ -13,7 +13,7 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Leaf, Bell, BookOpen, Tractor, Map, MapPin, TestTubeDiagonal, Boxes, Search } from 'lucide-react';
+import { Leaf, Bell, BookOpen, Tractor, Map, Boxes, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -22,7 +22,6 @@ import { ActivePath } from '@/components/active-path';
 const menuItems = [
   { href: '/', label: 'Slimme Invoer', icon: Tractor },
   { href: '/percelen', label: 'Percelen', icon: Map },
-  { href: '/percelen/kaart', label: 'RVO Kaart', icon: MapPin },
   { href: '/middelenoverzicht', label: 'Middelenoverzicht', icon: Search },
   { href: '/spuitschrift', label: 'Spuitschrift', icon: BookOpen },
   { href: '/voorraad', label: 'Voorraad', icon: Boxes },
