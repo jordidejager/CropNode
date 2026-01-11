@@ -8,7 +8,8 @@ import type { Parcel } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle, ChevronRight } from "lucide-react";
+import { MoreHorizontal, PlusCircle, ChevronRight, MapPin } from "lucide-react";
+import Link from "next/link";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ParcelFormDialog } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -91,9 +92,15 @@ export default function PercelenPage() {
                 <CardTitle>Mijn Percelen</CardTitle>
                 <CardDescription>{loading ? 'Laden...' : `Totaal ${parcels.length} percelen in beheer.`}</CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+                <Button variant="outline" asChild>
+                    <Link href="/percelen/kaart">
+                        <MapPin className="mr-2 h-4 w-4" />
+                        Importeer van RVO
+                    </Link>
+                </Button>
                 <Button onClick={handleAdd}>
-                    <PlusCircle className="mr-2" />
+                    <PlusCircle className="mr-2 h-4 w-4" />
                     Perceel Toevoegen
                 </Button>
             </div>

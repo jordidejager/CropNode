@@ -1,3 +1,5 @@
+export type ParcelSource = "MANUAL" | "RVO_IMPORT";
+
 export type Parcel = {
   id: string; // Firestore ID
   name: string;
@@ -6,6 +8,39 @@ export type Parcel = {
   area: number; // in hectares
   location?: { lat: number; lng: number }; // Center point of the parcel
   geometry?: any; // Full GeoJSON geometry for drawing
+  source?: ParcelSource; // How the parcel was added
+  rvoId?: string; // Original RVO ID if imported
+};
+
+// === RVO/PDOK Types ===
+
+export type RvoParcelProperties = {
+  id: string;
+  gewas: string;
+  gewascode: number;
+  jaar: number;
+  status: string;
+  category: string;
+};
+
+export type RvoParcel = {
+  type: "Feature";
+  id: string;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  properties: RvoParcelProperties;
+};
+
+export type RvoApiResponse = {
+  type: "FeatureCollection";
+  features: RvoParcel[];
+  numberMatched?: number;
+  numberReturned?: number;
+};
+
+export type AddressSuggestion = {
+  id: string;
+  weergavenaam: string;
+  centroide_ll: string; // "POINT(lng lat)"
 };
 
 export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout' | 'Waarschuwing' | 'Afgekeurd';
