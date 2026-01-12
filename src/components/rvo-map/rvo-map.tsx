@@ -6,11 +6,19 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
 import "leaflet-draw";
-import type { RvoParcel, RvoApiResponse } from "@/lib/types";
+import type { RvoParcel, RvoApiResponse, Parcel } from "@/lib/types";
 import { fetchRvoParcels } from "@/lib/rvo-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { RvoMapControls } from "./rvo-map-controls";
 import { Loader2 } from "lucide-react";
+
+// Style for user's own parcels (orange)
+const USER_PARCEL_STYLE: L.PathOptions = {
+  color: "#f97316",
+  weight: 3,
+  fillColor: "#f97316",
+  fillOpacity: 0.3,
+};
 
 const DEFAULT_CENTER: L.LatLngExpression = [52.1326, 5.2913];
 const DEFAULT_ZOOM = 8;
@@ -37,6 +45,7 @@ interface RvoMapProps {
   isDrawingEnabled?: boolean;
   onGeometryChange?: (geometry: any) => void;
   initialGeometry?: any;
+  userParcels?: Parcel[];
 }
 
 export function RvoMap({
@@ -45,14 +54,17 @@ export function RvoMap({
   isDrawingEnabled = false,
   onGeometryChange,
   initialGeometry,
+  userParcels = [],
 }: RvoMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
+  const userParcelsLayerRef = useRef<L.GeoJSON | null>(null);
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const onParcelSelectRef = useRef(onParcelSelect);
   const selectedParcelRef = useRef(selectedParcel);
+  const onGeometryChangeRef = useRef(onGeometryChange);
 
   const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [parcels, setParcels] = useState<RvoParcel[]>([]);
@@ -68,6 +80,10 @@ export function RvoMap({
   useEffect(() => {
     selectedParcelRef.current = selectedParcel;
   }, [selectedParcel]);
+
+  useEffect(() => {
+    onGeometryChangeRef.current = onGeometryChange;
+  }, [onGeometryChange]);
 
   const debouncedBounds = useDebounce(bounds, 400);
 
@@ -118,6 +134,22 @@ export function RvoMap({
       geoJsonLayer.addTo(map);
       geoJsonLayerRef.current = geoJsonLayer;
 
+      // Add layer for user's own parcels (on top of RVO parcels)
+      const userParcelsLayer = L.geoJSON(undefined, {
+        style: USER_PARCEL_STYLE,
+        onEachFeature: (feature, layer) => {
+          if (feature.properties?.name) {
+            layer.bindTooltip(feature.properties.name, {
+              permanent: true,
+              direction: 'center',
+              className: 'parcel-label'
+            });
+          }
+        },
+      });
+      userParcelsLayer.addTo(map);
+      userParcelsLayerRef.current = userParcelsLayer;
+
       // Setup for drawing if enabled
       if (isDrawingEnabled) {
         const drawnItems = new L.FeatureGroup();
@@ -148,7 +180,7 @@ export function RvoMap({
 
         const handleGeometryChange = (layer: L.Layer) => {
           if (layer instanceof L.Polygon) {
-            onGeometryChange?.(layer.toGeoJSON().geometry);
+            onGeometryChangeRef.current?.(layer.toGeoJSON().geometry);
           }
         };
 
@@ -157,14 +189,14 @@ export function RvoMap({
             drawnItems.addLayer(event.layer);
             handleGeometryChange(event.layer);
         });
-        
+
         map.on(L.Draw.Event.EDITED, (event: any) => {
             const layers = event.layers.getLayers();
             if (layers.length > 0) handleGeometryChange(layers[0]);
         });
-        
+
         map.on(L.Draw.Event.DELETED, () => {
-            onGeometryChange?.(null);
+            onGeometryChangeRef.current?.(null);
         });
       }
 
@@ -186,7 +218,25 @@ export function RvoMap({
         mapRef.current = null;
       }
     };
-  }, [isDrawingEnabled, initialGeometry, onGeometryChange, getStyle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDrawingEnabled]);
+
+  // Update drawn geometry when initialGeometry changes (for editing existing parcels)
+  useEffect(() => {
+    if (isDrawingEnabled && drawnItemsRef.current && mapRef.current) {
+      drawnItemsRef.current.clearLayers();
+      if (initialGeometry) {
+        const featureLayer = L.geoJSON(initialGeometry, {
+          style: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.5 }
+        });
+        drawnItemsRef.current.addLayer(featureLayer);
+        const bounds = featureLayer.getBounds();
+        if (bounds.isValid()) {
+          mapRef.current.fitBounds(bounds);
+        }
+      }
+    }
+  }, [initialGeometry, isDrawingEnabled]);
 
   // Update GeoJSON layer when parcels or selection changes
   useEffect(() => {
@@ -201,6 +251,34 @@ export function RvoMap({
       geoJsonLayerRef.current.setStyle(getStyle);
     }
   }, [parcels, selectedParcel, getStyle]);
+
+  // Update user parcels layer
+  useEffect(() => {
+    if (userParcelsLayerRef.current && mapRef.current) {
+      userParcelsLayerRef.current.clearLayers();
+
+      const features = userParcels
+        .filter(p => p.geometry)
+        .map(p => ({
+          type: "Feature" as const,
+          properties: { id: p.id, name: p.name, crop: p.crop, variety: p.variety },
+          geometry: p.geometry,
+        }));
+
+      if (features.length > 0) {
+        userParcelsLayerRef.current.addData({
+          type: "FeatureCollection",
+          features,
+        } as GeoJSON.FeatureCollection);
+
+        // Fit map to show all user parcels on initial load
+        const bounds = userParcelsLayerRef.current.getBounds();
+        if (bounds.isValid() && zoomLevel === DEFAULT_ZOOM) {
+          mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+        }
+      }
+    }
+  }, [userParcels, zoomLevel]);
 
   // Fetch parcels when bounds change
   useEffect(() => {
@@ -247,8 +325,8 @@ export function RvoMap({
   );
 
   return (
-    <div className="relative h-full w-full">
-      <div ref={mapContainerRef} className="h-full w-full" />
+    <div className="relative h-full w-full z-0">
+      <div ref={mapContainerRef} className="h-full w-full [&_.leaflet-pane]:z-auto [&_.leaflet-control]:z-auto" />
       
       <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
         <div className="pointer-events-auto max-w-md">

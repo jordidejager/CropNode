@@ -99,6 +99,7 @@ const LogbookTableRow = ({
         const updatedEntry: LogbookEntry = {
             ...entry,
             date: editedDate ? (editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate)) : new Date(),
+            createdAt: entry.createdAt,
             parsedData: {
                 ...entry.parsedData,
                 plots: editedParcels,

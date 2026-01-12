@@ -16,7 +16,7 @@ export default async function PercelenPage() {
                 </div>
                 <TabsList>
                     <TabsTrigger value="list">Mijn Percelen</TabsTrigger>
-                    <TabsTrigger value="map">Importeer van RVO Kaart</TabsTrigger>
+                    <TabsTrigger value="map">Kaart</TabsTrigger>
                 </TabsList>
             </div>
             <TabsContent value="list" className="flex-grow">

@@ -33,32 +33,6 @@ const RvoMap = dynamic(
   { ssr: false }
 );
 
-
-// Helper to convert coordinates to GeoJSON polygon and calculate center
-function coordinatesToGeometry(coords: { lat: number; lng: number }[]) {
-  if (coords.length < 3) return { geometry: null, center: null };
-
-  // Create closed polygon (first point = last point)
-  const closedCoords = [...coords];
-  if (closedCoords[0].lat !== closedCoords[closedCoords.length - 1].lat ||
-      closedCoords[0].lng !== closedCoords[closedCoords.length - 1].lng) {
-    closedCoords.push(closedCoords[0]);
-  }
-
-  const geometry = {
-    type: "Polygon",
-    coordinates: [closedCoords.map(c => [c.lng, c.lat])]
-  };
-
-  // Calculate center (simple centroid)
-  const center = {
-    lat: coords.reduce((sum, c) => sum + c.lat, 0) / coords.length,
-    lng: coords.reduce((sum, c) => sum + c.lng, 0) / coords.length
-  };
-
-  return { geometry, center };
-}
-
 export type RvoData = {
     area: number;
     location: { lat: number, lng: number };
@@ -85,6 +59,7 @@ interface ParcelFormDialogProps {
   parcel: Parcel | null
   rvoData?: RvoData | null
   onSubmit: (data: ParcelFormValues) => Promise<void>
+  userParcels?: Parcel[]
 }
 
 export function ParcelFormDialog({
@@ -93,6 +68,7 @@ export function ParcelFormDialog({
   parcel,
   rvoData,
   onSubmit,
+  userParcels = [],
 }: ParcelFormDialogProps) {
   const {
     register,
@@ -121,7 +97,7 @@ export function ParcelFormDialog({
   const watchedGeometry = watch("geometry")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false);
-  const [tempGeometry, setTempGeometry] = useState<any>(null);
+  const [selectedRvoParcel, setSelectedRvoParcel] = useState<RvoParcel | null>(null);
 
   const varietyOptions = useMemo(() => {
     if (watchedCrop?.toLowerCase() === "appel") {
@@ -129,7 +105,7 @@ export function ParcelFormDialog({
     } else if (watchedCrop?.toLowerCase() === "peer") {
       return pearVarieties
     }
-    return []
+    return [];
   }, [watchedCrop])
 
   useEffect(() => {
@@ -162,10 +138,16 @@ export function ParcelFormDialog({
 
   useEffect(() => {
     const currentVariety = getValues("variety");
-    if (watchedCrop && currentVariety && !varietyOptions.includes(currentVariety)) {
-      setValue('variety', '');
+    // Only clear variety if crop changed and current variety was from a different crop's list
+    if (watchedCrop && currentVariety) {
+      const isFromOtherCrop =
+        (watchedCrop.toLowerCase() === "appel" && pearVarieties.includes(currentVariety)) ||
+        (watchedCrop.toLowerCase() === "peer" && appleVarieties.includes(currentVariety));
+      if (isFromOtherCrop) {
+        setValue('variety', '');
+      }
     }
-  }, [watchedCrop, varietyOptions, setValue, getValues]);
+  }, [watchedCrop, setValue, getValues]);
 
 
   const handleClose = () => {
@@ -173,33 +155,32 @@ export function ParcelFormDialog({
   }
 
   const handleOpenMap = () => {
-    setTempGeometry(watchedGeometry || null);
+    setSelectedRvoParcel(null);
     setIsMapOpen(true);
   };
 
-  const handleMapSave = useCallback((geometry: any) => {
-    setTempGeometry(geometry);
+  const handleRvoParcelSelect = useCallback((parcel: RvoParcel | null) => {
+    setSelectedRvoParcel(parcel);
   }, []);
 
   const handleConfirmLocation = () => {
-    if (tempGeometry) {
-      const coords = tempGeometry.coordinates[0].slice(0, -1).map((c: number[]) => ({ lat: c[1], lng: c[0] }));
+    if (selectedRvoParcel) {
+      const geometry = selectedRvoParcel.geometry;
+      // Calculate center from geometry
+      const coords = geometry.coordinates[0];
       const center = {
-        lat: coords.reduce((sum: number, c: { lat: number }) => sum + c.lat, 0) / coords.length,
-        lng: coords.reduce((sum: number, c: { lng: number }) => sum + c.lng, 0) / coords.length
+        lat: coords.reduce((sum: number, c: number[]) => sum + c[1], 0) / coords.length,
+        lng: coords.reduce((sum: number, c: number[]) => sum + c[0], 0) / coords.length
       };
-      setValue("geometry", tempGeometry);
+      setValue("geometry", geometry);
       setValue("location", center);
-    } else {
-      // Handle case where geometry was deleted
-      setValue("geometry", undefined);
-      setValue("location", undefined);
     }
+    setSelectedRvoParcel(null);
     setIsMapOpen(false);
   };
 
   const handleCancelMap = () => {
-    setTempGeometry(null);
+    setSelectedRvoParcel(null);
     setIsMapOpen(false);
   };
 
@@ -273,24 +254,19 @@ export function ParcelFormDialog({
                 Ras
               </Label>
               <div className="col-span-3">
-                <Controller
-                  control={control}
-                  name="variety"
-                  render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value} disabled={!watchedCrop}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Kies een ras" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {varietyOptions.map((variety) => (
-                          <SelectItem key={variety} value={variety}>
-                            {variety}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                <Input
+                  id="variety"
+                  {...register("variety")}
+                  list="variety-options"
+                  placeholder={watchedCrop ? "Kies of typ een ras" : "Kies eerst een gewas"}
+                  disabled={!watchedCrop}
+                  className="w-full"
                 />
+                <datalist id="variety-options">
+                  {varietyOptions.map((variety) => (
+                    <option key={variety} value={variety} />
+                  ))}
+                </datalist>
                 {errors.variety && (
                   <p className="text-red-500 text-xs mt-1">
                     {errors.variety.message}
@@ -355,35 +331,46 @@ export function ParcelFormDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Map Dialog for location selection */}
-      <Dialog open={isMapOpen} onOpenChange={(open) => !open && handleCancelMap()}>
-        <DialogContent className="w-full max-w-[90vw] h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Locatie aanwijzen</DialogTitle>
-            <DialogDescription>
-              Teken het perceel op de kaart door punten te plaatsen. Klik op het polygon icoon links om te beginnen. De RVO percelen zijn zichtbaar als referentie.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 rounded-md overflow-hidden border">
-             <RvoMap
-                onParcelSelect={() => {}} // Not needed in drawing mode
-                selectedParcel={null}
-                isDrawingEnabled={true}
-                onGeometryChange={handleMapSave}
-                initialGeometry={tempGeometry || watchedGeometry}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancelMap}>
-              Annuleren
-            </Button>
-            <Button type="button" onClick={handleConfirmLocation}>
-              <Check className="mr-2 h-4 w-4" />
-              Locatie Bevestigen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Map Dialog for RVO parcel selection - only render when open to prevent memory issues */}
+      {isMapOpen && (
+        <Dialog open={isMapOpen} onOpenChange={(open) => !open && handleCancelMap()}>
+          <DialogContent className="w-full max-w-[90vw] h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>RVO Perceel selecteren</DialogTitle>
+              <DialogDescription>
+                Zoom in op de kaart en klik op een RVO perceel om de grenzen over te nemen.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 rounded-md overflow-hidden border">
+               <RvoMap
+                  onParcelSelect={handleRvoParcelSelect}
+                  selectedParcel={selectedRvoParcel}
+                  userParcels={userParcels}
+              />
+            </div>
+            {selectedRvoParcel && (
+              <div className="bg-muted rounded-md px-4 py-3 flex items-center gap-3">
+                <Check className="h-5 w-5 text-green-500" />
+                <div className="flex-1">
+                  <p className="font-medium">{selectedRvoParcel.properties.gewas}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Code: {selectedRvoParcel.properties.gewascode} | Jaar: {selectedRvoParcel.properties.jaar}
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCancelMap}>
+                Annuleren
+              </Button>
+              <Button type="button" onClick={handleConfirmLocation} disabled={!selectedRvoParcel}>
+                <Check className="mr-2 h-4 w-4" />
+                Grenzen overnemen
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 }

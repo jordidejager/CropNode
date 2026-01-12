@@ -83,3 +83,31 @@
     @apply bg-background text-foreground font-body;
   }
 }
+
+/* Ensure Leaflet map stays below dialogs and sheets */
+.leaflet-container {
+  z-index: 0 !important;
+}
+.leaflet-pane {
+  z-index: auto !important;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 800 !important;
+}
+
+/* Parcel label styling */
+.parcel-label {
+  background: rgba(249, 115, 22, 0.9) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 2px 8px !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  color: white !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+}
+.parcel-label::before {
+  display: none !important;
+}

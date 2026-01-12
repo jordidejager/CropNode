@@ -37,6 +37,7 @@ const SprayApplicationOutputSchema = z.object({
   products: z
     .array(ProductEntrySchema)
     .describe('An array of products that were used in the spray application, based on the user text.'),
+  date: z.string().optional().describe("The date of the spray application in 'YYYY-MM-DD' format. If the user mentions 'today', 'yesterday', or a specific date, parse it. Otherwise, omit this field."),
 });
 
 export type SprayApplicationInput = z.infer<typeof SprayApplicationInputSchema>;
@@ -54,9 +55,15 @@ const prompt = ai.definePrompt({
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
 You will be provided with a sentence, a list of available plots (parcels), and a list of official product names.
 
-Your goal is to identify which plots were sprayed and which products were used.
-- For the products, you MUST match the user's input to the most likely official product name from the provided list. For example, if the user says "pyrus", you should match it to "Pyrus 400 SC" from the list.
-- For the plots, identify which plots were sprayed based on their name or variety. A user might refer to 'all conference' which means all plots of the 'Conference' variety. You MUST use the ID of the plot in your output.
+Your goal is to identify:
+1.  Which plots were sprayed.
+2.  Which products were used, including their dosage and unit.
+3.  The date of the application if mentioned.
+
+Rules for parsing:
+-   Plots: Identify which plots were sprayed based on their name or variety. A user might refer to 'all conference' which means all plots of the 'Conference' variety. If the user says 'alles' (everything) or 'alle percelen' (all plots), you MUST select all plot IDs from the provided list. You MUST use the ID of the plot in your output.
+-   Products: You MUST match the user's input to the most likely official product name from the provided list. For example, if the user says "pyrus", you should match it to "Pyrus 400 SC" from the list.
+-   Date: If the user mentions a specific date, 'today', or 'yesterday', determine the date and provide it in 'YYYY-MM-DD' format. If no date is mentioned, do not include the date field in the output. Today's date is ${new Date().toISOString().split('T')[0]}.
 
 Return the answer ONLY as a valid JSON object matching the provided schema.
 
@@ -88,4 +95,5 @@ const parseSprayApplicationFlow = ai.defineFlow(
     return output;
   }
 );
+
 

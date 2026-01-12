@@ -22,6 +22,7 @@ export async function getSpuitschriftEntries(db: Firestore): Promise<Spuitschrif
         id: doc.id,
         ...data,
         date: (data.date as Timestamp).toDate(),
+        createdAt: (data.createdAt as Timestamp)?.toDate() || (data.date as Timestamp).toDate(),
       } as SpuitschriftEntry;
     });
   } catch (e) {
@@ -35,6 +36,7 @@ export async function addSpuitschriftEntry(db: Firestore, entry: Omit<Spuitschri
   await addDoc(collection(db, SPUITSCHRIFT_COLLECTION), {
     ...entry,
     date: Timestamp.fromDate(new Date(entry.date)),
+    createdAt: Timestamp.fromDate(new Date(entry.createdAt)),
   });
 }
 
@@ -92,12 +94,28 @@ export async function setUserPreference(db: Firestore, preference: Omit<UserPref
 export async function getParcels(db: Firestore): Promise<Parcel[]> {
   if (!db) return [];
   const querySnapshot = await getDocs(query(collection(db, PARCELS_COLLECTION), orderBy('name')));
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Parcel));
+  return querySnapshot.docs.map(doc => {
+    const data = doc.data();
+    // Parse geometry back from JSON string if stored as string
+    if (data.geometry && typeof data.geometry === 'string') {
+      try {
+        data.geometry = JSON.parse(data.geometry);
+      } catch (e) {
+        console.warn('Failed to parse geometry for parcel', doc.id);
+      }
+    }
+    return { id: doc.id, ...data } as Parcel;
+  });
 }
 
 export async function addParcel(db: Firestore, parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
   if (!db) throw new Error("Database not initialized");
-  const docRef = await addDoc(collection(db, PARCELS_COLLECTION), parcel);
+  // Convert geometry to JSON string to avoid Firestore nested array limitation
+  const dataToSave = { ...parcel };
+  if (dataToSave.geometry && typeof dataToSave.geometry === 'object') {
+    dataToSave.geometry = JSON.stringify(dataToSave.geometry);
+  }
+  const docRef = await addDoc(collection(db, PARCELS_COLLECTION), dataToSave);
   return { id: docRef.id, ...parcel };
 }
 
@@ -105,8 +123,13 @@ export async function updateParcel(db: Firestore, parcel: Parcel): Promise<void>
   if (!db) throw new Error("Database not initialized");
   const { id, ...data } = parcel;
   if (!id) throw new Error("Parcel ID is missing for update");
+  // Convert geometry to JSON string to avoid Firestore nested array limitation
+  const dataToSave = { ...data };
+  if (dataToSave.geometry && typeof dataToSave.geometry === 'object') {
+    dataToSave.geometry = JSON.stringify(dataToSave.geometry);
+  }
   const docRef = doc(db, PARCELS_COLLECTION, id);
-  await setDoc(docRef, data, { merge: true });
+  await setDoc(docRef, dataToSave, { merge: true });
 }
 
 export async function deleteParcel(db: Firestore, parcelId: string): Promise<void> {
@@ -125,61 +148,49 @@ export async function getLogbookEntry(db: Firestore, id: string): Promise<Logboo
     return null;
   }
   const data = docSnap.data();
-  const dateValue = data.date;
   
-  let date;
-  if (dateValue instanceof Timestamp) {
-    date = dateValue.toDate();
-  } else if (typeof dateValue === 'string') {
-    date = new Date(dateValue);
-  } else {
-    date = new Date(); // Fallback
-  }
-
   return {
     id: docSnap.id,
     ...data,
-    date,
+    date: (data.date as Timestamp).toDate(),
+    createdAt: (data.createdAt as Timestamp)?.toDate() || (data.date as Timestamp).toDate(),
   } as LogbookEntry;
 }
 
 export async function getLogbookEntries(db: Firestore): Promise<LogbookEntry[]> {
   if (!db) return [];
-  const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('date', 'desc'));
+  const q = query(collection(db, LOGBOOK_COLLECTION), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(doc => {
     const data = doc.data();
-    const dateValue = data.date;
     
-    let date;
-    if (dateValue instanceof Timestamp) {
-      date = dateValue.toDate();
-    } else if (typeof dateValue === 'string') {
-      date = new Date(dateValue);
-    } else if (dateValue && typeof dateValue.toDate === 'function') { // Fallback for different Timestamp-like objects
-      date = dateValue.toDate();
-    } else {
-      date = new Date(); // Fallback
-    }
-
     return { 
       id: doc.id, 
       ...data,
-      date,
+      date: (data.date as Timestamp).toDate(),
+      createdAt: (data.createdAt as Timestamp)?.toDate() || (data.date as Timestamp).toDate(),
     } as LogbookEntry;
   });
 }
 
 export async function addLogbookEntry(db: Firestore, entry: Omit<LogbookEntry, 'id'>): Promise<LogbookEntry> {
   if (!db) throw new Error("Database not initialized");
-  const docRef = await addDoc(collection(db, LOGBOOK_COLLECTION), entry);
+  const docRef = await addDoc(collection(db, LOGBOOK_COLLECTION), {
+      ...entry,
+      date: Timestamp.fromDate(entry.date),
+      createdAt: Timestamp.fromDate(entry.createdAt),
+  });
   return { id: docRef.id, ...entry };
 }
 
 export async function updateLogbookEntry(db: Firestore, entry: LogbookEntry): Promise<void> {
     if (!db) throw new Error("Database not initialized");
     const { id, ...data } = entry;
-    const dataToSave = { ...data, date: Timestamp.fromDate(new Date(data.date)) };
+    const dataToSave = { 
+        ...data, 
+        date: Timestamp.fromDate(new Date(data.date)),
+        createdAt: Timestamp.fromDate(new Date(data.createdAt))
+    };
     if (!id) {
         // This case should ideally not happen if types are correct
         console.error("updateLogbookEntry called without an ID", entry);

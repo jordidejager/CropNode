@@ -108,6 +108,7 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
     let finalStatus: LogStatus = 'Fout';
     let finalValidationMessage: string | undefined = 'Onbekende fout.';
     let finalParsedData: ParsedSprayData | undefined = undefined;
+    let finalDate = entry.date;
 
     try {
         const [allParcels, allProductNames] = await Promise.all([
@@ -126,6 +127,10 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
             plots: cleanedOutput.plots || [],
             products: cleanedOutput.products || []
         };
+        
+        if (cleanedOutput.date) {
+            finalDate = new Date(cleanedOutput.date);
+        }
         
         if (!finalParsedData || finalParsedData.plots.length === 0) {
             throw new Error("AI kon geen geldige percelen identificeren in de output.");
@@ -164,7 +169,8 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
         validationMessage: finalValidationMessage,
         parsedData: finalParsedData,
         rawInput: entry.rawInput,
-        date: entry.date,
+        date: finalDate, // This is now the spray date
+        createdAt: entry.createdAt,
     };
     await updateLogbookEntry(db, updatedEntryData as LogbookEntry);
 }
@@ -184,12 +190,13 @@ export async function createInitialSprayEntry(prevState: InitialState, formData:
   
   const { rawInput } = validatedFields.data;
   const { firestore } = initializeFirebase();
-  const newDate = new Date();
+  const now = new Date();
 
   const initialEntryData: Omit<LogbookEntry, 'id'> = {
     rawInput,
     status: 'Analyseren...',
-    date: newDate,
+    date: now, // Default spray date to now
+    createdAt: now, // Creation date
   };
 
   const newEntry = await addLogbookEntry(firestore, initialEntryData);
@@ -271,6 +278,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
         id: entry.id,
         rawInput: entry.rawInput,
         date: entry.date,
+        createdAt: entry.createdAt,
         parsedData: entry.parsedData,
     };
 
@@ -300,10 +308,14 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     const dateToReturn = entry.date instanceof Timestamp 
       ? entry.date.toDate() 
       : new Date(entry.date);
+      
+    const createdAtToReturn = entry.createdAt instanceof Timestamp 
+      ? entry.createdAt.toDate() 
+      : new Date(entry.createdAt || entry.date);
 
     return {
         message: 'Wijzigingen opgeslagen.',
-        entry: { ...entry, date: dateToReturn.toISOString() } as any, // HACK: for type compatibility with form state
+        entry: { ...entry, date: dateToReturn.toISOString(), createdAt: createdAtToReturn.toISOString() } as any, // HACK: for type compatibility with form state
     };
 }
 
@@ -361,7 +373,8 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             plots: entry.parsedData.plots,
             products: entry.parsedData.products,
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
-            ...(validationMessage && { validationMessage }),
+            createdAt: entry.createdAt || new Date(),
+            ...(validationMessage && { validationMessage: validationMessage }),
         };
         await addSpuitschriftEntry(firestore, spuitschriftEntry);
 

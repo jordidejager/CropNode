@@ -60,7 +60,8 @@ export type LogbookEntry = {
   id: string; // Firestore ID
   rawInput: string;
   status: LogStatus;
-  date: Date;
+  date: Date; // Spraying date
+  createdAt: Date; // Creation date
   parsedData?: ParsedSprayData;
   validationMessage?: string;
 };
@@ -68,7 +69,8 @@ export type LogbookEntry = {
 export type SpuitschriftEntry = {
   id: string; // Firestore ID
   originalRawInput: string;
-  date: Date;
+  date: Date; // Spraying date
+  createdAt: Date; // Creation date
   plots: string[];
   products: ProductEntry[];
   validationMessage?: string;

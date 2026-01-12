@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useFirestore } from "@/firebase";
-import { addParcel } from "@/lib/store";
+import { addParcel, getParcels } from "@/lib/store";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { RvoParcelSheet } from "@/components/rvo-map/rvo-parcel-sheet";
-import type { RvoParcel } from "@/lib/types";
+import type { RvoParcel, Parcel } from "@/lib/types";
 import { calculateAreaHectares, calculateCenter } from "@/lib/rvo-api";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +39,22 @@ export default function RvoKaartPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [rvoDataForForm, setRvoDataForForm] = useState<RvoData | null>(null);
+  const [userParcels, setUserParcels] = useState<Parcel[]>([]);
+
+  // Load user parcels
+  const loadUserParcels = useCallback(async () => {
+    if (!db) return;
+    try {
+      const parcels = await getParcels(db);
+      setUserParcels(parcels);
+    } catch (error) {
+      console.error("Error loading user parcels:", error);
+    }
+  }, [db]);
+
+  useEffect(() => {
+    loadUserParcels();
+  }, [loadUserParcels]);
 
   // Handle parcel selection from map
   const handleParcelSelect = useCallback((parcel: RvoParcel | null) => {
@@ -85,6 +101,8 @@ export default function RvoKaartPage() {
         });
 
         setSelectedParcel(null);
+        // Reload user parcels to show the new one on the map
+        loadUserParcels();
       } catch (error) {
         console.error("Error adding parcel:", error);
         toast({
@@ -94,7 +112,7 @@ export default function RvoKaartPage() {
         });
       }
     },
-    [db, selectedParcel, toast]
+    [db, selectedParcel, toast, loadUserParcels]
   );
 
   return (
@@ -102,6 +120,7 @@ export default function RvoKaartPage() {
       <RvoMap
         onParcelSelect={handleParcelSelect}
         selectedParcel={selectedParcel}
+        userParcels={userParcels}
       />
 
       <RvoParcelSheet
@@ -117,6 +136,7 @@ export default function RvoKaartPage() {
         parcel={null}
         rvoData={rvoDataForForm}
         onSubmit={handleFormSubmit}
+        userParcels={userParcels}
       />
     </div>
   );

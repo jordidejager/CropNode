@@ -185,6 +185,7 @@ export function PercelenClientPage() {
         onOpenChange={setIsFormOpen}
         parcel={editingParcel}
         onSubmit={handleFormSubmit}
+        userParcels={parcels}
       />
     </>
   );
