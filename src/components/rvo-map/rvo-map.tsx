@@ -251,13 +251,11 @@ export function RvoMap({
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full" />
       
-      {!isDrawingEnabled && (
-        <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
-          <div className="pointer-events-auto max-w-md">
-            <RvoMapControls onLocationSelect={handleLocationSelect} />
-          </div>
+      <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
+        <div className="pointer-events-auto max-w-md">
+          <RvoMapControls onLocationSelect={handleLocationSelect} />
         </div>
-      )}
+      </div>
 
       {isLoading && (
         <div className="absolute bottom-4 left-4 z-[1000] bg-background/90 rounded-md px-3 py-2 flex items-center gap-2 shadow-md">
@@ -266,7 +264,7 @@ export function RvoMap({
         </div>
       )}
 
-      {zoomLevel < MIN_ZOOM_FOR_PARCELS && (
+      {zoomLevel < MIN_ZOOM_FOR_PARCELS && !isDrawingEnabled && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-background/90 rounded-md px-4 py-2 shadow-md">
           <span className="text-sm text-muted-foreground">
             Zoom in om percelen te zien
@@ -280,7 +278,7 @@ export function RvoMap({
         </div>
       )}
 
-      {parcels.length > 0 && !isLoading && (
+      {parcels.length > 0 && !isLoading && !isDrawingEnabled && (
         <div className="absolute bottom-4 right-4 z-[1000] bg-background/90 rounded-md px-3 py-2 shadow-md">
           <span className="text-sm">{parcels.length} percelen gevonden</span>
         </div>
