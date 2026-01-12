@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, dbDeleteLogbookEntry, getLogbookEntry, getParcels, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getAllCtgbProducts, addSpuitschriftEntry } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, dbDeleteLogbookEntry, getLogbookEntry, getParcels, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getAllCtgbProducts, addSpuitschriftEntry, deleteSpuitschriftEntry as dbDeleteSpuitschriftEntry, getSpuitschriftEntry } from '@/lib/store';
 import type { LogbookEntry, Parcel, ParsedSprayData, ProductEntry, InventoryMovement, LogStatus, SpuitschriftEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -367,7 +367,8 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
         
         // Maak een nieuwe Spuitschrift entry
-        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id'> = {
+        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'> = {
+            originalLogbookId: entry.id,
             originalRawInput: entry.rawInput,
             date: entry.date,
             plots: entry.parsedData.plots,
@@ -376,13 +377,14 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             createdAt: entry.createdAt || new Date(),
             ...(validationMessage && { validationMessage: validationMessage }),
         };
-        await addSpuitschriftEntry(firestore, spuitschriftEntry);
+        const newSpuitschriftEntry = await addSpuitschriftEntry(firestore, spuitschriftEntry);
 
         // Verwerk de voorraadmutaties
         await addParcelHistoryEntries(firestore, {
             logbookEntry: entry,
             parcels: allParcels,
-            isConfirmation: true, // Geef aan dat dit een bevestiging is
+            isConfirmation: true, 
+            spuitschriftId: newSpuitschriftEntry.id,
         });
         
         // Verwijder de logboekregel
@@ -398,6 +400,52 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         return { success: false, message };
     }
 }
+
+export async function deleteSpuitschriftEntry(entryId: string) {
+    const { firestore } = initializeFirebase();
+    await dbDeleteSpuitschriftEntry(firestore, entryId);
+    revalidatePath('/spuitschrift');
+    revalidatePath('/voorraad');
+}
+
+
+export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{ success: boolean; message?: string }> {
+    const { firestore } = initializeFirebase();
+    try {
+        const spuitschriftEntry = await getSpuitschriftEntry(firestore, entryId);
+        if (!spuitschriftEntry) {
+            return { success: false, message: 'Spuitschrift regel niet gevonden.' };
+        }
+        
+        // Maak een nieuwe logboek regel
+        const logbookEntryData: Omit<LogbookEntry, 'id'> = {
+            rawInput: spuitschriftEntry.originalRawInput,
+            status: 'Te Controleren',
+            date: spuitschriftEntry.date,
+            createdAt: spuitschriftEntry.createdAt,
+            parsedData: {
+                plots: spuitschriftEntry.plots,
+                products: spuitschriftEntry.products,
+            },
+            validationMessage: spuitschriftEntry.validationMessage,
+        };
+
+        await addLogbookEntry(firestore, logbookEntryData);
+        
+        // Verwijder de spuitschrift regel en gerelateerde data
+        await dbDeleteSpuitschriftEntry(firestore, entryId);
+        
+        revalidatePath('/');
+        revalidatePath('/spuitschrift');
+        revalidatePath('/voorraad');
+
+        return { success: true, message: 'Regel is teruggeplaatst in het logboek voor bewerking.' };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Onbekende fout.';
+        return { success: false, message };
+    }
+}
+
 
 export async function confirmLogbookEntries(entryIds: string[]): Promise<{ success: boolean; message?: string, count: number }> {
     const { firestore } = initializeFirebase();

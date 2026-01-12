@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -10,20 +11,94 @@ import { Timestamp } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getSpuitschriftEntries } from '@/lib/store';
-import { useFirestore } from '@/firebase';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { deleteSpuitschriftEntry, moveSpuitschriftEntryToLogbook } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 const formatDate = (date: Date | Timestamp) => {
     const d = date instanceof Timestamp ? date.toDate() : date;
     return format(d, 'dd MMMM yyyy HH:mm', { locale: nl });
 };
 
+function ActionsMenu({ entry, onAction }: { entry: SpuitschriftEntry; onAction: () => void }) {
+    const [isPendiing, startTransition] = React.useTransition();
+    const [isAlertOpen, setIsAlertOpen] = React.useState(false);
+    const { toast } = useToast();
+    const router = useRouter();
+
+    const handleEdit = () => {
+        startTransition(async () => {
+            const result = await moveSpuitschriftEntryToLogbook(entry.id);
+            if (result.success) {
+                toast({ title: 'Regel verplaatst', description: result.message });
+                onAction();
+                router.push('/');
+            } else {
+                toast({ variant: 'destructive', title: 'Fout bij verplaatsen', description: result.message });
+            }
+        });
+    };
+
+    const handleDelete = () => {
+        startTransition(async () => {
+            await deleteSpuitschriftEntry(entry.id);
+            toast({ title: 'Regel verwijderd', description: 'De registratie is permanent verwijderd.' });
+            onAction();
+        });
+    };
+
+    return (
+        <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0" disabled={isPendiing}>
+                        <span className="sr-only">Open menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleEdit}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Bewerken (terug naar logboek)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
+                         <AlertDialogAction asChild>
+                             <button className="w-full text-red-500 relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Verwijderen
+                            </button>
+                        </AlertDialogAction>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Deze actie kan niet ongedaan worden gemaakt. Dit zal de registratie permanent uit het spuitschrift verwijderen en de voorraadmutatie terugdraaien.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                        Verwijderen
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
 interface SpuitschriftClientPageProps {
     initialEntries: SpuitschriftEntry[];
     allParcels: Parcel[];
 }
 
-function ChronologicalView({ entries, allParcels }: { entries: SpuitschriftEntry[], allParcels: Parcel[] }) {
+function ChronologicalView({ entries, allParcels, onAction }: { entries: SpuitschriftEntry[], allParcels: Parcel[], onAction: () => void }) {
     const calculateTotals = (entry: SpuitschriftEntry) => {
         const selectedParcels = allParcels.filter(p => entry.plots.includes(p.id));
         const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
@@ -66,16 +141,19 @@ function ChronologicalView({ entries, allParcels }: { entries: SpuitschriftEntry
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pt-2 pb-4 space-y-4 bg-muted/50 rounded-b-md">
-                            <div>
-                                <h4 className="font-semibold mb-2">Percelen ({totalArea.toFixed(4)} ha totaal)</h4>
-                                <div className="text-sm text-muted-foreground space-y-1">
-                                    {selectedParcels.map(p => (
-                                        <div key={p.id} className="flex justify-between">
-                                            <span>{p.name} <span className="text-xs">({p.variety})</span></span>
-                                            <span>{p.area ? p.area.toFixed(4) : '0.0000'} ha</span>
-                                        </div>
-                                    ))}
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-semibold mb-2">Percelen ({totalArea.toFixed(4)} ha totaal)</h4>
+                                    <div className="text-sm text-muted-foreground space-y-1">
+                                        {selectedParcels.map(p => (
+                                            <div key={p.id} className="flex justify-between">
+                                                <span>{p.name} <span className="text-xs">({p.variety})</span></span>
+                                                <span className="ml-4">{p.area ? p.area.toFixed(4) : '0.0000'} ha</span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
+                                <ActionsMenu entry={entry} onAction={onAction} />
                             </div>
                             <div>
                                 <h4 className="font-semibold mb-2">Middelen</h4>
@@ -183,7 +261,8 @@ function ParcelHistoryView({ allParcels, initialEntries }: { allParcels: Parcel[
 }
 
 export function SpuitschriftClientPage({ initialEntries, allParcels }: SpuitschriftClientPageProps) {
-    
+    const router = useRouter();
+
     if (initialEntries.length === 0 && allParcels.length === 0) {
         return (
             <Card>
@@ -200,6 +279,10 @@ export function SpuitschriftClientPage({ initialEntries, allParcels }: Spuitschr
         );
     }
 
+    const handleAction = () => {
+        router.refresh();
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -214,7 +297,7 @@ export function SpuitschriftClientPage({ initialEntries, allParcels }: Spuitschr
                     </TabsList>
                     <TabsContent value="chronological" className="mt-6">
                         {initialEntries.length > 0 ? (
-                           <ChronologicalView entries={initialEntries} allParcels={allParcels} />
+                           <ChronologicalView entries={initialEntries} allParcels={allParcels} onAction={handleAction} />
                         ) : (
                              <div className="text-center text-muted-foreground py-10">
                                 <p>Er zijn nog geen bevestigde bespuitingen in het logboek gevonden.</p>

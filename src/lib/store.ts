@@ -1,3 +1,4 @@
+
 import { collection, addDoc, getDocs, query, orderBy, writeBatch, doc, Firestore, setDoc, Timestamp, getDoc, deleteDoc, where, collectionGroup, QueryConstraint } from 'firebase/firestore';
 import type { LogbookEntry, Parcel, ParcelHistoryEntry, UserPreference, InventoryMovement, CtgbProduct, CtgbSyncStats, SpuitschriftEntry } from './types';
 
@@ -11,6 +12,24 @@ const SPUITSCHRIFT_COLLECTION = 'spuitschrift';
 
 
 // Spuitschrift Functions
+export async function getSpuitschriftEntry(db: Firestore, id: string): Promise<SpuitschriftEntry | null> {
+  if (!db) return null;
+  const docRef = doc(db, SPUITSCHRIFT_COLLECTION, id);
+  const docSnap = await getDoc(docRef);
+
+  if (!docSnap.exists()) {
+    return null;
+  }
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    ...data,
+    date: (data.date as Timestamp).toDate(),
+    createdAt: (data.createdAt as Timestamp)?.toDate() || (data.date as Timestamp).toDate(),
+  } as SpuitschriftEntry;
+}
+
+
 export async function getSpuitschriftEntries(db: Firestore): Promise<SpuitschriftEntry[]> {
   if (!db) return [];
   try {
@@ -31,13 +50,36 @@ export async function getSpuitschriftEntries(db: Firestore): Promise<Spuitschrif
   }
 }
 
-export async function addSpuitschriftEntry(db: Firestore, entry: Omit<SpuitschriftEntry, 'id'>): Promise<void> {
+export async function addSpuitschriftEntry(db: Firestore, entry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'>): Promise<SpuitschriftEntry> {
   if (!db) throw new Error("Database not initialized");
-  await addDoc(collection(db, SPUITSCHRIFT_COLLECTION), {
+  const docRef = await addDoc(collection(db, SPUITSCHRIFT_COLLECTION), {
     ...entry,
     date: Timestamp.fromDate(new Date(entry.date)),
     createdAt: Timestamp.fromDate(new Date(entry.createdAt)),
   });
+  return { id: docRef.id, ...entry } as SpuitschriftEntry;
+}
+
+export async function deleteSpuitschriftEntry(db: Firestore, entryId: string): Promise<void> {
+  if (!db) throw new Error("Database not initialized");
+  
+  const batch = writeBatch(db);
+  
+  // Delete the entry itself
+  const entryRef = doc(db, SPUITSCHRIFT_COLLECTION, entryId);
+  batch.delete(entryRef);
+
+  // Delete related parcel history
+  const historyQuery = query(collection(db, HISTORY_COLLECTION), where("spuitschriftId", "==", entryId));
+  const historySnapshot = await getDocs(historyQuery);
+  historySnapshot.forEach(doc => batch.delete(doc.ref));
+  
+  // Delete related inventory movements
+  const inventoryQuery = query(collection(db, INVENTORY_MOVEMENTS_COLLECTION), where("referenceId", "==", entryId));
+  const inventorySnapshot = await getDocs(inventoryQuery);
+  inventorySnapshot.forEach(doc => batch.delete(doc.ref));
+
+  await batch.commit();
 }
 
 
@@ -393,7 +435,7 @@ export async function getBatchParcelSeasonHistory(
   return resultMap;
 }
 
-export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels, isConfirmation = false }: { logbookEntry: LogbookEntry, parcels: Parcel[], isConfirmation?: boolean }) {
+export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, parcels, isConfirmation = false, spuitschriftId }: { logbookEntry: LogbookEntry, parcels: Parcel[], isConfirmation?: boolean, spuitschriftId?: string }) {
     if (!db) throw new Error("Database not initialized");
     if (!logbookEntry.parsedData) return;
 
@@ -422,10 +464,11 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
         if (!parcel) return;
 
         products.forEach(productEntry => {
-            if (isConfirmation) {
+            if (isConfirmation && spuitschriftId) {
                  const historyDocRef = doc(collection(db, HISTORY_COLLECTION));
                 const historyEntry: Omit<ParcelHistoryEntry, 'id'> = {
-                    logId,
+                    logId: logbookEntry.originalLogbookId || logId,
+                    spuitschriftId: spuitschriftId,
                     parcelId: parcel.id,
                     parcelName: parcel.name,
                     crop: parcel.crop,
@@ -458,7 +501,7 @@ export async function addParcelHistoryEntries(db: Firestore, { logbookEntry, par
                 type: 'usage',
                 date: new Date(logbookEntry.date),
                 description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
-                referenceId: logId, 
+                referenceId: spuitschriftId, 
             };
             batch.set(inventoryDocRef, inventoryMovement);
         }

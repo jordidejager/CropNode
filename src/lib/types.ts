@@ -1,3 +1,4 @@
+
 export type ParcelSource = "MANUAL" | "RVO_IMPORT";
 
 export type Parcel = {
@@ -64,10 +65,13 @@ export type LogbookEntry = {
   createdAt: Date; // Creation date
   parsedData?: ParsedSprayData;
   validationMessage?: string;
+  originalLogbookId?: string; // Used when moving back from spuitschrift
 };
 
 export type SpuitschriftEntry = {
   id: string; // Firestore ID
+  spuitschriftId?: string; // Self-reference for consistency, can be same as id
+  originalLogbookId: string; // ID of the original logbook entry
   originalRawInput: string;
   date: Date; // Spraying date
   createdAt: Date; // Creation date
@@ -79,7 +83,8 @@ export type SpuitschriftEntry = {
 
 export type ParcelHistoryEntry = {
   id: string; // Firestore ID
-  logId: string;
+  logId: string; // Original logbook ID
+  spuitschriftId: string; // Spuitschrift entry ID
   parcelId: string;
   parcelName: string;
   crop: string;
@@ -104,7 +109,7 @@ export type InventoryMovement = {
     type: 'addition' | 'usage' | 'correction';
     date: Date;
     description: string;
-    referenceId?: string; // e.g., logId or a manual entry ID
+    referenceId?: string; // e.g., spuitschriftId or a manual entry ID
 }
 
 // ============================================
