@@ -61,6 +61,9 @@ const LogbookTableRow = ({
     const [editedProducts, setEditedProducts] = useState<ProductEntry[]>([]);
     const [editedDate, setEditedDate] = useState<Date | Timestamp | undefined>();
     
+    // Store original state to compare against for changes
+    const originalStateRef = useRef<{ parcels: string[], products: ProductEntry[] }>();
+    
     const { toast } = useToast();
 
     // Determine if it's the initial load
@@ -69,8 +72,11 @@ const LogbookTableRow = ({
     // Sync state when entry changes
     useEffect(() => {
         if (entry.parsedData) {
-            setEditedParcels(entry.parsedData.plots || []);
-            setEditedProducts(entry.parsedData.products || []);
+            const parcels = entry.parsedData.plots || [];
+            const products = entry.parsedData.products || [];
+            setEditedParcels(parcels);
+            setEditedProducts(products);
+            originalStateRef.current = { parcels, products };
         }
         setEditedDate(entry.date);
         // After first sync, it's no longer the initial load
@@ -80,13 +86,14 @@ const LogbookTableRow = ({
     }, [entry]);
 
     const hasChanged = useMemo(() => {
-        if (!entry.parsedData || !editedDate) return false;
+        if (!entry.parsedData || !editedDate || !originalStateRef.current) return false;
+        
         const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
         const newDate = editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate);
         
         const dateChanged = originalDate.getTime() !== newDate.getTime();
-        const parcelsChanged = JSON.stringify(entry.parsedData.plots.sort()) !== JSON.stringify(editedParcels.sort());
-        const productsChanged = JSON.stringify(entry.parsedData.products) !== JSON.stringify(editedProducts);
+        const parcelsChanged = JSON.stringify(originalStateRef.current.parcels.sort()) !== JSON.stringify(editedParcels.sort());
+        const productsChanged = JSON.stringify(originalStateRef.current.products) !== JSON.stringify(editedProducts);
 
         return dateChanged || parcelsChanged || productsChanged;
     }, [entry, editedDate, editedParcels, editedProducts]);
@@ -112,7 +119,7 @@ const LogbookTableRow = ({
         };
 
         startSaveTransition(async () => {
-            const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
+            const result = await updateAndConfirmEntry(updatedEntry, originalStateRef.current?.products || []);
             toast({
                 title: 'Automatisch opgeslagen',
                 description: 'De regel is opnieuw gevalideerd.',
