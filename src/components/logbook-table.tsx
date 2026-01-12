@@ -29,6 +29,7 @@ import { InlineEditProducts } from './inline-edit-products';
 import { InlineEditDate } from './inline-edit-date';
 import { Skeleton } from './ui/skeleton';
 import { Label } from './ui/label';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
   'Nieuw': { variant: 'outline', label: 'Nieuw', colorClass: '' },
@@ -53,7 +54,6 @@ const LogbookTableRow = ({
     onDelete: (id: string) => void,
     onUpdate: () => void,
 }) => {
-    const [isEditing, setIsEditing] = useState(false);
     const [isSaving, startSaveTransition] = useTransition();
     const [isActionPending, startActionTransition] = useTransition();
 
@@ -63,14 +63,64 @@ const LogbookTableRow = ({
     
     const { toast } = useToast();
 
-    // Sync state when entry changes or when editing starts
+    // Determine if it's the initial load
+    const isInitialLoad = useRef(true);
+
+    // Sync state when entry changes
     useEffect(() => {
         if (entry.parsedData) {
             setEditedParcels(entry.parsedData.plots || []);
             setEditedProducts(entry.parsedData.products || []);
         }
         setEditedDate(entry.date);
+        // After first sync, it's no longer the initial load
+        isInitialLoad.current = true; 
+        setTimeout(() => isInitialLoad.current = false, 500);
+
     }, [entry]);
+
+    const hasChanged = useMemo(() => {
+        if (!entry.parsedData || !editedDate) return false;
+        const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+        const newDate = editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate);
+        
+        const dateChanged = originalDate.getTime() !== newDate.getTime();
+        const parcelsChanged = JSON.stringify(entry.parsedData.plots.sort()) !== JSON.stringify(editedParcels.sort());
+        const productsChanged = JSON.stringify(entry.parsedData.products) !== JSON.stringify(editedProducts);
+
+        return dateChanged || parcelsChanged || productsChanged;
+    }, [entry, editedDate, editedParcels, editedProducts]);
+    
+    const debouncedState = useDebounce({ date: editedDate, parcels: editedParcels, products: editedProducts, hasChanged }, 500);
+
+    // Auto-save effect
+    useEffect(() => {
+        // Don't save on initial render or if nothing has changed
+        if (isInitialLoad.current || !debouncedState.hasChanged) {
+            return;
+        }
+
+        const updatedEntry: LogbookEntry = {
+            ...entry,
+            date: debouncedState.date ? (debouncedState.date instanceof Timestamp ? debouncedState.date.toDate() : new Date(debouncedState.date)) : new Date(),
+            createdAt: entry.createdAt,
+            parsedData: {
+                ...entry.parsedData!,
+                plots: debouncedState.parcels,
+                products: debouncedState.products
+            }
+        };
+
+        startSaveTransition(async () => {
+            const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
+            toast({
+                title: 'Automatisch opgeslagen',
+                description: 'De regel is opnieuw gevalideerd.',
+            });
+            onUpdate();
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedState]);
 
 
     const handleRetry = (entryId: string) => {
@@ -92,61 +142,13 @@ const LogbookTableRow = ({
             if (result.success) onUpdate();
         });
     };
-
-    const handleSave = useCallback(() => {
-        if (!entry.parsedData) return;
-
-        const updatedEntry: LogbookEntry = {
-            ...entry,
-            date: editedDate ? (editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate)) : new Date(),
-            createdAt: entry.createdAt,
-            parsedData: {
-                ...entry.parsedData,
-                plots: editedParcels,
-                products: editedProducts
-            }
-        };
-
-        startSaveTransition(async () => {
-            const result = await updateAndConfirmEntry(updatedEntry, entry.parsedData?.products || []);
-            toast({
-                title: 'Wijzigingen opgeslagen',
-                description: 'De regel is opnieuw gevalideerd en opgeslagen.',
-            });
-            setIsEditing(false);
-            onUpdate();
-        });
-    }, [entry, editedParcels, editedProducts, editedDate, toast, onUpdate]);
     
-    const handleCancel = () => {
-        setIsEditing(false);
-        // Reset state to original entry
-        if (entry.parsedData) {
-            setEditedParcels(entry.parsedData.plots || []);
-            setEditedProducts(entry.parsedData.products || []);
-        }
-        setEditedDate(entry.date);
-    }
-
     const config = statusConfig[entry.status] || statusConfig['Fout'];
     const isPending = isSaving || isActionPending;
 
-    const hasChanged = useMemo(() => {
-        if (!entry.parsedData || !editedDate) return false;
-        const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
-        const newDate = editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate);
-        
-        const dateChanged = originalDate.getTime() !== newDate.getTime();
-        const parcelsChanged = JSON.stringify(entry.parsedData.plots.sort()) !== JSON.stringify(editedParcels.sort());
-        const productsChanged = JSON.stringify(entry.parsedData.products) !== JSON.stringify(editedProducts);
-
-        return dateChanged || parcelsChanged || productsChanged;
-
-    }, [entry, editedDate, editedParcels, editedProducts]);
-
     return (
         <>
-            <TableRow data-state={isEditing ? 'selected' : undefined}>
+            <TableRow data-state={isSaving ? 'selected' : undefined}>
                 <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top whitespace-pre-wrap">
                    <InlineEditDate date={editedDate} onDateChange={setEditedDate} />
                 </TableCell>
@@ -185,10 +187,10 @@ const LogbookTableRow = ({
                 <TableCell className="align-top">
                     <Badge
                         variant={config.variant}
-                        className={cn('capitalize whitespace-nowrap', entry.status === 'Analyseren...' && 'animate-pulse', config.colorClass)}
+                        className={cn('capitalize whitespace-nowrap', (entry.status === 'Analyseren...' || isSaving) && 'animate-pulse', config.colorClass)}
                     >
-                        {config.icon && <config.icon className="mr-1.5 h-3 w-3"/>}
-                        {config.label}
+                        {isSaving ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin"/> : (config.icon && <config.icon className="mr-1.5 h-3 w-3"/>)}
+                        {isSaving ? 'Opslaan...' : config.label}
                     </Badge>
                 </TableCell>
                 <TableCell className="text-right align-top">
@@ -198,15 +200,9 @@ const LogbookTableRow = ({
                                 <RefreshCcw className="h-4 w-4" />
                             </Button>
                         )}
-                        {hasChanged ? (
-                           <Button variant="ghost" size="icon" onClick={handleSave} disabled={isSaving} title="Wijzigingen Opslaan" className="h-8 w-8 text-green-500 hover:text-green-600">
-                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                           </Button>
-                        ) : (
-                            <Button variant="ghost" size="icon" onClick={() => handleConfirm(entry.id)} disabled={isPending} title="Bevestigen" className="h-8 w-8 text-green-500 hover:text-green-600">
-                               <CheckCircle className="h-4 w-4" />
-                            </Button>
-                        )}
+                        <Button variant="ghost" size="icon" onClick={() => handleConfirm(entry.id)} disabled={isPending || hasChanged} title="Bevestigen" className="h-8 w-8 text-green-500 hover:text-green-600 disabled:text-muted-foreground disabled:hover:text-muted-foreground">
+                           <CheckCircle className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => onDelete(entry.id)} disabled={isPending} title="Verwijderen" className="h-8 w-8 text-destructive hover:text-destructive">
                             <Trash2 className="h-4 w-4" />
                         </Button>
