@@ -10,6 +10,11 @@ import 'leaflet-draw';
 
 const defaultCenter: L.LatLngExpression = [52.1326, 5.2913];
 
+// PDOK Luchtfoto tile layer
+const PDOK_LUCHTFOTO_URL =
+  "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg";
+
+
 // Fix for default icon issue with Leaflet in React
 if (typeof window !== 'undefined') {
   delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -35,8 +40,8 @@ export const ParcelDrawingMap: React.FC<ParcelDrawingMapProps> = ({ parcel, onSa
         const map = L.map(mapContainerRef.current);
         mapRef.current = map;
 
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri'
+        L.tileLayer(PDOK_LUCHTFOTO_URL, {
+            attribution: 'Luchtfoto © PDOK'
         }).addTo(map);
 
         const drawnItems = new L.FeatureGroup();
