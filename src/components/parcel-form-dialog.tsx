@@ -316,21 +316,21 @@ export function ParcelFormDialog({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">
+            <div className="grid grid-cols-4 items-start gap-4 pt-2">
+              <Label className="text-right mt-2">
                 Locatie
               </Label>
               <div className="col-span-3">
                 {watchedLocation ? (
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 text-sm text-muted-foreground bg-muted rounded px-3 py-2">
-                      <MapPin className="inline h-4 w-4 mr-1" />
-                      {watchedLocation.lat.toFixed(5)}, {watchedLocation.lng.toFixed(5)}
+                    <div className="flex-1 text-sm bg-muted text-muted-foreground rounded-md px-3 py-2 flex items-center gap-2">
+                       <Check className="h-4 w-4 text-green-500" />
+                       Locatie ingesteld
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={handleOpenMap}>
                       Wijzig
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={handleClearLocation}>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleClearLocation}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
