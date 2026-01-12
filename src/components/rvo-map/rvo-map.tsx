@@ -38,12 +38,23 @@ export function RvoMap({ onParcelSelect, selectedParcel }: RvoMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onParcelSelectRef = useRef(onParcelSelect);
+  const selectedParcelRef = useRef(selectedParcel);
 
   const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [parcels, setParcels] = useState<RvoParcel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
+
+  // Keep refs in sync with props
+  useEffect(() => {
+    onParcelSelectRef.current = onParcelSelect;
+  }, [onParcelSelect]);
+
+  useEffect(() => {
+    selectedParcelRef.current = selectedParcel;
+  }, [selectedParcel]);
 
   const debouncedBounds = useDebounce(bounds, 400);
 
@@ -83,7 +94,7 @@ export function RvoMap({ onParcelSelect, selectedParcel }: RvoMapProps) {
         onEachFeature: (feature, layer) => {
           layer.on({
             click: () => {
-              onParcelSelect(feature as unknown as RvoParcel);
+              onParcelSelectRef.current(feature as unknown as RvoParcel);
             },
             mouseover: (e) => {
               const layer = e.target;
@@ -93,8 +104,9 @@ export function RvoMap({ onParcelSelect, selectedParcel }: RvoMapProps) {
             },
             mouseout: (e) => {
               const layer = e.target;
+              const currentSelected = selectedParcelRef.current;
               const isSelected =
-                selectedParcel && feature.id === selectedParcel.id;
+                currentSelected && feature.id === currentSelected.id;
               layer.setStyle({
                 fillOpacity: isSelected ? 0.4 : 0.2,
               });
