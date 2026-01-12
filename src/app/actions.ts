@@ -427,7 +427,7 @@ export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{
                 plots: spuitschriftEntry.plots,
                 products: spuitschriftEntry.products,
             },
-            validationMessage: spuitschriftEntry.validationMessage,
+            validationMessage: spuitschriftEntry.validationMessage || '',
         };
 
         await addLogbookEntry(firestore, logbookEntryData);
