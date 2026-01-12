@@ -23,14 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select"
-import type { Parcel } from "@/lib/types"
+import type { Parcel, RvoParcel } from "@/lib/types"
 import { appleVarieties, pearVarieties } from "@/lib/data"
 import { MapPin, Check, X } from "lucide-react"
 import dynamic from "next/dynamic"
 
-const ParcelDrawingMap = dynamic(() => import('./parcel-drawing-map').then(mod => mod.ParcelDrawingMap), {
-  ssr: false,
-});
+const RvoMap = dynamic(
+  () => import('./rvo-map/rvo-map').then((mod) => mod.RvoMap),
+  { ssr: false }
+);
+
 
 // Helper to convert coordinates to GeoJSON polygon and calculate center
 function coordinatesToGeometry(coords: { lat: number; lng: number }[]) {
@@ -175,13 +177,8 @@ export function ParcelFormDialog({
     setIsMapOpen(true);
   };
 
-  const handleMapSave = useCallback((coords: { lat: number; lng: number }[]) => {
-    if (coords.length >= 3) {
-      const { geometry, center } = coordinatesToGeometry(coords);
-      setTempGeometry(geometry);
-    } else {
-      setTempGeometry(null);
-    }
+  const handleMapSave = useCallback((geometry: any) => {
+    setTempGeometry(geometry);
   }, []);
 
   const handleConfirmLocation = () => {
@@ -193,6 +190,10 @@ export function ParcelFormDialog({
       };
       setValue("geometry", tempGeometry);
       setValue("location", center);
+    } else {
+      // Handle case where geometry was deleted
+      setValue("geometry", undefined);
+      setValue("location", undefined);
     }
     setIsMapOpen(false);
   };
@@ -356,26 +357,29 @@ export function ParcelFormDialog({
 
       {/* Map Dialog for location selection */}
       <Dialog open={isMapOpen} onOpenChange={(open) => !open && handleCancelMap()}>
-        <DialogContent className="sm:max-w-[800px] h-[600px] flex flex-col">
+        <DialogContent className="w-full max-w-[90vw] h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Locatie aanwijzen</DialogTitle>
             <DialogDescription>
-              Teken het perceel op de kaart door punten te plaatsen. Klik op het polygon icoon links om te beginnen.
+              Teken het perceel op de kaart door punten te plaatsen. Klik op het polygon icoon links om te beginnen. De RVO percelen zijn zichtbaar als referentie.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 rounded-md overflow-hidden border">
-            <ParcelDrawingMap
-              parcel={{ geometry: tempGeometry || watchedGeometry }}
-              onSave={handleMapSave}
+             <RvoMap
+                onParcelSelect={() => {}} // Not needed in drawing mode
+                selectedParcel={null}
+                isDrawingEnabled={true}
+                onGeometryChange={handleMapSave}
+                initialGeometry={tempGeometry || watchedGeometry}
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancelMap}>
               Annuleren
             </Button>
-            <Button type="button" onClick={handleConfirmLocation} disabled={!tempGeometry}>
+            <Button type="button" onClick={handleConfirmLocation}>
               <Check className="mr-2 h-4 w-4" />
-              Bevestigen
+              Locatie Bevestigen
             </Button>
           </DialogFooter>
         </DialogContent>
