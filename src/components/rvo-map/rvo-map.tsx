@@ -104,16 +104,15 @@ export function RvoMap({
       const geoJsonLayer = L.geoJSON(undefined, {
         style: getStyle,
         onEachFeature: (feature, layer) => {
-          if (!isDrawingEnabled) {
-            layer.on({
-              click: () => onParcelSelectRef.current(feature as unknown as RvoParcel),
-              mouseover: (e) => e.target.setStyle({ fillOpacity: 0.4 }),
-              mouseout: (e) => {
-                const isSelected = selectedParcelRef.current && feature.id === selectedParcelRef.current.id;
-                e.target.setStyle({ fillOpacity: isSelected ? 0.4 : 0.2 });
-              },
-            });
-          }
+          // Always allow selecting parcels for import or reference
+          layer.on({
+            click: () => onParcelSelectRef.current(feature as unknown as RvoParcel),
+            mouseover: (e) => e.target.setStyle({ fillOpacity: 0.4 }),
+            mouseout: (e) => {
+              const isSelected = selectedParcelRef.current && feature.id === selectedParcelRef.current.id;
+              e.target.setStyle({ fillOpacity: isSelected ? 0.4 : 0.2 });
+            },
+          });
         },
       });
       geoJsonLayer.addTo(map);
@@ -264,7 +263,7 @@ export function RvoMap({
         </div>
       )}
 
-      {zoomLevel < MIN_ZOOM_FOR_PARCELS && !isDrawingEnabled && (
+      {zoomLevel < MIN_ZOOM_FOR_PARCELS && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-background/90 rounded-md px-4 py-2 shadow-md">
           <span className="text-sm text-muted-foreground">
             Zoom in om percelen te zien
@@ -278,7 +277,7 @@ export function RvoMap({
         </div>
       )}
 
-      {parcels.length > 0 && !isLoading && !isDrawingEnabled && (
+      {parcels.length > 0 && !isLoading && (
         <div className="absolute bottom-4 right-4 z-[1000] bg-background/90 rounded-md px-3 py-2 shadow-md">
           <span className="text-sm">{parcels.length} percelen gevonden</span>
         </div>
