@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useTransition, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useTransition, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { LogbookEntry, Parcel, LogStatus, ProductEntry } from '@/lib/types';
