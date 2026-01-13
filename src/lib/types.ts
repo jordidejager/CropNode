@@ -50,11 +50,13 @@ export type ProductEntry = {
     product: string;
     dosage: number;
     unit: string;
+    targetReason?: string; // Doelorganisme uit gebruikersinvoer (bijv. "luis", "schurft")
 };
 
 export type ParsedSprayData = {
   plots: string[];
   products: ProductEntry[];
+  assumedTargets?: Record<string, string>;
 }
 
 export type LogbookEntry = {

@@ -26,6 +26,13 @@ export type ValidationFlag = {
 export type ValidationResult = {
   isValid: boolean;
   flags: ValidationFlag[];
+  matchedTargets?: Map<string, MatchedTarget>; // productName -> matched target info
+};
+
+export type MatchedTarget = {
+  targetOrganism: string;
+  isAssumed: boolean; // true = automatisch bepaald, false = uit gebruikersinvoer
+  voorschrift: CtgbGebruiksvoorschrift;
 };
 
 type ValidationContext = {
@@ -36,6 +43,8 @@ type ValidationContext = {
   applicationDate: Date;
   seasonHistory: ParcelHistoryEntry[];
   ctgbProducts: Map<string, CtgbProduct>;
+  targetReason?: string; // Doelorganisme uit gebruikersinvoer
+  matchedTarget?: MatchedTarget; // Resultaat van target matching
 };
 
 type Season = {
@@ -136,6 +145,118 @@ export function findGebruiksvoorschrift(
   }
 
   return null;
+}
+
+/**
+ * Fuzzy match voor doelorganisme
+ * Vergelijkt gebruikersinvoer (bijv. "luis") met toegelaten doelen (bijv. "Groene appelbladluis")
+ */
+function fuzzyMatchTarget(userInput: string, allowedTarget: string): boolean {
+  const normalizedInput = userInput.toLowerCase().trim();
+  const normalizedTarget = allowedTarget.toLowerCase();
+
+  // Direct match
+  if (normalizedTarget.includes(normalizedInput)) return true;
+
+  // Common synonyms/abbreviations mapping
+  const synonyms: Record<string, string[]> = {
+    'luis': ['bladluis', 'appelbladluis', 'pereluis', 'bloedluis', 'wollige luis'],
+    'bladluis': ['luis', 'appelbladluis', 'groene appelbladluis', 'roze appelbladluis'],
+    'schurft': ['appelschurft', 'pereschurft', 'venturia'],
+    'meeldauw': ['echte meeldauw', 'valse meeldauw', 'witziekte'],
+    'mot': ['vruchtmot', 'fruitmot', 'appelmot'],
+    'spint': ['fruitspint', 'rode spin', 'spintmijt'],
+    'roest': ['roestschimmel'],
+    'trips': ['tripsen'],
+  };
+
+  // Check synonyms
+  const inputSynonyms = synonyms[normalizedInput] || [];
+  for (const syn of inputSynonyms) {
+    if (normalizedTarget.includes(syn)) return true;
+  }
+
+  // Reverse check: if target contains a base form that matches input
+  for (const [base, syns] of Object.entries(synonyms)) {
+    if (normalizedTarget.includes(base) && syns.some(s => normalizedInput.includes(s))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Vind het juiste gebruiksvoorschrift met doelorganisme matching
+ * Scenario A: Gebruiker geeft targetReason -> fuzzy match met toegelaten doelen
+ * Scenario B: Geen targetReason -> selecteer "hoofddoel" (meest voorkomend/breedste toelating)
+ */
+export function findGebruiksvoorschriftWithTarget(
+  product: CtgbProduct,
+  parcelCrop: string,
+  targetReason?: string
+): { voorschrift: CtgbGebruiksvoorschrift; matchedTarget: MatchedTarget } | null {
+  if (!product.gebruiksvoorschriften || product.gebruiksvoorschriften.length === 0) {
+    return null;
+  }
+
+  const normalizedCrop = parcelCrop.toLowerCase().trim();
+  const cropHierarchy = CROP_HIERARCHY[normalizedCrop] || [normalizedCrop];
+
+  // Filter voorschriften die matchen met het gewas
+  const cropMatchedVoorschriften = product.gebruiksvoorschriften.filter(voorschrift => {
+    if (!voorschrift.gewas) return false;
+    const allowedCrops = voorschrift.gewas.toLowerCase();
+    return cropHierarchy.some(crop => allowedCrops.includes(crop));
+  });
+
+  if (cropMatchedVoorschriften.length === 0) {
+    return null;
+  }
+
+  // Scenario A: Gebruiker geeft targetReason
+  if (targetReason) {
+    for (const voorschrift of cropMatchedVoorschriften) {
+      const doelOrganisme = voorschrift.doelorganisme;
+      if (doelOrganisme && fuzzyMatchTarget(targetReason, doelOrganisme)) {
+        return {
+          voorschrift,
+          matchedTarget: {
+            targetOrganism: doelOrganisme,
+            isAssumed: false,
+            voorschrift,
+          },
+        };
+      }
+    }
+    // Geen exacte match gevonden - val terug op eerste match met warning
+  }
+
+  // Scenario B: Auto-detect "hoofddoel"
+  // Strategie: Kies het doel met de hoogste max dosering (breedste toelating)
+  // of het eerste voorschrift als er geen dosering info is
+  let bestVoorschrift = cropMatchedVoorschriften[0];
+  let highestDosage = 0;
+
+  for (const voorschrift of cropMatchedVoorschriften) {
+    if (voorschrift.dosering) {
+      const parsed = parseDosering(voorschrift.dosering);
+      if (parsed && parsed.value > highestDosage) {
+        highestDosage = parsed.value;
+        bestVoorschrift = voorschrift;
+      }
+    }
+  }
+
+  const targetName = bestVoorschrift.doelorganisme || 'Algemeen';
+  return {
+    voorschrift: bestVoorschrift,
+    matchedTarget: {
+      targetOrganism: `${targetName} (automatisch bepaald)`,
+      isAssumed: true,
+      voorschrift: bestVoorschrift,
+    },
+  };
 }
 
 /**
@@ -332,11 +453,13 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
 
 /**
  * PRIORITEIT 3: Check dosering tegen maximum
+ * Gebruikt het matched voorschrift (met doelorganisme) als beschikbaar
  */
 function checkDosage(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
 
-  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
+  // Gebruik het matched voorschrift als beschikbaar, anders zoek op gewas
+  const voorschrift = ctx.matchedTarget?.voorschrift || findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
   if (!voorschrift?.dosering) {
     return flags;
   }
@@ -393,11 +516,13 @@ function checkDosage(ctx: ValidationContext): ValidationFlag[] {
 
 /**
  * PRIORITEIT 4: Check interval tussen toepassingen
+ * Zoekt nu op product NAAM (niet werkzame stof) voor correcte interval bepaling
  */
 function checkInterval(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
 
-  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
+  // Gebruik het matched voorschrift als beschikbaar, anders zoek op gewas
+  const voorschrift = ctx.matchedTarget?.voorschrift || findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
   if (!voorschrift?.interval) {
     return flags;
   }
@@ -407,17 +532,11 @@ function checkInterval(ctx: ValidationContext): ValidationFlag[] {
     return flags;
   }
 
-  // Vind laatste toepassing met dezelfde werkzame stof
-  const newProductSubstances = ctx.product.werkzameStoffen || [];
+  // Zoek laatste toepassing met HETZELFDE MIDDEL (op basis van naam)
+  const productName = ctx.product.naam.toLowerCase();
 
   const relevantHistory = ctx.seasonHistory
-    .filter(h => {
-      const p = ctx.ctgbProducts.get(h.product.toLowerCase());
-      if (!p || !p.werkzameStoffen) return false;
-      return p.werkzameStoffen.some(s =>
-        newProductSubstances.some(ns => ns.toLowerCase() === s.toLowerCase())
-      );
-    })
+    .filter(h => h.product.toLowerCase() === productName)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const lastApplication = relevantHistory[0];
@@ -427,12 +546,14 @@ function checkInterval(ctx: ValidationContext): ValidationFlag[] {
     const daysSince = daysBetween(lastDate, ctx.applicationDate);
 
     if (daysSince < minIntervalDays) {
+      const daysRemaining = minIntervalDays - daysSince;
       flags.push({
-        type: 'warning',
-        message: `Interval te kort: ${daysSince} dagen sinds laatste toepassing op ${lastDate.toLocaleDateString('nl-NL')} (minimaal ${minIntervalDays} dagen vereist).`,
+        type: 'error', // ERROR: interval overtreding is wettelijk niet toegestaan
+        message: `Interval overtreding: Je mag ${ctx.product.naam} pas weer gebruiken over ${daysRemaining} dag${daysRemaining !== 1 ? 'en' : ''}. Laatste toepassing was ${lastDate.toLocaleDateString('nl-NL')} (minimaal ${minIntervalDays} dagen interval vereist).`,
         field: 'date',
         details: {
           daysSince,
+          daysRemaining,
           minRequired: minIntervalDays,
           lastApplicationDate: lastDate.toISOString(),
           lastProduct: lastApplication.product
@@ -501,9 +622,11 @@ export async function validateSprayApplication(
   applicationDate: Date,
   seasonHistory: ParcelHistoryEntry[],
   allCtgbProducts: CtgbProduct[],
-  expectedHarvestDate?: Date
+  expectedHarvestDate?: Date,
+  targetReason?: string // Doelorganisme uit gebruikersinvoer
 ): Promise<ValidationResult> {
   const flags: ValidationFlag[] = [];
+  const matchedTargets = new Map<string, MatchedTarget>();
 
   // Build lookup map voor snelle CTGB product zoekacties
   const ctgbMap = new Map<string, CtgbProduct>();
@@ -515,6 +638,40 @@ export async function validateSprayApplication(
     }
   }
 
+  // Match target organism met gebruiksvoorschriften
+  const targetMatch = findGebruiksvoorschriftWithTarget(product, parcel.crop, targetReason);
+  let matchedTarget: MatchedTarget | undefined;
+
+  if (targetMatch) {
+    matchedTarget = targetMatch.matchedTarget;
+    matchedTargets.set(product.naam, matchedTarget);
+
+    // Info bericht over matched/assumed target
+    if (matchedTarget.isAssumed) {
+      flags.push({
+        type: 'info',
+        message: `Doelorganisme: ${matchedTarget.targetOrganism}`,
+        field: 'targetOrganism',
+        details: { assumedTarget: matchedTarget.targetOrganism }
+      });
+    } else if (targetReason) {
+      flags.push({
+        type: 'info',
+        message: `Doelorganisme gematcht: "${targetReason}" → ${matchedTarget.targetOrganism}`,
+        field: 'targetOrganism',
+        details: { userInput: targetReason, matchedTarget: matchedTarget.targetOrganism }
+      });
+    }
+  } else if (targetReason) {
+    // Gebruiker gaf target, maar geen match gevonden
+    flags.push({
+      type: 'warning',
+      message: `Doelorganisme "${targetReason}" niet gevonden in toegelaten doelen voor ${product.naam}. Controleer of dit middel hiervoor is toegelaten.`,
+      field: 'targetOrganism',
+      details: { userInput: targetReason }
+    });
+  }
+
   const ctx: ValidationContext = {
     parcel,
     product,
@@ -522,7 +679,9 @@ export async function validateSprayApplication(
     unit,
     applicationDate,
     seasonHistory,
-    ctgbProducts: ctgbMap
+    ctgbProducts: ctgbMap,
+    targetReason,
+    matchedTarget
   };
 
   // Run alle checks in prioriteitsvolgorde
@@ -534,7 +693,8 @@ export async function validateSprayApplication(
 
   return {
     isValid: !flags.some(f => f.type === 'error'),
-    flags
+    flags,
+    matchedTargets
   };
 }
 
@@ -543,7 +703,7 @@ export async function validateSprayApplication(
  */
 export async function validateBatchSprayApplication(
   parcels: Parcel[],
-  products: Array<{ product: CtgbProduct; dosage: number; unit: string }>,
+  products: Array<{ product: CtgbProduct; dosage: number; unit: string; targetReason?: string }>,
   applicationDate: Date,
   seasonHistoryByParcel: Map<string, ParcelHistoryEntry[]>,
   allCtgbProducts: CtgbProduct[]
@@ -553,8 +713,9 @@ export async function validateBatchSprayApplication(
   for (const parcel of parcels) {
     const parcelHistory = seasonHistoryByParcel.get(parcel.id) || [];
     const combinedFlags: ValidationFlag[] = [];
+    const combinedMatchedTargets = new Map<string, MatchedTarget>();
 
-    for (const { product, dosage, unit } of products) {
+    for (const { product, dosage, unit, targetReason } of products) {
       const result = await validateSprayApplication(
         parcel,
         product,
@@ -562,14 +723,20 @@ export async function validateBatchSprayApplication(
         unit,
         applicationDate,
         parcelHistory,
-        allCtgbProducts
+        allCtgbProducts,
+        undefined, // expectedHarvestDate
+        targetReason
       );
       combinedFlags.push(...result.flags);
+      if (result.matchedTargets) {
+        result.matchedTargets.forEach((v, k) => combinedMatchedTargets.set(k, v));
+      }
     }
 
     results.set(parcel.id, {
       isValid: !combinedFlags.some(f => f.type === 'error'),
-      flags: combinedFlags
+      flags: combinedFlags,
+      matchedTargets: combinedMatchedTargets
     });
   }
 

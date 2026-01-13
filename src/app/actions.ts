@@ -2,7 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, dbDeleteLogbookEntry, getLogbookEntry, getParcels, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getAllCtgbProducts, addSpuitschriftEntry, deleteSpuitschriftEntry as dbDeleteSpuitschriftEntry, getSpuitschriftEntry } from '@/lib/store';
+import { addLogbookEntry, updateLogbookEntry, addParcelHistoryEntries, dbDeleteLogbookEntry, getLogbookEntry, getParcels, getUserPreferences, setUserPreference, dbDeleteLogbookEntries, addInventoryMovement, getAllCtgbProducts, addSpuitschriftEntry, deleteSpuitschriftEntry as dbDeleteSpuitschriftEntry, getSpuitschriftEntry, getParcelHistoryEntries } from '@/lib/store';
+import { validateSprayApplication, type ValidationFlag, findGebruiksvoorschriftWithTarget } from '@/lib/validation-service';
 import type { LogbookEntry, Parcel, ParsedSprayData, ProductEntry, InventoryMovement, LogStatus, SpuitschriftEntry } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { initializeFirebase } from '@/firebase';
@@ -21,31 +22,42 @@ export type InitialState = {
   };
 };
 
-async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, parcels: Parcel[]): Promise<{ isValid: boolean, validationMessage: string | null, errorCount: number, warningCount: number, updatedProducts?: ProductEntry[] }> {
-    const allCtgbProducts = await getAllCtgbProducts(db);
-    const uniqueCrops = [...new Set(
-        parsedData.plots.map(parcelId => parcels.find(p => p.id === parcelId)?.crop).filter(Boolean)
-    )];
-    
+async function validateSprayData(
+    db: Firestore,
+    parsedData: ParsedSprayData,
+    parcels: Parcel[],
+    applicationDate?: Date
+): Promise<{ isValid: boolean, validationMessage: string | null, errorCount: number, warningCount: number, infoCount: number, updatedProducts?: ProductEntry[], assumedTargets?: Record<string, string> }> {
+    const [allCtgbProducts, allParcelHistory] = await Promise.all([
+        getAllCtgbProducts(db),
+        getParcelHistoryEntries(db)
+    ]);
+
+    const selectedParcels = parsedData.plots
+        .map(parcelId => parcels.find(p => p.id === parcelId))
+        .filter((p): p is Parcel => p !== undefined);
+
     const updatedProducts: ProductEntry[] = JSON.parse(JSON.stringify(parsedData.products));
     const validationMessages: string[] = [];
+    const assumedTargets: Record<string, string> = {};
     let errorCount = 0;
     let warningCount = 0;
+    let infoCount = 0;
 
     for (let i = 0; i < updatedProducts.length; i++) {
         const productEntry = updatedProducts[i];
-        
+
+        // Zoek CTGB product
         const matchingRules = allCtgbProducts.filter(m => m.naam?.toLowerCase().includes(productEntry.product.toLowerCase()));
 
         if (matchingRules.length === 0) {
             validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in de MiddelMatrix.`);
             warningCount++;
-            continue; 
+            continue;
         }
 
         let officialProductName: string;
         if (matchingRules.length > 1) {
-            // Try a more exact match
             const exactMatch = matchingRules.find(m => m.naam?.toLowerCase() === productEntry.product.toLowerCase());
             if (exactMatch) {
               officialProductName = exactMatch.naam;
@@ -58,57 +70,70 @@ async function validateSprayData(db: Firestore, parsedData: ParsedSprayData, par
             officialProductName = matchingRules[0]['naam'];
         }
         updatedProducts[i].product = officialProductName;
-        
+
         const matchingProduct = allCtgbProducts.find(m => m.naam === officialProductName);
-        if (!matchingProduct) {
-          // This should not happen if logic above is correct
-          continue;
-        }
+        if (!matchingProduct) continue;
 
-        let productAllowedOnAnySelectedCrop = false;
-        for (const crop of uniqueCrops) {
-            const ruleForCrop = matchingProduct.gebruiksvoorschriften?.some(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
-            if (ruleForCrop) {
-                productAllowedOnAnySelectedCrop = true;
-                const voorschrift = matchingProduct.gebruiksvoorschriften.find(g => g.gewas?.toLowerCase().includes(crop.toLowerCase()));
-                const maxDosageString = voorschrift?.dosering;
+        // Valideer elk product op elk geselecteerd perceel
+        for (const parcel of selectedParcels) {
+            // Filter history voor dit perceel
+            const parcelHistory = allParcelHistory.filter(h => h.parcelId === parcel.id);
 
-                if (maxDosageString) {
-                    const maxDosage = parseFloat(String(maxDosageString).replace(/,.*$/, '').replace(',', '.'));
-                    if (!isNaN(maxDosage) && productEntry.dosage > maxDosage) {
-                         const msg = `⚠️ Dosering voor ${officialProductName} op '${crop}' (${productEntry.dosage} ${productEntry.unit}) overschrijdt de maximale dosering van ${maxDosageString}.`;
-                         if (!validationMessages.includes(msg)) {
-                             validationMessages.push(msg);
-                             warningCount++;
-                         }
-                    }
+            // Voer volledige validatie uit met ValidationService
+            const result = await validateSprayApplication(
+                parcel,
+                matchingProduct,
+                productEntry.dosage,
+                productEntry.unit,
+                applicationDate || new Date(),
+                parcelHistory,
+                allCtgbProducts,
+                undefined, // expectedHarvestDate
+                productEntry.targetReason // Doelorganisme uit AI parsing
+            );
+
+            // Verwerk validatie resultaten
+            for (const flag of result.flags) {
+                const prefix = flag.type === 'error' ? '❌' : flag.type === 'warning' ? '⚠️' : 'ℹ️';
+                const msg = `${prefix} ${flag.message}`;
+
+                if (!validationMessages.includes(msg)) {
+                    validationMessages.push(msg);
+                    if (flag.type === 'error') errorCount++;
+                    else if (flag.type === 'warning') warningCount++;
+                    else infoCount++;
                 }
             }
-        }
 
-        if (!productAllowedOnAnySelectedCrop && uniqueCrops.length > 0) {
-            const msg = `⚠️ ${officialProductName} mag mogelijk niet gebruikt worden op de geselecteerde gewassen (${uniqueCrops.join(', ')}).`;
-            if (!validationMessages.includes(msg)) {
-                validationMessages.push(msg);
-                warningCount++;
+            // Sla assumed targets op
+            if (result.matchedTargets) {
+                result.matchedTargets.forEach((target, productName) => {
+                    if (target.isAssumed) {
+                        assumedTargets[productName] = target.targetOrganism;
+                    }
+                });
             }
         }
     }
 
     return {
         isValid: errorCount === 0,
-        validationMessage: validationMessages.length > 0 ? validationMessages.join(' ') : null,
+        validationMessage: validationMessages.length > 0 ? validationMessages.join('\n') : null,
         errorCount,
         warningCount,
+        infoCount,
         updatedProducts,
+        assumedTargets,
     };
 }
+
 
 async function performAnalysis(db: Firestore, entry: LogbookEntry) {
     let finalStatus: LogStatus = 'Fout';
     let finalValidationMessage: string | undefined = 'Onbekende fout.';
     let finalParsedData: ParsedSprayData | undefined = undefined;
     let finalDate = entry.date;
+    let finalAssumedTargets: Record<string, string> | undefined = undefined;
 
     try {
         const [allParcels, allProductNames] = await Promise.all([
@@ -139,12 +164,13 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
             throw new Error("AI kon geen geldige middelen identificeren in de output.");
         }
         
-        const { isValid, validationMessage, errorCount, warningCount, updatedProducts } = await validateSprayData(db, finalParsedData, allParcels);
+        const { isValid, validationMessage, errorCount, warningCount, updatedProducts, assumedTargets } = await validateSprayData(db, finalParsedData, allParcels, finalDate);
+        finalAssumedTargets = assumedTargets;
 
         if (updatedProducts) {
             finalParsedData.products = updatedProducts;
         }
-        
+
         if (errorCount > 0) {
             finalStatus = 'Afgekeurd';
         } else if (warningCount > 0) {
@@ -167,7 +193,10 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
         id: entry.id,
         status: finalStatus,
         validationMessage: finalValidationMessage,
-        parsedData: finalParsedData,
+        parsedData: finalParsedData ? {
+            ...finalParsedData,
+            assumedTargets: finalAssumedTargets,
+        } : undefined,
         rawInput: entry.rawInput,
         date: finalDate, // This is now the spray date
         createdAt: entry.createdAt,
@@ -268,12 +297,15 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     }
     
     const allParcels = await getParcels(firestore);
-    const { isValid, validationMessage, updatedProducts, errorCount, warningCount } = await validateSprayData(firestore, entry.parsedData, allParcels);
-    
+    const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+    const { isValid, validationMessage, updatedProducts, errorCount, warningCount, assumedTargets } = await validateSprayData(firestore, entry.parsedData, allParcels, entryDate);
+
     if (updatedProducts) {
         entry.parsedData.products = updatedProducts;
     }
-    
+
+    entry.parsedData.assumedTargets = assumedTargets;
+
     const updatedEntryData: Partial<LogbookEntry> = {
         id: entry.id,
         rawInput: entry.rawInput,
@@ -351,9 +383,10 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         if (!entry.parsedData) {
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
-        
-        const { isValid, validationMessage, updatedProducts, errorCount, warningCount } = await validateSprayData(firestore, entry.parsedData, allParcels);
-        
+
+        const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+        const { isValid, validationMessage, updatedProducts, errorCount, warningCount, assumedTargets } = await validateSprayData(firestore, entry.parsedData, allParcels, entryDate);
+
         if (updatedProducts) {
             entry.parsedData.products = updatedProducts;
         }
@@ -456,12 +489,13 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
         for (const entryId of entryIds) {
             const entry = await getLogbookEntry(firestore, entryId);
             if (!entry || !entry.parsedData) continue;
-            
-            const { isValid, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels);
+
+            const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+            const { isValid, updatedProducts } = await validateSprayData(firestore, entry.parsedData, allParcels, entryDate);
             if (updatedProducts) {
                 entry.parsedData.products = updatedProducts;
             }
-            
+
             if (!isValid) continue; // Skip entries that are not valid
 
             entry.status = 'Akkoord';

@@ -18,6 +18,7 @@ const ProductEntrySchema = z.object({
   product: z.string().describe('The official name of the product used, matched from the provided productNames list.'),
   dosage: z.number().describe('The dosage of the product.'),
   unit: z.string().describe('The unit of measurement for the dosage (e.g., "kg", "l").'),
+  targetReason: z.string().optional().describe('The target pest, disease, or reason for spraying this product if mentioned (e.g., "schurft", "luis", "bladluis", "vruchtmot"). Extract keywords like "tegen [X]", "voor [X]", "bestrijding van [X]".'),
 });
 
 const SprayApplicationInputSchema = z.object({
@@ -59,11 +60,19 @@ Your goal is to identify:
 1.  Which plots were sprayed.
 2.  Which products were used, including their dosage and unit.
 3.  The date of the application if mentioned.
+4.  The target organism/reason for spraying each product (if mentioned).
 
 Rules for parsing:
 -   Plots: Identify which plots were sprayed based on their name or variety. A user might refer to 'all conference' which means all plots of the 'Conference' variety. If the user says 'alles' (everything) or 'alle percelen' (all plots), you MUST select all plot IDs from the provided list. You MUST use the ID of the plot in your output.
 -   Products: You MUST match the user's input to the most likely official product name from the provided list. For example, if the user says "pyrus", you should match it to "Pyrus 400 SC" from the list.
 -   Date: If the user mentions a specific date, 'today', or 'yesterday', determine the date and provide it in 'YYYY-MM-DD' format. If no date is mentioned, do not include the date field in the output. Today's date is ${new Date().toISOString().split('T')[0]}.
+-   Target Reason (targetReason): Extract the pest, disease, or reason for spraying if mentioned. Look for patterns like:
+    - "tegen [X]" (against X) - e.g., "tegen schurft" -> targetReason: "schurft"
+    - "voor [X]" (for X) - e.g., "voor luis" -> targetReason: "luis"
+    - "bestrijding [X]" (control of X) - e.g., "bestrijding bladluis" -> targetReason: "bladluis"
+    - Direct mentions of pests/diseases near product names - e.g., "captan voor schurft" -> targetReason: "schurft"
+    Common Dutch pest/disease names: schurft, luis, bladluis, vruchtmot, meeldauw, roest, trips, spint, appelbloesemkever.
+    If no target is mentioned for a product, omit the targetReason field for that product.
 
 Return the answer ONLY as a valid JSON object matching the provided schema.
 

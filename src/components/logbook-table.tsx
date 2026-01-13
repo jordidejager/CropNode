@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
 import { Button } from './ui/button';
-import { Trash2, CheckCircle, RefreshCcw, AlertTriangle, ShieldAlert, Loader2, Edit } from 'lucide-react';
+import { Trash2, CheckCircle, RefreshCcw, AlertTriangle, ShieldAlert, Loader2, Sparkles, Target, Info } from 'lucide-react';
 import { deleteLogbookEntry, retryAnalysis, updateAndConfirmEntry, confirmLogbookEntry } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -28,7 +28,6 @@ import { InlineEditParcels } from './inline-edit-parcels';
 import { InlineEditProducts } from './inline-edit-products';
 import { InlineEditDate } from './inline-edit-date';
 import { Skeleton } from './ui/skeleton';
-import { Label } from './ui/label';
 import { useDebounce } from '@/hooks/use-debounce';
 
 const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline', icon?: React.ElementType, label: string, colorClass: string }> = {
@@ -40,6 +39,34 @@ const statusConfig: Record<LogStatus, { variant: 'default' | 'secondary' | 'dest
   'Fout': { variant: 'destructive', label: 'Fout', colorClass: '', icon: AlertTriangle },
   'Afgekeurd': { variant: 'destructive', label: 'Afgekeurd', colorClass: '', icon: ShieldAlert },
 };
+
+function ValidationMessageDisplay({ message }: { message?: string }) {
+    if (!message) return null;
+
+    const lines = message.split('\n').filter(line => line.trim() !== '');
+
+    return (
+        <div className="mt-2 space-y-1">
+            {lines.map((line, index) => {
+                let icon = <Info className="h-4 w-4 mr-2 shrink-0" />;
+                let colorClass = 'text-blue-400';
+                if (line.startsWith('❌')) {
+                    icon = <ShieldAlert className="h-4 w-4 mr-2 shrink-0" />;
+                    colorClass = 'text-destructive';
+                } else if (line.startsWith('⚠️')) {
+                    icon = <AlertTriangle className="h-4 w-4 mr-2 shrink-0" />;
+                    colorClass = 'text-yellow-400';
+                }
+                return (
+                    <div key={index} className={cn("flex items-start text-xs", colorClass)}>
+                        {icon}
+                        <span className="flex-1">{line.substring(2)}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 const LogbookTableRow = ({
     entry,
@@ -62,12 +89,9 @@ const LogbookTableRow = ({
     const [editedDate, setEditedDate] = useState<Date | Timestamp | undefined>();
     
     // Store original state to compare against for changes
-    const originalStateRef = useRef<{ parcels: string[], products: ProductEntry[] }>();
+    const originalStateRef = useRef<{ parcels: string[], products: ProductEntry[], date: Date | Timestamp } | null>(null);
     
     const { toast } = useToast();
-
-    // Determine if it's the initial load
-    const isInitialLoad = useRef(true);
 
     // Sync state when entry changes
     useEffect(() => {
@@ -76,19 +100,23 @@ const LogbookTableRow = ({
             const products = entry.parsedData.products || [];
             setEditedParcels(parcels);
             setEditedProducts(products);
-            originalStateRef.current = { parcels, products };
         }
         setEditedDate(entry.date);
-        // After first sync, it's no longer the initial load
-        isInitialLoad.current = true; 
-        setTimeout(() => isInitialLoad.current = false, 500);
 
+        // Set the original state only once when the entry ID changes
+        if (originalStateRef.current?.parcels === undefined || entry.id !== originalStateRef.current.parcels[0]) {
+             originalStateRef.current = {
+                parcels: entry.parsedData?.plots || [],
+                products: entry.parsedData?.products || [],
+                date: entry.date
+            };
+        }
     }, [entry]);
 
     const hasChanged = useMemo(() => {
         if (!entry.parsedData || !editedDate || !originalStateRef.current) return false;
         
-        const originalDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+        const originalDate = originalStateRef.current.date instanceof Timestamp ? originalStateRef.current.date.toDate() : new Date(originalStateRef.current.date);
         const newDate = editedDate instanceof Timestamp ? editedDate.toDate() : new Date(editedDate);
         
         const dateChanged = originalDate.getTime() !== newDate.getTime();
@@ -96,14 +124,13 @@ const LogbookTableRow = ({
         const productsChanged = JSON.stringify(originalStateRef.current.products) !== JSON.stringify(editedProducts);
 
         return dateChanged || parcelsChanged || productsChanged;
-    }, [entry, editedDate, editedParcels, editedProducts]);
+    }, [editedDate, editedParcels, editedProducts, originalStateRef, entry.parsedData]);
     
-    const debouncedState = useDebounce({ date: editedDate, parcels: editedParcels, products: editedProducts, hasChanged }, 500);
+    const debouncedState = useDebounce({ date: editedDate, parcels: editedParcels, products: editedProducts, hasChanged }, 1000);
 
     // Auto-save effect
     useEffect(() => {
-        // Don't save on initial render or if nothing has changed
-        if (isInitialLoad.current || !debouncedState.hasChanged) {
+        if (!debouncedState.hasChanged) {
             return;
         }
 
@@ -119,7 +146,7 @@ const LogbookTableRow = ({
         };
 
         startSaveTransition(async () => {
-            const result = await updateAndConfirmEntry(updatedEntry, originalStateRef.current?.products || []);
+            await updateAndConfirmEntry(updatedEntry, originalStateRef.current?.products || []);
             toast({
                 title: 'Automatisch opgeslagen',
                 description: 'De regel is opnieuw gevalideerd.',
@@ -158,19 +185,15 @@ const LogbookTableRow = ({
             <TableRow data-state={isSaving ? 'selected' : undefined}>
                 <TableCell className="min-w-[140px] text-muted-foreground text-sm align-top whitespace-pre-wrap">
                    <InlineEditDate date={editedDate} onDateChange={setEditedDate} />
+                   <div className="text-xs text-muted-foreground/70 pl-3 pt-1">
+                        Ingevoerd: {format(entry.createdAt, 'dd-MM-yy HH:mm')}
+                   </div>
                 </TableCell>
                 <TableCell className="align-top max-w-sm">
                     <p className="font-medium text-sm whitespace-pre-wrap break-words">
                         {entry.rawInput}
                     </p>
-                    {entry.validationMessage && (
-                        <p className={cn(
-                            "text-xs mt-1",
-                            entry.status === 'Afgekeurd' || entry.status === 'Fout' ? 'text-destructive' : 'text-yellow-400'
-                        )} title={entry.validationMessage}>
-                            {entry.validationMessage}
-                        </p>
-                    )}
+                    <ValidationMessageDisplay message={entry.validationMessage} />
                 </TableCell>
                  <TableCell className="min-w-[200px] max-w-xs align-top whitespace-pre-wrap break-words">
                     {entry.parsedData ? (
@@ -185,7 +208,7 @@ const LogbookTableRow = ({
                      {entry.parsedData?.products && allProducts.length > 0 ? (
                         <InlineEditProducts
                             allProducts={allProducts}
-                            selectedProducts={editedProducts}
+                            parsedData={entry.parsedData}
                             onProductsChange={setEditedProducts}
                             isEditing={false} // Always use popover mode
                         />
