@@ -165,3 +165,30 @@ export type CtgbSyncStats = {
     count: number;
     lastSynced?: string;
 }
+
+// ============================================
+// Fertilizer Types
+// ============================================
+export interface FertilizerProduct {
+  id: string;
+  name: string;
+  manufacturer: string;
+  category: 'Leaf' | 'Fertigation' | 'Soil';
+  unit: 'L' | 'kg';
+  composition: {
+    N?: number;
+    P?: number;
+    K?: number;
+    MgO?: number;
+    SO3?: number;
+    CaO?: number;
+    S?: number;
+    Fe?: number;
+    Mn?: number;
+    Zn?: number;
+    Cu?: number;
+    B?: number;
+    Mo?: number;
+  };
+  searchKeywords: string[];
+}

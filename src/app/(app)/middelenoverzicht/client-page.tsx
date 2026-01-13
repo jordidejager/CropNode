@@ -49,20 +49,22 @@ const DosageSelector: React.FC<{ voorschriften: CtgbGebruiksvoorschrift[] }> = (
             <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="font-mono text-primary font-semibold h-auto p-1 -ml-1">
                     {selectedVoorschrift.dosering || '-'}
-                    <ChevronDown className="ml-2 h-4 w-4" />
+                    {allVoorschriften.length > 1 && <ChevronDown className="ml-2 h-4 w-4" />}
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-                {allVoorschriften.map((item, index) => (
-                    <DropdownMenuItem key={index} onSelect={() => setSelectedVoorschrift(item)}>
-                       <div className="flex flex-col">
-                           <span className="font-semibold">{item.gewas}</span>
-                           <span className="text-muted-foreground">{item.dosering}</span>
-                           {item.maxToepassingen && <span className="text-xs text-muted-foreground/80">Max. {item.maxToepassingen}x per jaar</span>}
-                       </div>
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
+            {allVoorschriften.length > 1 && (
+                <DropdownMenuContent align="start">
+                    {allVoorschriften.map((item, index) => (
+                        <DropdownMenuItem key={index} onSelect={() => setSelectedVoorschrift(item)}>
+                           <div className="flex flex-col">
+                               <span className="font-semibold">{item.gewas}</span>
+                               <span className="text-muted-foreground">{item.dosering}</span>
+                               {item.maxToepassingen && <span className="text-xs text-muted-foreground/80">Max. {item.maxToepassingen}x per jaar</span>}
+                           </div>
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            )}
         </DropdownMenu>
     );
 };
@@ -88,15 +90,10 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
     };
     
     return (
-        <Card className="h-[calc(100vh-10rem)] flex flex-col">
-            <CardHeader>
-                <CardTitle>Middelenoverzicht voor Hardfruit</CardTitle>
-                <CardDescription>
-                    Een gefilterd overzicht van alle middelen die relevant zijn voor de teelt van appel en peer.
-                    Totaal {products.length} relevante middelen gevonden.
-                </CardDescription>
-                <div className="relative pt-4">
-                    <Search className="absolute left-3 top-1/2 h-5 w-5 text-muted-foreground" />
+        <Card className="h-full flex flex-col">
+            <CardHeader className="pt-0">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
                         type="text"
                         placeholder="Filter op naam of werkzame stof..."
@@ -105,6 +102,9 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                 <CardDescription>
+                    Gefilterd op hardfruit. Totaal {products.length} relevante middelen gevonden.
+                </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
                 <ScrollArea className="h-full">
