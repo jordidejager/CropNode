@@ -1,5 +1,5 @@
-
 'use server';
+import 'dotenv/config';
 import { config } from 'dotenv';
 config();
 
