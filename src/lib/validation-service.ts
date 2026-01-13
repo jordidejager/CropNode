@@ -105,6 +105,56 @@ const CROP_HIERARCHY: Record<string, string[]> = {
 // ============================================
 
 /**
+ * Normaliseer gewasnaam voor fuzzy matching
+ * Strip meervoudsvormen ('s', 'en') en maak lowercase
+ */
+function normalizeGewasNaam(naam: string): string[] {
+  const normalized = naam.toLowerCase().trim();
+  const variants: string[] = [normalized];
+
+  // Strip Nederlandse meervoudsvormen
+  if (normalized.endsWith('en')) {
+    // 'appelen' -> 'appel', 'tomaten' -> 'tomaat', etc.
+    variants.push(normalized.slice(0, -2));
+    // Sommige woorden hebben 'en' als meervoud na wegval van letter: 'aardappelen' -> 'aardappel'
+    variants.push(normalized.slice(0, -1)); // 'appelen' -> 'appele' (voor edge cases)
+  }
+  if (normalized.endsWith('s') && !normalized.endsWith('es')) {
+    // 'appels' -> 'appel', 'peren' -> 'per' (already handled above)
+    variants.push(normalized.slice(0, -1));
+  }
+  if (normalized.endsWith("'s")) {
+    // "paprika's" -> "paprika"
+    variants.push(normalized.slice(0, -2));
+  }
+
+  // Voeg ook meervoud toe voor enkelvoud input
+  variants.push(normalized + 's');
+  variants.push(normalized + 'en');
+
+  return [...new Set(variants)]; // Unieke waardes
+}
+
+/**
+ * Fuzzy match voor gewasnamen
+ * Matcht 'Appels' met 'Appel', case-insensitive
+ */
+function fuzzyMatchGewas(parcelCrop: string, allowedCrop: string): boolean {
+  const parcelVariants = normalizeGewasNaam(parcelCrop);
+  const allowedVariants = normalizeGewasNaam(allowedCrop);
+
+  // Check of een van de varianten matcht
+  for (const pv of parcelVariants) {
+    for (const av of allowedVariants) {
+      if (pv === av) return true;
+      if (pv.includes(av) || av.includes(pv)) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Bepaal het huidige seizoen (kalenderjaar)
  */
 export function getCurrentSeason(date: Date): Season {
@@ -117,7 +167,7 @@ export function getCurrentSeason(date: Date): Season {
 
 /**
  * Vind het juiste gebruiksvoorschrift voor een gewas
- * Houdt rekening met de teelt-hiërarchie
+ * Houdt rekening met de teelt-hiërarchie en fuzzy matching
  */
 export function findGebruiksvoorschrift(
   product: CtgbProduct,
@@ -128,7 +178,18 @@ export function findGebruiksvoorschrift(
   }
 
   const normalizedCrop = parcelCrop.toLowerCase().trim();
-  const cropHierarchy = CROP_HIERARCHY[normalizedCrop] || [normalizedCrop];
+
+  // Probeer eerst de crop hiërarchie met genormaliseerde variant
+  const parcelVariants = normalizeGewasNaam(normalizedCrop);
+  let cropHierarchy: string[] = [normalizedCrop];
+
+  // Zoek de hiërarchie voor elke variant van het gewas
+  for (const variant of parcelVariants) {
+    if (CROP_HIERARCHY[variant]) {
+      cropHierarchy = CROP_HIERARCHY[variant];
+      break;
+    }
+  }
 
   // Zoek naar een match in de gebruiksvoorschriften
   for (const voorschrift of product.gebruiksvoorschriften) {
@@ -141,6 +202,11 @@ export function findGebruiksvoorschrift(
       if (allowedCrops.includes(cropVariant)) {
         return voorschrift;
       }
+    }
+
+    // Fuzzy match: check of parcelCrop fuzzy matcht met gewas
+    if (fuzzyMatchGewas(parcelCrop, voorschrift.gewas)) {
+      return voorschrift;
     }
   }
 
@@ -201,13 +267,30 @@ export function findGebruiksvoorschriftWithTarget(
   }
 
   const normalizedCrop = parcelCrop.toLowerCase().trim();
-  const cropHierarchy = CROP_HIERARCHY[normalizedCrop] || [normalizedCrop];
 
-  // Filter voorschriften die matchen met het gewas
+  // Probeer de crop hiërarchie met genormaliseerde varianten
+  const parcelVariants = normalizeGewasNaam(normalizedCrop);
+  let cropHierarchy: string[] = [normalizedCrop];
+
+  for (const variant of parcelVariants) {
+    if (CROP_HIERARCHY[variant]) {
+      cropHierarchy = CROP_HIERARCHY[variant];
+      break;
+    }
+  }
+
+  // Filter voorschriften die matchen met het gewas (incl. fuzzy matching)
   const cropMatchedVoorschriften = product.gebruiksvoorschriften.filter(voorschrift => {
     if (!voorschrift.gewas) return false;
     const allowedCrops = voorschrift.gewas.toLowerCase();
-    return cropHierarchy.some(crop => allowedCrops.includes(crop));
+
+    // Check hiërarchie match
+    if (cropHierarchy.some(crop => allowedCrops.includes(crop))) {
+      return true;
+    }
+
+    // Check fuzzy match
+    return fuzzyMatchGewas(parcelCrop, voorschrift.gewas);
   });
 
   if (cropMatchedVoorschriften.length === 0) {
@@ -414,7 +497,46 @@ async function checkActiveSubstanceCumulation(ctx: ValidationContext): Promise<V
 }
 
 /**
+ * Verzamel en formatteer alle toegelaten gewassen voor een product
+ * - Dedupliceer: elke naam komt maar 1x voor
+ * - Sorteer: alfabetische volgorde
+ * - Formatteer: nette comma-separated string
+ */
+function formatAllowedCropsList(voorschriften: CtgbGebruiksvoorschrift[]): string {
+  // Verzamel alle gewasnamen
+  const allCrops: string[] = [];
+  for (const v of voorschriften) {
+    if (v.gewas) {
+      // Split op comma's als er meerdere gewassen in een string staan
+      const crops = v.gewas.split(',').map(c => c.trim()).filter(c => c.length > 0);
+      allCrops.push(...crops);
+    }
+  }
+
+  if (allCrops.length === 0) {
+    return 'onbekend';
+  }
+
+  // Dedupliceer (case-insensitive, maar behoud originele casing van eerste voorkomen)
+  const seen = new Map<string, string>();
+  for (const crop of allCrops) {
+    const key = crop.toLowerCase();
+    if (!seen.has(key)) {
+      seen.set(key, crop);
+    }
+  }
+
+  // Sorteer alfabetisch en join
+  const uniqueCrops = Array.from(seen.values()).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase(), 'nl')
+  );
+
+  return uniqueCrops.join(', ');
+}
+
+/**
  * PRIORITEIT 2: Check of het middel toegelaten is voor dit gewas
+ * Gebruikt fuzzy matching voor enkelvoud/meervoud (bijv. 'Appels' matcht met 'Appel')
  */
 function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
@@ -431,19 +553,16 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
   const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
 
   if (!voorschrift) {
-    // Verzamel alle toegelaten gewassen voor suggestie
-    const allowedCrops = ctx.product.gebruiksvoorschriften
-      .map(v => v.gewas)
-      .filter(Boolean)
-      .join(', ');
+    // Verzamel en formatteer alle toegelaten gewassen (gedepliceerd en gesorteerd)
+    const allowedCropsFormatted = formatAllowedCropsList(ctx.product.gebruiksvoorschriften);
 
     flags.push({
       type: 'error',
-      message: `${ctx.product.naam} is niet toegelaten voor gewas '${ctx.parcel.crop}'. Toegelaten voor: ${allowedCrops || 'onbekend'}.`,
+      message: `Het gewas '${ctx.parcel.crop}' wordt niet ondersteund door ${ctx.product.naam}. Dit middel is toegelaten voor: ${allowedCropsFormatted}.`,
       field: 'products',
       details: {
         crop: ctx.parcel.crop,
-        allowedCrops: allowedCrops
+        allowedCrops: allowedCropsFormatted
       }
     });
   }

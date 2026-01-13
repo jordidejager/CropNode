@@ -40,6 +40,7 @@ export default async function MiddelenOverzichtPage() {
             naam: product.naam,
             werkzameStoffen: product.werkzameStoffen,
             status: product.status,
+            categorie: product.categorie,
             popularity: popularity[product.naam] || 0,
             gebruiksvoorschriften: product.gebruiksvoorschriften
         }))

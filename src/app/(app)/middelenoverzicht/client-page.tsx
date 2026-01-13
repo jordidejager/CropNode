@@ -13,6 +13,7 @@ import type { CtgbGebruiksvoorschrift } from '@/lib/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ChevronDown } from 'lucide-react';
+import { CtgbCategoryBadge } from '@/components/ctgb-category-badge';
 
 
 type ProductInList = {
@@ -22,6 +23,7 @@ type ProductInList = {
     werkzameStoffen: string[];
     status: string;
     gebruiksvoorschriften: CtgbGebruiksvoorschrift[];
+    categorie: string;
 };
 
 interface MiddelenOverzichtClientPageProps {
@@ -113,6 +115,7 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Middel</TableHead>
+                                    <TableHead>Categorie</TableHead>
                                     <TableHead>Dosering (Appel/Peer)</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
@@ -126,6 +129,9 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                                                 <div className="text-xs text-muted-foreground truncate max-w-xs">{product.werkzameStoffen.join(', ')}</div>
                                             </TableCell>
                                             <TableCell>
+                                                <CtgbCategoryBadge category={product.categorie} />
+                                            </TableCell>
+                                            <TableCell>
                                                 <DosageSelector voorschriften={product.gebruiksvoorschriften} />
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -135,7 +141,7 @@ export function MiddelenOverzichtClientPage({ products }: MiddelenOverzichtClien
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="h-24 text-center">
+                                        <TableCell colSpan={4} className="h-24 text-center">
                                             Geen middelen gevonden voor uw zoekopdracht.
                                         </TableCell>
                                     </TableRow>
