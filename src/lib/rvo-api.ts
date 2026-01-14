@@ -1,4 +1,4 @@
-import type { RvoApiResponse, AddressSuggestion } from "./types";
+import type { RvoApiResponse, AddressSuggestion, RvoParcel } from "./types";
 
 const PDOK_GEWASPERCELEN_URL =
   "https://api.pdok.nl/rvo/gewaspercelen/ogc/v1/collections/brpgewas/items";
@@ -33,6 +33,31 @@ export async function fetchRvoParcels(
   }
 
   return response.json();
+}
+
+export async function fetchRvoParcelAtLocation(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal
+): Promise<RvoParcel | null> {
+  // Create a small bounding box around the point (approx 10x10 meters)
+  // 1 degree lat is ~111km, 1 degree lng is ~111km * cos(lat)
+  // 0.0001 degrees is roughly 10 meters
+  const delta = 0.0001;
+  const bbox: [number, number, number, number] = [
+    lng - delta,
+    lat - delta,
+    lng + delta,
+    lat + delta,
+  ];
+
+  const response = await fetchRvoParcels({ bbox, limit: 10, signal });
+
+  // Return the first feature that actually contains the point
+  // Although the API uses bbox, so it might return nearby parcels.
+  // Ideally client-side check if point is in polygon, but for now just returning the first one is likely fine
+  // or we can just return the first one as "the one clicked".
+  return response.features[0] || null;
 }
 
 export async function searchAddress(

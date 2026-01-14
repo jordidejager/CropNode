@@ -2,13 +2,11 @@
 "use client";
 
 import React, { useEffect, useRef, useCallback, useState } from "react";
-import "leaflet/dist/leaflet.css";
-import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
 import "leaflet-draw";
 import type { RvoParcel, RvoApiResponse, Parcel } from "@/lib/types";
-import { fetchRvoParcels } from "@/lib/rvo-api";
-import { useDebounce } from "@/hooks/use-debounce";
+import { fetchRvoParcels, fetchRvoParcelAtLocation } from "@/lib/rvo-api";
+// import { useDebounce } from "@/hooks/use-debounce";
 import { RvoMapControls } from "./rvo-map-controls";
 import { Loader2 } from "lucide-react";
 
@@ -66,7 +64,7 @@ export function RvoMap({
   const selectedParcelRef = useRef(selectedParcel);
   const onGeometryChangeRef = useRef(onGeometryChange);
 
-  const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
+  // const [bounds, setBounds] = useState<L.LatLngBounds | null>(null);
   const [parcels, setParcels] = useState<RvoParcel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +83,7 @@ export function RvoMap({
     onGeometryChangeRef.current = onGeometryChange;
   }, [onGeometryChange]);
 
-  const debouncedBounds = useDebounce(bounds, 400);
+  // const debouncedBounds = useDebounce(bounds, 400);
 
   // Style functions
   const getStyle = useCallback(
@@ -122,7 +120,10 @@ export function RvoMap({
         onEachFeature: (feature, layer) => {
           // Always allow selecting parcels for import or reference
           layer.on({
-            click: () => onParcelSelectRef.current(feature as unknown as RvoParcel),
+            click: (e) => {
+              L.DomEvent.stopPropagation(e); // Prevent map click (fetching)
+              onParcelSelectRef.current(feature as unknown as RvoParcel);
+            },
             mouseover: (e) => e.target.setStyle({ fillOpacity: 0.4 }),
             mouseout: (e) => {
               const isSelected = selectedParcelRef.current && feature.id === selectedParcelRef.current.id;
@@ -158,23 +159,23 @@ export function RvoMap({
 
         let initialBounds: L.LatLngBounds | null = null;
         if (initialGeometry) {
-            const featureLayer = L.geoJSON(initialGeometry, {
-                style: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.5 }
-            });
-            drawnItems.addLayer(featureLayer);
-            initialBounds = featureLayer.getBounds();
+          const featureLayer = L.geoJSON(initialGeometry, {
+            style: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.5 }
+          });
+          drawnItems.addLayer(featureLayer);
+          initialBounds = featureLayer.getBounds();
         }
 
         if (initialBounds && initialBounds.isValid()) {
-            map.fitBounds(initialBounds);
+          map.fitBounds(initialBounds);
         }
 
         const drawControl = new L.Control.Draw({
-            edit: { featureGroup: drawnItems, remove: true },
-            draw: {
-                polygon: { allowIntersection: false, shapeOptions: { color: 'hsl(var(--primary))' } },
-                rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false,
-            }
+          edit: { featureGroup: drawnItems, remove: true },
+          draw: {
+            polygon: { allowIntersection: false, shapeOptions: { color: 'hsl(var(--primary))' } },
+            rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false,
+          }
         });
         map.addControl(drawControl);
 
@@ -185,29 +186,50 @@ export function RvoMap({
         };
 
         map.on(L.Draw.Event.CREATED, (event: any) => {
-            drawnItems.clearLayers();
-            drawnItems.addLayer(event.layer);
-            handleGeometryChange(event.layer);
+          drawnItems.clearLayers();
+          drawnItems.addLayer(event.layer);
+          handleGeometryChange(event.layer);
         });
 
         map.on(L.Draw.Event.EDITED, (event: any) => {
-            const layers = event.layers.getLayers();
-            if (layers.length > 0) handleGeometryChange(layers[0]);
+          const layers = event.layers.getLayers();
+          if (layers.length > 0) handleGeometryChange(layers[0]);
         });
 
         map.on(L.Draw.Event.DELETED, () => {
-            onGeometryChangeRef.current?.(null);
+          onGeometryChangeRef.current?.(null);
         });
       }
 
 
       const updateBounds = () => {
-        setBounds(map.getBounds());
+        // setBounds(map.getBounds());
         setZoomLevel(map.getZoom());
       };
 
       map.on("moveend", updateBounds);
       map.on("zoomend", updateBounds);
+
+      map.on('click', async (e: L.LeafletMouseEvent) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const parcel = await fetchRvoParcelAtLocation(e.latlng.lat, e.latlng.lng);
+          if (parcel) {
+            setParcels(prev => {
+              // Avoid duplicates
+              if (prev.some(p => p.id === parcel.id)) return prev;
+              return [...prev, parcel];
+            });
+            onParcelSelectRef.current(parcel);
+          }
+        } catch (err) {
+          console.error("Error fetching parcel at location:", err);
+          // Silent error or small toast?
+        } finally {
+          setIsLoading(false);
+        }
+      });
 
       updateBounds();
     }
@@ -280,39 +302,12 @@ export function RvoMap({
     }
   }, [userParcels, zoomLevel]);
 
+  /*
   // Fetch parcels when bounds change
   useEffect(() => {
-    if (!debouncedBounds || zoomLevel < MIN_ZOOM_FOR_PARCELS) {
-      setParcels([]);
-      return;
-    }
-
-    const fetchParcels = async () => {
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = new AbortController();
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const sw = debouncedBounds.getSouthWest();
-        const ne = debouncedBounds.getNorthEast();
-        const bbox: [number, number, number, number] = [ sw.lng, sw.lat, ne.lng, ne.lat ];
-        const response: RvoApiResponse = await fetchRvoParcels({
-          bbox, limit: 100, signal: abortControllerRef.current.signal,
-        });
-        setParcels(response.features);
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
-        console.error("Error fetching RVO parcels:", err);
-        setError("Kan RVO percelen niet laden");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchParcels();
-  }, [debouncedBounds, zoomLevel]);
+    // ... removed
+  }, []);
+  */
 
   // Handle location navigation from search
   const handleLocationSelect = useCallback(
@@ -327,7 +322,7 @@ export function RvoMap({
   return (
     <div className="relative h-full w-full z-0">
       <div ref={mapContainerRef} className="h-full w-full [&_.leaflet-pane]:z-auto [&_.leaflet-control]:z-auto" />
-      
+
       <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
         <div className="pointer-events-auto max-w-md">
           <RvoMapControls onLocationSelect={handleLocationSelect} />
@@ -341,13 +336,7 @@ export function RvoMap({
         </div>
       )}
 
-      {zoomLevel < MIN_ZOOM_FOR_PARCELS && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-background/90 rounded-md px-4 py-2 shadow-md">
-          <span className="text-sm text-muted-foreground">
-            Zoom in om percelen te zien
-          </span>
-        </div>
-      )}
+
 
       {error && (
         <div className="absolute bottom-4 left-4 z-[1000] bg-destructive/90 text-destructive-foreground rounded-md px-4 py-2 shadow-md">

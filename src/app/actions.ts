@@ -12,14 +12,14 @@ import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 
 
 const formSchema = z.object({
-  rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
+    rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
 });
 
 export type InitialState = {
-  message: string;
-  errors?: {
-    rawInput?: string[];
-  };
+    message: string;
+    errors?: {
+        rawInput?: string[];
+    };
 };
 
 async function validateSprayData(
@@ -60,11 +60,11 @@ async function validateSprayData(
         if (matchingRules.length > 1) {
             const exactMatch = matchingRules.find(m => m.naam?.toLowerCase() === productEntry.product.toLowerCase());
             if (exactMatch) {
-              officialProductName = exactMatch.naam;
+                officialProductName = exactMatch.naam;
             } else {
-              validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
-              warningCount++;
-              continue;
+                validationMessages.push(`⚠️ Meerdere producten gevonden voor "${productEntry.product}". Wees specifieker.`);
+                warningCount++;
+                continue;
             }
         } else {
             officialProductName = matchingRules[0]['naam'];
@@ -137,8 +137,8 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
 
     try {
         const [allParcels, allProductNames] = await Promise.all([
-          getParcels(db),
-          getAllCtgbProducts(db).then(products => products.map(p => p.naam))
+            getParcels(db),
+            getAllCtgbProducts(db).then(products => products.map(p => p.naam))
         ]);
 
         const llmResponse = await parseSprayApplication({
@@ -146,24 +146,24 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
             plots: JSON.stringify(allParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))),
             productNames: allProductNames
         });
-        
+
         const cleanedOutput = llmResponse.plots ? llmResponse : JSON.parse(JSON.stringify(llmResponse).replace(/```json/g, '').replace(/```/g, ''));
         finalParsedData = {
             plots: cleanedOutput.plots || [],
             products: cleanedOutput.products || []
         };
-        
+
         if (cleanedOutput.date) {
             finalDate = new Date(cleanedOutput.date);
         }
-        
+
         if (!finalParsedData || finalParsedData.plots.length === 0) {
             throw new Error("AI kon geen geldige percelen identificeren in de output.");
         }
         if (finalParsedData.products.length === 0) {
             throw new Error("AI kon geen geldige middelen identificeren in de output.");
         }
-        
+
         const { isValid, validationMessage, errorCount, warningCount, updatedProducts, assumedTargets } = await validateSprayData(db, finalParsedData, allParcels, finalDate);
         finalAssumedTargets = assumedTargets;
 
@@ -189,59 +189,78 @@ async function performAnalysis(db: Firestore, entry: LogbookEntry) {
         finalParsedData = undefined; // Clear parsed data on error
     }
 
+    // Clean undefined values from finalParsedData to avoid Firestore errors
+    const cleanedParsedData = finalParsedData ? {
+        ...finalParsedData,
+        assumedTargets: finalAssumedTargets || {}, // Ensure not undefined
+    } : undefined;
+
     const updatedEntryData: Partial<LogbookEntry> = {
         id: entry.id,
         status: finalStatus,
         validationMessage: finalValidationMessage,
-        parsedData: finalParsedData ? {
-            ...finalParsedData,
-            assumedTargets: finalAssumedTargets,
-        } : undefined,
+        parsedData: cleanedParsedData,
         rawInput: entry.rawInput,
         date: finalDate, // This is now the spray date
         createdAt: entry.createdAt,
     };
-    await updateLogbookEntry(db, updatedEntryData as LogbookEntry);
+
+    // Convert to plain object to remove any remaining undefineds that might cause setDoc to fail
+    const cleanData = JSON.parse(JSON.stringify(updatedEntryData));
+    await updateLogbookEntry(db, cleanData as LogbookEntry);
 }
 
 
 export async function createInitialSprayEntry(prevState: InitialState, formData: FormData): Promise<InitialState> {
-  const validatedFields = formSchema.safeParse({
-    rawInput: formData.get('rawInput'),
-  });
+    const validatedFields = formSchema.safeParse({
+        rawInput: formData.get('rawInput'),
+    });
 
-  if (!validatedFields.success) {
-    return {
-      message: 'Validatiefout.',
-      errors: validatedFields.error.flatten().fieldErrors,
+    if (!validatedFields.success) {
+        return {
+            message: 'Validatiefout.',
+            errors: validatedFields.error.flatten().fieldErrors,
+        };
+    }
+
+    const { rawInput } = validatedFields.data;
+    const { firestore } = initializeFirebase();
+    const now = new Date();
+
+    const initialEntryData: Omit<LogbookEntry, 'id'> = {
+        rawInput,
+        status: 'Analyseren...',
+        date: now, // Default spray date to now
+        createdAt: now, // Creation date
     };
-  }
-  
-  const { rawInput } = validatedFields.data;
-  const { firestore } = initializeFirebase();
-  const now = new Date();
 
-  const initialEntryData: Omit<LogbookEntry, 'id'> = {
-    rawInput,
-    status: 'Analyseren...',
-    date: now, // Default spray date to now
-    createdAt: now, // Creation date
-  };
+    const newEntry = await addLogbookEntry(firestore, initialEntryData);
 
-  const newEntry = await addLogbookEntry(firestore, initialEntryData);
+    // Perform analysis in the background. Don't await this.
+    // Note: We cannot use revalidatePath here as the request context is lost.
+    performAnalysis(firestore, newEntry).catch(async (error) => {
+        console.error("Background analysis failed:", error);
+        try {
+            // Convert to plain object to sanitize
+            const cleanEntry = JSON.parse(JSON.stringify({
+                ...newEntry,
+                id: newEntry.id!,
+                status: 'Fout',
+                validationMessage: `Interne fout tijdens analyse: ${error.message}`
+            }));
+            await updateLogbookEntry(firestore, cleanEntry as LogbookEntry);
+        } catch (updateError) {
+            console.error("Failed to update entry status after analysis failure:", updateError);
+        }
+    });
 
-  // Perform analysis in the background. Don't await this.
-  performAnalysis(firestore, newEntry).then(() => {
     revalidatePath('/');
     revalidatePath('/spuitschrift');
     revalidatePath('/voorraad');
-  });
 
-  revalidatePath('/');
-
-  return {
-    message: 'Invoer wordt verwerkt...',
-  };
+    return {
+        message: 'Invoer wordt verwerkt...',
+    };
 }
 
 export async function retryAnalysis(entryId: string): Promise<{ success: boolean; message: string }> {
@@ -257,12 +276,21 @@ export async function retryAnalysis(entryId: string): Promise<{ success: boolean
         revalidatePath('/');
 
         // Perform analysis in the background.
-        performAnalysis(firestore, entry).then(() => {
-            revalidatePath('/');
-            revalidatePath('/spuitschrift');
-            revalidatePath('/voorraad');
+        performAnalysis(firestore, entry).catch(async (error) => {
+            console.error("Background analysis failed (retry):", error);
+            try {
+                const cleanEntry = JSON.parse(JSON.stringify({
+                    ...entry,
+                    status: 'Fout',
+                    validationMessage: `Interne fout tijdens analyse: ${error.message}`
+                }));
+                await updateLogbookEntry(firestore, cleanEntry as LogbookEntry);
+            } catch (e) {
+                console.error("Failed to update status", e);
+            }
         });
 
+        revalidatePath('/');
         return { success: true, message: "Analyse opnieuw gestart." };
     } catch (error: any) {
         return { success: false, message: error.message || "Onbekende fout." };
@@ -276,7 +304,7 @@ async function learnFromCorrection(db: Firestore, originalProduct: string, corre
     }
     const originalFirstWord = originalProduct.split(' ')[0].toLowerCase();
     const correctedFirstWord = correctedProduct.split(' ')[0].toLowerCase();
-    
+
     if (originalFirstWord === correctedFirstWord) {
         await setUserPreference(db, { alias: originalFirstWord, preferred: correctedProduct });
     } else {
@@ -285,8 +313,8 @@ async function learnFromCorrection(db: Firestore, originalProduct: string, corre
 }
 
 type FormState = {
-  message: string;
-  entry?: LogbookEntry;
+    message: string;
+    entry?: LogbookEntry;
 };
 
 
@@ -295,7 +323,7 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
     if (!entry.parsedData) {
         return { message: "Fout: Geen geparseerde data om op te slaan." };
     }
-    
+
     const allParcels = await getParcels(firestore);
     const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
     const { isValid, validationMessage, updatedProducts, errorCount, warningCount, assumedTargets } = await validateSprayData(firestore, entry.parsedData, allParcels, entryDate);
@@ -330,20 +358,20 @@ export async function updateAndConfirmEntry(entry: LogbookEntry, originalProduct
             const original = originalProducts[i];
             const corrected = entry.parsedData.products[i];
             if (original && corrected) {
-               await learnFromCorrection(firestore, original.product, corrected.product);
+                await learnFromCorrection(firestore, original.product, corrected.product);
             }
         }
     }
 
     revalidatePath('/');
-    
-    const dateToReturn = entry.date instanceof Timestamp 
-      ? entry.date.toDate() 
-      : new Date(entry.date);
-      
-    const createdAtToReturn = entry.createdAt instanceof Timestamp 
-      ? entry.createdAt.toDate() 
-      : new Date(entry.createdAt || entry.date);
+
+    const dateToReturn = entry.date instanceof Timestamp
+        ? entry.date.toDate()
+        : new Date(entry.date);
+
+    const createdAtToReturn = entry.createdAt instanceof Timestamp
+        ? entry.createdAt.toDate()
+        : new Date(entry.createdAt || entry.date);
 
     return {
         message: 'Wijzigingen opgeslagen.',
@@ -373,8 +401,8 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
     const { firestore } = initializeFirebase();
     try {
         let [entry, allParcels] = await Promise.all([
-          getLogbookEntry(firestore, entryId),
-          getParcels(firestore),
+            getLogbookEntry(firestore, entryId),
+            getParcels(firestore),
         ]);
 
         if (!entry) {
@@ -398,7 +426,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             revalidatePath('/');
             return { success: false, message: `Kan niet bevestigen: ${validationMessage}` };
         }
-        
+
         // Maak een nieuwe Spuitschrift entry
         const spuitschriftEntry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'> = {
             originalLogbookId: entry.id,
@@ -416,10 +444,10 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         await addParcelHistoryEntries(firestore, {
             logbookEntry: entry,
             parcels: allParcels,
-            isConfirmation: true, 
+            isConfirmation: true,
             spuitschriftId: newSpuitschriftEntry.id,
         });
-        
+
         // Verwijder de logboekregel
         await dbDeleteLogbookEntry(firestore, entryId);
 
@@ -449,7 +477,7 @@ export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{
         if (!spuitschriftEntry) {
             return { success: false, message: 'Spuitschrift regel niet gevonden.' };
         }
-        
+
         // Maak een nieuwe logboek regel
         const logbookEntryData: Omit<LogbookEntry, 'id'> = {
             rawInput: spuitschriftEntry.originalRawInput,
@@ -464,10 +492,10 @@ export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{
         };
 
         await addLogbookEntry(firestore, logbookEntryData);
-        
+
         // Verwijder de spuitschrift regel en gerelateerde data
         await dbDeleteSpuitschriftEntry(firestore, entryId);
-        
+
         revalidatePath('/');
         revalidatePath('/spuitschrift');
         revalidatePath('/voorraad');
@@ -485,7 +513,7 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
     let confirmedCount = 0;
     try {
         const allParcels = await getParcels(firestore);
-        
+
         for (const entryId of entryIds) {
             const entry = await getLogbookEntry(firestore, entryId);
             if (!entry || !entry.parsedData) continue;
@@ -523,39 +551,39 @@ export async function confirmLogbookEntries(entryIds: string[]): Promise<{ succe
 }
 
 const addStockSchema = z.object({
-  productName: z.string().min(1, 'Productnaam is verplicht'),
-  quantity: z.coerce.number().min(0.001, 'Hoeveelheid moet groter dan 0 zijn'),
-  unit: z.string().min(1, 'Eenheid is verplicht'),
+    productName: z.string().min(1, 'Productnaam is verplicht'),
+    quantity: z.coerce.number().min(0.001, 'Hoeveelheid moet groter dan 0 zijn'),
+    unit: z.string().min(1, 'Eenheid is verplicht'),
 });
 
 export async function addNewStock(formData: FormData): Promise<{ success: boolean; message: string }> {
-  const validatedFields = addStockSchema.safeParse({
-    productName: formData.get('productName'),
-    quantity: formData.get('quantity'),
-    unit: formData.get('unit'),
-  });
+    const validatedFields = addStockSchema.safeParse({
+        productName: formData.get('productName'),
+        quantity: formData.get('quantity'),
+        unit: formData.get('unit'),
+    });
 
-  if (!validatedFields.success) {
-    return { success: false, message: validatedFields.error.flatten().fieldErrors.productName?.[0] || validatedFields.error.flatten().fieldErrors.quantity?.[0] || 'Validatiefout.' };
-  }
+    if (!validatedFields.success) {
+        return { success: false, message: validatedFields.error.flatten().fieldErrors.productName?.[0] || validatedFields.error.flatten().fieldErrors.quantity?.[0] || 'Validatiefout.' };
+    }
 
-  const { productName, quantity, unit } = validatedFields.data;
-  const { firestore } = initializeFirebase();
+    const { productName, quantity, unit } = validatedFields.data;
+    const { firestore } = initializeFirebase();
 
-  try {
-    const newMovement: Omit<InventoryMovement, 'id'> = {
-      productName,
-      quantity,
-      unit,
-      type: 'addition',
-      date: new Date(),
-      description: 'Handmatige toevoeging (levering)',
-    };
-    await addInventoryMovement(firestore, newMovement);
-    revalidatePath('/voorraad');
-    return { success: true, message: `${quantity} ${unit} van ${productName} succesvol toegevoegd aan de voorraad.` };
-  } catch (error: any) {
-    console.error('Fout bij het toevoegen van voorraad:', error);
-    return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
-  }
+    try {
+        const newMovement: Omit<InventoryMovement, 'id'> = {
+            productName,
+            quantity,
+            unit,
+            type: 'addition',
+            date: new Date(),
+            description: 'Handmatige toevoeging (levering)',
+        };
+        await addInventoryMovement(firestore, newMovement);
+        revalidatePath('/voorraad');
+        return { success: true, message: `${quantity} ${unit} van ${productName} succesvol toegevoegd aan de voorraad.` };
+    } catch (error: any) {
+        console.error('Fout bij het toevoegen van voorraad:', error);
+        return { success: false, message: error.message || 'Onbekende fout bij het toevoegen van voorraad.' };
+    }
 }
