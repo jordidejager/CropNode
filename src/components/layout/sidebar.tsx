@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -23,11 +24,14 @@ import {
     Clock,
     Users,
     Timer,
-    Bug
+    Bug,
+    LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logout } from '@/lib/auth-actions';
+import { createClient } from '@/lib/supabase/client';
 import {
     Tooltip,
     TooltipContent,
@@ -175,7 +179,7 @@ function FlyoutMenu({ item, isLinkActive }: FlyoutMenuProps) {
     );
 }
 
-export function Sidebar() {
+function SidebarContent() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
@@ -183,6 +187,24 @@ export function Sidebar() {
     const [isCollapsed, setIsCollapsed] = React.useState(false);
     // Group State (open accordions)
     const [openGroups, setOpenGroups] = React.useState<string[]>([]);
+    // User State
+    const [userEmail, setUserEmail] = React.useState<string | null>(null);
+    const [userInitials, setUserInitials] = React.useState<string>('');
+
+    // Load user on mount
+    React.useEffect(() => {
+        const supabase = createClient();
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user?.email) {
+                setUserEmail(user.email);
+                const initials = user.email
+                    .split('@')[0]
+                    .slice(0, 2)
+                    .toUpperCase();
+                setUserInitials(initials);
+            }
+        });
+    }, []);
 
     // Initialize from LocalStorage
     React.useEffect(() => {
@@ -406,19 +428,55 @@ export function Sidebar() {
                         isCollapsed ? "justify-center p-2" : "p-3"
                     )}>
                         <div className="size-9 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner">
-                            <span className="text-[10px] font-black text-emerald-400">JT</span>
+                            <span className="text-[10px] font-black text-emerald-400">{userInitials || '?'}</span>
                         </div>
                         {!isCollapsed && (
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="flex flex-col overflow-hidden"
+                                className="flex flex-col overflow-hidden flex-1"
                             >
-                                <span className="text-xs font-bold text-white truncate">JagerTech Demo</span>
-                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider truncate">demo@jagertech.nl</span>
+                                <span className="text-xs font-bold text-white truncate">{userEmail?.split('@')[0] || 'Gebruiker'}</span>
+                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider truncate">{userEmail || 'Laden...'}</span>
                             </motion.div>
                         )}
+                        {!isCollapsed && (
+                            <form action={logout}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="submit"
+                                            className="size-8 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all"
+                                        >
+                                            <LogOut className="size-4" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="bg-slate-800 text-white font-bold border-white/10">
+                                        Uitloggen
+                                    </TooltipContent>
+                                </Tooltip>
+                            </form>
+                        )}
                     </div>
+
+                    {/* Logout button when collapsed */}
+                    {isCollapsed && (
+                        <form action={logout} className="mb-3">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="submit"
+                                        className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 transition-all text-slate-400 hover:text-red-400"
+                                    >
+                                        <LogOut className="size-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
+                                    Uitloggen
+                                </TooltipContent>
+                            </Tooltip>
+                        </form>
+                    )}
 
                     {/* Toggle Button - Always visible and clickable */}
                     {!isCollapsed && (
@@ -452,5 +510,34 @@ export function Sidebar() {
                 </div>
             </aside>
         </TooltipProvider>
+    );
+}
+
+// Sidebar skeleton for Suspense fallback
+function SidebarSkeleton() {
+    return (
+        <aside className="h-screen sticky top-0 bg-[#020617] border-r border-white/5 w-72 flex flex-col z-50 shrink-0">
+            <div className="h-16 flex items-center gap-3 mb-4 px-6">
+                <div className="size-8 rounded-lg bg-emerald-500/20 animate-pulse" />
+                <div className="flex-1 space-y-1">
+                    <div className="h-5 bg-white/5 rounded w-24 animate-pulse" />
+                    <div className="h-2 bg-white/5 rounded w-16 animate-pulse" />
+                </div>
+            </div>
+            <nav className="flex-1 px-3 space-y-2">
+                {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="h-10 bg-white/5 rounded-xl animate-pulse" />
+                ))}
+            </nav>
+        </aside>
+    );
+}
+
+// Wrap in Suspense for useSearchParams() - required by Next.js 13+
+export function Sidebar() {
+    return (
+        <Suspense fallback={<SidebarSkeleton />}>
+            <SidebarContent />
+        </Suspense>
     );
 }

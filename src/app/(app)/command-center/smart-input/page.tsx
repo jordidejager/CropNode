@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Suspense } from 'react';
 import { SmartInvoerFeed } from '@/components/smart-invoer-feed';
 import { CommandBar } from '@/components/command-bar';
 import { type InputMode, getModeConfig } from '@/components/mode-selector';
@@ -703,7 +704,7 @@ function EmptyStatusPanel() {
 // MAIN PAGE COMPONENT
 // ============================================================================
 
-export default function SmartInputPage() {
+function SmartInputContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const sessionId = searchParams.get('session_id');
@@ -1724,5 +1725,14 @@ export default function SmartInputPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// Wrap in Suspense for useSearchParams() - required by Next.js 13+
+export default function SmartInputPage() {
+    return (
+        <Suspense fallback={<DashboardSkeleton />}>
+            <SmartInputContent />
+        </Suspense>
     );
 }
