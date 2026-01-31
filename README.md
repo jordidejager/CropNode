@@ -115,6 +115,90 @@ src/
 
 ---
 
+## Database Schema (Supabase)
+
+De applicatie gebruikt Supabase (PostgreSQL) als database. Hieronder een overzicht van alle tabellen:
+
+### Kern Tabellen
+
+| Tabel | Doel | Belangrijkste Kolommen |
+|-------|------|------------------------|
+| **spuitschrift** | Bevestigde spuitregistraties | `id`, `date`, `plots[]`, `products` (JSONB), `status`, `validation_message` |
+| **logbook** | Ruwe invoer/draft registraties | `id`, `raw_input`, `parsed_data` (JSONB), `status`, `date` |
+| **parcels** | Hoofdpercelen | `id`, `name`, `crop`, `area`, `geometry` (JSONB), `rvo_id` |
+| **sub_parcels** | Sub-percelen (rassen/plantjaren) | `id`, `parcel_id`, `variety`, `plant_year`, `area` |
+| **parcel_history** | Spuithistorie per perceel | `id`, `parcel_id`, `product`, `dosage`, `date`, `log_id` |
+| **production_history** | Productie/oogst historie | `id`, `parcel_id`, `year`, `yield`, `quality` |
+
+### Product & Voorraad
+
+| Tabel | Doel | Belangrijkste Kolommen |
+|-------|------|------------------------|
+| **ctgb_products** | CTGB gewasbeschermingsmiddelen | `toelatingsnummer` (PK), `naam`, `status`, `werkzame_stoffen[]`, `gebruiksvoorschriften` (JSONB), `etikettering` (JSONB) |
+| **ctgb_regulation_embeddings** | Vector embeddings voor RAG search | `id`, `product_naam`, `gewas`, `embedding` (VECTOR) |
+| **fertilizers** | Meststoffen database | `id`, `name`, `manufacturer`, `category`, `composition` (JSONB) |
+| **inventory_movements** | Voorraadmutaties | `id`, `product_name`, `quantity`, `type` (inkoop/verbruik), `date` |
+| **product_aliases** | Product synoniemen/afkortingen | `alias`, `official_name`, `confidence`, `usage_count` |
+| **product_usages** | Product gebruiksdata | `id`, `product_id`, `usage_count`, `last_used` |
+| **active_substances** | Werkzame stoffen referentie | `code` (PK), `name`, `category`, `max_applications_per_year` |
+| **product_substances** | Koppeltabel product-stof | `product_id`, `substance_code`, `concentration` |
+
+### Team & Taken
+
+| Tabel | Doel | Belangrijkste Kolommen |
+|-------|------|------------------------|
+| **task_types** | Soorten werk (snoeien, plukken, etc.) | `id`, `name`, `default_hourly_rate` |
+| **task_logs** | Urenregistraties | `id`, `start_date`, `end_date`, `sub_parcel_id`, `task_type_id`, `people_count`, `hours_per_person`, `total_hours` |
+| **active_task_sessions** | Actieve timer sessies | `id`, `task_type_id`, `started_at`, `user_id` |
+
+### Research & AI
+
+| Tabel | Doel | Belangrijkste Kolommen |
+|-------|------|------------------------|
+| **research_papers** | Onderzoeksdocumenten | `id`, `title`, `summary_ai`, `category`, `verdict`, `embedding` (VECTOR) |
+| **pests_diseases** | Ziektes en plagen database | `id`, `name`, `type`, `crops[]`, `symptoms`, `treatments` |
+| **soil_samples** | Bodemanalyses | `id`, `parcel_id`, `date`, `ph`, `nutrients` (JSONB) |
+| **conversations** | Chat sessies/drafts | `id`, `status`, `draft_data` (JSONB), `chat_history` (JSONB) |
+| **user_preferences** | Gebruikersvoorkeuren/aliassen | `id`, `alias`, `preferred` |
+
+### Views
+
+| View | Doel |
+|------|------|
+| **v_task_logs_enriched** | Task logs met perceel- en taaktype info |
+| **v_active_task_sessions_enriched** | Actieve sessies met taaktype info |
+| **v_sprayable_parcels** | Percelen beschikbaar voor bespuiting |
+| **v_substances_summary** | Werkzame stoffen met aantal producten |
+| **v_products_with_substances** | Producten met gekoppelde stoffen |
+| **v_pests_diseases_summary** | Ziektes/plagen overzicht |
+
+### JSONB Structuren
+
+**ctgb_products.gebruiksvoorschriften:**
+```json
+[{
+  "gewas": "Appel",
+  "doelorganisme": "Schurft",
+  "dosering": "2.25 kg/ha",
+  "maxToepassingen": 8,
+  "veiligheidstermijn": "21 dagen",
+  "interval": "min. 7 dagen",
+  "wCodes": ["W1", "W2"]
+}]
+```
+
+**spuitschrift.products:**
+```json
+[{
+  "product": "Merpan spuitkorrel",
+  "dosage": 2.25,
+  "unit": "kg/ha",
+  "targetReason": "Schurft"
+}]
+```
+
+---
+
 ## Aan de slag
 
 ### 1. Omgeving instellen
