@@ -1,49 +1,80 @@
 'use client'
 
 import { useState } from 'react'
-import { useFormStatus } from 'react-dom'
-import { login, register, type AuthResult } from '@/lib/auth-actions'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Sprout } from 'lucide-react'
 
-function SubmitButton({ mode }: { mode: 'login' | 'register' }) {
-  const { pending } = useFormStatus()
-
-  return (
-    <Button
-      type="submit"
-      disabled={pending}
-      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-    >
-      {pending ? (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Even geduld...
-        </>
-      ) : mode === 'login' ? (
-        'Inloggen'
-      ) : (
-        'Registreren'
-      )}
-    </Button>
-  )
-}
-
 export default function LoginPage() {
+  const router = useRouter()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
     setError(null)
+    setLoading(true)
 
-    const action = mode === 'login' ? login : register
-    const result: AuthResult = await action(formData)
+    const formData = new FormData(e.currentTarget)
+    let username = formData.get('username') as string
+    const password = formData.get('password') as string
 
-    if (result?.error) {
-      setError(result.error)
+    if (!username || !password) {
+      setError('Vul alle velden in')
+      setLoading(false)
+      return
+    }
+
+    // Als geen @ in de input, voeg @agrisprayer.local toe (voor admin login)
+    const email = username.includes('@')
+      ? username
+      : `${username.toLowerCase()}@agrisprayer.local`
+
+    try {
+      const supabase = createClient()
+
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (error) {
+          setError(getErrorMessage(error.message))
+          setLoading(false)
+          return
+        }
+      } else {
+        if (password.length < 6) {
+          setError('Wachtwoord moet minimaal 6 tekens bevatten')
+          setLoading(false)
+          return
+        }
+
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        })
+
+        if (error) {
+          setError(getErrorMessage(error.message))
+          setLoading(false)
+          return
+        }
+      }
+
+      // Success - redirect
+      router.push('/command-center')
+      router.refresh()
+    } catch (err) {
+      console.error('[Auth] Exception:', err)
+      setError('Verbindingsfout. Probeer het opnieuw.')
+      setLoading(false)
     }
   }
 
@@ -66,7 +97,7 @@ export default function LoginPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <form action={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                 {error}
@@ -74,15 +105,17 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-300">
-                E-mailadres
+              <Label htmlFor="username" className="text-slate-300">
+                Gebruikersnaam of e-mail
               </Label>
               <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="naam@bedrijf.nl"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                placeholder="admin of naam@bedrijf.nl"
                 required
+                disabled={loading}
                 className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
@@ -95,14 +128,31 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="current-password"
                 placeholder="••••••••"
                 required
+                disabled={loading}
                 minLength={6}
                 className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
 
-            <SubmitButton mode={mode} />
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Even geduld...
+                </>
+              ) : mode === 'login' ? (
+                'Inloggen'
+              ) : (
+                'Registreren'
+              )}
+            </Button>
           </form>
 
           <div className="mt-6 text-center">
@@ -123,4 +173,18 @@ export default function LoginPage() {
       </Card>
     </div>
   )
+}
+
+function getErrorMessage(message: string): string {
+  const errorMessages: Record<string, string> = {
+    'Invalid login credentials': 'Ongeldige inloggegevens',
+    'Email not confirmed': 'E-mailadres is nog niet bevestigd',
+    'User already registered': 'Dit e-mailadres is al geregistreerd',
+    'Password should be at least 6 characters': 'Wachtwoord moet minimaal 6 tekens bevatten',
+    'Unable to validate email address: invalid format': 'Ongeldig e-mailadres formaat',
+    'Signup requires a valid password': 'Voer een geldig wachtwoord in',
+    'Auth session missing!': 'Sessie verlopen, log opnieuw in',
+  }
+
+  return errorMessages[message] || `Er is een fout opgetreden: ${message}`
 }

@@ -19,6 +19,33 @@ import type {
 } from './types';
 
 // ============================================
+// Auth Helper - Get current user ID
+// ============================================
+
+let cachedUserId: string | null = null;
+
+export async function getCurrentUserId(): Promise<string | null> {
+  if (cachedUserId) return cachedUserId;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    cachedUserId = user?.id || null;
+    return cachedUserId;
+  } catch {
+    return null;
+  }
+}
+
+// Clear cache on auth state change
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    cachedUserId = null;
+  } else if (event === 'SIGNED_IN') {
+    cachedUserId = null; // Will be refreshed on next call
+  }
+});
+
+// ============================================
 // Helper functions for snake_case <-> camelCase conversion
 // ============================================
 
@@ -107,6 +134,7 @@ export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
 
 export async function addSpuitschriftEntry(entry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'>): Promise<SpuitschriftEntry> {
   const id = crypto.randomUUID();
+  const userId = await getCurrentUserId();
 
   // Safely parse dates with fallback to current date
   const parseDate = (d: any): string => {
@@ -120,6 +148,7 @@ export async function addSpuitschriftEntry(entry: Omit<SpuitschriftEntry, 'id' |
 
   const snakeCaseEntry = {
     id,
+    user_id: userId,
     original_logbook_id: entry.originalLogbookId,
     original_raw_input: entry.originalRawInput,
     date: parseDate(entry.date),
@@ -200,10 +229,12 @@ export async function getInventoryMovements(): Promise<InventoryMovement[]> {
 }
 
 export async function addInventoryMovement(movement: Omit<InventoryMovement, 'id'>): Promise<void> {
+  const userId = await getCurrentUserId();
   const { error } = await supabase
     .from('inventory_movements')
     .insert({
       id: crypto.randomUUID(),
+      user_id: userId,
       product_name: movement.productName,
       quantity: movement.quantity,
       unit: movement.unit,
@@ -236,11 +267,13 @@ export async function getUserPreferences(): Promise<UserPreference[]> {
 
 export async function setUserPreference(preference: Omit<UserPreference, 'id'>): Promise<void> {
   const docId = preference.alias.replace(/\s+/g, '-').toLowerCase();
+  const userId = await getCurrentUserId();
 
   const { error } = await supabase
     .from('user_preferences')
     .upsert({
       id: docId,
+      user_id: userId,
       alias: preference.alias,
       preferred: preference.preferred,
     });
@@ -536,7 +569,8 @@ export async function getSubParcel(id: string): Promise<SubParcel | null> {
 
 export async function addSubParcel(subParcel: Omit<SubParcel, 'id' | 'createdAt' | 'updatedAt'>): Promise<SubParcel> {
   const { soilSamples, productionHistory, ...cleanSubParcel } = subParcel as any;
-  const payload = objectToSnakeCase(cleanSubParcel);
+  const userId = await getCurrentUserId();
+  const payload = { ...objectToSnakeCase(cleanSubParcel), user_id: userId };
   const { data, error } = await supabase
     .from('sub_parcels')
     .insert(payload)
@@ -586,7 +620,8 @@ export async function getSoilSamples(subParcelId: string): Promise<SoilSample[]>
 }
 
 export async function addSoilSample(sample: Omit<SoilSample, 'id' | 'createdAt'>): Promise<SoilSample> {
-  const snakeCase = objectToSnakeCase(sample);
+  const userId = await getCurrentUserId();
+  const snakeCase: Record<string, any> = { ...objectToSnakeCase(sample), user_id: userId };
   // Ensure dates are stringified for Supabase
   if (sample.sampleDate) snakeCase.sample_date = sample.sampleDate.toISOString().split('T')[0];
 
@@ -617,9 +652,10 @@ export async function getProductionHistory(subParcelId: string): Promise<Product
 }
 
 export async function addProductionHistory(history: Omit<ProductionHistory, 'id' | 'createdAt'>): Promise<ProductionHistory> {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('production_history')
-    .insert(objectToSnakeCase(history))
+    .insert({ ...objectToSnakeCase(history), user_id: userId })
     .select()
     .single();
 
@@ -628,6 +664,7 @@ export async function addProductionHistory(history: Omit<ProductionHistory, 'id'
 }
 
 export async function addParcel(parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
+  const userId = await getCurrentUserId();
   let geometryToSave = parcel.geometry;
   if (geometryToSave && typeof geometryToSave === 'object') {
     geometryToSave = JSON.stringify(geometryToSave);
@@ -637,6 +674,7 @@ export async function addParcel(parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
     .from('parcels')
     .insert({
       id: crypto.randomUUID(),
+      user_id: userId,
       name: parcel.name,
       area: parcel.area,
       location: parcel.location || null,
@@ -853,6 +891,7 @@ export async function getLogbookEntries(): Promise<LogbookEntry[]> {
 
 export async function addLogbookEntry(entry: Omit<LogbookEntry, 'id'>): Promise<LogbookEntry> {
   const id = crypto.randomUUID();
+  const userId = await getCurrentUserId();
 
   console.log('[addLogbookEntry] Adding entry with ID:', id);
 
@@ -872,6 +911,7 @@ export async function addLogbookEntry(entry: Omit<LogbookEntry, 'id'>): Promise<
       .from('logbook')
       .insert({
         id,
+        user_id: userId,
         raw_input: entry.rawInput,
         status: entry.status,
         date: parseDate(entry.date),
@@ -1012,6 +1052,7 @@ export async function addParcelHistoryEntries({
 }) {
   if (!logbookEntry.parsedData) return;
 
+  const userId = await getCurrentUserId();
   const { id: logId, parsedData } = logbookEntry;
   const { plots, products } = parsedData;
 
@@ -1045,6 +1086,7 @@ export async function addParcelHistoryEntries({
         if (isConfirmation && spuitschriftId) {
           historyEntries.push({
             id: crypto.randomUUID(),
+            user_id: userId,
             log_id: logbookEntry.originalLogbookId || logId,
             spuitschrift_id: spuitschriftId,
             parcel_id: sprayableParcel.id, // Store sub-parcel ID (unit of work)
@@ -1084,6 +1126,7 @@ export async function addParcelHistoryEntries({
           if (isConfirmation && spuitschriftId) {
             historyEntries.push({
               id: crypto.randomUUID(),
+              user_id: userId,
               log_id: logbookEntry.originalLogbookId || logId,
               spuitschrift_id: spuitschriftId,
               parcel_id: parcel.id,
@@ -1113,6 +1156,7 @@ export async function addParcelHistoryEntries({
     if (usage.totalAmount > 0) {
       inventoryEntries.push({
         id: crypto.randomUUID(),
+        user_id: userId,
         product_name: productName,
         quantity: -usage.totalAmount,
         unit: usage.unit,
@@ -1408,7 +1452,8 @@ export async function getFieldSignals(currentUserId?: string, client: SupabaseCl
 }
 
 export async function addFieldSignal(signal: Omit<FieldSignal, 'id' | 'createdAt' | 'likesCount' | 'userReaction' | 'authorName'>, client: SupabaseClient = supabase): Promise<FieldSignal> {
-  const payload = objectToSnakeCase(signal);
+  const userId = await getCurrentUserId();
+  const payload = { ...objectToSnakeCase(signal), user_id: userId };
   const { data, error } = await client
     .from('field_signals')
     .insert(payload)
@@ -1424,7 +1469,8 @@ export async function addFieldSignal(signal: Omit<FieldSignal, 'id' | 'createdAt
 }
 
 export async function addFieldSignalReaction(reaction: Omit<FieldSignalReaction, 'id' | 'createdAt'>, client: SupabaseClient = supabase): Promise<void> {
-  const payload = objectToSnakeCase(reaction);
+  const userId = await getCurrentUserId();
+  const payload = { ...objectToSnakeCase(reaction), user_id: userId };
   const { error } = await client
     .from('field_signal_reactions')
     .insert(payload);
@@ -1472,9 +1518,11 @@ export async function getTaskTypes(): Promise<TaskType[]> {
 }
 
 export async function addTaskType(taskType: Omit<TaskType, 'id' | 'createdAt' | 'updatedAt'>): Promise<TaskType> {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('task_types')
     .insert({
+      user_id: userId,
       name: taskType.name,
       default_hourly_rate: taskType.defaultHourlyRate,
     })
@@ -1529,9 +1577,11 @@ export async function getTaskLogs(): Promise<TaskLogEnriched[]> {
 }
 
 export async function addTaskLog(taskLog: Omit<TaskLog, 'id' | 'totalHours' | 'createdAt' | 'updatedAt'>): Promise<TaskLog> {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('task_logs')
     .insert({
+      user_id: userId,
       start_date: taskLog.startDate instanceof Date ? taskLog.startDate.toISOString().split('T')[0] : taskLog.startDate,
       end_date: taskLog.endDate instanceof Date ? taskLog.endDate.toISOString().split('T')[0] : taskLog.endDate,
       days: taskLog.days,
@@ -1656,9 +1706,11 @@ export async function startTaskSession(session: {
   peopleCount: number;
   notes: string | null;
 }): Promise<ActiveTaskSession> {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase
     .from('active_task_sessions')
     .insert({
+      user_id: userId,
       task_type_id: session.taskTypeId,
       sub_parcel_id: session.subParcelId,
       start_time: session.startTime.toISOString(),

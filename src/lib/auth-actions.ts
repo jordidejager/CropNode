@@ -10,22 +10,33 @@ export type AuthResult = {
 }
 
 export async function login(formData: FormData): Promise<AuthResult> {
-  const supabase = await createClient()
-
-  const email = formData.get('email') as string
+  let email = (formData.get('username') || formData.get('email')) as string
   const password = formData.get('password') as string
 
   if (!email || !password) {
     return { error: 'Vul alle velden in' }
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
+  // Als geen @ in de input, voeg @agrisprayer.local toe (voor admin login)
+  if (!email.includes('@')) {
+    email = `${email.toLowerCase()}@agrisprayer.local`
+  }
 
-  if (error) {
-    return { error: getErrorMessage(error.message) }
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error('[Auth] Login error:', error.message)
+      return { error: getErrorMessage(error.message) }
+    }
+  } catch (err) {
+    console.error('[Auth] Login exception:', err)
+    return { error: 'Verbindingsfout. Probeer het opnieuw.' }
   }
 
   revalidatePath('/', 'layout')
@@ -33,9 +44,7 @@ export async function login(formData: FormData): Promise<AuthResult> {
 }
 
 export async function register(formData: FormData): Promise<AuthResult> {
-  const supabase = await createClient()
-
-  const email = formData.get('email') as string
+  let email = (formData.get('username') || formData.get('email')) as string
   const password = formData.get('password') as string
 
   if (!email || !password) {
@@ -46,13 +55,26 @@ export async function register(formData: FormData): Promise<AuthResult> {
     return { error: 'Wachtwoord moet minimaal 6 tekens bevatten' }
   }
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-  })
+  // Als geen @ in de input, voeg @agrisprayer.local toe
+  if (!email.includes('@')) {
+    email = `${email.toLowerCase()}@agrisprayer.local`
+  }
 
-  if (error) {
-    return { error: getErrorMessage(error.message) }
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error('[Auth] Register error:', error.message)
+      return { error: getErrorMessage(error.message) }
+    }
+  } catch (err) {
+    console.error('[Auth] Register exception:', err)
+    return { error: 'Verbindingsfout. Probeer het opnieuw.' }
   }
 
   revalidatePath('/', 'layout')
