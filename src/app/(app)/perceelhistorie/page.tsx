@@ -1,36 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getParcelHistoryEntries, getParcels } from '@/lib/store';
+import { getParcelHistoryEntries, getParcels } from '@/lib/supabase-store';
 import { HistoryDashboard } from '@/components/history-dashboard';
 import type { Parcel, ParcelHistoryEntry } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useFirestore } from '@/firebase';
+// import { useFirestore } from '@/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function PerceelHistoriePage() {
   const [historyEntries, setHistoryEntries] = useState<ParcelHistoryEntry[]>([]);
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
-  const db = useFirestore();
+  // const db = useFirestore();
 
-  const cropVarieties = [...new Set(parcels.map(p => p.variety))];
-  const parcelNames = [...new Set(parcels.map(p => p.name))];
+  // const cropVarieties = [...new Set(parcels.map(p => p.variety))];
+  // const parcelNames = [...new Set(parcels.map(p => p.name))];
 
   useEffect(() => {
     async function loadHistory() {
-      if (!db) return;
+      // if (!db) return;
       setLoading(true);
       const [fetchedEntries, fetchedParcels] = await Promise.all([
-        getParcelHistoryEntries(db),
-        getParcels(db)
+        getParcelHistoryEntries(),
+        getParcels()
       ]);
       setHistoryEntries(fetchedEntries);
       setParcels(fetchedParcels);
       setLoading(false);
     }
     loadHistory();
-  }, [db]);
+  }, []);
 
   if (loading) {
     return (

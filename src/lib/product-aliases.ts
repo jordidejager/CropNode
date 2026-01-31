@@ -1,0 +1,369 @@
+/**
+ * Product Alias Service
+ *
+ * Handelt de mapping van:
+ * 1. Korte namen / aliassen naar officiële CTGB productnamen
+ * 2. Werkzame stoffen naar historisch gebruikte producten
+ * 3. Gebruikersvoorkeuren uit eerdere bespuitingen
+ */
+
+import { getParcelHistoryEntries, getUserPreferences, getAllCtgbProducts } from './supabase-store';
+import type { CtgbProduct, ParcelHistoryEntry, UserPreference } from './types';
+
+// ============================================
+// Statische Alias Mapping
+// ============================================
+
+/**
+ * Handmatige mapping van veelgebruikte korte namen naar officiële productnamen
+ * Dit is de "directe fix" voor bekende aliassen
+ */
+export const PRODUCT_ALIASES: Record<string, string> = {
+    // ============================================
+    // Schurft / Fungiciden
+    // ============================================
+    'captan': 'Merpan Spuitkorrel',
+    'captaan': 'Merpan Spuitkorrel',
+    'merpan': 'Merpan Spuitkorrel',
+    'delan': 'Delan DF',
+    'delan pro': 'Delan Pro',
+    'dithianon': 'Delan DF',
+    'scala': 'Scala',
+    'pyrimethanil': 'Scala',
+    'bellis': 'Bellis',
+    'boscalid': 'Bellis',
+    'flint': 'Flint',
+    'trifloxystrobin': 'Flint',
+    'chorus': 'Chorus',
+    'cyprodinil': 'Chorus',
+    'topsin': 'Topsin M',
+    'thiophanate-methyl': 'Topsin M',
+    'teldor': 'Teldor',
+    'fenhexamid': 'Teldor',
+    'switch': 'Switch',
+    'cyprodinil + fludioxonil': 'Switch',
+    'luna': 'Luna Sensation',
+    'fluopyram': 'Luna Sensation',
+    'score': 'Score 250 EC',
+    'difenoconazool': 'Score 250 EC',
+    'syllit': 'Syllit Flow',
+    'dodine': 'Syllit Flow',
+    'folicur': 'Folicur',
+    'tebuconazool': 'Folicur',
+    'fontelis': 'Fontelis',
+    'penthiopyrad': 'Fontelis',
+    'pristine': 'Pristine',
+    'geoxe': 'Geoxe',
+    'fludioxonil': 'Geoxe',
+    'sercadis': 'Sercadis',
+    'fluxapyroxad': 'Sercadis',
+    'stroby': 'Stroby WG',
+    'kresoxim-methyl': 'Stroby WG',
+
+    // ============================================
+    // Insecticiden / Bladluis / Trips
+    // ============================================
+    'calypso': 'Calypso',
+    'thiacloprid': 'Calypso',
+    'movento': 'Movento 150 OD',
+    'spirotetramat': 'Movento 150 OD',
+    'pirimor': 'Pirimor',
+    'pirimicarb': 'Pirimor',
+    'karate': 'Karate Zeon',
+    'lambda-cyhalothrin': 'Karate Zeon',
+    'decis': 'Decis EC',
+    'deltamethrin': 'Decis EC',
+    'tracer': 'Tracer',
+    'spinosad': 'Tracer',
+    'steward': 'Steward',
+    'indoxacarb': 'Steward',
+    'runner': 'Runner',
+    'methoxyfenozide': 'Runner',
+    'coragen': 'CORAGEN',
+    'chlorantraniliprole': 'CORAGEN',
+    'madex': 'Madex Top',
+    'carpovirusine': 'Carpovirusine Evo 2',
+    'batavia': 'Batavia',
+    'teppeki': 'Teppeki',
+    'flonicamid': 'Teppeki',
+    'sivanto': 'Sivanto Prime',
+    'flupyradifurone': 'Sivanto Prime',
+    'exirel': 'Exirel',
+    'cyantraniliprole': 'Exirel',
+
+    // ============================================
+    // Mijten / Acariciden
+    // ============================================
+    'envidor': 'Envidor',
+    'spirodiclofen': 'Envidor',
+    'nissorun': 'Nissorun',
+    'hexythiazox': 'Nissorun',
+    'apollo': 'Apollo 50 SC',
+    'clofentezine': 'Apollo 50 SC',
+    'floramite': 'Floramite 240 SC',
+    'bifenazaat': 'Floramite 240 SC',
+    'masai': 'Masai',
+    'tebufenpyrad': 'Masai',
+    'milbeknock': 'Milbeknock',
+    'milbemectin': 'Milbeknock',
+    'vertimec': 'Vertimec',
+    'abamectin': 'Vertimec',
+
+    // ============================================
+    // Dunning / Groeiregulatie
+    // ============================================
+    'surround': 'SURROUND® WP CROP PROTECTANT',
+    'kaoline': 'SURROUND® WP CROP PROTECTANT',
+    'regalis': 'Regalis Plus',
+    'prohexadion': 'Regalis Plus',
+    'prohexadion-calcium': 'Regalis Plus',
+    'brevis': 'Brevis',
+    'metamitron': 'Brevis',
+    'exilis': 'Exilis',
+    'maxcel': 'MaxCel',
+    'benzyladenine': 'MaxCel',
+    'rhodofix': 'Rhodofix',
+    'aba': 'Rhodofix',
+
+    // ============================================
+    // Herbiciden / Onkruidbestrijding
+    // ============================================
+    'roundup': 'Roundup',
+    'glyfosaat': 'Roundup',
+    'glyphosate': 'Roundup',
+    'basta': 'Basta',
+    'glufosinaat': 'Basta',
+    'kerb': 'Kerb Flo',
+    'propyzamide': 'Kerb Flo',
+    'spotlight': 'Spotlight Plus',
+    'carfentrazone': 'Spotlight Plus',
+
+    // ============================================
+    // Diverse / Overige
+    // ============================================
+    'aliette': 'Aliette',
+    'fosetyl': 'Aliette',
+    'ridomil': 'Ridomil Gold',
+    'metalaxyl': 'Ridomil Gold',
+    'previcur': 'Previcur Energy',
+    'propamocarb': 'Previcur Energy',
+    'ranman': 'Ranman Top',
+    'cyazofamid': 'Ranman Top',
+    'revus': 'Revus',
+    'mandipropamid': 'Revus',
+    'amistar': 'Amistar',
+    'azoxystrobin': 'Amistar',
+    'kumulus': 'Kumulus WG',
+    'zwavel': 'Kumulus WG',
+    'spuitzwavel': 'Kumulus WG',
+    'solubor': 'Solubor DF',
+    'borium': 'Solubor DF',
+};
+
+// ============================================
+// Dynamic Alias Resolution
+// ============================================
+
+export interface ResolvedProduct {
+    originalInput: string;
+    resolvedName: string;
+    source: 'static_alias' | 'history' | 'user_preference' | 'ctgb_match' | 'direct';
+    confidence: number; // 0-100
+}
+
+/**
+ * Resolve een product alias naar de officiële naam
+ * Prioriteit:
+ * 1. Exacte match in CTGB database
+ * 2. Statische alias mapping
+ * 3. Gebruikersvoorkeur (eerder gecorrigeerde aliassen)
+ * 4. Historische data (eerder gebruikt product met zelfde werkzame stof)
+ */
+export async function resolveProductAlias(
+    inputName: string,
+    ctgbProducts: CtgbProduct[],
+    userPreferences: UserPreference[],
+    parcelHistory: ParcelHistoryEntry[]
+): Promise<ResolvedProduct> {
+    const normalizedInput = inputName.toLowerCase().trim();
+
+    // 1. Check for exact match in CTGB database
+    const exactMatch = ctgbProducts.find(p =>
+        p.naam?.toLowerCase() === normalizedInput ||
+        p.toelatingsnummer?.toLowerCase() === normalizedInput
+    );
+    if (exactMatch) {
+        return {
+            originalInput: inputName,
+            resolvedName: exactMatch.naam,
+            source: 'direct',
+            confidence: 100
+        };
+    }
+
+    // 2. Check static alias mapping
+    if (PRODUCT_ALIASES[normalizedInput]) {
+        // Verify the alias target exists in CTGB database
+        const aliasTarget = PRODUCT_ALIASES[normalizedInput];
+        const targetExists = ctgbProducts.some(p =>
+            p.naam?.toLowerCase() === aliasTarget.toLowerCase()
+        );
+
+        if (targetExists) {
+            return {
+                originalInput: inputName,
+                resolvedName: aliasTarget,
+                source: 'static_alias',
+                confidence: 95
+            };
+        }
+    }
+
+    // 3. Check user preferences (learned corrections)
+    const prefKey = `middel_${normalizedInput}`;
+    const userPref = userPreferences.find(p =>
+        p.alias.toLowerCase() === prefKey.toLowerCase() ||
+        p.alias.toLowerCase() === normalizedInput
+    );
+    if (userPref) {
+        return {
+            originalInput: inputName,
+            resolvedName: userPref.preferred,
+            source: 'user_preference',
+            confidence: 90
+        };
+    }
+
+    // 4. Check historical usage - find products with matching active substance
+    const matchingBySubstance = ctgbProducts.filter(p =>
+        p.werkzameStoffen?.some(ws =>
+            ws.toLowerCase().includes(normalizedInput) ||
+            normalizedInput.includes(ws.toLowerCase())
+        )
+    );
+
+    if (matchingBySubstance.length > 0) {
+        // Find which of these products was most recently used
+        const historyProductCounts = new Map<string, { count: number; lastUsed: Date }>();
+
+        for (const historyEntry of parcelHistory) {
+            const productName = historyEntry.product.toLowerCase();
+            const matchingProduct = matchingBySubstance.find(p =>
+                p.naam.toLowerCase() === productName
+            );
+
+            if (matchingProduct) {
+                const existing = historyProductCounts.get(matchingProduct.naam) || { count: 0, lastUsed: new Date(0) };
+                existing.count++;
+                const entryDate = new Date(historyEntry.date);
+                if (entryDate > existing.lastUsed) {
+                    existing.lastUsed = entryDate;
+                }
+                historyProductCounts.set(matchingProduct.naam, existing);
+            }
+        }
+
+        // Return the most frequently used product
+        let bestMatch: string | null = null;
+        let bestScore = 0;
+
+        for (const [productName, stats] of historyProductCounts) {
+            const score = stats.count * 10 + (Date.now() - stats.lastUsed.getTime()) / (1000 * 60 * 60 * 24 * 365); // Recency bonus
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = productName;
+            }
+        }
+
+        if (bestMatch) {
+            return {
+                originalInput: inputName,
+                resolvedName: bestMatch,
+                source: 'history',
+                confidence: 80
+            };
+        }
+
+        // No history, but we found matching products - return the first one
+        return {
+            originalInput: inputName,
+            resolvedName: matchingBySubstance[0].naam,
+            source: 'ctgb_match',
+            confidence: 70
+        };
+    }
+
+    // 5. Partial match in CTGB database (starts with or contains)
+    const partialMatch = ctgbProducts.find(p => {
+        const naam = p.naam?.toLowerCase() || '';
+        const firstWord = naam.split(/[\s-]/)[0];
+        return firstWord === normalizedInput || naam.startsWith(normalizedInput);
+    });
+
+    if (partialMatch) {
+        return {
+            originalInput: inputName,
+            resolvedName: partialMatch.naam,
+            source: 'ctgb_match',
+            confidence: 60
+        };
+    }
+
+    // 6. No match found - return original input
+    return {
+        originalInput: inputName,
+        resolvedName: inputName,
+        source: 'direct',
+        confidence: 0
+    };
+}
+
+/**
+ * Batch resolve multiple product aliases
+ */
+export async function resolveProductAliases(
+    inputNames: string[]
+): Promise<Map<string, ResolvedProduct>> {
+    const [ctgbProducts, userPreferences, parcelHistory] = await Promise.all([
+        getAllCtgbProducts(),
+        getUserPreferences(),
+        getParcelHistoryEntries()
+    ]);
+
+    const results = new Map<string, ResolvedProduct>();
+
+    for (const name of inputNames) {
+        const resolved = await resolveProductAlias(name, ctgbProducts, userPreferences, parcelHistory);
+        results.set(name, resolved);
+    }
+
+    return results;
+}
+
+/**
+ * Get frequently used products from history
+ * Returns the top N most used products in the last X days
+ */
+export async function getFrequentlyUsedProducts(
+    topN: number = 10,
+    daysBack: number = 365
+): Promise<string[]> {
+    const parcelHistory = await getParcelHistoryEntries();
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+
+    const productCounts = new Map<string, number>();
+
+    for (const entry of parcelHistory) {
+        const entryDate = new Date(entry.date);
+        if (entryDate >= cutoffDate) {
+            const count = productCounts.get(entry.product) || 0;
+            productCounts.set(entry.product, count + 1);
+        }
+    }
+
+    return Array.from(productCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, topN)
+        .map(([name]) => name);
+}

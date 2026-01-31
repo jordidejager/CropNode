@@ -10,7 +10,6 @@ import { Calendar as CalendarIcon, X } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import { Timestamp } from 'firebase/firestore';
 
 type Filters = {
   variety: string;
@@ -18,8 +17,8 @@ type Filters = {
   date: Date | undefined;
 };
 
-const formatDate = (date: Date | Timestamp) => {
-    const d = date instanceof Timestamp ? date.toDate() : date;
+const formatDate = (date: Date | string) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
     return format(d, 'dd MMMM yyyy', { locale: nl });
 }
 
@@ -37,20 +36,20 @@ export function HistoryDashboard({
   const handleFilterChange = (filterName: keyof Filters, value: string | Date | undefined) => {
     setFilters(prev => ({ ...prev, [filterName]: value }));
   };
-  
+
   const resetFilters = () => {
     setFilters({ variety: 'all', parcel: 'all', date: undefined });
   };
-  
+
   const isFiltered = filters.variety !== 'all' || filters.parcel !== 'all' || filters.date !== undefined;
 
   const filteredEntries = entries.filter(entry => {
     const varietyMatch = filters.variety === 'all' || entry.variety === filters.variety;
     const parcelMatch = filters.parcel === 'all' || entry.parcelName === filters.parcel;
-    
-    const entryDate = entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date);
+
+    const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
     const dateMatch = !filters.date || entryDate.toDateString() === filters.date.toDateString();
-    
+
     return varietyMatch && parcelMatch && dateMatch;
   });
 

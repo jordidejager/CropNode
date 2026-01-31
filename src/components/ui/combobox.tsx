@@ -31,6 +31,7 @@ interface ComboboxProps {
   placeholder?: string
   className?: string
   creatable?: boolean
+  disabled?: boolean
 }
 
 export function Combobox({
@@ -40,6 +41,7 @@ export function Combobox({
   placeholder = "Select an option",
   className,
   creatable = false,
+  disabled = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
@@ -56,8 +58,8 @@ export function Combobox({
     inputValue === ""
       ? options
       : options.filter((option) =>
-          option.label.toLowerCase().includes(inputValue.toLowerCase())
-        )
+        option.label.toLowerCase().includes(inputValue.toLowerCase())
+      )
 
   const showCreateOption =
     creatable &&
@@ -73,6 +75,7 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
           <span className="truncate">{currentLabel || placeholder}</span>
@@ -80,8 +83,9 @@ export function Combobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-[--radix-popover-trigger-width] min-w-[200px] p-0"
         onCloseAutoFocus={(e) => e.preventDefault()}
+        align="start"
       >
         <Command>
           <CommandInput
@@ -92,7 +96,7 @@ export function Combobox({
           <CommandList>
             <CommandEmpty>
               {showCreateOption ? (
-                 <CommandItem
+                <CommandItem
                   value={inputValue}
                   onSelect={() => handleSelect(inputValue)}
                 >

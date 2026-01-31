@@ -37,6 +37,7 @@ export type MatchedTarget = {
 
 type ValidationContext = {
   parcel: Parcel;
+  crop: string; // Extracted crop (from parcel.crop or subParcels)
   product: CtgbProduct;
   dosage: number;
   unit: string;
@@ -171,8 +172,13 @@ export function getCurrentSeason(date: Date): Season {
  */
 export function findGebruiksvoorschrift(
   product: CtgbProduct,
-  parcelCrop: string
+  parcelCrop: string | undefined
 ): CtgbGebruiksvoorschrift | null {
+  // Defensive check: return null if no crop
+  if (!parcelCrop) {
+    return null;
+  }
+
   if (!product.gebruiksvoorschriften || product.gebruiksvoorschriften.length === 0) {
     return null;
   }
@@ -259,14 +265,21 @@ function fuzzyMatchTarget(userInput: string, allowedTarget: string): boolean {
  */
 export function findGebruiksvoorschriftWithTarget(
   product: CtgbProduct,
-  parcelCrop: string,
+  parcelCrop: string | undefined,
   targetReason?: string
 ): { voorschrift: CtgbGebruiksvoorschrift; matchedTarget: MatchedTarget } | null {
+  // Defensive check: return null if no crop or no product data
+  if (!parcelCrop) {
+    console.log(`[findGebruiksvoorschriftWithTarget] No parcelCrop provided for product ${product?.naam}`);
+    return null;
+  }
+
   if (!product.gebruiksvoorschriften || product.gebruiksvoorschriften.length === 0) {
     return null;
   }
 
   const normalizedCrop = parcelCrop.toLowerCase().trim();
+  console.log(`[findGebruiksvoorschriftWithTarget] Checking: gewas="${normalizedCrop}" for product="${product.naam}", targetReason="${targetReason || 'none'}"`);
 
   // Probeer de crop hiërarchie met genormaliseerde varianten
   const parcelVariants = normalizeGewasNaam(normalizedCrop);
@@ -455,7 +468,7 @@ async function checkActiveSubstanceCumulation(ctx: ValidationContext): Promise<V
   }
 
   // Vind het gebruiksvoorschrift voor maxToepassingen
-  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
+  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.crop);
   const maxToepassingen = voorschrift?.maxToepassingen;
 
   if (maxToepassingen) {
@@ -550,7 +563,7 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
     return flags;
   }
 
-  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
+  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.crop);
 
   if (!voorschrift) {
     // Verzamel en formatteer alle toegelaten gewassen (gedepliceerd en gesorteerd)
@@ -558,10 +571,10 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
 
     flags.push({
       type: 'error',
-      message: `Het gewas '${ctx.parcel.crop}' wordt niet ondersteund door ${ctx.product.naam}. Dit middel is toegelaten voor: ${allowedCropsFormatted}.`,
+      message: `Het gewas '${ctx.crop}' wordt niet ondersteund door ${ctx.product.naam}. Dit middel is toegelaten voor: ${allowedCropsFormatted}.`,
       field: 'products',
       details: {
-        crop: ctx.parcel.crop,
+        crop: ctx.crop,
         allowedCrops: allowedCropsFormatted
       }
     });
@@ -571,61 +584,70 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
 }
 
 /**
- * PRIORITEIT 3: Check dosering tegen maximum
- * Gebruikt het matched voorschrift (met doelorganisme) als beschikbaar
+ * PRIORITEIT 3: Check dosering tegen alle relevante voorschriften voor dit gewas
+ * Evalueert of de dosering past binnen EEN van de toegelaten doelen.
  */
 function checkDosage(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
 
-  // Gebruik het matched voorschrift als beschikbaar, anders zoek op gewas
-  const voorschrift = ctx.matchedTarget?.voorschrift || findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
-  if (!voorschrift?.dosering) {
+  if (!ctx.product.gebruiksvoorschriften || ctx.product.gebruiksvoorschriften.length === 0) {
     return flags;
   }
 
-  const maxDosering = parseDosering(voorschrift.dosering);
-  if (!maxDosering) {
-    return flags;
-  }
+  // Vind ALLE voorschriften voor dit gewas
+  const cropVoorschriften = ctx.product.gebruiksvoorschriften.filter(v =>
+    v.gewas && isCropAllowed(ctx.crop, v.gewas)
+  );
 
-  // Normaliseer input unit (verwijder /ha suffix)
+  if (cropVoorschriften.length === 0) return flags;
+
+  // Normaliseer input unit
   const inputUnit = ctx.unit.toLowerCase().replace('/ha', '').trim();
 
-  // Check of units vergelijkbaar zijn
-  if (inputUnit !== maxDosering.unit) {
-    // Probeer eenheden te converteren (l <-> ml, kg <-> g)
+  const results = cropVoorschriften.map(v => {
+    const max = parseDosering(v.dosering || '');
+    if (!max) return { voorschrift: v, isOk: true }; // Geen dosering info = OK
+
     let normalizedInput = ctx.dosage;
-    let normalizedMax = maxDosering.value;
+    let normalizedMax = max.value;
 
-    if (inputUnit === 'l' && maxDosering.unit === 'ml') {
-      normalizedInput = ctx.dosage * 1000;
-    } else if (inputUnit === 'ml' && maxDosering.unit === 'l') {
-      normalizedMax = maxDosering.value * 1000;
-    } else if (inputUnit === 'kg' && maxDosering.unit === 'g') {
-      normalizedInput = ctx.dosage * 1000;
-    } else if (inputUnit === 'g' && maxDosering.unit === 'kg') {
-      normalizedMax = maxDosering.value * 1000;
-    } else {
-      // Kan niet vergelijken
-      return flags;
-    }
+    // Unit conversie
+    if (inputUnit === 'l' && max.unit === 'ml') normalizedInput *= 1000;
+    else if (inputUnit === 'ml' && max.unit === 'l') normalizedMax *= 1000;
+    else if (inputUnit === 'kg' && max.unit === 'g') normalizedInput *= 1000;
+    else if (inputUnit === 'g' && max.unit === 'kg') normalizedMax *= 1000;
+    else if (inputUnit !== max.unit) return { voorschrift: v, isOk: false, overLimit: true };
 
-    if (normalizedInput > normalizedMax) {
+    return { voorschrift: v, isOk: normalizedInput <= normalizedMax, overLimit: normalizedInput > normalizedMax, maxAllowed: v.dosering };
+  });
+
+  const exactMatch = ctx.matchedTarget ? results.find(r => r.voorschrift === ctx.matchedTarget?.voorschrift) : null;
+  const anyOk = results.some(r => r.isOk);
+
+  if (!anyOk) {
+    // Geen enkel voorschrift staat deze dosering toe
+    const absoluteMax = Math.max(...results.map(r => parseDosering(r.voorschrift.dosering || '')?.value || 0));
+    flags.push({
+      type: 'error',
+      message: `Dosering ${ctx.dosage} ${ctx.unit} is te hoog voor alle toegelaten doelen in '${ctx.crop}'. Het absolute maximum is ${absoluteMax} ${inputUnit}.`,
+      field: 'dosage'
+    });
+  } else if (exactMatch && !exactMatch.isOk) {
+    // De specifieke reden (target) matcht niet, maar een ander doel wel
+    const alternative = results.find(r => r.isOk);
+    flags.push({
+      type: 'warning',
+      message: `Dosering ${ctx.dosage} ${ctx.unit} is te hoog voor '${ctx.matchedTarget?.targetOrganism}' (max ${exactMatch.maxAllowed}), maar wel toegestaan voor '${alternative?.voorschrift.doelorganisme}'.`,
+      field: 'dosage'
+    });
+  } else if (!ctx.matchedTarget && results.length > 1) {
+    // Geen target opgegeven, dosage is ok voor sommige maar niet voor alle
+    const failedOnes = results.filter(r => !r.isOk);
+    if (failedOnes.length > 0) {
       flags.push({
-        type: 'warning',
-        message: `Dosering ${ctx.dosage} ${ctx.unit} overschrijdt maximum van ${voorschrift.dosering}.`,
-        field: 'dosage',
-        details: { input: ctx.dosage, unit: ctx.unit, max: voorschrift.dosering }
-      });
-    }
-  } else {
-    // Zelfde eenheid, directe vergelijking
-    if (ctx.dosage > maxDosering.value) {
-      flags.push({
-        type: 'warning',
-        message: `Dosering ${ctx.dosage} ${ctx.unit} overschrijdt maximum van ${voorschrift.dosering}.`,
-        field: 'dosage',
-        details: { input: ctx.dosage, unit: ctx.unit, max: voorschrift.dosering }
+        type: 'info',
+        message: `Let op: deze dosering is toegestaan voor ${results.find(r => r.isOk)?.voorschrift.doelorganisme}, maar te hoog voor ${failedOnes[0].voorschrift.doelorganisme}.`,
+        field: 'dosage'
       });
     }
   }
@@ -635,48 +657,37 @@ function checkDosage(ctx: ValidationContext): ValidationFlag[] {
 
 /**
  * PRIORITEIT 4: Check interval tussen toepassingen
- * Zoekt nu op product NAAM (niet werkzame stof) voor correcte interval bepaling
  */
 function checkInterval(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
+  const voorschrift = ctx.matchedTarget?.voorschrift || findGebruiksvoorschrift(ctx.product, ctx.crop);
+  const minIntervalDays = parseInterval(voorschrift?.interval || '');
 
-  // Gebruik het matched voorschrift als beschikbaar, anders zoek op gewas
-  const voorschrift = ctx.matchedTarget?.voorschrift || findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
-  if (!voorschrift?.interval) {
-    return flags;
-  }
+  if (!minIntervalDays) return flags;
 
-  const minIntervalDays = parseInterval(voorschrift.interval);
-  if (!minIntervalDays) {
-    return flags;
-  }
+  // Zoek laatste toepassing op DIT perceel met DIT middel of ZELFDE werkzame stoffen
+  const lastEntry = ctx.seasonHistory
+    .filter(h => {
+      if (h.parcelId !== ctx.parcel.id) return false;
+      const historicProduct = ctx.ctgbProducts.get(h.product.toLowerCase());
+      if (h.product.toLowerCase() === ctx.product.naam.toLowerCase()) return true;
 
-  // Zoek laatste toepassing met HETZELFDE MIDDEL (op basis van naam)
-  const productName = ctx.product.naam.toLowerCase();
+      // Check overlap in werkzame stoffen
+      if (historicProduct && historicProduct.werkzameStoffen && ctx.product.werkzameStoffen) {
+        return historicProduct.werkzameStoffen.some(s => ctx.product.werkzameStoffen?.includes(s));
+      }
+      return false;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
-  const relevantHistory = ctx.seasonHistory
-    .filter(h => h.product.toLowerCase() === productName)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  const lastApplication = relevantHistory[0];
-
-  if (lastApplication) {
-    const lastDate = new Date(lastApplication.date);
-    const daysSince = daysBetween(lastDate, ctx.applicationDate);
-
-    if (daysSince < minIntervalDays) {
-      const daysRemaining = minIntervalDays - daysSince;
+  if (lastEntry) {
+    const lastDate = new Date(lastEntry.date);
+    const diff = daysBetween(lastDate, ctx.applicationDate);
+    if (diff < minIntervalDays) {
       flags.push({
-        type: 'error', // ERROR: interval overtreding is wettelijk niet toegestaan
-        message: `Interval overtreding: Je mag ${ctx.product.naam} pas weer gebruiken over ${daysRemaining} dag${daysRemaining !== 1 ? 'en' : ''}. Laatste toepassing was ${lastDate.toLocaleDateString('nl-NL')} (minimaal ${minIntervalDays} dagen interval vereist).`,
-        field: 'date',
-        details: {
-          daysSince,
-          daysRemaining,
-          minRequired: minIntervalDays,
-          lastApplicationDate: lastDate.toISOString(),
-          lastProduct: lastApplication.product
-        }
+        type: 'error',
+        message: `Wettelijk interval overtreding voor ${ctx.product.naam}. Minimaal ${minIntervalDays} dagen vereist, laatste was ${diff} dag(en) geleden (${lastDate.toLocaleDateString('nl-NL')}).`,
+        field: 'date'
       });
     }
   }
@@ -685,42 +696,76 @@ function checkInterval(ctx: ValidationContext): ValidationFlag[] {
 }
 
 /**
+ * PRIORITEIT 5: Check seizoens maxima (Dosering & Aantal)
+ */
+function checkSeasonalMaxima(ctx: ValidationContext): ValidationFlag[] {
+  const flags: ValidationFlag[] = [];
+  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.crop);
+  if (!voorschrift) return flags;
+
+  const maxFreq = voorschrift.maxToepassingenPerTeeltcyclus || voorschrift.maxToepassingen; // Fallback to older field if needed
+  const maxDoseSeasonStr = voorschrift.maxDoseringPerTeeltcyclus;
+
+  // Tel historie voor DIT perceel en DIT gewas (teeltcyclus)
+  const relevantHistory = ctx.seasonHistory.filter(h =>
+    h.parcelId === ctx.parcel.id &&
+    h.product.toLowerCase() === ctx.product.naam.toLowerCase()
+  );
+
+  // Aantal toepassingen
+  if (maxFreq && (relevantHistory.length + 1) > maxFreq) {
+    flags.push({
+      type: 'error',
+      message: `Maximum aantal toepassingen bereikt voor ${ctx.product.naam} op dit perceel (${relevantHistory.length + 1}/${maxFreq}x per teelt).`,
+      field: 'products'
+    });
+  }
+
+  // Cumulatieve dosering
+  if (maxDoseSeasonStr) {
+    const maxDoseSeason = parseDosering(maxDoseSeasonStr);
+    if (maxDoseSeason) {
+      let totalDose = ctx.dosage;
+      relevantHistory.forEach(h => {
+        // Simplificatie: we gaan ervan uit dat eenheid consistent is of converteren
+        totalDose += h.dosage; // TODO: unit conversion if needed
+      });
+
+      if (totalDose > maxDoseSeason.value) {
+        flags.push({
+          type: 'error',
+          message: `Maximale seizoensdosering overschreden voor ${ctx.product.naam}: totaal ${totalDose} ${ctx.unit} (max ${maxDoseSeasonStr} per teelt).`,
+          field: 'dosage'
+        });
+      }
+    }
+  }
+
+  return flags;
+}
+
+/**
  * Check veiligheidstermijn (Pre-Harvest Interval)
- * Dit is optioneel - vereist een verwachte oogstdatum
  */
 function checkVeiligheidstermijn(
   ctx: ValidationContext,
   expectedHarvestDate?: Date
 ): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
+  if (!expectedHarvestDate) return flags;
 
-  if (!expectedHarvestDate) {
-    return flags;
-  }
+  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.crop);
+  const phiDays = parseInterval(voorschrift?.veiligheidstermijn || '');
 
-  const voorschrift = findGebruiksvoorschrift(ctx.product, ctx.parcel.crop);
-  if (!voorschrift?.veiligheidstermijn) {
-    return flags;
-  }
-
-  const phiDays = parseInterval(voorschrift.veiligheidstermijn);
-  if (!phiDays) {
-    return flags;
-  }
-
-  const daysUntilHarvest = daysBetween(ctx.applicationDate, expectedHarvestDate);
-
-  if (daysUntilHarvest < phiDays) {
-    flags.push({
-      type: 'error',
-      message: `Veiligheidstermijn niet gehaald: ${daysUntilHarvest} dagen tot oogst, maar ${phiDays} dagen vereist.`,
-      field: 'date',
-      details: {
-        daysUntilHarvest,
-        requiredDays: phiDays,
-        harvestDate: expectedHarvestDate.toISOString()
-      }
-    });
+  if (phiDays) {
+    const daysUntilHarvest = daysBetween(ctx.applicationDate, expectedHarvestDate);
+    if (daysUntilHarvest < phiDays) {
+      flags.push({
+        type: 'error',
+        message: `Oogst over ${daysUntilHarvest} dagen is te vroeg. Veiligheidstermijn voor ${ctx.product.naam} is ${phiDays} dagen.`,
+        field: 'date'
+      });
+    }
   }
 
   return flags;
@@ -729,6 +774,32 @@ function checkVeiligheidstermijn(
 // ============================================
 // Main Validation Function
 // ============================================
+
+/**
+ * Helper: bepaal het gewas van een perceel
+ * Probeert eerst parcel.crop, dan subParcels[0].crop
+ */
+function getParcelCrop(parcel: Parcel): string | undefined {
+  // Direct crop field
+  if (parcel.crop) {
+    return parcel.crop;
+  }
+
+  // Try first sub-parcel
+  if (parcel.subParcels && parcel.subParcels.length > 0) {
+    const firstSubParcel = parcel.subParcels[0];
+    if (firstSubParcel.crop) {
+      return firstSubParcel.crop;
+    }
+    // Some sub-parcels might use 'cropType' instead
+    if ((firstSubParcel as any).cropType) {
+      return (firstSubParcel as any).cropType;
+    }
+  }
+
+  console.warn(`[getParcelCrop] No crop found for parcel ${parcel.name || parcel.id}`);
+  return undefined;
+}
 
 /**
  * Hoofdfunctie voor validatie van een bespuiting
@@ -747,40 +818,41 @@ export async function validateSprayApplication(
   const flags: ValidationFlag[] = [];
   const matchedTargets = new Map<string, MatchedTarget>();
 
-  // Build lookup map voor snelle CTGB product zoekacties
+  // Determine the crop from parcel or sub-parcels
+  const parcelCrop = getParcelCrop(parcel);
+
+  if (!parcelCrop) {
+    flags.push({
+      type: 'warning',
+      message: `Perceel "${parcel.name || parcel.id}" heeft geen gewas geconfigureerd. Kan toelating niet valideren.`,
+      field: 'plots'
+    });
+    return { isValid: true, flags, matchedTargets }; // Skip validation but don't block
+  }
+
+  console.log(`[validateSprayApplication] Validating: product="${product.naam}", parcel="${parcel.name}", crop="${parcelCrop}"`);
+
+  // Build lookup map
   const ctgbMap = new Map<string, CtgbProduct>();
-  for (const p of allCtgbProducts) {
-    ctgbMap.set(p.naam.toLowerCase(), p);
-    // Ook toevoegen op basis van toelatingsnummer voor extra lookup mogelijkheid
+  allCtgbProducts.forEach(p => {
+    if (p.naam) {
+      ctgbMap.set(p.naam.toLowerCase(), p);
+    }
     if (p.toelatingsnummer) {
       ctgbMap.set(p.toelatingsnummer.toLowerCase(), p);
     }
-  }
+  });
 
-  // Match target organism met gebruiksvoorschriften
-  const targetMatch = findGebruiksvoorschriftWithTarget(product, parcel.crop, targetReason);
+  // Match target
+  const targetMatch = findGebruiksvoorschriftWithTarget(product, parcelCrop, targetReason);
   let matchedTarget: MatchedTarget | undefined;
 
   if (targetMatch) {
     matchedTarget = targetMatch.matchedTarget;
     matchedTargets.set(product.naam, matchedTarget);
 
-    // Info bericht over matched/assumed target
-    if (matchedTarget.isAssumed) {
-      flags.push({
-        type: 'info',
-        message: `Doelorganisme: ${matchedTarget.targetOrganism}`,
-        field: 'targetOrganism',
-        details: { assumedTarget: matchedTarget.targetOrganism }
-      });
-    } else if (targetReason) {
-      flags.push({
-        type: 'info',
-        message: `Doelorganisme gematcht: "${targetReason}" → ${matchedTarget.targetOrganism}`,
-        field: 'targetOrganism',
-        details: { userInput: targetReason, matchedTarget: matchedTarget.targetOrganism }
-      });
-    }
+    const label = matchedTarget.isAssumed ? `${matchedTarget.targetOrganism}` : `Doel: ${matchedTarget.targetOrganism}`;
+    flags.push({ type: 'info', message: label, field: 'targetOrganism' });
   } else if (targetReason) {
     // Gebruiker gaf target, maar geen match gevonden
     flags.push({
@@ -792,72 +864,168 @@ export async function validateSprayApplication(
   }
 
   const ctx: ValidationContext = {
-    parcel,
-    product,
-    dosage,
-    unit,
-    applicationDate,
-    seasonHistory,
-    ctgbProducts: ctgbMap,
-    targetReason,
-    matchedTarget
+    parcel, crop: parcelCrop, product, dosage, unit, applicationDate,
+    seasonHistory, ctgbProducts: ctgbMap,
+    targetReason, matchedTarget
   };
 
-  // Run alle checks in prioriteitsvolgorde
-  flags.push(...await checkActiveSubstanceCumulation(ctx));
+  // Voer alle checks uit
   flags.push(...checkCropAllowed(ctx));
+  if (flags.some(f => f.type === 'error' && f.field === 'products')) {
+    return { isValid: false, flags, matchedTargets };
+  }
+
   flags.push(...checkDosage(ctx));
   flags.push(...checkInterval(ctx));
+  flags.push(...checkSeasonalMaxima(ctx));
+  flags.push(...await checkActiveSubstanceCumulation(ctx));
   flags.push(...checkVeiligheidstermijn(ctx, expectedHarvestDate));
 
-  return {
-    isValid: !flags.some(f => f.type === 'error'),
-    flags,
-    matchedTargets
-  };
+  const isValid = !flags.some(f => f.type === 'error');
+
+  return { isValid, flags, matchedTargets };
 }
 
 /**
- * Batch validatie voor meerdere producten op meerdere percelen
+ * Hulpfunctie voor de API om parsed data in één keer te valideren.
+ *
+ * GROUPING LOGIC:
+ * - Crop authorization errors: Grouped by crop (not per parcel)
+ * - Dosage errors: Grouped by product
+ * - Interval/substance limits: Per subparcel (more specific)
  */
-export async function validateBatchSprayApplication(
-  parcels: Parcel[],
-  products: Array<{ product: CtgbProduct; dosage: number; unit: string; targetReason?: string }>,
-  applicationDate: Date,
-  seasonHistoryByParcel: Map<string, ParcelHistoryEntry[]>,
-  allCtgbProducts: CtgbProduct[]
-): Promise<Map<string, ValidationResult>> {
-  const results = new Map<string, ValidationResult>();
+export async function validateParsedSprayData(
+  parsedData: { plots: string[]; products: any[]; date?: string },
+  allParcels: Parcel[],
+  allCtgbProducts: CtgbProduct[],
+  parcelHistory: ParcelHistoryEntry[]
+): Promise<{
+  isValid: boolean;
+  validationMessage: string | null;
+  errorCount: number;
+  warningCount: number;
+}> {
+  const selectedParcels = allParcels.filter(p => parsedData.plots.includes(p.id));
+  const applicationDate = parsedData.date ? new Date(parsedData.date) : new Date();
 
-  for (const parcel of parcels) {
-    const parcelHistory = seasonHistoryByParcel.get(parcel.id) || [];
-    const combinedFlags: ValidationFlag[] = [];
-    const combinedMatchedTargets = new Map<string, MatchedTarget>();
+  // Group errors by type for smarter deduplication
+  const cropAuthErrors = new Map<string, Set<string>>(); // product -> Set<crop>
+  const dosageErrors = new Map<string, string>(); // product -> message
+  const intervalErrors = new Map<string, string>(); // product+parcel -> message
+  const substanceErrors = new Map<string, string>(); // substance -> message
+  const otherMessages: string[] = [];
+  let errorCount = 0;
+  let warningCount = 0;
+  let infoCount = 0;
 
-    for (const { product, dosage, unit, targetReason } of products) {
-      const result = await validateSprayApplication(
-        parcel,
-        product,
-        dosage,
-        unit,
-        applicationDate,
-        parcelHistory,
-        allCtgbProducts,
-        undefined, // expectedHarvestDate
-        targetReason
-      );
-      combinedFlags.push(...result.flags);
-      if (result.matchedTargets) {
-        result.matchedTargets.forEach((v, k) => combinedMatchedTargets.set(k, v));
-      }
+  for (const productEntry of parsedData.products) {
+    const matchingProduct = allCtgbProducts.find(m =>
+      m.naam?.toLowerCase() === productEntry.product.toLowerCase() ||
+      m.toelatingsnummer === productEntry.product
+    );
+
+    if (!matchingProduct) {
+      otherMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in CTGB database.`);
+      warningCount++;
+      continue;
     }
 
-    results.set(parcel.id, {
-      isValid: !combinedFlags.some(f => f.type === 'error'),
-      flags: combinedFlags,
-      matchedTargets: combinedMatchedTargets
-    });
+    for (const parcel of selectedParcels) {
+      const history = parcelHistory.filter(h => h.parcelId === parcel.id);
+      const crop = getParcelCrop(parcel) || 'Onbekend';
+
+      const result = await validateSprayApplication(
+        parcel,
+        matchingProduct,
+        productEntry.dosage,
+        productEntry.unit,
+        applicationDate,
+        history,
+        allCtgbProducts,
+        undefined,
+        productEntry.targetReason
+      );
+
+      for (const flag of result.flags) {
+        // Group crop authorization errors by crop
+        if (flag.details?.allowedCrops || flag.message.includes('wordt niet ondersteund')) {
+          if (!cropAuthErrors.has(matchingProduct.naam)) {
+            cropAuthErrors.set(matchingProduct.naam, new Set());
+          }
+          cropAuthErrors.get(matchingProduct.naam)!.add(crop);
+          if (flag.type === 'error') errorCount++;
+        }
+        // Group dosage errors by product (same message for all parcels)
+        else if (flag.field === 'dosage' && flag.type === 'error') {
+          if (!dosageErrors.has(matchingProduct.naam)) {
+            dosageErrors.set(matchingProduct.naam, flag.message);
+            errorCount++;
+          }
+        }
+        // Interval errors are per parcel (keep specific)
+        else if (flag.message.includes('interval') || flag.message.includes('Interval')) {
+          const key = `${matchingProduct.naam}-${parcel.id}`;
+          if (!intervalErrors.has(key)) {
+            intervalErrors.set(key, `${parcel.name}: ${flag.message}`);
+            if (flag.type === 'error') errorCount++;
+            else if (flag.type === 'warning') warningCount++;
+          }
+        }
+        // Substance cumulation errors
+        else if (flag.details?.substance) {
+          const substance = flag.details.substance as string;
+          if (!substanceErrors.has(substance)) {
+            substanceErrors.set(substance, flag.message);
+            if (flag.type === 'error') errorCount++;
+            else if (flag.type === 'warning') warningCount++;
+          }
+        }
+        // Other messages (deduplicate)
+        else {
+          const prefix = flag.type === 'error' ? '❌' : flag.type === 'warning' ? '⚠️' : 'ℹ️';
+          const msg = `${prefix} ${flag.message}`;
+          if (!otherMessages.includes(msg)) {
+            otherMessages.push(msg);
+            if (flag.type === 'error') errorCount++;
+            else if (flag.type === 'warning') warningCount++;
+            else infoCount++;
+          }
+        }
+      }
+    }
   }
 
-  return results;
+  // Build final message with grouped errors
+  const validationMessages: string[] = [];
+
+  // Crop authorization errors - ONE message per product per crop
+  for (const [product, crops] of cropAuthErrors) {
+    const cropList = [...crops].sort().join(', ');
+    validationMessages.push(`❌ ${product} is niet toegelaten op: ${cropList}`);
+  }
+
+  // Dosage errors
+  for (const [product, message] of dosageErrors) {
+    validationMessages.push(`❌ ${message}`);
+  }
+
+  // Substance cumulation errors
+  for (const [substance, message] of substanceErrors) {
+    validationMessages.push(`❌ ${message}`);
+  }
+
+  // Interval errors (per parcel)
+  for (const [key, message] of intervalErrors) {
+    validationMessages.push(`⚠️ ${message}`);
+  }
+
+  // Other messages
+  validationMessages.push(...otherMessages);
+
+  return {
+    isValid: errorCount === 0,
+    validationMessage: validationMessages.length > 0 ? validationMessages.join('\n') : null,
+    errorCount,
+    warningCount
+  };
 }

@@ -4,7 +4,6 @@ import * as React from "react"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import { nl } from 'date-fns/locale'
-import { Timestamp } from "firebase/firestore"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -16,14 +15,14 @@ import {
 } from "@/components/ui/popover"
 
 interface InlineEditDateProps {
-  date: Date | Timestamp | undefined;
+  date: Date | string | undefined;
   onDateChange: (date: Date) => void;
 }
 
 export function InlineEditDate({ date, onDateChange }: InlineEditDateProps) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const dateObj = date instanceof Timestamp ? date.toDate() : (date || new Date());
-  
+  const dateObj = date ? (typeof date === 'string' ? new Date(date) : date) : new Date();
+
   const handleSelect = (selectedDate: Date | undefined) => {
     if (!selectedDate) return;
 

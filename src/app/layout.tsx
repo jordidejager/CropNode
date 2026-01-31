@@ -3,7 +3,7 @@ import './globals.css';
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { Toaster } from "@/components/ui/toaster";
-import FirebaseClientProvider from '@/firebase/client-provider';
+// import FirebaseClientProvider from '@/firebase/client-provider';
 
 export const metadata: Metadata = {
   title: 'AgriSprayer Pro',
@@ -23,9 +23,9 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        <FirebaseClientProvider>
-          {children}
-        </FirebaseClientProvider>
+        {/* <FirebaseClientProvider> */}
+        {children}
+        {/* </FirebaseClientProvider> */}
         <Toaster />
       </body>
     </html>

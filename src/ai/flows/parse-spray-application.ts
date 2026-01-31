@@ -1,6 +1,4 @@
 
-'use server';
-
 /**
  * @fileOverview This file defines the Genkit flow for parsing spray application
  * data from natural language input. It uses AI to extract structured
@@ -16,8 +14,8 @@ import { z } from 'genkit';
 
 const ProductEntrySchema = z.object({
   product: z.string().describe('The official name of the product used, matched from the provided productNames list.'),
-  dosage: z.number().describe('The dosage of the product.'),
-  unit: z.string().describe('The unit of measurement for the dosage (e.g., "kg", "l").'),
+  dosage: z.number().describe('The dosage of the product. Use 0 if not specified by the user.'),
+  unit: z.string().describe('The unit of measurement for the dosage (e.g., "kg", "L"). Use "L" if not specified.'),
   targetReason: z.string().optional().describe('The target pest, disease, or reason for spraying this product if mentioned (e.g., "schurft", "luis", "bladluis", "vruchtmot"). Extract keywords like "tegen [X]", "voor [X]", "bestrijding van [X]".'),
 });
 
@@ -28,7 +26,16 @@ const SprayApplicationInputSchema = z.object({
   plots: z
     .string()
     .describe('A JSON string representing an array of available plots with their id, name, crop and variety.'),
-  productNames: z.array(z.string()).describe('An array of all available official product names.')
+  productNames: z.array(z.string()).describe('An array of all available official product names.'),
+  previousDraft: z.object({
+    plots: z.array(z.string()),
+    products: z.array(ProductEntrySchema),
+    date: z.string().optional()
+  }).optional().describe('The current state of the draft if this is a correction or follow-up.'),
+  userPreferences: z.array(z.object({
+    alias: z.string(),
+    preferred: z.string()
+  })).optional().describe('An array of user preferences/corrections from the past. Use these to favor certain matches.')
 });
 
 const SprayApplicationOutputSchema = z.object({
@@ -41,8 +48,27 @@ const SprayApplicationOutputSchema = z.object({
   date: z.string().optional().describe("The date of the spray application in 'YYYY-MM-DD' format. If the user mentions 'today', 'yesterday', or a specific date, parse it. Otherwise, omit this field."),
 });
 
+// Schema for registration unit (sub-group with specific plots and products)
+const RegistrationUnitSchema = z.object({
+  plots: z.array(z.string()).describe('Plot IDs for this specific unit.'),
+  products: z.array(ProductEntrySchema).describe('Products with dosages for this unit.'),
+  label: z.string().optional().describe('Descriptive label for UI, e.g. "Appels (zonder Kanzi)" or "Kanzi"'),
+  reason: z.enum(['base', 'exception', 'addition', 'reduced_dosage']).optional()
+    .describe('Why this unit exists: base=main group, exception=excluded from base, addition=extra products, reduced_dosage=different dosage'),
+});
+
+// V2 Schema with support for grouped registrations
+const SprayApplicationOutputSchemaV2 = z.object({
+  registrations: z
+    .array(RegistrationUnitSchema)
+    .describe('Array of registration units. For simple inputs: 1 unit. For complex inputs with variations: multiple units.'),
+  date: z.string().optional().describe("The date of the spray application in 'YYYY-MM-DD' format."),
+});
+
 export type SprayApplicationInput = z.infer<typeof SprayApplicationInputSchema>;
 export type SprayApplicationOutput = z.infer<typeof SprayApplicationOutputSchema>;
+export type SprayApplicationOutputV2 = z.infer<typeof SprayApplicationOutputSchemaV2>;
+export type RegistrationUnit = z.infer<typeof RegistrationUnitSchema>;
 
 export async function parseSprayApplication(input: SprayApplicationInput): Promise<SprayApplicationOutput> {
   return parseSprayApplicationFlow(input);
@@ -54,35 +80,49 @@ const prompt = ai.definePrompt({
   input: { schema: SprayApplicationInputSchema },
   output: { schema: SprayApplicationOutputSchema },
   prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
-You will be provided with a sentence, a list of available plots (parcels), and a list of official product names.
+You will be provided with a sentence, a list of available plots (parcels), a list of official product names, and optional context from a previous draft.
 
 Your goal is to identify:
 1.  Which plots were sprayed.
 2.  Which products were used, including their dosage and unit.
 3.  The date of the application if mentioned.
-4.  The target organism/reason for spraying each product (if mentioned).
+
+CRITICAL RULES:
+-   ONLY PARSE PRODUCTS EXPLICITLY MENTIONED BY THE USER.
+    -   DO NOT add products that are not in the user's input.
+    -   DO NOT suggest or assume additional products.
+    -   If the user says "coragen en score", ONLY output those two products.
+    -   NEVER add extra products like "Spuitzwavel" or similar unless the user explicitly mentions them.
+-   If the user does NOT specify a dosage, set dosage to 0 (the system will auto-fill from the database).
+-   If the user does NOT specify a unit, default to "L".
 
 Rules for parsing:
--   Plots: Identify which plots were sprayed based on their name or variety. A user might refer to 'all conference' which means all plots of the 'Conference' variety. If the user says 'alles' (everything) or 'alle percelen' (all plots), you MUST select all plot IDs from the provided list. You MUST use the ID of the plot in your output.
--   Products: You MUST match the user's input to the most likely official product name from the provided list. For example, if the user says "pyrus", you should match it to "Pyrus 400 SC" from the list.
--   Date: If the user mentions a specific date, 'today', or 'yesterday', determine the date and provide it in 'YYYY-MM-DD' format. If no date is mentioned, do not include the date field in the output. Today's date is ${new Date().toISOString().split('T')[0]}.
--   Target Reason (targetReason): Extract the pest, disease, or reason for spraying if mentioned. Look for patterns like:
-    - "tegen [X]" (against X) - e.g., "tegen schurft" -> targetReason: "schurft"
-    - "voor [X]" (for X) - e.g., "voor luis" -> targetReason: "luis"
-    - "bestrijding [X]" (control of X) - e.g., "bestrijding bladluis" -> targetReason: "bladluis"
-    - Direct mentions of pests/diseases near product names - e.g., "captan voor schurft" -> targetReason: "schurft"
-    Common Dutch pest/disease names: schurft, luis, bladluis, vruchtmot, meeldauw, roest, trips, spint, appelbloesemkever.
-    If no target is mentioned for a product, omit the targetReason field for that product.
+-   CONVERSATIONAL CONTEXT:
+    -   If 'previousDraft' is provided, the user might be correcting it (e.g., "Nee, perceel 'thuis' niet").
+    -   Use the 'previousDraft' as your base state and APPLY the changes from the 'naturalLanguageInput'.
+    -   If the user says "nee, [X] niet", remove [X] from the existing plots/products.
+    -   If the user adds information like "vandaag ook [Y]", add [Y] to the existing state.
+-   Plots (Intelligent Grouping):
+    -   Match per crop ('Appel', 'Peer') or variety ('Elstar', 'Conference').
+    -   "alle appels" -> all IDs with crop 'Appel'.
+    -   "alle elstar" -> all IDs with variety 'Elstar'.
+-   Products: Match to the official list. Check userPreferences. ONLY include products the user explicitly mentioned.
+-   Date: Parse mentions of 'today' (${new Date().toISOString().split('T')[0]}), 'yesterday', or specific dates.
 
 Return the answer ONLY as a valid JSON object matching the provided schema.
 
 Here is the user's input:
 "{{{naturalLanguageInput}}}"
 
-Here is the list of available plots. Use the 'id' for your output.
+{{#if previousDraft}}
+Here is the current state of the draft (to be updated):
+{{{json previousDraft}}}
+{{/if}}
+
+Here is the list of available plots (parcels):
 {{{plots}}}
 
-Here is the list of official product names to match against:
+Here is the list of official product names:
 {{#each productNames}}
 - {{{this}}}
 {{/each}}
@@ -105,4 +145,114 @@ const parseSprayApplicationFlow = ai.defineFlow(
   }
 );
 
+// ============================================
+// V2: Support for grouped registrations with variations
+// ============================================
 
+export async function parseSprayApplicationV2(input: SprayApplicationInput): Promise<SprayApplicationOutputV2> {
+  return parseSprayApplicationFlowV2(input);
+}
+
+const promptV2 = ai.definePrompt({
+  name: 'sprayApplicationPromptV2',
+  input: { schema: SprayApplicationInputSchema },
+  output: { schema: SprayApplicationOutputSchemaV2 },
+  prompt: `You are an expert in agriculture and your task is to parse a user's natural language input about a spray application.
+You will be provided with a sentence, a list of available plots (parcels), a list of official product names, and optional context from a previous draft.
+
+Your goal is to identify:
+1.  Which plots were sprayed.
+2.  Which products were used, including their dosage and unit.
+3.  The date of the application if mentioned.
+
+CRITICAL RULES:
+-   ONLY PARSE PRODUCTS EXPLICITLY MENTIONED BY THE USER.
+    -   DO NOT add products that are not in the user's input.
+    -   DO NOT suggest or assume additional products.
+    -   If the user says "coragen en score", ONLY output those two products.
+    -   NEVER add extra products like "Spuitzwavel" or similar unless the user explicitly mentions them.
+-   If the user does NOT specify a dosage, set dosage to 0 (the system will auto-fill from the database).
+-   If the user does NOT specify a unit, default to "L".
+
+VARIATIONS & EXCEPTIONS (IMPORTANT):
+When the user mentions variations, exceptions, or different treatments for subsets, you MUST split them into MULTIPLE registrations:
+
+**Trigger words:** "maar", "behalve", "uitgezonderd", "niet de", "alleen de", "halve dosering", "dubbele dosering", "ook nog", "extra"
+
+**Example 1: Extra product for a subset**
+User: "Alle appels met Merpan, maar Kanzi ook Score"
+→ registrations: [
+    { plots: [all apple IDs EXCEPT Kanzi], products: [{Merpan}], label: "Appels (zonder Kanzi)", reason: "base" },
+    { plots: [only Kanzi IDs], products: [{Merpan}, {Score}], label: "Kanzi", reason: "addition" }
+  ]
+
+**Example 2: Different dosage for subset**
+User: "Peren met 1 kg Captan, Lucas halve dosering"
+→ registrations: [
+    { plots: [all pear IDs EXCEPT Lucas], products: [{Captan, dosage: 1, unit: "kg"}], label: "Peren (zonder Lucas)", reason: "base" },
+    { plots: [only Lucas IDs], products: [{Captan, dosage: 0.5, unit: "kg"}], label: "Lucas", reason: "reduced_dosage" }
+  ]
+
+**Example 3: Excluding a variety**
+User: "Alle fruit behalve Tessa met Score"
+→ registrations: [
+    { plots: [all fruit IDs EXCEPT Tessa], products: [{Score}], label: "Fruit (zonder Tessa)", reason: "base" }
+  ]
+(Note: Tessa is excluded entirely, so no registration for Tessa)
+
+**Example 4: Simple input (no variations)**
+User: "Alle appels met Merpan"
+→ registrations: [
+    { plots: [all apple IDs], products: [{Merpan}], label: "Appels" }
+  ]
+
+Rules for parsing:
+-   CONVERSATIONAL CONTEXT:
+    -   If 'previousDraft' is provided, the user might be correcting it (e.g., "Nee, perceel 'thuis' niet").
+    -   Use the 'previousDraft' as your base state and APPLY the changes from the 'naturalLanguageInput'.
+    -   If the user says "nee, [X] niet", remove [X] from the existing plots/products.
+    -   If the user adds information like "vandaag ook [Y]", add [Y] to the existing state.
+-   Plots (Intelligent Grouping):
+    -   Match per crop ('Appel', 'Peer') or variety ('Elstar', 'Conference', 'Kanzi').
+    -   "alle appels" -> all IDs with crop 'Appel'.
+    -   "alle elstar" -> all IDs with variety 'Elstar'.
+    -   "alle kanzi" -> all IDs with variety 'Kanzi'.
+-   Products: Match to the official list. Check userPreferences. ONLY include products the user explicitly mentioned.
+-   Date: Parse mentions of 'today' (${new Date().toISOString().split('T')[0]}), 'yesterday', or specific dates.
+-   Labels: Create short, descriptive Dutch labels. Use "(zonder X)" for exclusions.
+
+Return the answer ONLY as a valid JSON object matching the provided schema.
+
+Here is the user's input:
+"{{{naturalLanguageInput}}}"
+
+{{#if previousDraft}}
+Here is the current state of the draft (to be updated):
+{{{json previousDraft}}}
+{{/if}}
+
+Here is the list of available plots (parcels):
+{{{plots}}}
+
+Here is the list of official product names:
+{{#each productNames}}
+- {{{this}}}
+{{/each}}
+`
+});
+
+const parseSprayApplicationFlowV2 = ai.defineFlow(
+  {
+    name: 'parseSprayApplicationFlowV2',
+    inputSchema: SprayApplicationInputSchema,
+    outputSchema: SprayApplicationOutputSchemaV2,
+  },
+  async (input) => {
+    const llmResponse = await promptV2(input);
+    const output = llmResponse.output;
+    if (!output) {
+      throw new Error('AI did not return a valid output.');
+    }
+    return output;
+  }
+);

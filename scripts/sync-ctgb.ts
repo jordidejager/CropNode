@@ -52,6 +52,35 @@ const firebaseConfig = {
 // TYPES
 // ============================================
 
+// Product type / "Aard van het middel" - from CTGB outcomeTypes
+type CtgbProductType =
+  | 'Fungicide'           // Schimmelbestrijdingsmiddel
+  | 'Insecticide'         // Insectenbestrijdingsmiddel
+  | 'Herbicide'           // Onkruidbestrijdingsmiddel
+  | 'Groeiregulator'      // Groeiregulator
+  | 'Kiemremmingsmiddel'  // Kiemremmingsmiddel
+  | 'Acaricide'           // Mijtenbestrijdingsmiddel
+  | 'Molluscicide'        // Slakkenbestrijdingsmiddel
+  | 'Rodenticide'         // Knaagdierbestrijdingsmiddel
+  | 'Overig';             // Other/Unknown
+
+// Mapping from CTGB outcomeTypes description to our product type
+const OUTCOME_TYPE_MAPPING: Record<string, CtgbProductType> = {
+  'Schimmelbestrijdingsmiddel': 'Fungicide',
+  'Insectenbestrijdingsmiddel': 'Insecticide',
+  'Onkruidbestrijdingsmiddel': 'Herbicide',
+  'Groeiregulator': 'Groeiregulator',
+  'Kiemremmingsmiddel': 'Kiemremmingsmiddel',
+  'Mijtenbestrijdingsmiddel': 'Acaricide',
+  'Slakkenbestrijdingsmiddel': 'Molluscicide',
+  'Knaagdierbestrijdingsmiddel': 'Rodenticide',
+  // Common variations
+  'Fungicide': 'Fungicide',
+  'Insecticide': 'Insecticide',
+  'Herbicide': 'Herbicide',
+  'Acaricide': 'Acaricide',
+};
+
 interface CtgbProduct {
   // Identifiers
   id: string;
@@ -65,6 +94,9 @@ interface CtgbProduct {
 
   // Company
   toelatingshouder?: string;
+
+  // Product types ("Aard van het middel")
+  productTypes: CtgbProductType[];
 
   // Substances
   werkzameStoffen: string[];
@@ -164,6 +196,72 @@ function cleanForFirestore<T>(obj: T): T {
   }
 
   return obj;
+}
+
+/**
+ * Extract product types from CTGB outcomeTypes
+ * Falls back to text analysis if outcomeTypes is empty
+ */
+function extractProductTypes(data: any): CtgbProductType[] {
+  const types: CtgbProductType[] = [];
+
+  // Primary: Extract from outcomeTypes field
+  if (data.outcomeTypes && Array.isArray(data.outcomeTypes)) {
+    for (const ot of data.outcomeTypes) {
+      const description = ot.description || '';
+      const mapped = OUTCOME_TYPE_MAPPING[description];
+      if (mapped && !types.includes(mapped)) {
+        types.push(mapped);
+      }
+    }
+  }
+
+  // Fallback: If no types found, try to infer from uses/targetOrganisms
+  if (types.length === 0 && data.uses && Array.isArray(data.uses)) {
+    const allText: string[] = [];
+
+    for (const use of data.uses) {
+      // Collect text from targetOrganisms
+      if (use.targetOrganisms && Array.isArray(use.targetOrganisms)) {
+        const extractOrganismText = (items: any[]): void => {
+          for (const item of items) {
+            if (item.groupScientific) allText.push(item.groupScientific.toLowerCase());
+            if (item.organismScientific) allText.push(item.organismScientific.toLowerCase());
+            if (item.items) extractOrganismText(item.items);
+          }
+        };
+        extractOrganismText(use.targetOrganisms);
+      }
+
+      // Collect remarks
+      if (use.remarks) allText.push(use.remarks.toLowerCase());
+    }
+
+    const combinedText = allText.join(' ');
+
+    // Keyword-based inference
+    const keywordPatterns: { pattern: RegExp; type: CtgbProductType }[] = [
+      { pattern: /schimmel|fungus|meeldauw|roest|botrytis|phytophthora/i, type: 'Fungicide' },
+      { pattern: /insect|luis|kever|vlieg|mot|rups|trips|bladluis/i, type: 'Insecticide' },
+      { pattern: /onkruid|gras|wortel.*onkruid|akker.*onkruid/i, type: 'Herbicide' },
+      { pattern: /groeiregulat|kiemrem|kieming/i, type: 'Groeiregulator' },
+      { pattern: /mijt|spint/i, type: 'Acaricide' },
+      { pattern: /slak|naaktslak/i, type: 'Molluscicide' },
+    ];
+
+    for (const { pattern, type } of keywordPatterns) {
+      if (pattern.test(combinedText) && !types.includes(type)) {
+        types.push(type);
+      }
+    }
+  }
+
+  // If still no types, return Overig
+  if (types.length === 0) {
+    types.push('Overig');
+  }
+
+  return types;
 }
 
 /**
@@ -440,6 +538,9 @@ async function fetchProductDetails(product: SearchResult): Promise<CtgbProduct> 
       }
     }
 
+    // Extract product types ("Aard van het middel")
+    const productTypes = extractProductTypes(data);
+
     return {
       id: String(data.id || product.id),
       toelatingsnummer: data.authorisation?.registrationNumber?.nl || product.registrationNumber || '',
@@ -448,6 +549,7 @@ async function fetchProductDetails(product: SearchResult): Promise<CtgbProduct> 
       vervaldatum: data.authorisation?.expirationDate || product.expirationDate || '',
       categorie: data.categoryType?.description || 'Gewasbeschermingsmiddel',
       toelatingshouder: data.authorisationHolder?.companyName,
+      productTypes,
       werkzameStoffen,
       samenstelling,
       gebruiksvoorschriften,
@@ -465,6 +567,7 @@ async function fetchProductDetails(product: SearchResult): Promise<CtgbProduct> 
       status: 'Valid',
       vervaldatum: product.expirationDate || '',
       categorie: 'Gewasbeschermingsmiddel',
+      productTypes: ['Overig'],
       werkzameStoffen: [],
       gebruiksvoorschriften: [],
       searchKeywords: generateSearchKeywords(product.name),
@@ -488,6 +591,7 @@ async function fetchAllDetails(products: SearchResult[]): Promise<CtgbProduct[]>
       status: 'Valid',
       vervaldatum: p.expirationDate || '',
       categorie: 'Gewasbeschermingsmiddel',
+      productTypes: ['Overig'] as CtgbProductType[],
       werkzameStoffen: [],
       gebruiksvoorschriften: [],
       searchKeywords: generateSearchKeywords(p.name),

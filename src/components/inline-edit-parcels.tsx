@@ -29,6 +29,28 @@ export function InlineEditParcels({
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
+  // Local state for editing - only committed when popup closes
+  const [localSelection, setLocalSelection] = useState<string[]>(selectedParcelIds)
+
+  // Sync local state when popup opens
+  useEffect(() => {
+    if (open) {
+      setLocalSelection(selectedParcelIds)
+    }
+  }, [open, selectedParcelIds])
+
+  // Commit changes when popup closes
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && open) {
+      // Popup is closing - commit the changes if they differ
+      const hasChanged = JSON.stringify(localSelection.sort()) !== JSON.stringify(selectedParcelIds.sort())
+      if (hasChanged) {
+        onSelectionChange(localSelection)
+      }
+    }
+    setOpen(newOpen)
+  }
+
   const filteredParcels = useMemo(() =>
     allParcels.filter(
       (parcel) =>
@@ -37,17 +59,17 @@ export function InlineEditParcels({
         parcel.variety.toLowerCase().includes(searchTerm.toLowerCase())
     ), [allParcels, searchTerm]
   );
-  
-  const selectedParcels = useMemo(() => 
+
+  const selectedParcels = useMemo(() =>
     selectedParcelIds.map(id => allParcels.find(p => p.id === id)).filter(Boolean) as Parcel[],
     [selectedParcelIds, allParcels]
   );
 
   const handleCheckboxChange = (parcelId: string, checked: boolean) => {
     const newSelection = checked
-      ? [...selectedParcelIds, parcelId]
-      : selectedParcelIds.filter((id) => id !== parcelId)
-    onSelectionChange(newSelection)
+      ? [...localSelection, parcelId]
+      : localSelection.filter((id) => id !== parcelId)
+    setLocalSelection(newSelection)
   }
 
   const displayText = useMemo(() => {
@@ -58,7 +80,7 @@ export function InlineEditParcels({
 
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -94,13 +116,13 @@ export function InlineEditParcels({
                   onClick={() =>
                     handleCheckboxChange(
                       parcel.id,
-                      !selectedParcelIds.includes(parcel.id)
+                      !localSelection.includes(parcel.id)
                     )
                   }
                 >
                   <Checkbox
                     id={`inline-parcel-${parcel.id}`}
-                    checked={selectedParcelIds.includes(parcel.id)}
+                    checked={localSelection.includes(parcel.id)}
                     onCheckedChange={(checked) =>
                       handleCheckboxChange(parcel.id, !!checked)
                     }
@@ -124,11 +146,11 @@ export function InlineEditParcels({
             )}
           </div>
         </ScrollArea>
-        {selectedParcelIds.length > 0 && (
+        {localSelection.length > 0 && (
           <div className="p-2 border-t">
             <p className="text-xs text-muted-foreground">
-              {selectedParcelIds.length} perceel
-              {selectedParcelIds.length !== 1 ? "en" : ""} geselecteerd
+              {localSelection.length} perceel
+              {localSelection.length !== 1 ? "en" : ""} geselecteerd
             </p>
           </div>
         )}
@@ -136,3 +158,4 @@ export function InlineEditParcels({
     </Popover>
   )
 }
+

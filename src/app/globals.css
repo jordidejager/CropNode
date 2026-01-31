@@ -79,6 +79,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground font-body;
   }
@@ -88,9 +89,11 @@
 .leaflet-container {
   z-index: 0 !important;
 }
+
 .leaflet-pane {
   z-index: auto !important;
 }
+
 .leaflet-top,
 .leaflet-bottom {
   z-index: 800 !important;
@@ -105,9 +108,37 @@
   font-weight: 600 !important;
   font-size: 12px !important;
   color: white !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
   white-space: nowrap !important;
 }
-.parcel-label::before {
+
+.parcel-label-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+
+.parcel-label-wrapper::before {
   display: none !important;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }

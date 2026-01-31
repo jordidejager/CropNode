@@ -1,4 +1,4 @@
-'use server';
+// Dev entry point for Genkit
 import 'dotenv/config';
 import { config } from 'dotenv';
 config();

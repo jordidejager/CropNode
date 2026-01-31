@@ -1,0 +1,115 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e6]
+        - generic [ref=e9]:
+          - generic [ref=e10]: AgriSprayer
+          - generic [ref=e11]: Professional
+      - navigation [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14] [cursor=pointer]:
+            - img [ref=e15]
+            - generic [ref=e18]: Command Center
+            - img [ref=e20]
+          - generic [ref=e22]:
+            - link "Slimme Invoer" [ref=e23] [cursor=pointer]:
+              - /url: /command-center/smart-input
+              - img [ref=e24]
+              - generic [ref=e26]: Slimme Invoer
+            - link "Tijdlijn" [ref=e27] [cursor=pointer]:
+              - /url: /command-center/timeline
+              - img [ref=e28]
+              - generic [ref=e31]: Tijdlijn
+        - generic [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+          - generic [ref=e36]: Percelen
+          - img [ref=e38]
+        - generic [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+          - generic [ref=e46]: Crop Care
+          - img [ref=e48]
+        - generic [ref=e51] [cursor=pointer]:
+          - img [ref=e52]
+          - generic [ref=e54]: Research Hub
+          - img [ref=e56]
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e61]: JT
+          - generic [ref=e62]:
+            - generic [ref=e63]: JagerTech Demo
+            - generic [ref=e64]: demo@jagertech.nl
+        - button "Inklappen" [ref=e65] [cursor=pointer]:
+          - img
+          - generic [ref=e66]: Inklappen
+    - generic [ref=e67]:
+      - banner [ref=e68]:
+        - button "Toggle notifications" [ref=e69] [cursor=pointer]:
+          - img
+          - generic [ref=e70]: Toggle notifications
+      - main [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - generic [ref=e75]:
+                - img [ref=e76]
+                - generic [ref=e78]: Logboek
+              - generic [ref=e79]: 2 berichten
+            - generic [ref=e82]:
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - generic [ref=e87]: "Alle percelen met peren: 2 kg/ha Delan"
+                  - generic [ref=e88]: U • 05:43 PM
+                - img [ref=e90]
+              - generic [ref=e95]:
+                - img [ref=e97]
+                - generic [ref=e100]:
+                  - generic [ref=e101]: "Oké, ik heb de percelen met peren voor je opgezocht. De volgende percelen zijn beplant met peren: * **Busje** (Migo) * **Jachthoek** (Conference) * **Kloetinge Spoor** (Beurré Alexandre Lucas) * **Plantsoen** (Doyenné du Comice) * **Schele** (Conference) * **Stadhoek** (Conference) * **Thuis** (Beurré Alexandre Lucas) * **Zuidhoek** (Conference) Je wilt 2 kg/ha Delan spuiten op al deze percelen. Heb ik het zo goed begrepen?"
+                  - generic [ref=e102]: AgriBot • 05:43 PM
+              - generic [ref=e103]:
+                - button "Verwijder een perceel" [ref=e104] [cursor=pointer]
+                - button "Wijzig dosering" [ref=e105] [cursor=pointer]
+                - button "Dat was alles, bevestig" [ref=e106] [cursor=pointer]
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - button "Vandaag gespoten" [ref=e111] [cursor=pointer]:
+                  - img [ref=e112]
+                  - text: Vandaag gespoten
+                - button "Gisteren alles afgespoten" [ref=e115] [cursor=pointer]:
+                  - img [ref=e116]
+                  - text: Gisteren alles afgespoten
+                - button "Zelfde als vorige keer" [ref=e119] [cursor=pointer]:
+                  - img [ref=e120]
+                  - text: Zelfde als vorige keer
+                - button "1,5 kg captan op alle percelen" [ref=e122] [cursor=pointer]:
+                  - img [ref=e123]
+                  - text: 1,5 kg captan op alle percelen
+              - generic [ref=e125]:
+                - textbox "Type je bespuiting..." [ref=e127]
+                - generic [ref=e128]:
+                  - button [disabled]:
+                    - img
+              - paragraph [ref=e129]: Futuristic Command Center v2.0
+          - generic [ref=e130]:
+            - generic [ref=e132]:
+              - img [ref=e133]
+              - generic [ref=e136]: Actieve Registratie
+            - generic [ref=e138]:
+              - img [ref=e140]
+              - paragraph [ref=e143]: Geen actieve registratie
+              - paragraph [ref=e144]: Typ een bespuiting in de chat om te beginnen
+  - region "Notifications (F8)":
+    - list [ref=e146]:
+      - listitem [ref=e147]:
+        - generic [ref=e148]:
+          - generic [ref=e149]: AgriBot
+          - generic [ref=e150]: "Oké, ik heb de percelen met peren voor je opgezocht. De volgende percelen zijn beplant met peren: *"
+        - button [ref=e151] [cursor=pointer]:
+          - img [ref=e152]
+  - button "Open Next.js Dev Tools" [ref=e161] [cursor=pointer]:
+    - img [ref=e162]
+  - alert [ref=e165]
+```

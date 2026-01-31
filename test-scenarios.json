@@ -1,0 +1,301 @@
+{
+  "version": "2.0.1",
+  "description": "AgriBot Slimme Invoer Test Scenarios - Gebruikt echte database data",
+  "notes": "Producten die werken: Merpan, Surround, Coragen, Score",
+  "scenarios": [
+    {
+      "id": "SC001",
+      "description": "Basis - enkel perceel met middel en dosering",
+      "steps": [
+        {
+          "input": "Spuit Thuis Coleswei met Merpan 1.5 kg",
+          "expected": {
+            "plotCountMin": 1,
+            "productCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC002",
+      "description": "Groep selectie - alle percelen",
+      "steps": [
+        {
+          "input": "Spuit alle percelen met Surround",
+          "expected": {
+            "plotCountMin": 5,
+            "productsContain": ["Surround"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC003",
+      "description": "Correctie - perceel verwijderen met behalve",
+      "steps": [
+        {
+          "input": "Spuit Jachthoek, Plantsoen en Schele met Merpan",
+          "expected": {
+            "plotCountMin": 3,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Behalve Plantsoen",
+          "expected": {
+            "plotCountMin": 2,
+            "productsContain": ["Merpan"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC004",
+      "description": "Dosering aanpassen",
+      "steps": [
+        {
+          "input": "Spuit Jachthoek met Merpan 2 kg",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Nee, 0.5 kg",
+          "expected": {
+            "dosage": { "product": "Merpan", "value": 0.5, "tolerance": 0.1 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC005",
+      "description": "Toevoeging - extra perceel",
+      "steps": [
+        {
+          "input": "Spuit Thuis met Coragen",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Coragen"]
+          }
+        },
+        {
+          "input": "Voeg ook Schele toe",
+          "expected": {
+            "plotCountMin": 2,
+            "productsContain": ["Coragen"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC006",
+      "description": "Toevoeging - extra middel",
+      "steps": [
+        {
+          "input": "Spuit Zuidhoek met Merpan 1kg",
+          "expected": {
+            "plotCountMin": 1,
+            "productCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Voeg ook Surround toe",
+          "expected": {
+            "productCountMin": 2,
+            "productsContain": ["Merpan", "Surround"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC007",
+      "description": "Annulering",
+      "steps": [
+        {
+          "input": "Spuit Thuis met Merpan",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Stop, annuleer",
+          "expected": {
+            "correctionType": "cancel_all"
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC008",
+      "description": "Undo functie",
+      "steps": [
+        {
+          "input": "Spuit Busje en Zuidhoek met Merpan",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Verwijder Busje",
+          "expected": {
+            "plotCountMin": 1
+          }
+        },
+        {
+          "input": "Ongedaan maken",
+          "expected": {
+            "correctionType": "undo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC009",
+      "description": "Meerdere middelen in één keer",
+      "steps": [
+        {
+          "input": "Spuit Thuis met Surround 2kg en Merpan 1kg",
+          "expected": {
+            "plotCountMin": 1,
+            "productCountMin": 2,
+            "productsContain": ["Surround", "Merpan"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC010",
+      "description": "Crop selectie - specifieke percelen",
+      "steps": [
+        {
+          "input": "Spuit Thuis Kloetinge en Stadhoek met Coragen 0.2 L",
+          "expected": {
+            "plotCountMin": 2,
+            "productsContain": ["Coragen"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC011",
+      "description": "Niet die laatste",
+      "steps": [
+        {
+          "input": "Spuit Kloetinge en Stadhoek met Merpan",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Merpan"]
+          }
+        },
+        {
+          "input": "Niet die laatste",
+          "expected": {
+            "correctionType": "remove_last_plot"
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC012",
+      "description": "Datum - gisteren",
+      "steps": [
+        {
+          "input": "Gisteren Busje gespoten met Coragen",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Coragen"],
+            "hasDate": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC013",
+      "description": "Complex - meerdere correcties",
+      "steps": [
+        {
+          "input": "Spuit Jachthoek, Plantsoen en Schele met Surround en Merpan",
+          "expected": {
+            "plotCountMin": 3,
+            "productCountMin": 2
+          }
+        },
+        {
+          "input": "Behalve Schele",
+          "expected": {
+            "plotCountMin": 2
+          }
+        },
+        {
+          "input": "Surround moet 3 kg zijn",
+          "expected": {
+            "dosage": { "product": "Surround", "value": 3.0, "tolerance": 0.3 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC014",
+      "description": "Voeg percelen weer toe",
+      "steps": [
+        {
+          "input": "Spuit Jachthoek, Plantsoen en Schele met Merpan",
+          "expected": {
+            "plotCountMin": 3
+          }
+        },
+        {
+          "input": "Behalve Jachthoek",
+          "expected": {
+            "plotCountMin": 2
+          }
+        },
+        {
+          "input": "Voeg die weer toe",
+          "expected": {
+            "correctionType": "add_back_plots"
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC015",
+      "description": "Simpele bevestiging flow",
+      "steps": [
+        {
+          "input": "Spuit Thuis Grote wei met Score 0.3 L",
+          "expected": {
+            "plotCountMin": 1,
+            "productsContain": ["Score"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SC016",
+      "description": "Slot filling - eerst percelen, dan middelen",
+      "steps": [
+        {
+          "input": "Vandaag alle conference gespoten",
+          "expected": {
+            "slotRequest": "products",
+            "plotCountMin": 1
+          }
+        },
+        {
+          "input": "met Surround en Merpan",
+          "expected": {
+            "plotCountMin": 1,
+            "productCountMin": 2,
+            "productsContain": ["Surround", "Merpan"]
+          }
+        }
+      ]
+    }
+  ]
+}
