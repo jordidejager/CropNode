@@ -24,6 +24,7 @@ import {
 import type { LogbookEntry, LogStatus, SprayRegistrationGroup, SprayRegistrationUnit } from '@/lib/types';
 import { RegistrationGroupCard } from '@/components/registration-group-card';
 import { ProductInfoCard, ProductInfoCompact } from '@/components/product-info-card';
+import { RegistrationBottomSheet } from '@/components/registration-bottom-sheet';
 import type { CtgbProduct } from '@/lib/types';
 import { useTransition, useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -1576,10 +1577,118 @@ function SmartInputContent() {
     // Loading state
     if (isLoadingDashboard || isLoadingProducts || isLoadingSession) return <DashboardSkeleton />;
 
+    // Calculate summary for bottom sheet
+    const bottomSheetSummary = useMemo(() => {
+        if (showGroupedPanel && groupedConfirmation) {
+            const totalHa = groupedConfirmation.units.reduce((sum, unit) => {
+                const parcelHa = unit.plots.reduce((pSum, plotId) => {
+                    const parcel = allParcels.find(p => p.id === plotId || p.name === plotId);
+                    return pSum + (parcel?.area || 0);
+                }, 0);
+                return sum + parcelHa;
+            }, 0);
+            return {
+                registrationCount: groupedConfirmation.units.reduce((sum, u) => sum + u.plots.length, 0),
+                totalHa,
+                productCount: groupedConfirmation.units[0]?.products?.length || 0,
+                date: groupedConfirmation.units[0]?.date,
+                status: 'Akkoord' as const,
+            };
+        }
+        if (showStatusPanel && confirmationData) {
+            const totalHa = confirmationData.plots.reduce((sum, plotId) => {
+                const parcel = allParcels.find(p => p.id === plotId || p.name === plotId);
+                return sum + (parcel?.area || 0);
+            }, 0);
+            return {
+                registrationCount: confirmationData.plots.length,
+                totalHa,
+                productCount: confirmationData.products.length,
+                date: confirmationData.date,
+                status: confirmationData.validationResult?.status as 'Akkoord' | 'Waarschuwing' | 'Fout',
+            };
+        }
+        return undefined;
+    }, [showGroupedPanel, groupedConfirmation, showStatusPanel, confirmationData, allParcels]);
+
+    const hasActiveRegistration = showStatusPanel || showGroupedPanel;
+
+    // Status panel content (shared between desktop and mobile bottom sheet)
+    const statusPanelContent = (
+        <>
+            {activeMode === 'product_info' && productInfoResult ? (
+                <div className="p-4">
+                    {productInfoResult.type === 'single' && productInfoResult.product ? (
+                        <ProductInfoCard product={productInfoResult.product} />
+                    ) : productInfoResult.type === 'list' && productInfoResult.products ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-white/60">
+                                {productInfoResult.totalCount} producten gevonden
+                            </p>
+                            {productInfoResult.products.map((product, i) => (
+                                <ProductInfoCompact
+                                    key={product.id || i}
+                                    product={product}
+                                    onClick={() => setProductInfoResult({
+                                        type: 'single',
+                                        product: product
+                                    })}
+                                />
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : showGroupedPanel && groupedConfirmation ? (
+                <RegistrationGroupCard
+                    group={groupedConfirmation}
+                    allParcels={groupedParcels.length > 0 ? groupedParcels : allParcels}
+                    savingUnitId={savingUnitId}
+                    onConfirmUnit={handleConfirmUnit}
+                    onConfirmAll={handleConfirmAllUnits}
+                    onEditUnit={handleEditUnit}
+                    onRemoveUnit={handleRemoveUnit}
+                    onCancelAll={handleCancelGroupedConfirmation}
+                />
+            ) : showStatusPanel && confirmationData ? (
+                <StatusPanel
+                    plots={confirmationData.plots}
+                    products={confirmationData.products}
+                    date={confirmationData.date}
+                    validationResult={confirmationData.validationResult}
+                    allParcels={groupedParcels.length > 0 ? groupedParcels : allParcels}
+                    isSaving={draftStatus === 'saving'}
+                    isSavingDraft={isSavingDraft}
+                    processingPhase={processingPhase}
+                    onConfirm={handleConfirmSave}
+                    onSaveAsDraft={handleSaveAsDraft}
+                    onEdit={handleEditConfirmation}
+                    onCancel={handleCancelConfirmation}
+                    onRemoveParcel={handleRemoveParcel}
+                    onRemoveParcelGroup={handleRemoveParcelGroup}
+                    onUpdateDosage={handleUpdateDosage}
+                    onUpdateProduct={handleUpdateProduct}
+                />
+            ) : activeMode === 'product_info' ? (
+                <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
+                        <FlaskConical className="h-6 w-6 text-blue-400" />
+                    </div>
+                    <p className="text-sm text-white/40 mb-1">Zoek een product</p>
+                    <p className="text-xs text-white/20">
+                        Typ een productnaam om informatie op te halen
+                    </p>
+                </div>
+            ) : (
+                <EmptyStatusPanel />
+            )}
+        </>
+    );
+
     return (
-        <div className="h-[calc(100vh-64px)] grid grid-cols-12 gap-0 overflow-hidden -m-6">
-            {/* LEFT COLUMN: Chat */}
-            <div className="col-span-7 h-full border-r border-white/[0.06] bg-black/20 overflow-y-auto flex flex-col">
+        <div className="h-[calc(100vh-64px)] flex flex-col md:grid md:grid-cols-12 gap-0 overflow-hidden -m-4 md:-m-6">
+            {/* MOBILE: Full width chat with bottom sheet */}
+            {/* DESKTOP: Left column (7 cols) */}
+            <div className="flex-1 md:col-span-7 h-full md:border-r border-white/[0.06] bg-black/20 overflow-hidden flex flex-col">
                 {/* Chat Header */}
                 <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1590,7 +1699,7 @@ function SmartInputContent() {
                 </div>
 
                 {/* Chat History */}
-                <div className="flex-1">
+                <div className="flex-1 overflow-y-auto">
                     <SmartInvoerFeed
                         entries={streamingEntry ? [streamingEntry, ...entries] : entries}
                         allParcels={allParcels}
@@ -1610,8 +1719,11 @@ function SmartInputContent() {
                     />
                 </div>
 
-                {/* Input Area */}
-                <div className="p-4 border-t border-white/[0.06] bg-black/40">
+                {/* Input Area - with padding for bottom sheet on mobile */}
+                <div className={cn(
+                    "p-4 border-t border-white/[0.06] bg-black/40",
+                    hasActiveRegistration && "md:pb-4 pb-[100px]"
+                )}>
                     <CommandBar
                         value={commandInput}
                         onValueChange={setCommandInput}
@@ -1621,10 +1733,20 @@ function SmartInputContent() {
                         onModeChange={setActiveMode}
                     />
                 </div>
+
+                {/* Mobile Bottom Sheet */}
+                <RegistrationBottomSheet
+                    isVisible={hasActiveRegistration}
+                    summary={bottomSheetSummary}
+                    onConfirm={showGroupedPanel ? handleConfirmAllUnits : handleConfirmSave}
+                    onCancel={showGroupedPanel ? handleCancelGroupedConfirmation : handleCancelConfirmation}
+                >
+                    {statusPanelContent}
+                </RegistrationBottomSheet>
             </div>
 
-            {/* RIGHT COLUMN: Status Panel */}
-            <div className="col-span-5 h-full bg-white/[0.02] overflow-y-auto">
+            {/* DESKTOP ONLY: Right column (5 cols) - Status Panel */}
+            <div className="hidden md:block md:col-span-5 h-full bg-white/[0.02] overflow-y-auto">
                 {/* Status Header - Dynamic based on mode */}
                 <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0A0A0A] z-10 backdrop-blur-sm">
                     {activeMode === 'product_info' ? (
@@ -1654,74 +1776,9 @@ function SmartInputContent() {
                     )}
                 </div>
 
-                {/* Status Content */}
+                {/* Status Content - reuse shared content */}
                 <div>
-                    {/* Product Info Mode: Show product details */}
-                    {activeMode === 'product_info' && productInfoResult ? (
-                        <div className="p-4">
-                            {productInfoResult.type === 'single' && productInfoResult.product ? (
-                                <ProductInfoCard product={productInfoResult.product} />
-                            ) : productInfoResult.type === 'list' && productInfoResult.products ? (
-                                <div className="space-y-3">
-                                    <p className="text-sm text-white/60">
-                                        {productInfoResult.totalCount} producten gevonden
-                                    </p>
-                                    {productInfoResult.products.map((product, i) => (
-                                        <ProductInfoCompact
-                                            key={product.id || i}
-                                            product={product}
-                                            onClick={() => setProductInfoResult({
-                                                type: 'single',
-                                                product: product
-                                            })}
-                                        />
-                                    ))}
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : showGroupedPanel && groupedConfirmation ? (
-                        <RegistrationGroupCard
-                            group={groupedConfirmation}
-                            allParcels={groupedParcels.length > 0 ? groupedParcels : allParcels}
-                            savingUnitId={savingUnitId}
-                            onConfirmUnit={handleConfirmUnit}
-                            onConfirmAll={handleConfirmAllUnits}
-                            onEditUnit={handleEditUnit}
-                            onRemoveUnit={handleRemoveUnit}
-                            onCancelAll={handleCancelGroupedConfirmation}
-                        />
-                    ) : showStatusPanel && confirmationData ? (
-                        <StatusPanel
-                            plots={confirmationData.plots}
-                            products={confirmationData.products}
-                            date={confirmationData.date}
-                            validationResult={confirmationData.validationResult}
-                            allParcels={groupedParcels.length > 0 ? groupedParcels : allParcels}
-                            isSaving={draftStatus === 'saving'}
-                            isSavingDraft={isSavingDraft}
-                            processingPhase={processingPhase}
-                            onConfirm={handleConfirmSave}
-                            onSaveAsDraft={handleSaveAsDraft}
-                            onEdit={handleEditConfirmation}
-                            onCancel={handleCancelConfirmation}
-                            onRemoveParcel={handleRemoveParcel}
-                            onRemoveParcelGroup={handleRemoveParcelGroup}
-                            onUpdateDosage={handleUpdateDosage}
-                            onUpdateProduct={handleUpdateProduct}
-                        />
-                    ) : activeMode === 'product_info' ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                            <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
-                                <FlaskConical className="h-6 w-6 text-blue-400" />
-                            </div>
-                            <p className="text-sm text-white/40 mb-1">Zoek een product</p>
-                            <p className="text-xs text-white/20">
-                                Typ een productnaam om informatie op te halen
-                            </p>
-                        </div>
-                    ) : (
-                        <EmptyStatusPanel />
-                    )}
+                    {statusPanelContent}
                 </div>
             </div>
         </div>
