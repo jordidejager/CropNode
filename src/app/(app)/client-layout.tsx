@@ -1,9 +1,18 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
-import { Bell } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QueryProvider } from '@/lib/query-provider';
+
+function PageSkeleton() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+    </div>
+  );
+}
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,7 +28,9 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             </Button>
           </header>
           <main className="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar">
-            {children}
+            <Suspense fallback={<PageSkeleton />}>
+              {children}
+            </Suspense>
           </main>
         </div>
       </div>

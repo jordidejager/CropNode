@@ -23,9 +23,18 @@ export default function LoginPage() {
     const formData = new FormData(e.currentTarget)
     let username = formData.get('username') as string
     const password = formData.get('password') as string
+    const name = formData.get('name') as string
+    const companyName = formData.get('company_name') as string
 
     if (!username || !password) {
       setError('Vul alle velden in')
+      setLoading(false)
+      return
+    }
+
+    // Bij registratie zijn naam en bedrijfsnaam verplicht
+    if (mode === 'register' && (!name || !companyName)) {
+      setError('Vul alle velden in (inclusief naam en bedrijfsnaam)')
       setLoading(false)
       return
     }
@@ -56,7 +65,7 @@ export default function LoginPage() {
           return
         }
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
         })
@@ -65,6 +74,22 @@ export default function LoginPage() {
           setError(getErrorMessage(error.message))
           setLoading(false)
           return
+        }
+
+        // Na succesvolle registratie, maak profiel aan
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: data.user.id,
+              name: name.trim(),
+              company_name: companyName.trim(),
+            })
+
+          if (profileError) {
+            console.error('[Auth] Profile creation error:', profileError)
+            // We gaan toch door, profiel kan later worden aangemaakt
+          }
         }
       }
 
@@ -136,6 +161,42 @@ export default function LoginPage() {
                 className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
+
+            {mode === 'register' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-slate-300">
+                    Naam
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    autoComplete="name"
+                    placeholder="Jan Jansen"
+                    required
+                    disabled={loading}
+                    className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="company_name" className="text-slate-300">
+                    Bedrijfsnaam
+                  </Label>
+                  <Input
+                    id="company_name"
+                    name="company_name"
+                    type="text"
+                    autoComplete="organization"
+                    placeholder="Akkerbouwbedrijf Jansen"
+                    required
+                    disabled={loading}
+                    className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
+                  />
+                </div>
+              </>
+            )}
 
             <Button
               type="submit"

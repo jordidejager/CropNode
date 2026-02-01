@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useCallback, useMemo } from 'react';
+import { Suspense, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, formatDistanceToNow } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -42,7 +42,7 @@ import { useConversations, useDeleteConversation, type ConversationListItem } fr
 
 type FilterStatus = 'all' | 'draft' | 'completed';
 
-export default function TimelinePage() {
+function TimelineContent() {
     const router = useRouter();
     const { toast } = useToast();
     const [filter, setFilter] = useState<FilterStatus>('all');
@@ -335,5 +335,28 @@ export default function TimelinePage() {
                 </AlertDialogContent>
             </AlertDialog>
         </div>
+    );
+}
+
+function TimelineSkeleton() {
+    return (
+        <div className="space-y-6 animate-pulse">
+            <div className="h-8 bg-white/5 rounded w-32" />
+            <div className="h-10 bg-white/5 rounded w-64" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map(i => (
+                    <div key={i} className="h-48 bg-white/5 rounded-xl" />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// Wrap in Suspense for Next.js 13+ App Router compatibility
+export default function TimelinePage() {
+    return (
+        <Suspense fallback={<TimelineSkeleton />}>
+            <TimelineContent />
+        </Suspense>
     );
 }
