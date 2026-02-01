@@ -1687,6 +1687,13 @@ function SmartInputContent() {
     // Determine if we're on mobile start screen (no conversation yet)
     const isMobileStartScreen = chatHistory.length === 0 && !hasActiveRegistration;
 
+    // Fixed suggestions for mobile start screen (always these, regardless of state)
+    const mobileStartSuggestions = [
+        "Alle peren vandaag gespoten met",
+        "Gisteren heel het bedrijf gespoten met",
+        "Morgen alle peren spuiten met"
+    ];
+
     return (
         <div className="h-[calc(100vh-64px)] flex flex-col md:grid md:grid-cols-12 gap-0 overflow-hidden -m-4 md:-m-6">
             {/* MOBILE START SCREEN - Clean layout with input at top */}
@@ -1717,7 +1724,7 @@ function SmartInputContent() {
 
                         {/* Shortcut Buttons */}
                         <div className="mt-4 space-y-2">
-                            {suggestions.map((suggestion, i) => (
+                            {mobileStartSuggestions.map((suggestion, i) => (
                                 <button
                                     key={i}
                                     onClick={() => setCommandInput(suggestion)}
