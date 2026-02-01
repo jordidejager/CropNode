@@ -1,8 +1,8 @@
 'use client';
 
 import { Suspense } from 'react';
-import { Sidebar } from '@/components/layout/sidebar';
-import { Bell, Loader2 } from 'lucide-react';
+import { Sidebar, MobileSidebarProvider, MobileMenuButton } from '@/components/layout/sidebar';
+import { Bell, Loader2, Leaf } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QueryProvider } from '@/lib/query-provider';
 
@@ -17,23 +17,35 @@ function PageSkeleton() {
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
-      <div className="flex min-h-screen bg-[#020617] text-slate-100">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-h-0 bg-transparent">
-          <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-white/5 bg-[#020617]/80 px-6 backdrop-blur-md">
-            <div className="flex-1" />
-            <Button variant="ghost" size="icon" className="rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">
-              <Bell className="h-5 w-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
-              <span className="sr-only">Toggle notifications</span>
-            </Button>
-          </header>
-          <main className="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar">
-            <Suspense fallback={<PageSkeleton />}>
-              {children}
-            </Suspense>
-          </main>
+      <MobileSidebarProvider>
+        <div className="flex min-h-screen bg-[#020617] text-slate-100">
+          <Sidebar />
+          <div className="flex-1 flex flex-col min-h-0 bg-transparent">
+            <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-white/5 bg-[#020617]/80 px-4 md:px-6 backdrop-blur-md">
+              {/* Mobile: hamburger + logo */}
+              <div className="flex items-center gap-3 md:hidden">
+                <MobileMenuButton />
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]">
+                    <Leaf className="size-4 text-white" />
+                  </div>
+                  <span className="text-sm font-black text-white">AgriSprayer</span>
+                </div>
+              </div>
+              <div className="flex-1" />
+              <Button variant="ghost" size="icon" className="rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">
+                <Bell className="h-5 w-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                <span className="sr-only">Toggle notifications</span>
+              </Button>
+            </header>
+            <main className="flex-1 flex flex-col p-4 md:p-6 overflow-y-auto custom-scrollbar">
+              <Suspense fallback={<PageSkeleton />}>
+                {children}
+              </Suspense>
+            </main>
+          </div>
         </div>
-      </div>
+      </MobileSidebarProvider>
     </QueryProvider>
   );
 }

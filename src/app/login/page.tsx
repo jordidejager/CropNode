@@ -7,13 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Sprout } from 'lucide-react'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Loader2, Sprout, Clock } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [cultivationType, setCultivationType] = useState<string>('')
+  const [showWaitlist, setShowWaitlist] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -32,9 +35,9 @@ export default function LoginPage() {
       return
     }
 
-    // Bij registratie zijn naam en bedrijfsnaam verplicht
-    if (mode === 'register' && (!name || !companyName)) {
-      setError('Vul alle velden in (inclusief naam en bedrijfsnaam)')
+    // Bij registratie zijn naam, bedrijfsnaam en teelttype verplicht
+    if (mode === 'register' && (!name || !companyName || !cultivationType)) {
+      setError('Vul alle velden in (inclusief naam, bedrijfsnaam en teelttype)')
       setLoading(false)
       return
     }
@@ -65,9 +68,17 @@ export default function LoginPage() {
           return
         }
 
+        // Stuur profiel data mee als user metadata - trigger maakt profile aan
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              name: name.trim(),
+              company_name: companyName.trim(),
+              cultivation_type: cultivationType,
+            }
+          }
         })
 
         if (error) {
@@ -76,24 +87,15 @@ export default function LoginPage() {
           return
         }
 
-        // Na succesvolle registratie, maak profiel aan
-        if (data.user) {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              user_id: data.user.id,
-              name: name.trim(),
-              company_name: companyName.trim(),
-            })
-
-          if (profileError) {
-            console.error('[Auth] Profile creation error:', profileError)
-            // We gaan toch door, profiel kan later worden aangemaakt
-          }
+        // Bij akkerbouw of anders: toon wachtlijst melding
+        if (data.user && (cultivationType === 'arable' || cultivationType === 'other')) {
+          setLoading(false)
+          setShowWaitlist(true)
+          return
         }
       }
 
-      // Success - redirect
+      // Success - redirect (alleen voor fruitteelt)
       router.push('/command-center')
       router.refresh()
     } catch (err) {
@@ -101,6 +103,45 @@ export default function LoginPage() {
       setError('Verbindingsfout. Probeer het opnieuw.')
       setLoading(false)
     }
+  }
+
+  // Wachtlijst melding voor akkerbouw/anders
+  if (showWaitlist) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4">
+        <Card className="w-full max-w-md bg-slate-900/50 border-white/10 backdrop-blur-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-600/20 border border-amber-500/30 flex items-center justify-center">
+              <Clock className="w-8 h-8 text-amber-400" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold text-slate-100">
+                Bedankt voor je interesse!
+              </CardTitle>
+              <CardDescription className="text-slate-400 mt-4 text-base leading-relaxed">
+                De akkerbouw-versie is nog in ontwikkeling. We laten je weten zodra het beschikbaar is.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-slate-500 text-sm mb-6">
+              Je account is aangemaakt en staat op de wachtlijst.
+            </p>
+            <Button
+              onClick={() => {
+                setShowWaitlist(false)
+                setMode('login')
+                setCultivationType('')
+              }}
+              variant="outline"
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            >
+              Terug naar inloggen
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -189,11 +230,46 @@ export default function LoginPage() {
                     name="company_name"
                     type="text"
                     autoComplete="organization"
-                    placeholder="Akkerbouwbedrijf Jansen"
+                    placeholder="Fruitbedrijf Jansen"
                     required
                     disabled={loading}
                     className="bg-slate-800/50 border-white/10 text-slate-100 placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
                   />
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-slate-300">Type teelt</Label>
+                  <RadioGroup
+                    value={cultivationType}
+                    onValueChange={setCultivationType}
+                    disabled={loading}
+                    className="space-y-2"
+                  >
+                    <label className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/50 border border-white/10 cursor-pointer hover:border-emerald-500/30 transition-colors has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-500/10">
+                      <RadioGroupItem
+                        value="fruit"
+                        id="fruit"
+                        className="border-slate-500 text-emerald-500 focus:ring-emerald-500/20"
+                      />
+                      <span className="text-slate-200">Fruitteelt</span>
+                    </label>
+                    <label className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/50 border border-white/10 cursor-pointer hover:border-emerald-500/30 transition-colors has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-500/10">
+                      <RadioGroupItem
+                        value="arable"
+                        id="arable"
+                        className="border-slate-500 text-emerald-500 focus:ring-emerald-500/20"
+                      />
+                      <span className="text-slate-200">Akkerbouw</span>
+                    </label>
+                    <label className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800/50 border border-white/10 cursor-pointer hover:border-emerald-500/30 transition-colors has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-500/10">
+                      <RadioGroupItem
+                        value="other"
+                        id="other"
+                        className="border-slate-500 text-emerald-500 focus:ring-emerald-500/20"
+                      />
+                      <span className="text-slate-200">Anders</span>
+                    </label>
+                  </RadioGroup>
                 </div>
               </>
             )}
@@ -222,6 +298,7 @@ export default function LoginPage() {
               onClick={() => {
                 setMode(mode === 'login' ? 'register' : 'login')
                 setError(null)
+                setCultivationType('')
               }}
               className="text-sm text-slate-400 hover:text-emerald-400 transition-colors"
             >

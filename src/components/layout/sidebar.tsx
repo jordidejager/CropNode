@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Suspense } from 'react';
+import { Suspense, createContext, useContext, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -25,7 +25,9 @@ import {
     Users,
     Timer,
     Bug,
-    LogOut
+    LogOut,
+    Menu,
+    X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,59 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+// Mobile sidebar context
+interface MobileSidebarContextType {
+    isOpen: boolean;
+    open: () => void;
+    close: () => void;
+    toggle: () => void;
+}
+
+const MobileSidebarContext = createContext<MobileSidebarContextType | null>(null);
+
+export function useMobileSidebar() {
+    const context = useContext(MobileSidebarContext);
+    if (!context) {
+        throw new Error('useMobileSidebar must be used within MobileSidebarProvider');
+    }
+    return context;
+}
+
+export function MobileSidebarProvider({ children }: { children: React.ReactNode }) {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const open = useCallback(() => setIsOpen(true), []);
+    const close = useCallback(() => setIsOpen(false), []);
+    const toggle = useCallback(() => setIsOpen(prev => !prev), []);
+
+    return (
+        <MobileSidebarContext.Provider value={{ isOpen, open, close, toggle }}>
+            {children}
+        </MobileSidebarContext.Provider>
+    );
+}
+
+// Hamburger button component for header
+export function MobileMenuButton() {
+    const { toggle, isOpen } = useMobileSidebar();
+
+    return (
+        <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggle}
+            className="md:hidden rounded-xl bg-white/5 border border-white/10 hover:bg-white/10"
+            aria-label={isOpen ? "Menu sluiten" : "Menu openen"}
+        >
+            {isOpen ? (
+                <X className="h-5 w-5 text-slate-400" />
+            ) : (
+                <Menu className="h-5 w-5 text-slate-400" />
+            )}
+        </Button>
+    );
+}
 
 interface NavItem {
     label: string;
@@ -183,7 +238,17 @@ function SidebarContent() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
-    // Collapse State
+    // Mobile sidebar state - use try/catch for when context is not available
+    let mobileContext: MobileSidebarContextType | null = null;
+    try {
+        mobileContext = useMobileSidebar();
+    } catch {
+        // Context not available, sidebar is being used outside provider
+    }
+    const isMobileOpen = mobileContext?.isOpen ?? false;
+    const closeMobile = mobileContext?.close ?? (() => {});
+
+    // Collapse State (desktop only)
     const [isCollapsed, setIsCollapsed] = React.useState(false);
     // Group State (open accordions)
     const [openGroups, setOpenGroups] = React.useState<string[]>([]);
@@ -222,6 +287,11 @@ function SidebarContent() {
         }
     }, [pathname]);
 
+    // Close mobile sidebar on navigation
+    React.useEffect(() => {
+        closeMobile();
+    }, [pathname, closeMobile]);
+
     // Save to LocalStorage
     const toggleCollapse = React.useCallback(() => {
         setIsCollapsed(prev => {
@@ -259,12 +329,17 @@ function SidebarContent() {
         return false;
     }, [pathname, searchParams]);
 
-    return (
+    // Sidebar content JSX
+    const sidebarContent = (
         <TooltipProvider delayDuration={0}>
             <aside
                 className={cn(
-                    "h-screen sticky top-0 bg-[#020617] border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col z-50 shrink-0",
-                    isCollapsed ? "w-[72px]" : "w-72"
+                    "h-screen bg-[#020617] border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col z-50 shrink-0",
+                    // Desktop: sticky, width based on collapse state
+                    "md:sticky md:top-0",
+                    isCollapsed ? "md:w-[72px]" : "md:w-72",
+                    // Mobile: full width when open
+                    "w-72"
                 )}
             >
                 {/* Header with integrated toggle for collapsed state */}
@@ -510,6 +585,45 @@ function SidebarContent() {
                 </div>
             </aside>
         </TooltipProvider>
+    );
+
+    // Desktop: render sidebar directly
+    // Mobile: render with overlay and slide animation
+    return (
+        <>
+            {/* Desktop sidebar - always visible */}
+            <div className="hidden md:block">
+                {sidebarContent}
+            </div>
+
+            {/* Mobile sidebar with overlay */}
+            <AnimatePresence>
+                {isMobileOpen && (
+                    <>
+                        {/* Overlay */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+                            onClick={closeMobile}
+                        />
+
+                        {/* Sliding sidebar */}
+                        <motion.div
+                            initial={{ x: '-100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '-100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            className="md:hidden fixed inset-y-0 left-0 z-50"
+                        >
+                            {sidebarContent}
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </>
     );
 }
 
