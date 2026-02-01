@@ -201,121 +201,214 @@ export function SmartInvoerFeed({
                 )}
 
                 {/* Chat History Messages */}
-                {chatHistory.map((msg, idx) => (
-                    <div key={`chat-${idx}`} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        {msg.role === 'user' ? (
-                            /* User Message (Right aligned) */
-                            <div className="flex justify-end pr-2">
-                                <div className="flex gap-3 max-w-[80%]">
-                                    <div className="flex flex-col gap-1.5 items-end">
-                                        <div className="bg-primary/20 backdrop-blur-sm border border-primary/30 rounded-2xl p-4 text-sm text-white/90 shadow-lg">
-                                            {msg.content}
+                {chatHistory.map((msg, idx) => {
+                    const timeString = msg.timestamp instanceof Date
+                        ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    return (
+                        <div key={`chat-${idx}`} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {msg.role === 'user' ? (
+                                <>
+                                    {/* MOBILE: Simple log style */}
+                                    <div className="md:hidden px-4 py-2 border-b border-white/5">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <User className="h-3.5 w-3.5 text-primary" />
+                                            <span className="text-[11px] font-bold text-primary uppercase tracking-wide">U</span>
+                                            <span className="text-[10px] text-white/30">{timeString}</span>
                                         </div>
-                                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest px-1">
-                                            U • {msg.timestamp instanceof Date
-                                                ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                : new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                                        <p className="text-sm text-white/90 leading-relaxed">{msg.content}</p>
                                     </div>
-                                    <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 mt-1">
-                                        <User className="h-4 w-4 text-primary" />
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            /* Assistant Message (Left aligned - Simple text bubble) */
-                            <div className="flex justify-start pl-2">
-                                <div className="flex gap-3 max-w-[80%]">
-                                    <div className="h-8 w-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-1 shadow-[0_0_10px_-2px_rgba(16,185,129,0.3)]">
-                                        <Bot className="h-4 w-4 text-emerald-400" />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <div className="bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 rounded-2xl p-4 text-sm text-white/90 shadow-lg">
-                                            {msg.content}
+
+                                    {/* DESKTOP: Bubble style (right aligned) */}
+                                    <div className="hidden md:flex justify-end pr-2">
+                                        <div className="flex gap-3 max-w-[80%]">
+                                            <div className="flex flex-col gap-1.5 items-end">
+                                                <div className="bg-primary/20 backdrop-blur-sm border border-primary/30 rounded-2xl p-4 text-sm text-white/90 shadow-lg">
+                                                    {msg.content}
+                                                </div>
+                                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest px-1">
+                                                    U • {timeString}
+                                                </span>
+                                            </div>
+                                            <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 mt-1">
+                                                <User className="h-4 w-4 text-primary" />
+                                            </div>
                                         </div>
-                                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest px-1">
-                                            AgriBot • {msg.timestamp instanceof Date
-                                                ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                : new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
                                     </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ))}
+                                </>
+                            ) : (
+                                <>
+                                    {/* MOBILE: Simple log style */}
+                                    <div className="md:hidden px-4 py-2 border-b border-white/5">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Bot className="h-3.5 w-3.5 text-emerald-400" />
+                                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide">AgriBot</span>
+                                            <span className="text-[10px] text-white/30">{timeString}</span>
+                                        </div>
+                                        <p className="text-sm text-white/70 leading-relaxed">{msg.content}</p>
+                                    </div>
+
+                                    {/* DESKTOP: Bubble style (left aligned) */}
+                                    <div className="hidden md:flex justify-start pl-2">
+                                        <div className="flex gap-3 max-w-[80%]">
+                                            <div className="h-8 w-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-1 shadow-[0_0_10px_-2px_rgba(16,185,129,0.3)]">
+                                                <Bot className="h-4 w-4 text-emerald-400" />
+                                            </div>
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 rounded-2xl p-4 text-sm text-white/90 shadow-lg">
+                                                    {msg.content}
+                                                </div>
+                                                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest px-1">
+                                                    AgriBot • {timeString}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
 
                 {/* Processing Indicator */}
                 {processingPhase !== 'idle' && processingPhase !== 'complete' && (
-                    <div className="flex justify-start pl-2 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <div className="flex gap-3 max-w-[80%]">
-                            <div className="h-8 w-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-1 shadow-[0_0_10px_-2px_rgba(16,185,129,0.3)]">
-                                <Bot className="h-4 w-4 text-emerald-400" />
+                    <>
+                        {/* MOBILE: Simple log style processing */}
+                        <div className="md:hidden px-4 py-2 border-b border-white/5 animate-in fade-in duration-300">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Bot className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide">AgriBot</span>
+                                <span className="text-[10px] text-white/30">bezig...</span>
                             </div>
-                            <div className="flex flex-col gap-2">
-                                {/* Agent Tool History */}
-                                {agentState?.toolHistory && agentState.toolHistory.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {agentState.toolHistory.map((tool, idx) => {
-                                            const toolInfo = TOOL_LABELS[tool.tool] || { label: tool.tool, icon: Wrench };
-                                            const ToolIcon = toolInfo.icon;
-                                            return (
-                                                <div
-                                                    key={`${tool.tool}-${idx}`}
-                                                    className={cn(
-                                                        "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium transition-all duration-300",
-                                                        tool.status === 'done'
-                                                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                                                            : "bg-primary/10 border border-primary/20 text-primary animate-pulse"
-                                                    )}
-                                                >
-                                                    {tool.status === 'done' ? (
-                                                        <Check className="h-3 w-3" />
-                                                    ) : (
-                                                        <ToolIcon className="h-3 w-3 animate-spin" />
-                                                    )}
-                                                    <span>{toolInfo.label}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Current Processing Status */}
-                                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                                    {(() => {
-                                        const status = getProcessingStatus();
-                                        if (!status) return null;
-                                        const StatusIcon = status.icon;
+                            {/* Tool chips */}
+                            {agentState?.toolHistory && agentState.toolHistory.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                    {agentState.toolHistory.map((tool, idx) => {
+                                        const toolInfo = TOOL_LABELS[tool.tool] || { label: tool.tool, icon: Wrench };
+                                        const ToolIcon = toolInfo.icon;
                                         return (
-                                            <>
-                                                <StatusIcon className="h-4 w-4 text-emerald-400 animate-pulse" />
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-semibold text-emerald-400">{status.label}</span>
-                                                    <span className="text-[10px] text-muted-foreground">{status.detail}</span>
-                                                </div>
-                                            </>
+                                            <div
+                                                key={`${tool.tool}-${idx}`}
+                                                className={cn(
+                                                    "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium",
+                                                    tool.status === 'done'
+                                                        ? "bg-emerald-500/10 text-emerald-400"
+                                                        : "bg-white/5 text-white/50 animate-pulse"
+                                                )}
+                                            >
+                                                {tool.status === 'done' ? (
+                                                    <Check className="h-2.5 w-2.5" />
+                                                ) : (
+                                                    <ToolIcon className="h-2.5 w-2.5" />
+                                                )}
+                                                <span>{toolInfo.label}</span>
+                                            </div>
                                         );
-                                    })()}
+                                    })}
+                                </div>
+                            )}
+                            {/* Status message */}
+                            {(() => {
+                                const status = getProcessingStatus();
+                                if (!status) return null;
+                                const StatusIcon = status.icon;
+                                return (
+                                    <div className="flex items-center gap-2 text-white/50">
+                                        <StatusIcon className="h-3 w-3 animate-pulse" />
+                                        <span className="text-xs">{status.label}</span>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        {/* DESKTOP: Bubble style processing */}
+                        <div className="hidden md:flex justify-start pl-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="flex gap-3 max-w-[80%]">
+                                <div className="h-8 w-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-1 shadow-[0_0_10px_-2px_rgba(16,185,129,0.3)]">
+                                    <Bot className="h-4 w-4 text-emerald-400" />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    {/* Agent Tool History */}
+                                    {agentState?.toolHistory && agentState.toolHistory.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {agentState.toolHistory.map((tool, idx) => {
+                                                const toolInfo = TOOL_LABELS[tool.tool] || { label: tool.tool, icon: Wrench };
+                                                const ToolIcon = toolInfo.icon;
+                                                return (
+                                                    <div
+                                                        key={`${tool.tool}-${idx}`}
+                                                        className={cn(
+                                                            "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium transition-all duration-300",
+                                                            tool.status === 'done'
+                                                                ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                                                : "bg-primary/10 border border-primary/20 text-primary animate-pulse"
+                                                        )}
+                                                    >
+                                                        {tool.status === 'done' ? (
+                                                            <Check className="h-3 w-3" />
+                                                        ) : (
+                                                            <ToolIcon className="h-3 w-3 animate-spin" />
+                                                        )}
+                                                        <span>{toolInfo.label}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Current Processing Status */}
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                                        {(() => {
+                                            const status = getProcessingStatus();
+                                            if (!status) return null;
+                                            const StatusIcon = status.icon;
+                                            return (
+                                                <>
+                                                    <StatusIcon className="h-4 w-4 text-emerald-400 animate-pulse" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-semibold text-emerald-400">{status.label}</span>
+                                                        <span className="text-[10px] text-muted-foreground">{status.detail}</span>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </>
                 )}
 
                 {/* Suggestions when conversation is active but idle */}
                 {hasConversation && processingPhase === 'idle' && suggestions.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pl-12 animate-in fade-in duration-500">
-                        {suggestions.map((suggestion, i) => (
-                            <button
-                                key={i}
-                                onClick={() => onSuggestionClick?.(suggestion)}
-                                className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/60 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all duration-300"
-                            >
-                                {suggestion}
-                            </button>
-                        ))}
-                    </div>
+                    <>
+                        {/* MOBILE: Vertical stack */}
+                        <div className="md:hidden px-4 py-2 flex flex-col gap-2 animate-in fade-in duration-500">
+                            {suggestions.map((suggestion, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => onSuggestionClick?.(suggestion)}
+                                    className="w-full text-left px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-white/60 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all duration-300"
+                                >
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* DESKTOP: Horizontal wrap */}
+                        <div className="hidden md:flex flex-wrap gap-2 pl-12 animate-in fade-in duration-500">
+                            {suggestions.map((suggestion, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => onSuggestionClick?.(suggestion)}
+                                    className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/60 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all duration-300"
+                                >
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+                    </>
                 )}
 
                 {/* Scroll Anchor for auto-scroll to bottom */}
