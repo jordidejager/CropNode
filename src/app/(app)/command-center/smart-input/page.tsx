@@ -1574,10 +1574,7 @@ function SmartInputContent() {
         });
     }, [invalidateDashboard, invalidateSpuitschrift, toast]);
 
-    // Loading state
-    if (isLoadingDashboard || isLoadingProducts || isLoadingSession) return <DashboardSkeleton />;
-
-    // Calculate summary for bottom sheet
+    // Calculate summary for bottom sheet (must be before early return to follow hooks rules)
     const bottomSheetSummary = useMemo(() => {
         if (showGroupedPanel && groupedConfirmation) {
             const totalHa = groupedConfirmation.units.reduce((sum, unit) => {
@@ -1612,6 +1609,9 @@ function SmartInputContent() {
     }, [showGroupedPanel, groupedConfirmation, showStatusPanel, confirmationData, allParcels]);
 
     const hasActiveRegistration = showStatusPanel || showGroupedPanel;
+
+    // Loading state
+    if (isLoadingDashboard || isLoadingProducts || isLoadingSession) return <DashboardSkeleton />;
 
     // Status panel content (shared between desktop and mobile bottom sheet)
     const statusPanelContent = (

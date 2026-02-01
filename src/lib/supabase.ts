@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -8,48 +8,53 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Custom fetch with timeout and connection keep-alive
- * Improves reliability on unstable networks (5G hotspot, etc.)
+ * Custom fetch with timeout and retry for unstable networks (5G hotspot, etc.)
  */
-const customFetch = (url: RequestInfo | URL, options?: RequestInit): Promise<Response> => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for slow networks
+const customFetch = async (url: RequestInfo | URL, options?: RequestInit): Promise<Response> => {
+  const maxRetries = 3;
+  const timeout = 30000;
 
-  // Properly handle Headers object or plain object
-  const existingHeaders = options?.headers instanceof Headers
-    ? Object.fromEntries(options.headers.entries())
-    : (options?.headers || {});
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  return fetch(url, {
-    ...options,
-    signal: controller.signal,
-    keepalive: true,
-    headers: {
-      ...existingHeaders,
-      'Connection': 'keep-alive',
-    },
-  }).finally(() => clearTimeout(timeoutId));
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        keepalive: true,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      // Wait before retry (exponential backoff)
+      const delay = Math.min(100 * Math.pow(2, attempt), 2000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw new Error('Max retries exceeded');
 };
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+/**
+ * Singleton Supabase client voor data operations
+ * Gebruikt dezelfde @supabase/ssr client als auth zodat RLS correct werkt
+ */
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: customFetch,
+  },
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-  },
-  global: {
-    headers: {
-      'x-client-info': 'agrisprayer/1.0',
-    },
-    fetch: customFetch,
-  },
-  // Disable realtime if not used - reduces connection overhead
-  realtime: {
-    params: {
-      eventsPerSecond: 1,
-    },
-  },
-  db: {
-    schema: 'public',
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
   },
 });
 
