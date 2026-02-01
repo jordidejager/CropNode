@@ -131,7 +131,7 @@ export function CommandBar({
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto px-4 pb-8 pt-4 space-y-4">
+        <div className="w-full max-w-4xl mx-auto px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4 space-y-2 md:space-y-4">
             {/* Mode Selector */}
             <div className="flex justify-center">
                 <ModeSelector
@@ -141,8 +141,8 @@ export function CommandBar({
                 />
             </div>
 
-            {/* Quick Action Chips */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1">
+            {/* Quick Action Chips - hidden on mobile */}
+            <div className="hidden md:flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1">
                 {quickActions.map((action, i) => (
                     <button
                         key={i}
@@ -162,11 +162,11 @@ export function CommandBar({
 
             {/* Input Bar */}
             <div className={cn(
-                "relative group flex items-end gap-2 bg-black/40 backdrop-blur-xl border-2 transition-all duration-300 p-2 rounded-2xl",
+                "relative group flex items-end gap-2 bg-black/40 backdrop-blur-xl border-2 transition-all duration-300 p-1.5 md:p-2 rounded-xl md:rounded-2xl",
                 getBorderStyle(),
                 isFocused ? `${getGlowStyle()} bg-black/60` : 'shadow-xl'
             )}>
-                <div className="flex-grow pl-3 py-2">
+                <div className="flex-grow pl-2 md:pl-3 py-1 md:py-2">
                     <textarea
                         ref={textareaRef}
                         rows={1}
@@ -185,14 +185,14 @@ export function CommandBar({
                     />
                 </div>
 
-                <div className="pb-1 pr-1">
+                <div className="pb-0.5 md:pb-1 pr-0.5 md:pr-1">
                     <Button
                         onClick={handleSend}
                         disabled={!input.trim() || isProcessing}
                         size="icon"
                         data-testid="send-button"
                         className={cn(
-                            "h-10 w-10 rounded-xl transition-all duration-300",
+                            "h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl transition-all duration-300",
                             getButtonStyle()
                         )}
                     >
@@ -205,7 +205,8 @@ export function CommandBar({
                 </div>
             </div>
 
-            <p className="text-[10px] text-center text-muted-foreground/50 font-medium uppercase tracking-[0.2em]">
+            {/* Footer - hidden on mobile */}
+            <p className="hidden md:block text-[10px] text-center text-muted-foreground/50 font-medium uppercase tracking-[0.2em]">
                 AgriBot Multi-Modal Command Center
             </p>
         </div>

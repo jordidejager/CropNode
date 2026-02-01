@@ -79,20 +79,45 @@ export function SmartInvoerFeed({
 }: SmartInvoerFeedProps) {
     const scrollRef = React.useRef<HTMLDivElement>(null);
     const bottomRef = React.useRef<HTMLDivElement>(null);
+    const lastMessageCountRef = React.useRef(0);
+    const lastPhaseRef = React.useRef<ProcessingPhase>('idle');
 
     // Sort entries by date (ascending for chat-like feel)
     const sortedEntries = [...entries].sort((a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
-    // Auto-scroll to bottom on new messages, entries, or phase changes
+    // Auto-scroll to bottom ONLY when new messages arrive or phase changes to complete
+    // Don't scroll on every phase change to avoid jumps during processing
     React.useEffect(() => {
-        // Use a small timeout to ensure DOM is updated
-        const timeoutId = setTimeout(() => {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }, 50);
-        return () => clearTimeout(timeoutId);
-    }, [entries.length, chatHistory.length, processingPhase, agentState?.currentTool]);
+        const currentMessageCount = chatHistory.length + entries.length;
+        const hasNewMessages = currentMessageCount > lastMessageCountRef.current;
+        const justCompleted = processingPhase === 'complete' && lastPhaseRef.current !== 'complete';
+        const justStartedProcessing = processingPhase === 'searching' && lastPhaseRef.current === 'idle';
+
+        // Update refs
+        lastMessageCountRef.current = currentMessageCount;
+        lastPhaseRef.current = processingPhase;
+
+        // Only scroll when we have new content to show
+        if (hasNewMessages || justCompleted || justStartedProcessing) {
+            const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768;
+            const scrollDelay = isMobileDevice ? 150 : 50;
+
+            // Use timeout for smoother scrolling after layout settles
+            const timeoutId = setTimeout(() => {
+                if (bottomRef.current) {
+                    // On mobile, use simpler scroll to avoid keyboard-related jumps
+                    if (isMobileDevice) {
+                        bottomRef.current.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+                    } else {
+                        bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                }
+            }, scrollDelay);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [entries.length, chatHistory.length, processingPhase]);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -167,37 +192,66 @@ export function SmartInvoerFeed({
     const confirmedEntries = sortedEntries.filter(e => !isStreamingEntry(e) && e.status === 'Akkoord');
 
     return (
-        <div ref={scrollRef} className="pr-4">
-            <div className="flex flex-col gap-6 pt-6 pb-4 max-w-4xl mx-auto">
+        <div ref={scrollRef} className="pr-0 md:pr-4 overflow-x-hidden">
+            <div className="flex flex-col gap-4 md:gap-6 pt-4 md:pt-6 pb-4 max-w-4xl mx-auto">
                 {/* Welcome message when no conversation */}
                 {!hasConversation && confirmedEntries.length === 0 && (
-                    <div className="flex flex-col items-start justify-center min-h-[40vh] gap-8 animate-in fade-in duration-1000 px-4">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                                <Bot className="h-6 w-6 text-emerald-400" />
+                    <>
+                        {/* MOBILE: Simple compact welcome */}
+                        <div className="md:hidden px-4 py-6 animate-in fade-in duration-500">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                    <Bot className="h-5 w-5 text-emerald-400" />
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-bold text-white">{getGreeting()}</h1>
+                                    <p className="text-xs text-white/50">Wat wil je registreren?</p>
+                                </div>
                             </div>
-                            <div className="flex flex-col">
-                                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-                                    {getGreeting()}. Wat is het plan vandaag?
-                                </h1>
-                                <p className="text-muted-foreground text-sm">Ik sta klaar om je bespuitingen te verwerken.</p>
-                            </div>
+                            {suggestions.length > 0 && (
+                                <div className="flex flex-col gap-2">
+                                    {suggestions.slice(0, 3).map((suggestion, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => onSuggestionClick?.(suggestion)}
+                                            className="w-full text-left px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white/70 active:bg-primary/20 active:border-primary/40"
+                                        >
+                                            {suggestion}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        {suggestions.length > 0 && (
-                            <div className="flex flex-wrap gap-2 animate-in slide-in-from-left-4 duration-1000 delay-300">
-                                {suggestions.map((suggestion, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => onSuggestionClick?.(suggestion)}
-                                        className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white/70 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all duration-300"
-                                    >
-                                        {suggestion}
-                                    </button>
-                                ))}
+                        {/* DESKTOP: Original welcome */}
+                        <div className="hidden md:flex flex-col items-start justify-center min-h-[40vh] gap-8 animate-in fade-in duration-1000 px-4">
+                            <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                                    <Bot className="h-6 w-6 text-emerald-400" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
+                                        {getGreeting()}. Wat is het plan vandaag?
+                                    </h1>
+                                    <p className="text-muted-foreground text-sm">Ik sta klaar om je bespuitingen te verwerken.</p>
+                                </div>
                             </div>
-                        )}
-                    </div>
+
+                            {suggestions.length > 0 && (
+                                <div className="flex flex-wrap gap-2 animate-in slide-in-from-left-4 duration-1000 delay-300">
+                                    {suggestions.map((suggestion, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => onSuggestionClick?.(suggestion)}
+                                            className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white/70 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all duration-300"
+                                        >
+                                            {suggestion}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </>
                 )}
 
                 {/* Chat History Messages */}

@@ -438,7 +438,7 @@ export function RegistrationGroupCard({
     };
 
     return (
-        <div className="flex flex-col" data-testid="registration-group-card">
+        <div className="flex flex-col max-w-full overflow-hidden" data-testid="registration-group-card">
             {/* Header */}
             <div className="p-4 border-b border-white/[0.06]">
                 <div className="flex items-center justify-between">

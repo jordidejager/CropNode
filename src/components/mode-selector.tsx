@@ -91,7 +91,9 @@ export function ModeSelector({ activeMode, onModeChange, disabled = false }: Mod
                         onClick={() => !disabled && onModeChange(config.key)}
                         disabled={disabled}
                         className={cn(
-                            "relative flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors duration-200",
+                            "relative flex items-center justify-center gap-2 rounded-xl border transition-colors duration-200",
+                            // Mobile: smaller, icon-only
+                            "h-10 w-10 md:h-auto md:w-auto md:px-3 md:py-2",
                             "disabled:opacity-50 disabled:cursor-not-allowed",
                             isActive
                                 ? config.activeClass
@@ -104,6 +106,7 @@ export function ModeSelector({ activeMode, onModeChange, disabled = false }: Mod
                     >
                         <Icon className="h-4 w-4 flex-shrink-0" />
 
+                        {/* Only show label on desktop */}
                         <AnimatePresence mode="wait">
                             {isActive && (
                                 <motion.span
@@ -112,7 +115,7 @@ export function ModeSelector({ activeMode, onModeChange, disabled = false }: Mod
                                     animate={{ opacity: 1, width: 'auto' }}
                                     exit={{ opacity: 0, width: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeInOut' }}
-                                    className="text-sm font-medium whitespace-nowrap overflow-hidden"
+                                    className="hidden md:inline text-sm font-medium whitespace-nowrap overflow-hidden"
                                 >
                                     {config.label}
                                 </motion.span>
