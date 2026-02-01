@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import {
     Check, X, Edit2, AlertTriangle, AlertCircle, Info, Loader2,
     Calendar, Package, MapPin, MessageSquare, ClipboardList, ChevronDown,
-    ChevronUp, Save, FlaskConical
+    ChevronUp, Save, FlaskConical, Bot
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -867,7 +867,7 @@ function SmartInputContent() {
             }
             return baseSuggestions;
         }
-        return ["Alle appels gespoten met Batavia", "1.2 kg Captan op de Elstar", "Gisteren peren gespoten tegen schurft"];
+        return ["Alle peren vandaag gespoten met", "Gisteren heel het bedrijf gespoten met", "Morgen alle peren spuiten met"];
     }, [activeDraft, currentSlotRequest, draftHistory.length]);
 
     // Handlers
@@ -1684,11 +1684,143 @@ function SmartInputContent() {
         </>
     );
 
+    // Determine if we're on mobile start screen (no conversation yet)
+    const isMobileStartScreen = chatHistory.length === 0 && !hasActiveRegistration;
+
     return (
         <div className="h-[calc(100vh-64px)] flex flex-col md:grid md:grid-cols-12 gap-0 overflow-hidden -m-4 md:-m-6">
-            {/* MOBILE: Full width chat with bottom sheet */}
+            {/* MOBILE START SCREEN - Clean layout with input at top */}
+            {isMobileStartScreen && (
+                <div className="md:hidden flex flex-col h-full bg-black/20">
+                    {/* Greeting + Input Section */}
+                    <div className="flex-1 flex flex-col justify-center px-4 pb-8">
+                        {/* AgriBot Greeting */}
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                <Bot className="h-6 w-6 text-emerald-400" />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-white">Hallo!</h1>
+                                <p className="text-sm text-white/50">Wat kan ik vandaag voor u doen?</p>
+                            </div>
+                        </div>
+
+                        {/* Input Bar */}
+                        <CommandBar
+                            value={commandInput}
+                            onValueChange={setCommandInput}
+                            onSend={handleSend}
+                            isProcessing={isProcessing || isPending}
+                            activeMode={activeMode}
+                            onModeChange={setActiveMode}
+                        />
+
+                        {/* Shortcut Buttons */}
+                        <div className="mt-4 space-y-2">
+                            {suggestions.map((suggestion, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setCommandInput(suggestion)}
+                                    className="w-full text-left px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 active:bg-emerald-500/20 active:border-emerald-500/40 transition-colors"
+                                >
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MOBILE CHAT SCREEN - When conversation exists */}
+            {!isMobileStartScreen && (
+                <div className="md:hidden flex-1 h-full bg-black/20 overflow-hidden flex flex-col">
+                    {/* Chat History - takes remaining space */}
+                    <div className={cn(
+                        "flex-1 overflow-y-auto",
+                        hasActiveRegistration && "pb-2"
+                    )}>
+                        <SmartInvoerFeed
+                            entries={streamingEntry ? [streamingEntry, ...entries] : entries}
+                            allParcels={allParcels}
+                            productNames={productNames}
+                            suggestions={suggestions}
+                            chatHistory={chatHistory}
+                            onDelete={(id) => handleDelete(id, true)}
+                            onConfirm={handleConfirm}
+                            onEdit={(e) => setActiveDraftId(e.id)}
+                            onSave={async (id, data, date) => { await saveInlineEdit(id, data, date); invalidateLogbook(); }}
+                            onSuggestionClick={setCommandInput}
+                            processingPhase={processingPhase}
+                            searchTerms={searchTerms}
+                            resolvedAliases={resolvedAliases}
+                            activeDraftId={activeDraft?.id}
+                            agentState={agentState}
+                        />
+                    </div>
+
+                    {/* Active Registration Panel - Inline on mobile when active */}
+                    {hasActiveRegistration && (
+                        <div className="border-t border-white/10 bg-[#0A0A0A] max-h-[40vh] overflow-y-auto">
+                            <div className="p-3 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0A0A0A] z-10">
+                                <div className="flex items-center gap-2">
+                                    <ClipboardList className="h-4 w-4 text-emerald-500" />
+                                    <span className="text-sm font-medium text-white/80">Actieve Registratie</span>
+                                </div>
+                                {bottomSheetSummary?.status && (
+                                    <Badge className={cn(
+                                        "text-[10px]",
+                                        bottomSheetSummary.status === 'Akkoord'
+                                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                            : bottomSheetSummary.status === 'Waarschuwing'
+                                                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                                : 'bg-red-500/20 text-red-400 border-red-500/30'
+                                    )}>
+                                        {bottomSheetSummary.status}
+                                    </Badge>
+                                )}
+                            </div>
+                            <div className="max-w-full overflow-hidden">
+                                {statusPanelContent}
+                            </div>
+                            {/* Action buttons */}
+                            <div className="p-3 border-t border-white/[0.06] flex gap-2 sticky bottom-0 bg-[#0A0A0A]">
+                                <Button
+                                    onClick={showGroupedPanel ? handleCancelGroupedConfirmation : handleCancelConfirmation}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-white/50 hover:text-white hover:bg-white/5"
+                                >
+                                    <X className="h-4 w-4 mr-1" />
+                                    Annuleer
+                                </Button>
+                                <Button
+                                    onClick={showGroupedPanel ? handleConfirmAllUnits : handleConfirmSave}
+                                    size="sm"
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Bevestigen
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Input Area - Fixed at bottom */}
+                    <div className="p-3 border-t border-white/[0.06] bg-black/40">
+                        <CommandBar
+                            value={commandInput}
+                            onValueChange={setCommandInput}
+                            onSend={handleSend}
+                            isProcessing={isProcessing || isPending}
+                            activeMode={activeMode}
+                            onModeChange={setActiveMode}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* DESKTOP: Left column (7 cols) */}
-            <div className="flex-1 md:col-span-7 h-full md:border-r border-white/[0.06] bg-black/20 overflow-hidden flex flex-col">
+            <div className="hidden md:flex md:col-span-7 h-full md:border-r border-white/[0.06] bg-black/20 overflow-hidden flex-col">
                 {/* Chat Header */}
                 <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1719,11 +1851,8 @@ function SmartInputContent() {
                     />
                 </div>
 
-                {/* Input Area - with padding for bottom sheet on mobile */}
-                <div className={cn(
-                    "p-4 border-t border-white/[0.06] bg-black/40",
-                    hasActiveRegistration && "md:pb-4 pb-[100px]"
-                )}>
+                {/* Input Area */}
+                <div className="p-4 border-t border-white/[0.06] bg-black/40">
                     <CommandBar
                         value={commandInput}
                         onValueChange={setCommandInput}
@@ -1733,16 +1862,6 @@ function SmartInputContent() {
                         onModeChange={setActiveMode}
                     />
                 </div>
-
-                {/* Mobile Bottom Sheet */}
-                <RegistrationBottomSheet
-                    isVisible={hasActiveRegistration}
-                    summary={bottomSheetSummary}
-                    onConfirm={showGroupedPanel ? handleConfirmAllUnits : handleConfirmSave}
-                    onCancel={showGroupedPanel ? handleCancelGroupedConfirmation : handleCancelConfirmation}
-                >
-                    {statusPanelContent}
-                </RegistrationBottomSheet>
             </div>
 
             {/* DESKTOP ONLY: Right column (5 cols) - Status Panel */}
