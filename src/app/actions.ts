@@ -1142,6 +1142,19 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+// Helper to get current user ID from server-side auth
+import { createClient as createServerClient } from '@/lib/supabase/server';
+
+async function getCurrentUserId(): Promise<string | null> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        return user?.id || null;
+    } catch {
+        return null;
+    }
+}
+
 export async function createFieldSignalAction(
     content: string,
     mediaUrl: string | undefined,
@@ -1254,6 +1267,11 @@ export async function saveConversationAsDraft(data: ConversationData): Promise<{
     }
 
     try {
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: "Not authenticated" };
+        }
+
         const conversationData = {
             title: data.title,
             status: 'draft' as const,
@@ -1263,11 +1281,12 @@ export async function saveConversationAsDraft(data: ConversationData): Promise<{
         };
 
         if (data.id) {
-            // Update existing conversation
+            // Update existing conversation (only if owned by user)
             const { data: updated, error } = await supabaseAdmin
                 .from('conversations')
                 .update(conversationData)
                 .eq('id', data.id)
+                .eq('user_id', userId)
                 .select('id')
                 .single();
 
@@ -1275,11 +1294,12 @@ export async function saveConversationAsDraft(data: ConversationData): Promise<{
             revalidatePath('/command-center/timeline');
             return { success: true, id: updated.id };
         } else {
-            // Create new conversation
+            // Create new conversation with user_id
             const { data: created, error } = await supabaseAdmin
                 .from('conversations')
                 .insert({
                     ...conversationData,
+                    user_id: userId,
                     created_at: new Date().toISOString()
                 })
                 .select('id')
@@ -1312,10 +1332,16 @@ export async function loadConversation(id: string): Promise<{ success: boolean; 
     }
 
     try {
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: "Not authenticated" };
+        }
+
         const { data, error } = await supabaseAdmin
             .from('conversations')
             .select('*')
             .eq('id', id)
+            .eq('user_id', userId)
             .single();
 
         if (error) throw error;
@@ -1333,9 +1359,17 @@ export async function getConversations(status?: 'draft' | 'active' | 'completed'
     }
 
     try {
+        // Get current user ID for filtering
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            console.error('[getConversations] No authenticated user');
+            return [];
+        }
+
         let query = supabaseAdmin
             .from('conversations')
             .select('id, title, status, last_updated, created_at, draft_data')
+            .eq('user_id', userId)
             .order('last_updated', { ascending: false });
 
         if (status) {
@@ -1358,10 +1392,16 @@ export async function updateConversationStatus(id: string, status: 'draft' | 'ac
     }
 
     try {
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: "Not authenticated" };
+        }
+
         const { error } = await supabaseAdmin
             .from('conversations')
             .update({ status, last_updated: new Date().toISOString() })
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId);
 
         if (error) throw error;
         revalidatePath('/command-center/timeline');
@@ -1378,10 +1418,16 @@ export async function deleteConversation(id: string): Promise<{ success: boolean
     }
 
     try {
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            return { success: false, error: "Not authenticated" };
+        }
+
         const { error } = await supabaseAdmin
             .from('conversations')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId);
 
         if (error) throw error;
         revalidatePath('/command-center/timeline');

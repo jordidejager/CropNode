@@ -1,4 +1,6 @@
-import { createBrowserClient } from '@supabase/ssr';
+'use client';
+
+import { createBrowserClient, type SupabaseClient } from '@supabase/ssr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -43,24 +45,34 @@ const customFetch = async (url: RequestInfo | URL, options?: RequestInit): Promi
 };
 
 /**
- * Singleton Supabase client voor data operations
- * Gebruikt dezelfde @supabase/ssr client als auth zodat RLS correct werkt
+ * Singleton Supabase client - lazy initialized
+ * Ensures only ONE client instance exists for both auth and data
  */
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-  global: {
-    fetch: customFetch,
-  },
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  },
-});
+let supabaseInstance: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient {
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: customFetch,
+      },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+  return supabaseInstance;
+}
+
+// Export as 'supabase' for backward compatibility
+export const supabase = typeof window !== 'undefined'
+  ? getSupabase()
+  : createBrowserClient(supabaseUrl, supabaseAnonKey); // Server-side fallback
 
 /**
  * Retry utility for transient network failures
- * Uses fast-first retry strategy: immediate retry, then exponential backoff
  */
 export async function withRetry<T>(
   operation: () => Promise<T>,
@@ -74,11 +86,10 @@ export async function withRetry<T>(
 ): Promise<T> {
   const {
     maxRetries = 4,
-    initialDelayMs = 200, // Faster initial retry
+    initialDelayMs = 200,
     maxDelayMs = 3000,
     operationName = 'Database operation',
     shouldRetry = (error) => {
-      // Retry on network errors
       const message = error?.message?.toLowerCase() || '';
       return (
         message.includes('fetch failed') ||
@@ -104,9 +115,8 @@ export async function withRetry<T>(
         throw error;
       }
 
-      // First retry is immediate (50ms), then exponential backoff
       const delay = attempt === 0
-        ? 50 + Math.random() * 50  // 50-100ms for first retry
+        ? 50 + Math.random() * 50
         : Math.min(
             initialDelayMs * Math.pow(2, attempt - 1) + Math.random() * 100,
             maxDelayMs
@@ -120,20 +130,4 @@ export async function withRetry<T>(
   }
 
   throw lastError;
-}
-
-/**
- * Warmup the Supabase connection
- * Call this early in app lifecycle to establish connection
- */
-export async function warmupConnection(): Promise<boolean> {
-  try {
-    // Simple query to establish connection
-    await supabase.from('parcels').select('id').limit(1).single();
-    console.log('[Supabase] Connection warmed up');
-    return true;
-  } catch {
-    console.warn('[Supabase] Warmup failed, will retry on first real request');
-    return false;
-  }
 }
