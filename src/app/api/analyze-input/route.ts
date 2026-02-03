@@ -42,6 +42,8 @@ import type { IntentType, IntentWithParams, QueryProductParams, QueryHistoryPara
 import type { CtgbProduct, SprayRegistrationGroup, SprayRegistrationUnit, ConfidenceBreakdown } from '@/lib/types';
 import { extractQueryParams, isQueryIntent, isLikelySprayRegistration } from '@/ai/schemas/intents';
 import { parseSprayApplicationV2, type RegistrationUnit } from '@/ai/flows/parse-spray-application';
+// Punt 7: Combined intent + spray parsing for optimization
+import { classifyAndParseSpray, shouldUseCombinedFlow, splitCombinedOutput, type ClassifyAndParseOutput } from '@/ai/flows/classify-and-parse-spray';
 
 /**
  * Fase 2.6.1: Defensive Validation
@@ -2135,11 +2137,43 @@ export async function POST(req: Request) {
                     // are handled in PHASE 0 above and return early before reaching here.
 
                     // === PHASE 2: Intent Classification with Parameters ===
+                    // Punt 7: Check if we should use the combined flow for likely spray registrations
+                    const likelySpray = isLikelySprayRegistration(rawInput);
 
-                    const intentResult = await classifyIntentWithParams({
-                        userInput: rawInput,
-                        hasDraft,
-                    });
+                    let intentResult: IntentWithParams;
+                    let combinedSprayData: ClassifyAndParseOutput['sprayData'] | null = null;
+
+                    if (likelySpray && !hasDraft) {
+                        // Punt 7: Use combined flow for likely spray registrations
+                        // This saves one AI call by combining intent + parsing
+                        console.log(`[${context}] Using combined classify+parse flow (likely spray registration)`);
+
+                        // Quick product term extraction for context
+                        const { productTerms: quickProductTerms } = extractSearchTerms(rawInput);
+
+                        const combinedResult = await classifyAndParseSpray({
+                            userInput: rawInput,
+                            hasDraft,
+                            productNames: quickProductTerms.length > 0 ? quickProductTerms : undefined,
+                            regexHints: {
+                                detectedProducts: quickProductTerms.length > 0 ? quickProductTerms : undefined,
+                            }
+                        });
+
+                        intentResult = {
+                            intent: combinedResult.intent,
+                            confidence: combinedResult.confidence
+                        };
+                        combinedSprayData = combinedResult.sprayData || null;
+
+                        console.log(`[${context}] Combined flow result: intent=${combinedResult.intent}, confidence=${combinedResult.confidence.toFixed(2)}, hasSprayData=${!!combinedSprayData}`);
+                    } else {
+                        // Standard intent classification (non-spray or has draft)
+                        intentResult = await classifyIntentWithParams({
+                            userInput: rawInput,
+                            hasDraft,
+                        });
+                    }
 
                     // Extract query params if present
                     const { type: queryType, params: queryParams } = extractQueryParams(intentResult);
@@ -2418,6 +2452,93 @@ export async function POST(req: Request) {
 
                     // === PHASE 5.5: Check for Variation Patterns (V2 Grouped Registrations) ===
                     const { hasVariation, pattern: variationPattern } = detectVariationPattern(rawInput);
+
+                    // Punt 7: Check if we can use combined flow's pre-computed spray data
+                    // This only works for simple (non-grouped) registrations where we don't need
+                    // the full parcel context for variation handling
+                    if (combinedSprayData && !combinedSprayData.isGrouped && !hasVariation && combinedSprayData.products && combinedSprayData.products.length > 0) {
+                        console.log(`[${context}] Using pre-computed spray data from combined flow (simple registration)`);
+                        send({ type: 'extracting' });
+
+                        try {
+                            // Map product names to resolve aliases with full context
+                            const resolvedProducts = (combinedSprayData.products || []).map(p => {
+                                const originalLower = p.product.toLowerCase();
+                                return {
+                                    ...p,
+                                    product: resolvedAliases[originalLower] || PRODUCT_ALIASES[originalLower] || p.product
+                                };
+                            });
+
+                            // Resolve plot names to IDs using the parcel list
+                            let resolvedPlotIds = combinedSprayData.plots || [];
+                            if (resolvedPlotIds.length === 0 && preResolvedParcelIds) {
+                                // Use pre-resolved parcels if no specific plots in combined data
+                                resolvedPlotIds = preResolvedParcelIds;
+                            } else if (resolvedPlotIds.length > 0) {
+                                // Validate that plot IDs exist in our parcel list
+                                const validIds = resolvedPlotIds.filter(id =>
+                                    allParcels.some(p => p.id === id || p.name.toLowerCase() === id.toLowerCase())
+                                );
+                                if (validIds.length < resolvedPlotIds.length) {
+                                    console.log(`[${context}] Some plot IDs from combined flow not found, using pre-resolved parcels`);
+                                    resolvedPlotIds = preResolvedParcelIds || validIds;
+                                }
+                            }
+
+                            if (resolvedPlotIds.length > 0 && resolvedProducts.length > 0) {
+                                const parsedDate = combinedSprayData.date
+                                    ? new Date(combinedSprayData.date)
+                                    : new Date();
+
+                                // Calculate confidence breakdown
+                                const confidenceBreakdown = calculateConfidenceBreakdown(
+                                    intentResult.confidence,
+                                    productConfidenceScores,
+                                    parcelResolutionConfidence
+                                );
+
+                                // Convert to SprayRegistrationGroup (single unit)
+                                const group: SprayRegistrationGroup = {
+                                    groupId: `group-${Date.now()}`,
+                                    date: parsedDate,
+                                    rawInput,
+                                    units: [{
+                                        id: `unit-${Date.now()}`,
+                                        plots: resolvedPlotIds,
+                                        products: resolvedProducts.map(p => ({
+                                            product: p.product,
+                                            dosage: p.dosage,
+                                            unit: p.unit,
+                                            targetReason: p.targetReason
+                                        })),
+                                        status: 'pending' as const
+                                    }],
+                                    confidence: confidenceBreakdown
+                                };
+
+                                const relevantParcels = allParcels
+                                    .filter(p => resolvedPlotIds.includes(p.id))
+                                    .map(p => ({ id: p.id, name: p.name, area: p.area }));
+
+                                const reply = `Registratie klaargezet voor ${resolvedPlotIds.length} percelen. Controleer rechts of alles klopt.`;
+
+                                console.log(`[${context}] Sending grouped_complete from combined flow: ${resolvedPlotIds.length} plots, ${resolvedProducts.length} products`);
+
+                                send({
+                                    type: 'grouped_complete',
+                                    group,
+                                    reply,
+                                    parcels: relevantParcels
+                                });
+                                return; // Exit - combined flow completed
+                            }
+                        } catch (combinedError: unknown) {
+                            const errorMsg = combinedError instanceof Error ? combinedError.message : 'Unknown error';
+                            console.error(`[${context}] Combined flow data processing failed:`, errorMsg);
+                            // Fall through to standard flow
+                        }
+                    }
 
                     if (hasVariation && !hasDraft) {
                         console.log(`[${context}] Variation pattern detected: "${variationPattern}" - using V2 grouped parsing`);
