@@ -143,6 +143,17 @@ export type SprayRegistrationUnit = {
 };
 
 /**
+ * Punt 4: Confidence breakdown voor transparantie naar gebruiker
+ */
+export type ConfidenceBreakdown = {
+  intentClassification: number;    // 0-1: Hoe zeker zijn we van het intent type
+  productResolution: number;       // 0-1: Laagste confidence van alle product aliassen
+  parcelResolution: number;        // 0-1: Exacte match of fuzzy guess?
+  overall: number;                 // 0-1: Minimum van bovenstaande (zwakste schakel)
+  uncertainFields?: string[];      // Velden met lage confidence (voor UI highlighting)
+};
+
+/**
  * Groep van gerelateerde registraties uit één invoer.
  * Gebruikt voor UI-weergave en batch-operaties.
  * Database: elke unit wordt als losse spuitschrift entry opgeslagen.
@@ -152,6 +163,8 @@ export type SprayRegistrationGroup = {
   date: Date;
   rawInput: string;          // Originele invoer van gebruiker
   units: SprayRegistrationUnit[];
+  // Punt 4: Confidence informatie
+  confidence?: ConfidenceBreakdown;
 };
 
 /**

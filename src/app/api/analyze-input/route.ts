@@ -39,7 +39,7 @@ import {
     type CorrectionResult
 } from '@/lib/correction-service';
 import type { IntentType, IntentWithParams, QueryProductParams, QueryHistoryParams, QueryRegulationParams } from '@/ai/schemas/intents';
-import type { CtgbProduct, SprayRegistrationGroup, SprayRegistrationUnit } from '@/lib/types';
+import type { CtgbProduct, SprayRegistrationGroup, SprayRegistrationUnit, ConfidenceBreakdown } from '@/lib/types';
 import { extractQueryParams, isQueryIntent, isLikelySprayRegistration } from '@/ai/schemas/intents';
 import { parseSprayApplicationV2, type RegistrationUnit } from '@/ai/flows/parse-spray-application';
 
@@ -447,11 +447,13 @@ function detectVariationPattern(input: string): { hasVariation: boolean; pattern
 
 /**
  * Convert AI V2 output to SprayRegistrationGroup
+ * Now includes optional confidence information (Punt 4)
  */
 function convertToRegistrationGroup(
     registrations: RegistrationUnit[],
     date: Date,
-    rawInput: string
+    rawInput: string,
+    confidence?: ConfidenceBreakdown
 ): SprayRegistrationGroup {
     const units: SprayRegistrationUnit[] = registrations.map((reg, index) => ({
         id: `unit-${Date.now()}-${index}`,
@@ -471,6 +473,39 @@ function convertToRegistrationGroup(
         date,
         rawInput,
         units,
+        confidence,
+    };
+}
+
+/**
+ * Punt 4: Calculate overall confidence from individual scores
+ * Uses minimum of all scores (chain is as strong as weakest link)
+ */
+function calculateConfidenceBreakdown(
+    intentConfidence: number,
+    productConfidences: number[],
+    parcelConfidence: number
+): ConfidenceBreakdown {
+    // Product confidence is the minimum of all resolved products
+    const productResolution = productConfidences.length > 0
+        ? Math.min(...productConfidences)
+        : 1.0; // No products = no uncertainty
+
+    // Overall is the minimum of all (weakest link)
+    const overall = Math.min(intentConfidence, productResolution, parcelConfidence);
+
+    // Identify uncertain fields
+    const uncertainFields: string[] = [];
+    if (intentConfidence < 0.65) uncertainFields.push('intent');
+    if (productResolution < 0.65) uncertainFields.push('product');
+    if (parcelConfidence < 0.65) uncertainFields.push('perceel');
+
+    return {
+        intentClassification: intentConfidence,
+        productResolution,
+        parcelResolution: parcelConfidence,
+        overall,
+        uncertainFields: uncertainFields.length > 0 ? uncertainFields : undefined,
     };
 }
 
@@ -2154,12 +2189,15 @@ export async function POST(req: Request) {
 
                     // === Product Alias Resolution (parallel per product, uses results from above) ===
                     const resolvedAliases: Record<string, string> = {};
+                    // Punt 4: Track confidence scores for each product resolution
+                    const productConfidenceScores: number[] = [];
 
                     // FIRST: Quick pass - static aliases (sync, O(1) lookup per term)
                     for (const term of productTerms) {
                         const normalizedTerm = term.toLowerCase().trim();
                         if (PRODUCT_ALIASES[normalizedTerm]) {
                             resolvedAliases[term] = PRODUCT_ALIASES[normalizedTerm];
+                            productConfidenceScores.push(0.95); // Static aliases have 95% confidence
                             console.log(`[${context}] Static alias: "${term}" → "${PRODUCT_ALIASES[normalizedTerm]}"`);
                         }
                     }
@@ -2177,8 +2215,20 @@ export async function POST(req: Request) {
                             if (resolved.confidence > 0 && resolved.source !== 'direct') {
                                 resolvedAliases[term] = resolved.resolvedName;
                             }
+                            // Punt 4: Track confidence score (normalize from 0-100 to 0-1)
+                            productConfidenceScores.push(resolved.confidence / 100);
                         }
                     }
+
+                    // Punt 4: Calculate parcel resolution confidence
+                    // - Exact group match (preResolvedParcelIds) = 1.0
+                    // - No group keyword but we have parcels = 0.85 (AI will decide)
+                    // - No parcels found = 0.5
+                    const parcelResolutionConfidence = preResolvedParcelIds !== null && preResolvedParcelIds.length > 0
+                        ? 1.0 // Exact match via group keyword
+                        : allParcels.length > 0
+                            ? 0.85 // Parcels available, AI will select
+                            : 0.5; // No parcels, uncertain
 
                     // === PHASE 2.5: Self-Learning Product Suggestions ===
                     // Check for product terms that weren't resolved to known products
@@ -2309,11 +2359,20 @@ export async function POST(req: Request) {
                                     ? new Date(v2Result.date)
                                     : new Date();
 
+                                // Punt 4: Calculate confidence breakdown
+                                const confidenceBreakdown = calculateConfidenceBreakdown(
+                                    intentResult.confidence,
+                                    productConfidenceScores,
+                                    parcelResolutionConfidence
+                                );
+                                console.log(`[${context}] Confidence breakdown: intent=${intentResult.confidence.toFixed(2)}, products=${productConfidenceScores.join(',')}, parcels=${parcelResolutionConfidence.toFixed(2)}, overall=${confidenceBreakdown.overall.toFixed(2)}`);
+
                                 // Convert to SprayRegistrationGroup
                                 const group = convertToRegistrationGroup(
                                     v2Result.registrations,
                                     parsedDate,
-                                    rawInput
+                                    rawInput,
+                                    confidenceBreakdown
                                 );
 
                                 // Generate reply for grouped registrations

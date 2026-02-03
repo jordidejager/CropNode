@@ -26,8 +26,9 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ConfidenceBreakdown } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type ParcelLike = { id: string; name: string; area: number | null };
 
@@ -54,6 +55,120 @@ interface RegistrationGroupCardProps {
 function getMainParcelName(name: string): string {
     const parts = name.trim().split(/\s+/);
     return parts[0] || name;
+}
+
+/**
+ * Punt 4: Confidence Indicator Component
+ *
+ * Shows visual feedback about how confident the system is about the parsed data.
+ * - Green (>= 0.85): High confidence, no extra text
+ * - Orange (0.65-0.84): Medium confidence with warning
+ * - Red (< 0.65): Low confidence with warning and field highlights
+ */
+function ConfidenceIndicator({ confidence }: { confidence?: ConfidenceBreakdown }) {
+    if (!confidence) return null;
+
+    const overall = confidence.overall;
+
+    // High confidence - subtle green indicator
+    if (overall >= 0.85) {
+        return (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20">
+                            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                            <span className="text-xs text-emerald-400 font-medium">
+                                {Math.round(overall * 100)}%
+                            </span>
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs font-medium mb-1">Hoge zekerheid</p>
+                        <div className="text-xs text-white/60 space-y-0.5">
+                            <p>Intent: {Math.round(confidence.intentClassification * 100)}%</p>
+                            <p>Producten: {Math.round(confidence.productResolution * 100)}%</p>
+                            <p>Percelen: {Math.round(confidence.parcelResolution * 100)}%</p>
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
+    // Medium confidence - orange warning
+    if (overall >= 0.65) {
+        return (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-xs text-amber-400 font-medium">
+                                Controleer gegevens
+                            </span>
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs font-medium mb-1">Gemiddelde zekerheid ({Math.round(overall * 100)}%)</p>
+                        <p className="text-xs text-white/60 mb-2">Ik ben niet 100% zeker. Controleer of alles klopt.</p>
+                        <div className="text-xs text-white/60 space-y-0.5">
+                            <p className={cn(confidence.intentClassification < 0.85 && "text-amber-400")}>
+                                Intent: {Math.round(confidence.intentClassification * 100)}%
+                            </p>
+                            <p className={cn(confidence.productResolution < 0.85 && "text-amber-400")}>
+                                Producten: {Math.round(confidence.productResolution * 100)}%
+                            </p>
+                            <p className={cn(confidence.parcelResolution < 0.85 && "text-amber-400")}>
+                                Percelen: {Math.round(confidence.parcelResolution * 100)}%
+                            </p>
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
+    // Low confidence - red warning with uncertain fields
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                        <span className="text-xs text-red-400 font-medium">
+                            Klopt dit?
+                        </span>
+                    </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-xs font-medium mb-1">Lage zekerheid ({Math.round(overall * 100)}%)</p>
+                    <p className="text-xs text-white/60 mb-2">Ik kon niet alles met zekerheid herkennen.</p>
+                    <div className="text-xs text-white/60 space-y-0.5">
+                        <p className={cn(confidence.intentClassification < 0.65 && "text-red-400")}>
+                            Intent: {Math.round(confidence.intentClassification * 100)}%
+                            {confidence.intentClassification < 0.65 && " - onzeker"}
+                        </p>
+                        <p className={cn(confidence.productResolution < 0.65 && "text-red-400")}>
+                            Producten: {Math.round(confidence.productResolution * 100)}%
+                            {confidence.productResolution < 0.65 && " - onzeker"}
+                        </p>
+                        <p className={cn(confidence.parcelResolution < 0.65 && "text-red-400")}>
+                            Percelen: {Math.round(confidence.parcelResolution * 100)}%
+                            {confidence.parcelResolution < 0.65 && " - onzeker"}
+                        </p>
+                    </div>
+                    {confidence.uncertainFields && confidence.uncertainFields.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                            <p className="text-xs text-red-400">
+                                Onzekere velden: {confidence.uncertainFields.join(', ')}
+                            </p>
+                        </div>
+                    )}
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
 }
 
 interface ParcelGroup {
@@ -446,9 +561,13 @@ export function RegistrationGroupCard({
                         <Calendar className="h-4 w-4" />
                         <span>{formattedDate}</span>
                     </div>
-                    <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
-                        {group.units.length} registratie{group.units.length !== 1 ? 's' : ''}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                        {/* Punt 4: Confidence Indicator */}
+                        <ConfidenceIndicator confidence={group.confidence} />
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
+                            {group.units.length} registratie{group.units.length !== 1 ? 's' : ''}
+                        </Badge>
+                    </div>
                 </div>
             </div>
 
