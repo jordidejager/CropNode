@@ -2,6 +2,7 @@ import { searchCtgbProducts } from './supabase-store';
 import { generateEmbedding } from './embedding-service';
 import { supabase } from './supabase';
 import { CtgbProduct } from './types';
+import { PRODUCT_ALIASES } from './product-aliases';
 
 /**
  * RAG Service - Retrieval Augmented Generation
@@ -214,6 +215,9 @@ export function extractSearchTerms(userInput: string): {
         ? { value: parseFloat(dosageMatch[1].replace(',', '.')), unit: dosageMatch[2].toLowerCase() }
         : null;
 
+    // Build a set of known alias keys for O(1) lookup
+    const aliasKeys = new Set(Object.keys(PRODUCT_ALIASES));
+
     // Categoriseer tokens
     for (const token of tokens) {
         if (STOP_WORDS.has(token)) continue;
@@ -225,22 +229,31 @@ export function extractSearchTerms(userInput: string): {
             contextTerms.push(token);
         } else if (TARGET_WORDS.has(token)) {
             contextTerms.push(token);
-        } else {
-            // Potentieel een productnaam of deel ervan
+        } else if (aliasKeys.has(token)) {
+            // ONLY add if it's a known product alias
+            // This prevents random words like "schele", "gedaan" from being searched
             productTerms.push(token);
         }
+        // Note: Unknown tokens are ignored - they're not products
     }
 
-    // Multi-word product namen detecteren (bijv. "Captan 80 WG")
+    // Multi-word product namen detecteren (bijv. "Captan 80 WG", "merpan spuitkorrel")
     const multiWordPatterns = [
         /([a-z]+)\s+(\d+)\s*(wg|wp|sc|ec|sl|sp|df|wdg|od)/gi,  // "Captan 80 WG"
-        /([a-z]+)\s+(flow|spray|gold|plus|max|pro|ultra)/gi     // "Batavia Flow"
+        /([a-z]+)\s+(flow|spray|gold|plus|max|pro|ultra)/gi,    // "Batavia Flow"
+        /([a-z]+)\s+(spuitkorrel|vloeibaar|poeder)/gi           // "Merpan Spuitkorrel"
     ];
 
     for (const pattern of multiWordPatterns) {
         const matches = normalizedInput.matchAll(pattern);
         for (const match of matches) {
-            productTerms.push(match[0].trim());
+            const matchedTerm = match[0].trim();
+            productTerms.push(matchedTerm);
+            // Also add the first word as a separate term for alias lookup
+            const firstWord = match[1]?.toLowerCase();
+            if (firstWord && aliasKeys.has(firstWord)) {
+                productTerms.push(firstWord);
+            }
         }
     }
 

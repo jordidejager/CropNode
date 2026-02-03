@@ -1,5 +1,6 @@
 // Use server-compatible supabase client (no 'use client' directive)
-import { supabase } from './supabase-client';
+// supabaseAdmin bypasses RLS for server-side operations
+import { supabase, supabaseAdmin } from './supabase-client';
 import { withRetry } from './retry-utils';
 import type {
   LogbookEntry,
@@ -327,8 +328,9 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
   console.log('[getSprayableParcels] Fetching from v_sprayable_parcels view...');
 
   // Use retry for transient network errors
+  // Use supabaseAdmin to bypass RLS (view inherits RLS from underlying tables)
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('v_sprayable_parcels')
       .select('*')
       .order('name');
@@ -391,8 +393,9 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
   console.log(`[getSprayableParcelsById] Fetching ${ids.length} parcels from view...`);
 
   // Use retry for transient network errors
+  // Use supabaseAdmin to bypass RLS (view inherits RLS from underlying tables)
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('v_sprayable_parcels')
       .select('*')
       .in('id', ids);
@@ -1335,26 +1338,52 @@ export async function getCtgbProductsBySubstance(substance: string): Promise<Ctg
 }
 
 /**
+ * Strip special characters from product names for database matching
+ * Removes: ®, ™, ©, etc.
+ */
+function stripSpecialChars(name: string): string {
+  return name
+    .replace(/[®™©]/g, '')  // Remove trademark symbols
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim();
+}
+
+/**
  * Fetch CTGB products by an array of names (case-insensitive)
  * Used for optimized validation - only fetches products mentioned in the draft
  * Includes retry logic for transient network errors
+ *
+ * Handles:
+ * - Case-insensitive matching
+ * - Special characters (®, ™) in product names
+ * - Partial matching for multi-word names
  */
 export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProduct[]> {
   if (!names || names.length === 0) return [];
 
-  // Normalize names for case-insensitive search
-  const normalizedNames = names.map(n => n.toLowerCase().trim()).filter(Boolean);
+  // Normalize names: lowercase, trim, and strip special chars
+  const normalizedNames = names
+    .map(n => stripSpecialChars(n.toLowerCase().trim()))
+    .filter(Boolean);
   if (normalizedNames.length === 0) return [];
 
-  console.log(`[getCtgbProductsByNames] Fetching ${names.length} products...`);
+  console.log(`[getCtgbProductsByNames] Fetching ${names.length} products: ${normalizedNames.slice(0, 3).join(', ')}...`);
 
   // Use retry for transient network errors
   return withRetry(async () => {
-    // Use ilike for case-insensitive matching
-    const { data, error } = await supabase
+    // Build OR conditions for each name
+    // Use ilike with wildcards stripped of special chars
+    const orConditions = normalizedNames.map(n => {
+      // For multi-word names, match the core product name (first significant word)
+      const coreWord = n.split(/\s+/)[0];
+      // Try both: exact partial match and core word match
+      return `naam.ilike.%${n}%,naam.ilike.%${coreWord}%`;
+    }).join(',');
+
+    const { data, error } = await supabaseAdmin
       .from('ctgb_products')
       .select('*')
-      .or(normalizedNames.map(n => `naam.ilike.%${n}%`).join(','));
+      .or(orConditions);
 
     if (error) {
       // Throw on fetch errors so withRetry can handle them
@@ -1370,8 +1399,16 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
       return [];
     }
 
-    console.log(`[getCtgbProductsByNames] Found ${data.length} products for ${names.length} names`);
-    return data.map(item => recursiveToCamelCase(item) as CtgbProduct);
+    // Deduplicate results (core word match might return duplicates)
+    const uniqueProducts = new Map<string, any>();
+    for (const item of data) {
+      if (!uniqueProducts.has(item.id)) {
+        uniqueProducts.set(item.id, item);
+      }
+    }
+
+    console.log(`[getCtgbProductsByNames] Found ${uniqueProducts.size} products for ${names.length} names`);
+    return Array.from(uniqueProducts.values()).map(item => recursiveToCamelCase(item) as CtgbProduct);
   }, 5);
 }
 
