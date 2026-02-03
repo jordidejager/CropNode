@@ -132,7 +132,7 @@ export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient>, {
 });
 
 /**
- * Debug function to test database connectivity and RLS bypass
+ * Debug function to test database connectivity and diagnose view issues
  * Call this to verify the service role client is working
  * Only works on server-side
  */
@@ -140,11 +140,15 @@ export async function testDatabaseConnection(): Promise<{
   success: boolean;
   hasServiceKey: boolean;
   subParcelsCount: number;
+  parcelsCount: number;
   viewCount: number;
+  orphanedSubParcels: number;
+  sampleSubParcel?: { id: string; parcel_id: string | null };
+  sampleParcel?: { id: string; name: string };
   error?: string;
 }> {
   if (!isServer) {
-    return { success: false, hasServiceKey: false, subParcelsCount: 0, viewCount: 0, error: 'testDatabaseConnection only works on server' };
+    return { success: false, hasServiceKey: false, subParcelsCount: 0, parcelsCount: 0, viewCount: 0, orphanedSubParcels: 0, error: 'testDatabaseConnection only works on server' };
   }
 
   const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -153,27 +157,82 @@ export async function testDatabaseConnection(): Promise<{
   const client = getSupabaseAdmin();
 
   try {
-    // Test 1: Direct sub_parcels query
-    const { data: subData, error: subError, count: subCount } = await client
+    // Test 1: Count sub_parcels
+    const { count: subCount, error: subError } = await client
       .from('sub_parcels')
-      .select('id', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true });
 
     if (subError) {
-      return { success: false, hasServiceKey, subParcelsCount: 0, viewCount: 0, error: `sub_parcels error: ${subError.message}` };
+      return { success: false, hasServiceKey, subParcelsCount: 0, parcelsCount: 0, viewCount: 0, orphanedSubParcels: 0, error: `sub_parcels error: ${subError.message}` };
     }
 
-    // Test 2: View query
-    const { data: viewData, error: viewError, count: viewCount } = await client
+    // Test 2: Count parcels (parent table)
+    const { count: parcelsCount, error: parcelsError } = await client
+      .from('parcels')
+      .select('*', { count: 'exact', head: true });
+
+    if (parcelsError) {
+      return { success: false, hasServiceKey, subParcelsCount: subCount || 0, parcelsCount: 0, viewCount: 0, orphanedSubParcels: 0, error: `parcels error: ${parcelsError.message}` };
+    }
+
+    // Test 3: Count view
+    const { count: viewCount, error: viewError } = await client
       .from('v_sprayable_parcels')
-      .select('id', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true });
 
     if (viewError) {
-      return { success: false, hasServiceKey, subParcelsCount: subCount || 0, viewCount: 0, error: `view error: ${viewError.message}` };
+      return { success: false, hasServiceKey, subParcelsCount: subCount || 0, parcelsCount: parcelsCount || 0, viewCount: 0, orphanedSubParcels: 0, error: `view error: ${viewError.message}` };
     }
 
-    console.log(`[testDatabaseConnection] SUCCESS: sub_parcels=${subCount}, view=${viewCount}`);
-    return { success: true, hasServiceKey, subParcelsCount: subCount || 0, viewCount: viewCount || 0 };
+    // Test 4: Get sample sub_parcel to check parcel_id
+    const { data: sampleSub } = await client
+      .from('sub_parcels')
+      .select('id, parcel_id')
+      .limit(1)
+      .single();
+
+    // Test 5: Get sample parcel
+    const { data: sampleParcel } = await client
+      .from('parcels')
+      .select('id, name')
+      .limit(1)
+      .single();
+
+    // Test 6: Count orphaned sub_parcels (parcel_id not in parcels)
+    // This is the likely cause: sub_parcels.parcel_id doesn't match any parcels.id
+    let orphanedCount = 0;
+    if (sampleSub?.parcel_id && parcelsCount === 0) {
+      orphanedCount = subCount || 0; // All are orphaned if no parcels exist
+    } else if (sampleSub?.parcel_id) {
+      // Check if this parcel_id exists
+      const { data: matchingParcel } = await client
+        .from('parcels')
+        .select('id')
+        .eq('id', sampleSub.parcel_id)
+        .single();
+
+      if (!matchingParcel) {
+        console.log(`[testDatabaseConnection] FOUND ISSUE: sub_parcel.parcel_id=${sampleSub.parcel_id} has no matching parcel!`);
+        orphanedCount = -1; // Indicates mismatch
+      }
+    }
+
+    console.log(`[testDatabaseConnection] Results: sub_parcels=${subCount}, parcels=${parcelsCount}, view=${viewCount}`);
+    if (parcelsCount === 0) {
+      console.log(`[testDatabaseConnection] ROOT CAUSE: parcels table is EMPTY! The JOIN fails.`);
+    }
+
+    return {
+      success: (viewCount || 0) > 0,
+      hasServiceKey,
+      subParcelsCount: subCount || 0,
+      parcelsCount: parcelsCount || 0,
+      viewCount: viewCount || 0,
+      orphanedSubParcels: orphanedCount,
+      sampleSubParcel: sampleSub ? { id: sampleSub.id, parcel_id: sampleSub.parcel_id } : undefined,
+      sampleParcel: sampleParcel ? { id: sampleParcel.id, name: sampleParcel.name } : undefined
+    };
   } catch (err: any) {
-    return { success: false, hasServiceKey, subParcelsCount: 0, viewCount: 0, error: err.message };
+    return { success: false, hasServiceKey, subParcelsCount: 0, parcelsCount: 0, viewCount: 0, orphanedSubParcels: 0, error: err.message };
   }
 }

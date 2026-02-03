@@ -329,12 +329,9 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
   const isServer = typeof window === 'undefined';
   const client = isServer ? supabaseAdmin : supabase;
 
-  if (isServer) {
-    console.log('[getSprayableParcels] Server-side: using supabaseAdmin (bypasses RLS)');
-  }
-
   // Use retry for transient network errors
   return withRetry(async () => {
+    // First try the view
     const { data, error } = await client
       .from('v_sprayable_parcels')
       .select('*')
@@ -345,119 +342,149 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
       if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
         throw new Error(error.message);
       }
-      console.error('[getSprayableParcels] Supabase error:', error.message, error.code);
+      console.error('[getSprayableParcels] View error:', error.message, error.code);
+    }
+
+    // If view works, return the data
+    if (data && data.length > 0) {
+      console.log(`[getSprayableParcels] Found ${data.length} sprayable parcels from view`);
+      return data.map(item => mapToSprayableParcel(item));
+    }
+
+    // FALLBACK: View is empty, try querying sub_parcels directly
+    // This happens when parcels table is empty (JOIN returns 0 rows)
+    console.warn('[getSprayableParcels] View returned 0 rows, trying direct sub_parcels query...');
+
+    const { data: subData, error: subError } = await client
+      .from('sub_parcels')
+      .select('*')
+      .order('crop');
+
+    if (subError) {
+      console.error('[getSprayableParcels] sub_parcels fallback error:', subError.message);
       return [];
     }
 
-    if (!data || data.length === 0) {
-      console.warn('[getSprayableParcels] No sprayable parcels found');
-      // Only run diagnostic on server
-      if (isServer) {
-        const diagnostic = await testDatabaseConnection();
-        console.log('[getSprayableParcels] Server diagnostic:', JSON.stringify(diagnostic, null, 2));
-      }
+    if (!subData || subData.length === 0) {
+      console.warn('[getSprayableParcels] No sub_parcels found either');
       return [];
     }
 
-    console.log(`[getSprayableParcels] Found ${data.length} sprayable parcels`);
+    console.log(`[getSprayableParcels] FALLBACK: Found ${subData.length} sub_parcels directly`);
 
-    return data.map(item => {
-      // Parse geometry if it's a string (Supabase may return it as string)
-      let geometry = item.geometry;
-      if (geometry && typeof geometry === 'string') {
-        try {
-          geometry = JSON.parse(geometry);
-        } catch {
-          // Keep as-is if parsing fails
-        }
-      }
-
-      return {
-        id: item.id,
-        name: item.name,
-        area: item.area,
-        crop: item.crop || 'Onbekend',
-        variety: item.variety,
-        parcelId: item.parcel_id,
-        parcelName: item.parcel_name,
-        location: item.location,
-        geometry,
-        source: item.source,
-        rvoId: item.rvo_id,
-      };
-    });
+    // Map sub_parcels to SprayableParcel format (without parent parcel info)
+    return subData.map(sp => ({
+      id: sp.id,
+      name: sp.name || `${sp.crop || 'Perceel'} ${sp.variety || ''}`.trim(),
+      area: sp.area,
+      crop: sp.crop || 'Onbekend',
+      variety: sp.variety,
+      parcelId: sp.parcel_id || sp.id,
+      parcelName: sp.name || 'Onbekend',
+      location: null,
+      geometry: null,
+      source: null,
+      rvoId: null,
+    }));
   });
+}
+
+/**
+ * Helper to map view/table row to SprayableParcel
+ */
+function mapToSprayableParcel(item: any): SprayableParcel {
+  // Parse geometry if it's a string
+  let geometry = item.geometry;
+  if (geometry && typeof geometry === 'string') {
+    try {
+      geometry = JSON.parse(geometry);
+    } catch {
+      // Keep as-is
+    }
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    area: item.area,
+    crop: item.crop || 'Onbekend',
+    variety: item.variety,
+    parcelId: item.parcel_id || item.id,
+    parcelName: item.parcel_name || item.name,
+    location: item.location,
+    geometry,
+    source: item.source,
+    rvoId: item.rvo_id,
+  };
 }
 
 /**
  * Fetch specific sprayable parcels by ID
  * IDs are sub_parcel IDs (the unit of work)
  * Includes retry logic for transient network errors
+ * Falls back to direct sub_parcels query if view is empty
  */
 export async function getSprayableParcelsById(ids: string[]): Promise<SprayableParcel[]> {
   if (!ids || ids.length === 0) {
     return [];
   }
 
-  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client (uses user session)
   const isServer = typeof window === 'undefined';
   const client = isServer ? supabaseAdmin : supabase;
 
-  // Use retry for transient network errors
   return withRetry(async () => {
+    // First try the view
     const { data, error } = await client
       .from('v_sprayable_parcels')
       .select('*')
       .in('id', ids);
 
     if (error) {
-      // Throw on fetch errors so withRetry can handle them
       if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
         throw new Error(error.message);
       }
-      console.error('[getSprayableParcelsById] Supabase error:', error.message, error.code);
+      console.error('[getSprayableParcelsById] View error:', error.message);
+    }
+
+    // If view returned data, use it
+    if (data && data.length > 0) {
+      console.log(`[getSprayableParcelsById] Found ${data.length}/${ids.length} parcels from view`);
+      return data.map(item => mapToSprayableParcel(item));
+    }
+
+    // FALLBACK: View is empty, try sub_parcels directly
+    console.warn('[getSprayableParcelsById] View returned 0 rows, trying sub_parcels fallback...');
+
+    const { data: subData, error: subError } = await client
+      .from('sub_parcels')
+      .select('*')
+      .in('id', ids);
+
+    if (subError) {
+      console.error('[getSprayableParcelsById] sub_parcels fallback error:', subError.message);
       return [];
     }
 
-    if (!data || data.length === 0) {
-      console.warn(`[getSprayableParcelsById] No parcels found for IDs: ${ids.slice(0, 3).join(', ')}...`);
+    if (!subData || subData.length === 0) {
+      console.warn(`[getSprayableParcelsById] No sub_parcels found for IDs: ${ids.slice(0, 3).join(', ')}...`);
       return [];
     }
 
-    console.log(`[getSprayableParcelsById] Found ${data.length}/${ids.length} parcels`);
+    console.log(`[getSprayableParcelsById] FALLBACK: Found ${subData.length}/${ids.length} sub_parcels`);
 
-    // Log any missing IDs for debugging
-    const foundIds = new Set(data.map((p: any) => p.id));
-    const missingIds = ids.filter(id => !foundIds.has(id));
-    if (missingIds.length > 0) {
-      console.warn(`[getSprayableParcelsById] Missing IDs: ${missingIds.slice(0, 3).join(', ')}${missingIds.length > 3 ? '...' : ''}`);
-    }
-
-    return data.map(item => {
-      // Parse geometry if it's a string
-      let geometry = item.geometry;
-      if (geometry && typeof geometry === 'string') {
-        try {
-          geometry = JSON.parse(geometry);
-        } catch {
-          // Keep as-is if parsing fails
-        }
-      }
-
-      return {
-        id: item.id,
-        name: item.name,
-        area: item.area,
-        crop: item.crop || 'Onbekend',
-        variety: item.variety,
-        parcelId: item.parcel_id,
-        parcelName: item.parcel_name,
-        location: item.location,
-        geometry,
-        source: item.source,
-        rvoId: item.rvo_id,
-      };
-    });
+    return subData.map(sp => ({
+      id: sp.id,
+      name: sp.name || `${sp.crop || 'Perceel'} ${sp.variety || ''}`.trim(),
+      area: sp.area,
+      crop: sp.crop || 'Onbekend',
+      variety: sp.variety,
+      parcelId: sp.parcel_id || sp.id,
+      parcelName: sp.name || 'Onbekend',
+      location: null,
+      geometry: null,
+      source: null,
+      rvoId: null,
+    }));
   });
 }
 
