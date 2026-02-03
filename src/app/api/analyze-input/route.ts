@@ -446,6 +446,123 @@ function detectVariationPattern(input: string): { hasVariation: boolean; pattern
 }
 
 /**
+ * Punt 5: Generate regex hints for AI pre-enrichment
+ * These hints provide context to the AI but don't make definitive decisions
+ */
+interface RegexHints {
+    possibleGroup?: string;
+    possibleException?: string;
+    variationPattern?: string;
+    detectedProducts?: string[];
+    detectedDate?: string;
+}
+
+function generateRegexHints(
+    input: string,
+    groupInfo: { hasGroupKeyword: boolean; groupType: 'all' | 'crop' | 'variety' | null; groupValue: string | null },
+    variationInfo: { hasVariation: boolean; pattern?: string },
+    productTerms: string[]
+): RegexHints {
+    const hints: RegexHints = {};
+    const inputLower = input.toLowerCase();
+
+    // Group keyword hint
+    if (groupInfo.hasGroupKeyword && groupInfo.groupValue) {
+        hints.possibleGroup = groupInfo.groupValue;
+    }
+
+    // Variation pattern hint
+    if (variationInfo.hasVariation && variationInfo.pattern) {
+        hints.variationPattern = variationInfo.pattern;
+    }
+
+    // Exception detection (after "behalve", "niet de", "zonder", etc.)
+    const exceptionPatterns = [
+        /behalve\s+(?:de\s+)?(\w+)/i,
+        /niet\s+de\s+(\w+)/i,
+        /zonder\s+(?:de\s+)?(\w+)/i,
+        /(\w+)\s+overgeslagen/i,
+        /(\w+)\s+niet\b/i,
+    ];
+    for (const pattern of exceptionPatterns) {
+        const match = inputLower.match(pattern);
+        if (match && match[1]) {
+            hints.possibleException = match[1];
+            break;
+        }
+    }
+
+    // Product terms as hints
+    if (productTerms.length > 0) {
+        hints.detectedProducts = productTerms;
+    }
+
+    // Date detection
+    const datePatterns = [
+        { pattern: /\bvandaag\b/i, value: 'vandaag' },
+        { pattern: /\bgisteren\b/i, value: 'gisteren' },
+        { pattern: /\beergisteren\b/i, value: 'eergisteren' },
+        { pattern: /\b(\d{1,2})[-\/](\d{1,2})(?:[-\/](\d{2,4}))?\b/, value: 'datum' },
+        { pattern: /\b(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\b/i, value: 'datum' },
+    ];
+    for (const { pattern, value } of datePatterns) {
+        if (pattern.test(input)) {
+            hints.detectedDate = value;
+            break;
+        }
+    }
+
+    return hints;
+}
+
+/**
+ * Punt 5: Validate AI output against regex hints
+ * Returns confidence adjustment based on agreement/disagreement
+ */
+function validateAIAgainstRegex(
+    aiOutput: { registrations: Array<{ plots: string[]; products: Array<{ product: string }> }> },
+    regexHints: RegexHints,
+    allParcels: Array<{ id: string; name: string; crop: string | null; variety: string | null }>
+): { confidenceAdjustment: number; reason: string } {
+    // If no hints, no adjustment
+    if (!regexHints.possibleGroup && !regexHints.possibleException && !regexHints.detectedProducts) {
+        return { confidenceAdjustment: 0, reason: 'no_hints' };
+    }
+
+    // Check if AI found the expected exception
+    if (regexHints.possibleException) {
+        const exceptionLower = regexHints.possibleException.toLowerCase();
+        // Check if any registration excludes a parcel that matches the exception
+        const allAIPlots = aiOutput.registrations.flatMap(r => r.plots);
+        const exceptionParcel = allParcels.find(p =>
+            p.name.toLowerCase().includes(exceptionLower) ||
+            p.variety?.toLowerCase().includes(exceptionLower)
+        );
+
+        if (exceptionParcel && !allAIPlots.includes(exceptionParcel.id)) {
+            // AI correctly excluded the exception - boost confidence
+            return { confidenceAdjustment: 0.05, reason: 'exception_confirmed' };
+        } else if (exceptionParcel && allAIPlots.includes(exceptionParcel.id)) {
+            // AI included what should be excluded - lower confidence
+            return { confidenceAdjustment: -0.1, reason: 'exception_missed' };
+        }
+    }
+
+    // Check if AI found the expected products
+    if (regexHints.detectedProducts && regexHints.detectedProducts.length > 0) {
+        const aiProducts = aiOutput.registrations.flatMap(r => r.products.map(p => p.product.toLowerCase()));
+        const foundAll = regexHints.detectedProducts.every(term =>
+            aiProducts.some(p => p.includes(term.toLowerCase()))
+        );
+        if (foundAll) {
+            return { confidenceAdjustment: 0.05, reason: 'products_confirmed' };
+        }
+    }
+
+    return { confidenceAdjustment: 0, reason: 'partial_match' };
+}
+
+/**
  * Convert AI V2 output to SprayRegistrationGroup
  * Now includes optional confidence information (Punt 4)
  */
@@ -2319,6 +2436,17 @@ export async function POST(req: Request) {
                             const productNames = allRelevantProducts.map(p => p.naam);
                             console.log(`[${context}] V2 calling AI with ${productNames.length} products: ${productNames.slice(0, 5).join(', ')}...`);
 
+                            // Punt 5: Generate regex hints for AI context
+                            const regexHints = generateRegexHints(
+                                rawInput,
+                                { hasGroupKeyword, groupType, groupValue },
+                                { hasVariation, pattern: variationPattern },
+                                productTerms
+                            );
+                            if (Object.keys(regexHints).length > 0) {
+                                console.log(`[${context}] Regex hints generated:`, JSON.stringify(regexHints));
+                            }
+
                             const v2Result = await parseSprayApplicationV2({
                                 naturalLanguageInput: rawInput,
                                 plots: plotsJson,
@@ -2327,6 +2455,7 @@ export async function POST(req: Request) {
                                     alias: pref.alias,
                                     preferred: pref.preferred
                                 })),
+                                regexHints, // Punt 5: Pass hints to AI
                             });
 
                             console.log(`[${context}] V2 result: ${v2Result.registrations.length} registrations`,
@@ -2359,13 +2488,21 @@ export async function POST(req: Request) {
                                     ? new Date(v2Result.date)
                                     : new Date();
 
-                                // Punt 4: Calculate confidence breakdown
+                                // Punt 5: Validate AI output against regex hints and adjust confidence
+                                const regexValidation = validateAIAgainstRegex(v2Result, regexHints, allParcels);
+                                if (regexValidation.confidenceAdjustment !== 0) {
+                                    console.log(`[${context}] Regex validation: ${regexValidation.reason}, adjustment=${regexValidation.confidenceAdjustment > 0 ? '+' : ''}${regexValidation.confidenceAdjustment.toFixed(2)}`);
+                                }
+
+                                // Punt 4: Calculate confidence breakdown (with Punt 5 adjustment)
                                 const confidenceBreakdown = calculateConfidenceBreakdown(
                                     intentResult.confidence,
                                     productConfidenceScores,
                                     parcelResolutionConfidence
                                 );
-                                console.log(`[${context}] Confidence breakdown: intent=${intentResult.confidence.toFixed(2)}, products=${productConfidenceScores.join(',')}, parcels=${parcelResolutionConfidence.toFixed(2)}, overall=${confidenceBreakdown.overall.toFixed(2)}`);
+                                // Apply regex validation adjustment to overall confidence
+                                confidenceBreakdown.overall = Math.max(0, Math.min(1, confidenceBreakdown.overall + regexValidation.confidenceAdjustment));
+                                console.log(`[${context}] Confidence breakdown: intent=${intentResult.confidence.toFixed(2)}, products=${productConfidenceScores.join(',')}, parcels=${parcelResolutionConfidence.toFixed(2)}, overall=${confidenceBreakdown.overall.toFixed(2)}${regexValidation.confidenceAdjustment !== 0 ? ` (regex: ${regexValidation.reason})` : ''}`);
 
                                 // Convert to SprayRegistrationGroup
                                 const group = convertToRegistrationGroup(

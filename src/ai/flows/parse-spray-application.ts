@@ -19,6 +19,18 @@ const ProductEntrySchema = z.object({
   targetReason: z.string().optional().describe('The target pest, disease, or reason for spraying this product if mentioned (e.g., "schurft", "luis", "bladluis", "vruchtmot"). Extract keywords like "tegen [X]", "voor [X]", "bestrijding van [X]".'),
 });
 
+/**
+ * Punt 5: Regex hints schema for pre-enrichment
+ * Regex patterns run BEFORE AI and provide context hints, not definitive results
+ */
+const RegexHintsSchema = z.object({
+  possibleGroup: z.string().optional().describe('Detected group keyword like "alle peren" or "alle appels"'),
+  possibleException: z.string().optional().describe('Detected exception like "Conference" in "maar de Conference niet"'),
+  variationPattern: z.string().optional().describe('Detected variation pattern like "maar...niet", "behalve", "halve dosering"'),
+  detectedProducts: z.array(z.string()).optional().describe('Product names detected by regex'),
+  detectedDate: z.string().optional().describe('Date detected by regex pattern'),
+}).describe('Optional hints from regex pre-processing. Use as context but make final decisions independently.');
+
 const SprayApplicationInputSchema = z.object({
   naturalLanguageInput: z
     .string()
@@ -35,7 +47,9 @@ const SprayApplicationInputSchema = z.object({
   userPreferences: z.array(z.object({
     alias: z.string(),
     preferred: z.string()
-  })).optional().describe('An array of user preferences/corrections from the past. Use these to favor certain matches.')
+  })).optional().describe('An array of user preferences/corrections from the past. Use these to favor certain matches.'),
+  // Punt 5: Add regex hints as optional context
+  regexHints: RegexHintsSchema.optional().describe('Optional hints from regex pre-processing to assist parsing.')
 });
 
 const SprayApplicationOutputSchema = z.object({
@@ -174,10 +188,30 @@ CRITICAL RULES:
 -   If the user does NOT specify a dosage, set dosage to 0 (the system will auto-fill from the database).
 -   If the user does NOT specify a unit, default to "L".
 
+{{#if regexHints}}
+**PRE-PROCESSING HINTS (Use as context, verify independently):**
+{{#if regexHints.possibleGroup}}
+- Detected group keyword: "{{regexHints.possibleGroup}}"
+{{/if}}
+{{#if regexHints.possibleException}}
+- Detected exception: "{{regexHints.possibleException}}"
+{{/if}}
+{{#if regexHints.variationPattern}}
+- Detected variation pattern: "{{regexHints.variationPattern}}"
+{{/if}}
+{{#if regexHints.detectedProducts}}
+- Detected products: {{#each regexHints.detectedProducts}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
+{{#if regexHints.detectedDate}}
+- Detected date: "{{regexHints.detectedDate}}"
+{{/if}}
+These hints are from regex pre-processing. Use them as helpful context but make your own decisions based on the full input.
+{{/if}}
+
 VARIATIONS & EXCEPTIONS (IMPORTANT):
 When the user mentions variations, exceptions, or different treatments for subsets, you MUST split them into MULTIPLE registrations:
 
-**Trigger words:** "maar", "behalve", "uitgezonderd", "niet de", "alleen de", "halve dosering", "dubbele dosering", "ook nog", "extra"
+**Trigger words (Nederlands):** "maar", "behalve", "uitgezonderd", "niet de", "alleen de", "halve dosering", "dubbele dosering", "ook nog", "extra", "zonder", "overgeslagen", "toch niet"
 
 **Example 1: Extra product for a subset**
 User: "Alle appels met Merpan, maar Kanzi ook Score"
@@ -206,6 +240,31 @@ User: "Alle appels met Merpan"
     { plots: [all apple IDs], products: [{Merpan}], label: "Appels" }
   ]
 
+**Example 5: Non-standard word order (Punt 5 - handle flexible Dutch)**
+User: "Captan overal op behalve Conference"
+→ registrations: [
+    { plots: [all IDs EXCEPT Conference], products: [{Captan}], label: "Alles (zonder Conference)", reason: "base" }
+  ]
+
+**Example 6: Past tense with skip**
+User: "Peren gehad met Merpan, Conference overgeslagen"
+→ registrations: [
+    { plots: [all pear IDs EXCEPT Conference], products: [{Merpan}], label: "Peren (zonder Conference)", reason: "base" }
+  ]
+
+**Example 7: Block reference instead of variety**
+User: "Alles behalve blok 3 met Score"
+→ registrations: [
+    { plots: [all IDs EXCEPT blok 3], products: [{Score}], label: "Alles (zonder blok 3)", reason: "base" }
+  ]
+
+**Example 8: Per-variety products**
+User: "Fruit met Score, Lucas halve dosering"
+→ registrations: [
+    { plots: [all fruit IDs EXCEPT Lucas], products: [{Score}], label: "Fruit (zonder Lucas)", reason: "base" },
+    { plots: [only Lucas IDs], products: [{Score, dosage halved}], label: "Lucas", reason: "reduced_dosage" }
+  ]
+
 Rules for parsing:
 -   CONVERSATIONAL CONTEXT:
     -   If 'previousDraft' is provided, the user might be correcting it (e.g., "Nee, perceel 'thuis' niet").
@@ -217,6 +276,7 @@ Rules for parsing:
     -   "alle appels" -> all IDs with crop 'Appel'.
     -   "alle elstar" -> all IDs with variety 'Elstar'.
     -   "alle kanzi" -> all IDs with variety 'Kanzi'.
+    -   "overal" / "alles" -> all plot IDs.
 -   Products: Match to the official list. Check userPreferences. ONLY include products the user explicitly mentioned.
 -   Date: Parse mentions of 'today' (${new Date().toISOString().split('T')[0]}), 'yesterday', or specific dates.
 -   Labels: Create short, descriptive Dutch labels. Use "(zonder X)" for exclusions.
