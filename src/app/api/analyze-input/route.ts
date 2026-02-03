@@ -2169,9 +2169,22 @@ export async function POST(req: Request) {
                         // Quick product term extraction for context
                         const { productTerms: quickProductTerms } = extractSearchTerms(rawInput);
 
+                        // Build parcel context for the AI - CRITICAL for matching "alle conference" etc.
+                        const parcelContext = allParcels.length > 0
+                            ? JSON.stringify(allParcels.map(p => ({
+                                id: p.id,
+                                name: p.name,
+                                crop: p.crop,
+                                variety: p.variety
+                            })))
+                            : undefined;
+
+                        console.log(`[${context}] Passing ${allParcels.length} parcels to combined flow`);
+
                         const combinedResult = await classifyAndParseSpray({
                             userInput: rawInput,
                             hasDraft,
+                            plots: parcelContext,
                             productNames: quickProductTerms.length > 0 ? quickProductTerms : undefined,
                             regexHints: {
                                 detectedProducts: quickProductTerms.length > 0 ? quickProductTerms : undefined,
