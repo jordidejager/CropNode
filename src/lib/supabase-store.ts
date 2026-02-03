@@ -1,4 +1,6 @@
-import { supabase, withRetry } from './supabase';
+// Use server-compatible supabase client (no 'use client' directive)
+import { supabase } from './supabase-client';
+import { withRetry } from './retry-utils';
 import type {
   LogbookEntry,
   Parcel,

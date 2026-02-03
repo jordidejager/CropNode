@@ -16,7 +16,9 @@
  */
 
 import type { UserFeedback } from './types';
-import { supabase, withRetry } from './supabase';
+// Use server-compatible supabase client (no 'use client' directive)
+import { supabase } from './supabase-client';
+import { withRetry } from './retry-utils';
 import { getCurrentUserId } from './supabase-store';
 
 // ============================================

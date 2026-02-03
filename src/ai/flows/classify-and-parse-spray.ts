@@ -23,22 +23,26 @@ import { z } from 'genkit';
 import { IntentType } from '@/ai/schemas/intents';
 
 // ============================================
-// Schemas
+// Schemas - FLATTENED to avoid Gemini nesting limits
 // ============================================
 
-const ProductEntrySchema = z.object({
-  product: z.string().describe('The official name of the product used.'),
-  dosage: z.number().describe('The dosage of the product. Use 0 if not specified.'),
-  unit: z.string().describe('The unit of measurement (e.g., "kg", "L"). Default "L".'),
-  targetReason: z.string().optional().describe('Target pest/disease if mentioned.'),
+/**
+ * Flattened product entry - uses parallel arrays instead of nested objects
+ * to stay within Gemini's 5-level nesting limit
+ */
+const FlatProductSchema = z.object({
+  product: z.string().describe('Product name'),
+  dosage: z.number().describe('Dosage (0 if not specified)'),
+  unit: z.string().describe('Unit (L, kg). Default L'),
 });
 
-const RegistrationUnitSchema = z.object({
-  plots: z.array(z.string()).describe('Plot IDs for this unit.'),
-  products: z.array(ProductEntrySchema).describe('Products with dosages for this unit.'),
-  label: z.string().optional().describe('Descriptive label for UI, e.g. "Appels (zonder Kanzi)"'),
-  reason: z.enum(['base', 'exception', 'addition', 'reduced_dosage']).optional()
-    .describe('Why this unit exists'),
+/**
+ * Flattened registration unit - avoids nested products array
+ */
+const FlatRegistrationSchema = z.object({
+  plotIds: z.string().describe('Comma-separated plot IDs, e.g. "plot1,plot2,plot3"'),
+  productList: z.string().describe('Comma-separated products with dosage, e.g. "Captan:2:L,Score:0.5:L"'),
+  label: z.string().optional().describe('UI label like "Appels (zonder Kanzi)"'),
 });
 
 /**
@@ -47,49 +51,120 @@ const RegistrationUnitSchema = z.object({
 const ClassifyAndParseInputSchema = z.object({
   userInput: z.string().describe('The raw user input text'),
   hasDraft: z.boolean().default(false).describe('Whether there is an active draft'),
-  // Only needed if input is likely a spray registration
   plots: z.string().optional().describe('JSON string of available plots'),
   productNames: z.array(z.string()).optional().describe('Available product names'),
-  userPreferences: z.array(z.object({
-    alias: z.string(),
-    preferred: z.string()
-  })).optional().describe('User alias preferences'),
   regexHints: z.object({
     possibleGroup: z.string().optional(),
     possibleException: z.string().optional(),
     variationPattern: z.string().optional(),
-    detectedProducts: z.array(z.string()).optional(),
     detectedDate: z.string().optional(),
-  }).optional().describe('Regex pre-processing hints'),
-  previousDraft: z.object({
-    plots: z.array(z.string()),
-    products: z.array(ProductEntrySchema),
-    date: z.string().optional()
-  }).optional().describe('Current draft if modifying'),
+  }).optional().describe('Regex hints'),
 });
 
 /**
- * Combined output schema that returns BOTH intent AND parsed data.
+ * FLATTENED output schema - max 4 levels deep
+ * Level 1: root object
+ * Level 2: sprayData object
+ * Level 3: registrations array
+ * Level 4: FlatRegistrationSchema object
  */
 const ClassifyAndParseOutputSchema = z.object({
   // Intent classification (always returned)
   intent: IntentType.describe('The detected intent type'),
   confidence: z.number().min(0).max(1).describe('Confidence score 0-1'),
-  reasoning: z.string().optional().describe('Brief explanation for the classification'),
+  reasoning: z.string().optional().describe('Brief explanation'),
 
-  // Spray parsing (only if intent is REGISTER_SPRAY or MODIFY_DRAFT)
+  // Spray parsing - FLATTENED structure
   sprayData: z.object({
-    registrations: z.array(RegistrationUnitSchema).optional()
-      .describe('Array of registration units (for grouped registrations)'),
-    plots: z.array(z.string()).optional().describe('Plot IDs (simple format)'),
-    products: z.array(ProductEntrySchema).optional().describe('Products (simple format)'),
-    date: z.string().optional().describe('Date in YYYY-MM-DD format'),
-    isGrouped: z.boolean().describe('Whether this is a grouped registration'),
-  }).optional().describe('Parsed spray data (only for REGISTER_SPRAY intent)'),
+    // For grouped registrations - use flat string format
+    registrations: z.array(FlatRegistrationSchema).optional()
+      .describe('Grouped registrations in flat format'),
+    // For simple registrations - direct flat values
+    plots: z.string().optional().describe('Comma-separated plot IDs'),
+    products: z.string().optional().describe('Products as "name:dosage:unit,name:dosage:unit"'),
+    date: z.string().optional().describe('Date YYYY-MM-DD'),
+    isGrouped: z.boolean().describe('True if multiple registration units'),
+  }).optional().describe('Parsed spray data'),
 });
 
+// Internal types for after parsing
+export interface ProductEntry {
+  product: string;
+  dosage: number;
+  unit: string;
+  targetReason?: string;
+}
+
+export interface RegistrationUnit {
+  plots: string[];
+  products: ProductEntry[];
+  label?: string;
+}
+
 export type ClassifyAndParseInput = z.infer<typeof ClassifyAndParseInputSchema>;
-export type ClassifyAndParseOutput = z.infer<typeof ClassifyAndParseOutputSchema>;
+export type ClassifyAndParseOutputRaw = z.infer<typeof ClassifyAndParseOutputSchema>;
+
+// The output type after post-processing
+export interface ClassifyAndParseOutput {
+  intent: string;
+  confidence: number;
+  reasoning?: string;
+  sprayData?: {
+    registrations?: RegistrationUnit[];
+    plots?: string[];
+    products?: ProductEntry[];
+    date?: string;
+    isGrouped: boolean;
+  };
+}
+
+/**
+ * Parse flat product string "name:dosage:unit" into ProductEntry
+ */
+function parseProductString(str: string): ProductEntry {
+  const parts = str.split(':');
+  return {
+    product: parts[0] || '',
+    dosage: parseFloat(parts[1]) || 0,
+    unit: parts[2] || 'L',
+  };
+}
+
+/**
+ * Convert flat output to nested structure for rest of pipeline
+ */
+function unflattenOutput(raw: ClassifyAndParseOutputRaw): ClassifyAndParseOutput {
+  const result: ClassifyAndParseOutput = {
+    intent: raw.intent,
+    confidence: raw.confidence,
+    reasoning: raw.reasoning,
+  };
+
+  if (raw.sprayData) {
+    result.sprayData = {
+      isGrouped: raw.sprayData.isGrouped,
+      date: raw.sprayData.date,
+    };
+
+    if (raw.sprayData.registrations && raw.sprayData.registrations.length > 0) {
+      result.sprayData.registrations = raw.sprayData.registrations.map(reg => ({
+        plots: reg.plotIds ? reg.plotIds.split(',').map(s => s.trim()).filter(Boolean) : [],
+        products: reg.productList ? reg.productList.split(',').map(s => parseProductString(s.trim())) : [],
+        label: reg.label,
+      }));
+    }
+
+    if (raw.sprayData.plots) {
+      result.sprayData.plots = raw.sprayData.plots.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    if (raw.sprayData.products) {
+      result.sprayData.products = raw.sprayData.products.split(',').map(s => parseProductString(s.trim()));
+    }
+  }
+
+  return result;
+}
 
 // ============================================
 // Combined Prompt
@@ -141,23 +216,29 @@ Als de intent REGISTER_SPRAY of MODIFY_DRAFT is, parse dan ook de spray data:
 ### Variaties & Uitzonderingen:
 Bij variaties (maar, behalve, halve dosering, etc.) maak **meerdere registrations**:
 
+**BELANGRIJK: Output altijd in PLAT formaat (comma-separated strings):**
+- plotIds: "plot1,plot2,plot3" (komma-gescheiden IDs)
+- productList: "Merpan:0:L,Score:0.5:L" (formaat: naam:dosering:unit)
+- plots: "plot1,plot2" (voor simpele registraties)
+- products: "Captan:2:L" (voor simpele registraties)
+
 **Voorbeeld: Extra product voor subset**
 "Alle appels met Merpan, maar Kanzi ook Score"
 → isGrouped: true, registrations: [
-    { plots: [appels BEHALVE Kanzi], products: [Merpan], label: "Appels (zonder Kanzi)" },
-    { plots: [alleen Kanzi], products: [Merpan, Score], label: "Kanzi" }
+    { plotIds: "appel1,appel2,appel3", productList: "Merpan:0:L", label: "Appels (zonder Kanzi)" },
+    { plotIds: "kanzi1", productList: "Merpan:0:L,Score:0:L", label: "Kanzi" }
   ]
 
 **Voorbeeld: Halve dosering voor subset**
 "Peren met 1 kg Captan, Lucas halve dosering"
 → isGrouped: true, registrations: [
-    { plots: [peren BEHALVE Lucas], products: [Captan 1kg], label: "Peren (zonder Lucas)" },
-    { plots: [alleen Lucas], products: [Captan 0.5kg], label: "Lucas" }
+    { plotIds: "peer1,peer2", productList: "Captan:1:kg", label: "Peren (zonder Lucas)" },
+    { plotIds: "lucas1", productList: "Captan:0.5:kg", label: "Lucas" }
   ]
 
 **Voorbeeld: Simpele registratie**
 "Alle appels met Merpan"
-→ isGrouped: false, plots: [alle appel IDs], products: [Merpan]
+→ isGrouped: false, plots: "appel1,appel2,appel3", products: "Merpan:0:L"
 
 ### Perceel Matching:
 - "alle appels" → alle percelen met crop='Appel'
@@ -224,7 +305,7 @@ export const classifyAndParseSpray = ai.defineFlow(
   {
     name: 'classifyAndParseSpray',
     inputSchema: ClassifyAndParseInputSchema,
-    outputSchema: ClassifyAndParseOutputSchema,
+    // Note: No outputSchema here - we post-process the flat AI output to nested structure
   },
   async (input: ClassifyAndParseInput): Promise<ClassifyAndParseOutput> => {
     const startTime = Date.now();
@@ -246,7 +327,8 @@ export const classifyAndParseSpray = ai.defineFlow(
       const duration = Date.now() - startTime;
       console.log(`[CLASSIFY-PARSE] Completed in ${duration}ms: intent=${output.intent}, confidence=${output.confidence.toFixed(2)}${output.sprayData ? ', hasSprayData=true' : ''}`);
 
-      return output;
+      // Convert flat AI output to nested structure for rest of pipeline
+      return unflattenOutput(output);
     } catch (error) {
       console.error('[CLASSIFY-PARSE] Error:', error);
       // Conservative fallback
