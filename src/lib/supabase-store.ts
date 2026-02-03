@@ -36,14 +36,16 @@ export async function getCurrentUserId(): Promise<string | null> {
   }
 }
 
-// Clear cache on auth state change
-supabase.auth.onAuthStateChange((event) => {
-  if (event === 'SIGNED_OUT') {
-    cachedUserId = null;
-  } else if (event === 'SIGNED_IN') {
-    cachedUserId = null; // Will be refreshed on next call
-  }
-});
+// Clear cache on auth state change (only in browser)
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      cachedUserId = null;
+    } else if (event === 'SIGNED_IN') {
+      cachedUserId = null; // Will be refreshed on next call
+    }
+  });
+}
 
 // ============================================
 // Helper functions for snake_case <-> camelCase conversion
