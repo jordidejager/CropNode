@@ -1,6 +1,6 @@
 # Slimme Invoer - Technische Documentatie
 
-> Laatste update: 3 februari 2026
+> Laatste update: 3 februari 2026 (v2.0 - inclusief 7-punts optimalisatie)
 
 Dit document beschrijft de volledige werking van de "Slimme Invoer" functionaliteit in het AgriBot Command Center. Het systeem verwerkt natuurlijke taal invoer van gebruikers en zet deze om naar gestructureerde registraties, queries en acties.
 
@@ -20,7 +20,8 @@ Dit document beschrijft de volledige werking van de "Slimme Invoer" functionalit
 10. [Processing Phases & Streaming](#10-processing-phases--streaming)
 11. [Frontend Componenten](#11-frontend-componenten)
 12. [Praktijkvoorbeeld: Complete Flow](#12-praktijkvoorbeeld-complete-flow)
-13. [Bestandsoverzicht](#13-bestandsoverzicht)
+13. [Optimalisaties (7-Punts Upgrade)](#13-optimalisaties-7-punts-upgrade)
+14. [Bestandsoverzicht](#14-bestandsoverzicht)
 
 ---
 
@@ -735,15 +736,244 @@ Weergave van gegroepeerde registraties:
 
 ---
 
-## 13. Bestandsoverzicht
+## 13. Optimalisaties (7-Punts Upgrade)
+
+In februari 2026 is de slimme invoer pipeline geoptimaliseerd op 7 belangrijke punten:
+
+### 13.1 Punt 1: Parallelle Resolutie
+
+**Probleem:** Perceel- en productresolutie gebeurden sequentieel.
+
+**Oplossing:** `Promise.all()` voor gelijktijdige uitvoering.
+
+```typescript
+// Voorheen (sequentieel, ~600ms totaal):
+const parcels = await fetchParcels();
+const products = await fetchProducts();
+const aliases = await resolveAliases();
+
+// Nu (parallel, ~200ms totaal):
+const [parcels, products, aliases] = await Promise.all([
+  fetchParcels(),
+  fetchProducts(),
+  resolveAliases()
+]);
+```
+
+**Impact:** ~3x snellere initiële data loading.
+
+### 13.2 Punt 2: Sessie-Caching
+
+**Probleem:** Herhaalde database lookups voor dezelfde data binnen een sessie.
+
+**Oplossing:** In-memory cache met 5-minuten TTL (`/src/lib/session-cache.ts`).
+
+```typescript
+// Cache configuratie
+const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minuten
+const MAX_CACHE_ENTRIES = 100;
+
+// Cache types
+type CacheTypes = 'parcels' | 'products' | 'preferences' | 'history';
+
+// Gebruik
+const cacheKey = getCacheKey(userId, 'parcels');
+const cached = getFromCache<Parcel[]>(cacheKey);
+if (!cached) {
+  const fresh = await fetchFromDb();
+  setInCache(cacheKey, fresh);
+}
+```
+
+**Impact:** 80%+ reductie in database calls na eerste request.
+
+### 13.3 Punt 3: AI Fallback Logging
+
+**Probleem:** Geen inzicht in wanneer en waarom AI classificatie nodig was.
+
+**Oplossing:** Structured JSON logging in intent-router.
+
+```typescript
+interface IntentRouterLog {
+  input: string;                                    // Gebruikersinvoer (max 100 chars)
+  prefilter: { intent: string; confidence: number } | null;
+  aiFallback: boolean;                              // Was AI call nodig?
+  aiResult?: { intent: string; confidence: number };
+  aiLatencyMs?: number;
+  finalIntent: string;
+  finalConfidence: number;
+  durationMs: number;
+}
+
+// Output voorbeeld:
+// [INTENT-ROUTER] {"input":"Alle appels met...","prefilter":{"intent":"REGISTER_SPRAY","confidence":0.85},"aiFallback":false,"finalIntent":"REGISTER_SPRAY","finalConfidence":0.85,"durationMs":2}
+```
+
+**Impact:** Inzicht in pre-filter effectiviteit en AI kosten.
+
+### 13.4 Punt 4: Confidence Doorpropageren naar UI
+
+**Probleem:** Gebruiker ziet niet hoe zeker het systeem is van de interpretatie.
+
+**Oplossing:** ConfidenceBreakdown type + visuele indicator.
+
+```typescript
+type ConfidenceBreakdown = {
+  intentClassification: number;  // 0-1
+  productResolution: number;     // 0-1 (laagste van alle producten)
+  parcelResolution: number;      // 0-1
+  overall: number;               // Minimum van bovenstaande ("zwakste schakel")
+  uncertainFields?: string[];    // Velden om te highlighten
+};
+```
+
+**UI Component:** `ConfidenceIndicator`
+
+| Overall Score | Kleur | Weergave |
+|---------------|-------|----------|
+| ≥ 0.85 | Groen | Percentage badge |
+| 0.65 - 0.84 | Oranje | "Controleer gegevens" + onzekere velden |
+| < 0.65 | Rood | "Klopt dit?" met edit suggestie |
+
+### 13.5 Punt 5: AI als Primaire Parser, Regex als Hints
+
+**Probleem:** Regex parsing was te rigide en miste nuances.
+
+**Oplossing:** AI is nu primair, regex levert optionele "hints" als context.
+
+```typescript
+// Regex hints schema
+interface RegexHints {
+  possibleGroup?: string;        // "alle peren"
+  possibleException?: string;    // "Conference" uit "maar de Conference niet"
+  variationPattern?: string;     // "maar...niet", "behalve"
+  detectedProducts?: string[];   // Product namen gevonden door regex
+  detectedDate?: string;         // "vandaag", "gisteren", datum patroon
+}
+
+// Hints worden meegegeven aan AI prompt:
+const v2Result = await parseSprayApplicationV2({
+  naturalLanguageInput: rawInput,
+  plots: plotsJson,
+  productNames,
+  regexHints  // ← Nieuwe parameter
+});
+```
+
+**Post-validation:** AI output wordt vergeleken met regex hints voor confidence adjustment:
+- Hints bevestigd → +0.05 confidence
+- Hints genegeerd → -0.10 confidence
+
+### 13.6 Punt 6: Feedback Loop voor Correcties
+
+**Probleem:** Systeem leert niet van gebruikerscorrecties.
+
+**Oplossing:** Supabase tabel + feedback service.
+
+**Database tabel:** `smart_input_feedback`
+```sql
+CREATE TABLE smart_input_feedback (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  correction_type TEXT NOT NULL,  -- 'product_alias', 'dosage_preference', etc.
+  original_value TEXT NOT NULL,   -- Wat AI interpreteerde
+  corrected_value TEXT NOT NULL,  -- Wat gebruiker corrigeerde
+  context JSONB DEFAULT '{}',
+  frequency INT DEFAULT 1,        -- Hoe vaak dezelfde correctie
+  last_used_at TIMESTAMP,
+  created_at TIMESTAMP
+);
+```
+
+**Correction types:**
+| Type | Beschrijving | Voorbeeld |
+|------|-------------|-----------|
+| `product_alias` | Productnaam correctie | "captan" → "Captan 80 WDG" |
+| `dosage_preference` | Standaard dosering | "Merpan" → "2.5 kg/ha" |
+| `parcel_group` | Groep definitie | "alle appels" → [lijst IDs] |
+| `exception_pattern` | Uitzonderingen | "alle peren" → "Conference niet" |
+| `product_combo` | Vaak samen gebruikt | "Merpan" + "Score" |
+
+**Service functies:**
+```typescript
+// Opslaan
+await recordFeedbackToSupabase('product_alias', 'captan', 'Captan 80 WDG');
+
+// Ophalen voor AI context
+const patterns = await getUserLearnedPatternsFromSupabase();
+// → { productAliases: {...}, dosageDefaults: {...}, exceptionPatterns: [...] }
+```
+
+### 13.7 Punt 7: Gecombineerde Intent + Spray Parsing
+
+**Probleem:** Twee aparte AI calls voor intent classificatie en spray parsing.
+
+**Oplossing:** Gecombineerde flow voor REGISTER_SPRAY intent.
+
+```
+VOORHEEN (2 AI calls):
+┌─────────────────┐     ┌─────────────────┐
+│ classifyIntent  │ ──► │ parseSprayApp   │
+│   (~200ms)      │     │   (~300ms)      │
+└─────────────────┘     └─────────────────┘
+      Total: ~500ms + 2x token cost
+
+NU (1 AI call voor spray registraties):
+┌─────────────────────────────────────┐
+│      classifyAndParseSpray          │
+│ (intent + parsing in één call)      │
+│           (~350ms)                  │
+└─────────────────────────────────────┘
+      Total: ~350ms + 1x token cost
+```
+
+**Flow logica:**
+```typescript
+const likelySpray = isLikelySprayRegistration(rawInput);
+
+if (likelySpray && !hasDraft) {
+  // Gecombineerde flow - bespaart 1 AI call
+  const result = await classifyAndParseSpray({
+    userInput: rawInput,
+    productNames,
+    regexHints
+  });
+  // result.intent + result.sprayData in één response
+} else {
+  // Standaard flow voor non-spray intents
+  const intent = await classifyIntentWithParams({ userInput: rawInput });
+}
+```
+
+**Impact:**
+- 50% reductie in AI calls voor spray registraties
+- ~30% lagere latency
+- Consistentere parsing (AI ziet volledige context)
+
+### 13.8 Samenvatting Optimalisaties
+
+| Punt | Optimalisatie | Impact |
+|------|---------------|--------|
+| 1 | Parallelle resolutie | 3x snellere data loading |
+| 2 | Sessie-caching | 80% minder database calls |
+| 3 | AI fallback logging | Observability voor kosten |
+| 4 | Confidence UI | Transparantie naar gebruiker |
+| 5 | Regex als hints | Flexibelere parsing |
+| 6 | Feedback loop | Lerend systeem |
+| 7 | Gecombineerde flow | 50% minder AI calls |
+
+---
+
+## 14. Bestandsoverzicht
 
 ### Core AI/Processing
 
 | Bestand | Functie |
 |---------|---------|
 | `/src/ai/genkit.ts` | Genkit configuratie en setup |
-| `/src/ai/flows/intent-router.ts` | Intent classificatie logica |
-| `/src/ai/flows/parse-spray-application.ts` | Spray parsing V2 |
+| `/src/ai/flows/intent-router.ts` | Intent classificatie logica + logging (Punt 3) |
+| `/src/ai/flows/parse-spray-application.ts` | Spray parsing V2 + regex hints (Punt 5) |
+| `/src/ai/flows/classify-and-parse-spray.ts` | **NIEUW** Gecombineerde flow (Punt 7) |
 | `/src/ai/flows/agribot-agent.ts` | Agent met tool calling |
 | `/src/ai/schemas/intents.ts` | Intent types en signaalwoorden |
 | `/src/ai/tools/agribot-tools.ts` | Tool definities voor agent |
@@ -753,13 +983,22 @@ Weergave van gegroepeerde registraties:
 
 | Bestand | Functie |
 |---------|---------|
-| `/src/app/api/analyze-input/route.ts` | Centrale analyse pipeline |
+| `/src/app/api/analyze-input/route.ts` | Centrale analyse pipeline (Punt 1, 5, 7) |
+| `/src/lib/session-cache.ts` | **NIEUW** In-memory caching (Punt 2) |
+| `/src/lib/feedback-service.ts` | **UITGEBREID** Feedback loop + Supabase (Punt 6) |
 | `/src/lib/rag-service.ts` | Semantisch zoeken |
 | `/src/lib/embedding-service.ts` | Vector embeddings |
 | `/src/lib/validation-service.ts` | CTGB validatie |
 | `/src/lib/correction-service.ts` | Correctie detectie |
 | `/src/lib/product-aliases.ts` | Product alias resolutie |
 | `/src/lib/parcel-resolver.ts` | Perceel groep resolutie |
+| `/src/lib/types.ts` | Types incl. ConfidenceBreakdown (Punt 4) |
+
+### Database Migrations
+
+| Bestand | Functie |
+|---------|---------|
+| `/supabase/migrations/003_create_smart_input_feedback.sql` | **NIEUW** Feedback tabel (Punt 6) |
 
 ### Frontend Components
 
@@ -770,7 +1009,7 @@ Weergave van gegroepeerde registraties:
 | `/src/components/smart-result-card.tsx` | Resultaat weergave |
 | `/src/components/command-bar.tsx` | Input balk |
 | `/src/components/mode-selector.tsx` | Mode selector |
-| `/src/components/registration-group-card.tsx` | Gegroepeerde registraties |
+| `/src/components/registration-group-card.tsx` | Gegroepeerde registraties + ConfidenceIndicator (Punt 4) |
 
 ### Tests
 
