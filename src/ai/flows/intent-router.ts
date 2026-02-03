@@ -58,6 +58,40 @@ Retourneer JSON met intent en confidence (0-1).`,
 });
 
 /**
+ * Punt 3: Structured logging interface for intent classification
+ */
+interface IntentRouterLog {
+  input: string;
+  prefilter: { intent: string; confidence: number } | null;
+  aiFallback: boolean;
+  aiResult?: { intent: string; confidence: number };
+  aiLatencyMs?: number;
+  finalIntent: string;
+  finalConfidence: number;
+  durationMs: number;
+}
+
+/**
+ * Log intent classification result in structured JSON format
+ */
+function logIntentClassification(log: IntentRouterLog): void {
+  const inputPreview = log.input.length > 100
+    ? log.input.substring(0, 100) + '...'
+    : log.input;
+
+  console.log(`[INTENT-ROUTER] ${JSON.stringify({
+    input: inputPreview,
+    prefilter: log.prefilter,
+    aiFallback: log.aiFallback,
+    aiResult: log.aiResult,
+    aiLatencyMs: log.aiLatencyMs,
+    finalIntent: log.finalIntent,
+    finalConfidence: log.finalConfidence,
+    durationMs: log.durationMs
+  })}`);
+}
+
+/**
  * Intent Router Flow
  *
  * Classificeert gebruikersinput naar een intent type.
@@ -77,42 +111,97 @@ export const classifyIntent = ai.defineFlow(
     outputSchema: IntentClassificationSchema,
   },
   async (input: IntentRouterInput): Promise<IntentClassification> => {
+    const startTime = Date.now();
+
     // Stap 1: Probeer snelle pre-classificatie
     const preResult = preClassifyIntent(input.userInput, input.hasDraft);
 
     if (preResult && preResult.confidence >= 0.8) {
       // Hoge confidence -> geen AI nodig
-      return {
+      const result: IntentClassification = {
         intent: preResult.intent,
         confidence: preResult.confidence,
         reasoning: 'Pre-classified via signal words',
       };
+
+      // Punt 3: Log successful pre-classification
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: { intent: preResult.intent, confidence: preResult.confidence },
+        aiFallback: false,
+        finalIntent: result.intent,
+        finalConfidence: result.confidence,
+        durationMs: Date.now() - startTime
+      });
+
+      return result;
     }
 
     // Stap 2: AI classificatie nodig
+    const aiStartTime = Date.now();
     try {
       const llmResponse = await classificationPrompt(input);
+      const aiLatencyMs = Date.now() - aiStartTime;
       const output = llmResponse.output;
 
       if (!output) {
         // Fallback als AI faalt
-        return fallbackClassification(input.userInput, input.hasDraft);
+        const fallback = fallbackClassification(input.userInput, input.hasDraft);
+
+        logIntentClassification({
+          input: input.userInput,
+          prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+          aiFallback: true,
+          aiLatencyMs,
+          finalIntent: fallback.intent,
+          finalConfidence: fallback.confidence,
+          durationMs: Date.now() - startTime
+        });
+
+        return fallback;
       }
 
       // Combineer met pre-classificatie indien beide beschikbaar
+      let result: IntentClassification;
       if (preResult && preResult.intent === output.intent) {
         // Beide eens -> boost confidence
-        return {
+        result = {
           ...output,
           confidence: Math.min(output.confidence + 0.1, 1),
           reasoning: `${output.reasoning || ''} (confirmed by pre-filter)`.trim(),
         };
+      } else {
+        result = output;
       }
 
-      return output;
+      // Punt 3: Log AI classification result
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+        aiFallback: true,
+        aiResult: { intent: output.intent, confidence: output.confidence },
+        aiLatencyMs,
+        finalIntent: result.intent,
+        finalConfidence: result.confidence,
+        durationMs: Date.now() - startTime
+      });
+
+      return result;
     } catch (error) {
       console.error('Intent classification error:', error);
-      return fallbackClassification(input.userInput, input.hasDraft);
+      const fallback = fallbackClassification(input.userInput, input.hasDraft);
+
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+        aiFallback: true,
+        aiLatencyMs: Date.now() - aiStartTime,
+        finalIntent: fallback.intent,
+        finalConfidence: fallback.confidence,
+        durationMs: Date.now() - startTime
+      });
+
+      return fallback;
     }
   }
 );
@@ -222,39 +311,91 @@ export const classifyIntentWithParams = ai.defineFlow(
     outputSchema: IntentWithParamsSchema,
   },
   async (input: IntentRouterInput): Promise<IntentWithParams> => {
+    const startTime = Date.now();
+
     // Stap 1: Snelle pre-classificatie
     const preResult = preClassifyIntent(input.userInput, input.hasDraft);
 
     // Als pre-filter zeker is en het is GEEN query intent, skip parameter extractie
     if (preResult && preResult.confidence >= 0.9 && !isQueryIntent(preResult.intent)) {
-      return {
+      const result: IntentWithParams = {
         intent: preResult.intent,
         confidence: preResult.confidence,
       };
+
+      // Punt 3: Log successful pre-classification (no AI needed)
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: { intent: preResult.intent, confidence: preResult.confidence },
+        aiFallback: false,
+        finalIntent: result.intent,
+        finalConfidence: result.confidence,
+        durationMs: Date.now() - startTime
+      });
+
+      return result;
     }
 
     // Stap 2: AI classificatie met parameter extractie
+    const aiStartTime = Date.now();
     try {
       const llmResponse = await intentWithParamsPrompt(input);
+      const aiLatencyMs = Date.now() - aiStartTime;
       const output = llmResponse.output;
 
       if (!output) {
         // Fallback
         const fallback = fallbackClassification(input.userInput, input.hasDraft);
-        return {
+        const result: IntentWithParams = {
           intent: fallback.intent,
           confidence: fallback.confidence,
         };
+
+        logIntentClassification({
+          input: input.userInput,
+          prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+          aiFallback: true,
+          aiLatencyMs,
+          finalIntent: result.intent,
+          finalConfidence: result.confidence,
+          durationMs: Date.now() - startTime
+        });
+
+        return result;
       }
+
+      // Punt 3: Log AI classification with params result
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+        aiFallback: true,
+        aiResult: { intent: output.intent, confidence: output.confidence },
+        aiLatencyMs,
+        finalIntent: output.intent,
+        finalConfidence: output.confidence,
+        durationMs: Date.now() - startTime
+      });
 
       return output;
     } catch (error) {
       console.error('Intent with params classification error:', error);
       const fallback = fallbackClassification(input.userInput, input.hasDraft);
-      return {
+      const result: IntentWithParams = {
         intent: fallback.intent,
         confidence: fallback.confidence,
       };
+
+      logIntentClassification({
+        input: input.userInput,
+        prefilter: preResult ? { intent: preResult.intent, confidence: preResult.confidence } : null,
+        aiFallback: true,
+        aiLatencyMs: Date.now() - aiStartTime,
+        finalIntent: result.intent,
+        finalConfidence: result.confidence,
+        durationMs: Date.now() - startTime
+      });
+
+      return result;
     }
   }
 );
