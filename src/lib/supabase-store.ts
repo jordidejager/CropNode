@@ -1,6 +1,6 @@
 // Use server-compatible supabase client (no 'use client' directive)
 // supabaseAdmin bypasses RLS for server-side operations
-import { supabase, supabaseAdmin } from './supabase-client';
+import { supabase, supabaseAdmin, testDatabaseConnection } from './supabase-client';
 import { withRetry } from './retry-utils';
 import type {
   LogbookEntry,
@@ -326,30 +326,36 @@ export type ActiveParcel = SprayableParcel;
  */
 export async function getSprayableParcels(): Promise<SprayableParcel[]> {
   console.log('[getSprayableParcels] Fetching from v_sprayable_parcels view...');
+  console.log('[getSprayableParcels] Using supabaseAdmin client (should bypass RLS)');
 
   // Use retry for transient network errors
   // Use supabaseAdmin to bypass RLS (view inherits RLS from underlying tables)
   return withRetry(async () => {
-    const { data, error } = await supabaseAdmin
+    const { data, error, count } = await supabaseAdmin
       .from('v_sprayable_parcels')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('name');
+
+    console.log(`[getSprayableParcels] Query result: data=${data?.length || 0} rows, count=${count}, error=${error?.message || 'none'}`);
 
     if (error) {
       // Throw on fetch errors so withRetry can handle them
       if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
         throw new Error(error.message);
       }
-      console.error('[getSprayableParcels] Supabase error:', error.message, error.code);
+      console.error('[getSprayableParcels] Supabase error:', error.message, error.code, error.details, error.hint);
       return [];
     }
 
     if (!data || data.length === 0) {
-      console.warn('[getSprayableParcels] No sprayable parcels found');
+      console.warn('[getSprayableParcels] No sprayable parcels found - running diagnostics...');
+      // Run full diagnostic
+      const diagnostic = await testDatabaseConnection();
+      console.log('[getSprayableParcels] Diagnostic result:', JSON.stringify(diagnostic, null, 2));
       return [];
     }
 
-    console.log(`[getSprayableParcels] Found ${data.length} sprayable parcels`);
+    console.log(`[getSprayableParcels] SUCCESS: Found ${data.length} sprayable parcels`);
 
     return data.map(item => {
       // Parse geometry if it's a string (Supabase may return it as string)

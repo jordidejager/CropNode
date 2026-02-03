@@ -71,11 +71,17 @@ export const supabase = createSupabaseClient();
  * - Admin operations
  */
 export function createServiceRoleClient() {
+  // Debug: Check if service role key is available
+  const hasServiceKey = !!supabaseServiceRoleKey;
+  const keyPreview = supabaseServiceRoleKey ? `${supabaseServiceRoleKey.substring(0, 20)}...` : 'NOT SET';
+  console.log(`[supabase-client] Creating service role client. Has key: ${hasServiceKey}, Preview: ${keyPreview}`);
+
   if (!supabaseServiceRoleKey) {
-    console.warn('[supabase-client] SUPABASE_SERVICE_ROLE_KEY not set, falling back to anon client');
+    console.error('[supabase-client] CRITICAL: SUPABASE_SERVICE_ROLE_KEY not set! Falling back to anon client - RLS will block queries!');
     return createSupabaseClient();
   }
 
+  console.log('[supabase-client] Service role client created successfully - RLS will be bypassed');
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -88,7 +94,66 @@ export function createServiceRoleClient() {
 }
 
 /**
- * Singleton service role client for server-side operations
+ * Lazy-initialized service role client for server-side operations
  * BYPASSES RLS - only use in API routes and server actions
+ *
+ * Uses getter to ensure env vars are available at runtime (not build time)
  */
-export const supabaseAdmin = createServiceRoleClient();
+let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+
+export function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    console.log('[supabase-client] Lazy-initializing supabaseAdmin...');
+    _supabaseAdmin = createServiceRoleClient();
+  }
+  return _supabaseAdmin;
+}
+
+// Export the actual client getter for direct use
+export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient>, {
+  get(_, prop) {
+    return (getSupabaseAdmin() as any)[prop];
+  }
+});
+
+/**
+ * Debug function to test database connectivity and RLS bypass
+ * Call this to verify the service role client is working
+ */
+export async function testDatabaseConnection(): Promise<{
+  success: boolean;
+  hasServiceKey: boolean;
+  subParcelsCount: number;
+  viewCount: number;
+  error?: string;
+}> {
+  const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  console.log(`[testDatabaseConnection] Service key available: ${hasServiceKey}`);
+
+  const client = getSupabaseAdmin();
+
+  try {
+    // Test 1: Direct sub_parcels query
+    const { data: subData, error: subError, count: subCount } = await client
+      .from('sub_parcels')
+      .select('id', { count: 'exact', head: true });
+
+    if (subError) {
+      return { success: false, hasServiceKey, subParcelsCount: 0, viewCount: 0, error: `sub_parcels error: ${subError.message}` };
+    }
+
+    // Test 2: View query
+    const { data: viewData, error: viewError, count: viewCount } = await client
+      .from('v_sprayable_parcels')
+      .select('id', { count: 'exact', head: true });
+
+    if (viewError) {
+      return { success: false, hasServiceKey, subParcelsCount: subCount || 0, viewCount: 0, error: `view error: ${viewError.message}` };
+    }
+
+    console.log(`[testDatabaseConnection] SUCCESS: sub_parcels=${subCount}, view=${viewCount}`);
+    return { success: true, hasServiceKey, subParcelsCount: subCount || 0, viewCount: viewCount || 0 };
+  } catch (err: any) {
+    return { success: false, hasServiceKey, subParcelsCount: 0, viewCount: 0, error: err.message };
+  }
+}

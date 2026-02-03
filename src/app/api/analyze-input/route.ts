@@ -858,7 +858,8 @@ function filterInvalidProducts(
     aiOutput: z.infer<typeof IntentSchema>,
     rawInput: string,
     productTerms: string[],
-    resolvedAliases: Record<string, string>
+    resolvedAliases: Record<string, string>,
+    previousDraft?: PreviousDraft | null
 ): z.infer<typeof IntentSchema> {
     if (!aiOutput.products || aiOutput.products.length === 0) {
         return aiOutput;
@@ -889,6 +890,23 @@ function filterInvalidProducts(
         if (inputWords.includes(alias) || inputLower.includes(alias)) {
             validProductRefs.add(alias);
             validProductRefs.add(product.toLowerCase());
+        }
+    }
+
+    // CRITICAL: For MODIFY_DRAFT intents, products from the existing draft are valid!
+    // These are not hallucinations - they're part of the ongoing registration
+    if (previousDraft?.products && previousDraft.products.length > 0) {
+        console.log(`[filterInvalidProducts] Adding ${previousDraft.products.length} products from previous draft as valid refs`);
+        for (const draftProduct of previousDraft.products) {
+            if (draftProduct.product) {
+                const productLower = draftProduct.product.toLowerCase().trim();
+                validProductRefs.add(productLower);
+                // Also add first word for matching
+                const firstWord = productLower.split(/[\s®™]+/)[0];
+                if (firstWord.length >= 3) {
+                    validProductRefs.add(firstWord);
+                }
+            }
         }
     }
 
@@ -2865,7 +2883,8 @@ ${Object.keys(resolvedAliases).length > 0 ? `Gebruik de product aliassen: ${alia
 
                     if (lastOutput) {
                         // === PHASE 6.4: Filter Invalid Products (crop/variety names + AI hallucinations) ===
-                        const filteredOutput = filterInvalidProducts(lastOutput, rawInput, productTerms, resolvedAliases);
+                        // Pass previousDraft so products from existing draft aren't filtered as hallucinations
+                        const filteredOutput = filterInvalidProducts(lastOutput, rawInput, productTerms, resolvedAliases, previousDraft);
 
                         // === PHASE 6.5: Self-Correction Loop for Dosages ===
                         // Validate AI output and fix common errors (e.g., "3 kg" -> 30)
