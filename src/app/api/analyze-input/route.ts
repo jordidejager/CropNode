@@ -20,6 +20,15 @@ import {
 import { resolveProductAlias, PRODUCT_ALIASES, getFrequentlyUsedProducts } from '@/lib/product-aliases';
 import { detectParcelGroups, resolveParcelGroup, buildParcelContextWithGroups } from '@/lib/parcel-resolver';
 import { classifyIntentWithParams } from '@/ai/flows/intent-router';
+// Punt 2: Session caching
+import {
+    getCacheKey,
+    getFromCache,
+    setInCache,
+    invalidateUserCache,
+    CacheTypes,
+    getCacheStats
+} from '@/lib/session-cache';
 import { agribotAgentStream } from '@/ai/flows/agribot-agent';
 // Fase 3.1.1: Multi-turn Corrections
 import {
@@ -608,9 +617,12 @@ async function handleProductConfirmation(
             preferred: productName
         });
 
+        // Punt 2: Invalidate user preferences cache after mutation
+        invalidateUserCache('session'); // In production, use actual user ID
+
         return {
             success: true,
-            message: `Top! Ik heb geleerd dat "${alias}" = "${productName}". Volgende keer vul ik dit automatisch in! 🧠`
+            message: `Top! Ik heb geleerd dat "${alias}" = "${productName}". Volgende keer vul ik dit automatisch in!`
         };
     } catch (err) {
         console.error('[handleProductConfirmation] Error saving preference:', err);
@@ -1704,35 +1716,112 @@ export async function POST(req: Request) {
                         return;
                     }
 
-                    // === PHASE 1: Database Fetch (only for registration mode) ===
-                    // We need parcel info BEFORE correction detection to match names to IDs
+                    // === PHASE 1: Database Fetch with Caching (only for registration mode) ===
+                    // Punt 2: Session caching - check cache before hitting database
+                    // Note: userId would come from auth context in production
+                    const userId = 'session'; // Placeholder - in production use actual user ID
+
                     let allParcels: ActiveParcel[] = [];
                     let userPreferences: Awaited<ReturnType<typeof getUserPreferences>> = null;
                     let parcelHistory: Awaited<ReturnType<typeof getParcelHistoryEntries>> = [];
                     let frequentProducts: string[] = [];
 
+                    // Cache keys
+                    const parcelsCacheKey = getCacheKey(userId, CacheTypes.PARCELS);
+                    const prefsCacheKey = getCacheKey(userId, CacheTypes.USER_PREFERENCES);
+                    const historyCacheKey = getCacheKey(userId, CacheTypes.PARCEL_HISTORY);
+                    const frequentCacheKey = getCacheKey(userId, CacheTypes.FREQUENT_PRODUCTS);
+
+                    // Check caches first
+                    const cachedParcels = getFromCache<ActiveParcel[]>(parcelsCacheKey);
+                    const cachedPrefs = getFromCache<Awaited<ReturnType<typeof getUserPreferences>>>(prefsCacheKey);
+                    const cachedHistory = getFromCache<Awaited<ReturnType<typeof getParcelHistoryEntries>>>(historyCacheKey);
+                    const cachedFrequent = getFromCache<string[]>(frequentCacheKey);
+
+                    // Determine which fetches we actually need
+                    const needParcels = cachedParcels === undefined;
+                    const needPrefs = cachedPrefs === undefined;
+                    const needHistory = cachedHistory === undefined;
+                    const needFrequent = cachedFrequent === undefined;
+
+                    const cacheHits = [!needParcels, !needPrefs, !needHistory, !needFrequent].filter(Boolean).length;
+                    if (cacheHits > 0) {
+                        console.log(`[${context}] Cache hits: ${cacheHits}/4 (parcels=${!needParcels}, prefs=${!needPrefs}, history=${!needHistory}, frequent=${!needFrequent})`);
+                    }
+
                     try {
-                        [allParcels, userPreferences, parcelHistory, frequentProducts] = await Promise.all([
-                            getActiveParcels().catch(err => {
+                        // Only fetch what we don't have cached
+                        const fetchPromises: Promise<unknown>[] = [];
+                        const fetchTypes: string[] = [];
+
+                        if (needParcels) {
+                            fetchPromises.push(getActiveParcels().catch(err => {
                                 console.error(`[${context}] Failed to fetch parcels:`, err?.message || err);
                                 return [];
-                            }),
-                            getUserPreferences().catch(err => {
+                            }));
+                            fetchTypes.push('parcels');
+                        }
+                        if (needPrefs) {
+                            fetchPromises.push(getUserPreferences().catch(err => {
                                 console.error(`[${context}] Failed to fetch preferences:`, err?.message || err);
                                 return null;
-                            }),
-                            getParcelHistoryEntries().catch(err => {
+                            }));
+                            fetchTypes.push('prefs');
+                        }
+                        if (needHistory) {
+                            fetchPromises.push(getParcelHistoryEntries().catch(err => {
                                 console.error(`[${context}] Failed to fetch history:`, err?.message || err);
                                 return [];
-                            }),
-                            getFrequentlyUsedProducts(10, 365).catch(err => {
+                            }));
+                            fetchTypes.push('history');
+                        }
+                        if (needFrequent) {
+                            fetchPromises.push(getFrequentlyUsedProducts(10, 365).catch(err => {
                                 console.error(`[${context}] Failed to fetch frequent products:`, err?.message || err);
                                 return [];
-                            })
-                        ]);
+                            }));
+                            fetchTypes.push('frequent');
+                        }
+
+                        // Execute only needed fetches in parallel
+                        if (fetchPromises.length > 0) {
+                            const fetchStart = Date.now();
+                            const results = await Promise.all(fetchPromises);
+                            console.log(`[${context}] DB fetch (${fetchTypes.join(', ')}) completed in ${Date.now() - fetchStart}ms`);
+
+                            // Map results back and cache them
+                            let resultIndex = 0;
+                            if (needParcels) {
+                                allParcels = results[resultIndex++] as ActiveParcel[];
+                                setInCache(parcelsCacheKey, allParcels);
+                            }
+                            if (needPrefs) {
+                                userPreferences = results[resultIndex++] as Awaited<ReturnType<typeof getUserPreferences>>;
+                                setInCache(prefsCacheKey, userPreferences);
+                            }
+                            if (needHistory) {
+                                parcelHistory = results[resultIndex++] as Awaited<ReturnType<typeof getParcelHistoryEntries>>;
+                                setInCache(historyCacheKey, parcelHistory);
+                            }
+                            if (needFrequent) {
+                                frequentProducts = results[resultIndex++] as string[];
+                                setInCache(frequentCacheKey, frequentProducts);
+                            }
+                        }
+
+                        // Use cached values for anything we didn't fetch
+                        if (!needParcels && cachedParcels) allParcels = cachedParcels;
+                        if (!needPrefs && cachedPrefs !== undefined) userPreferences = cachedPrefs;
+                        if (!needHistory && cachedHistory) parcelHistory = cachedHistory;
+                        if (!needFrequent && cachedFrequent) frequentProducts = cachedFrequent;
+
                     } catch (fetchError) {
                         console.error(`[${context}] Database fetch failed:`, fetchError);
-                        // Continue with parcelInfo if provided (test mode)
+                        // Use whatever we had cached
+                        if (cachedParcels) allParcels = cachedParcels;
+                        if (cachedPrefs !== undefined) userPreferences = cachedPrefs;
+                        if (cachedHistory) parcelHistory = cachedHistory;
+                        if (cachedFrequent) frequentProducts = cachedFrequent;
                     }
 
                     // TEST MODE: If parcelInfo is provided and database returned empty, use parcelInfo as fallback
