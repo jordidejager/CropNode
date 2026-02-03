@@ -1997,7 +1997,7 @@ export async function POST(req: Request) {
 
                     // === Continue with spray registration flow for REGISTER_SPRAY and MODIFY_DRAFT ===
 
-                    // === PHASE 2: Extract search terms and detect groups ===
+                    // === PHASE 2: Extract search terms (fast, sync) ===
                     const { productTerms, contextTerms } = extractSearchTerms(rawInput);
                     send({ type: 'searching', terms: [...productTerms, ...contextTerms].slice(0, 5) });
 
@@ -2006,31 +2006,67 @@ export async function POST(req: Request) {
                         console.warn(`[${context}] No parcels found - continuing with empty list`);
                     }
 
-                    // Fetch ONLY the products mentioned in the input (not all 1000+)
-                    let matchedCtgbProducts: CtgbProduct[] = [];
-                    let productFetchFailed = false;
-                    if (productTerms.length > 0) {
+                    // === PHASE 2+3 PARALLELIZED: Product Resolution + Parcel Resolution ===
+                    // Run product fetch, alias resolution, parcel group detection, and RAG search in parallel
+
+                    // Parcel group detection (fast, sync - uses already-fetched allParcels)
+                    const { hasGroupKeyword, groupType, groupValue } = detectParcelGroups(rawInput);
+
+                    // Start parallel tasks
+                    const parallelStartTime = Date.now();
+
+                    // Task 1: CTGB Product Fetch (async database call)
+                    const productFetchPromise = (async () => {
+                        if (productTerms.length === 0) return { products: [] as CtgbProduct[], failed: false };
                         try {
-                            matchedCtgbProducts = await getCtgbProductsByNames(productTerms);
+                            const products = await getCtgbProductsByNames(productTerms);
+                            return { products, failed: false };
                         } catch (err: any) {
-                            console.warn(`[${context}] Product fetch failed, retrying after 1s delay...`, err?.message || err);
-                            // Wait 1 second and try once more
+                            console.warn(`[${context}] Product fetch failed, retrying...`, err?.message || err);
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             try {
-                                matchedCtgbProducts = await getCtgbProductsByNames(productTerms);
+                                const products = await getCtgbProductsByNames(productTerms);
+                                return { products, failed: false };
                             } catch (retryErr: any) {
                                 console.error(`[${context}] Product fetch failed after retry:`, retryErr?.message || retryErr);
-                                productFetchFailed = true;
+                                return { products: [] as CtgbProduct[], failed: true };
                             }
                         }
-                        console.log(`[${context}] Fetched ${matchedCtgbProducts.length} products for terms: ${productTerms.join(', ')}`);
-                    }
+                    })();
 
-                    // === PHASE 2: Product Alias Resolution ===
+                    // Task 2: RAG Product Search (async)
+                    const ragSearchPromise = getRelevantProducts(rawInput);
+
+                    // Task 3: Parcel Group Resolution (sync, but wrapped in promise for Promise.all)
+                    const parcelResolutionPromise = Promise.resolve().then(() => {
+                        if (hasGroupKeyword && groupType && groupValue) {
+                            console.log(`[${context}] Group keyword detected: type="${groupType}", value="${groupValue}"`);
+                            const matchedParcels = resolveParcelGroup(groupType, groupValue, allParcels);
+                            console.log(`[${context}] Matched parcels for "${groupValue}": ${matchedParcels.length} - ${matchedParcels.map(p => p.name).join(', ')}`);
+                            if (matchedParcels.length > 0) {
+                                return matchedParcels.map(p => p.id);
+                            }
+                            console.warn(`[${context}] WARNING: No parcels matched for group "${groupValue}"!`);
+                        }
+                        return null;
+                    });
+
+                    // Wait for all parallel tasks to complete
+                    const [productFetchResult, relevantProducts, preResolvedParcelIds] = await Promise.all([
+                        productFetchPromise,
+                        ragSearchPromise,
+                        parcelResolutionPromise
+                    ]);
+
+                    const matchedCtgbProducts = productFetchResult.products;
+                    const productFetchFailed = productFetchResult.failed;
+                    console.log(`[${context}] Parallel phase completed in ${Date.now() - parallelStartTime}ms`);
+                    console.log(`[${context}] Fetched ${matchedCtgbProducts.length} products for terms: ${productTerms.join(', ')}`);
+
+                    // === Product Alias Resolution (parallel per product, uses results from above) ===
                     const resolvedAliases: Record<string, string> = {};
 
-                    // FIRST: Always add static PRODUCT_ALIASES for known terms
-                    // This ensures aliases work even when database is unavailable
+                    // FIRST: Quick pass - static aliases (sync, O(1) lookup per term)
                     for (const term of productTerms) {
                         const normalizedTerm = term.toLowerCase().trim();
                         if (PRODUCT_ALIASES[normalizedTerm]) {
@@ -2039,16 +2075,17 @@ export async function POST(req: Request) {
                         }
                     }
 
-                    // THEN: Check for additional aliases from database (user preferences, history)
-                    // Using the targeted product list instead of all 1000+ products
-                    for (const term of productTerms) {
-                        // Skip if already resolved via static alias
-                        if (resolvedAliases[term]) continue;
+                    // THEN: Resolve remaining terms in parallel (user preferences, history, fuzzy match)
+                    const unresolvedProductTerms = productTerms.filter(term => !resolvedAliases[term]);
+                    if (unresolvedProductTerms.length > 0) {
+                        const resolvePromises = unresolvedProductTerms.map(async term => {
+                            const resolved = await resolveProductAlias(term, matchedCtgbProducts, userPreferences, parcelHistory);
+                            return { term, resolved };
+                        });
 
-                        const resolved = await resolveProductAlias(term, matchedCtgbProducts, userPreferences, parcelHistory);
-                        if (resolved.source !== 'direct' || resolved.confidence === 0) {
-                            // Only track if we actually resolved something
-                            if (resolved.confidence > 0) {
+                        const resolvedResults = await Promise.all(resolvePromises);
+                        for (const { term, resolved } of resolvedResults) {
+                            if (resolved.confidence > 0 && resolved.source !== 'direct') {
                                 resolvedAliases[term] = resolved.resolvedName;
                             }
                         }
@@ -2058,16 +2095,13 @@ export async function POST(req: Request) {
                     // Check for product terms that weren't resolved to known products
                     const unresolvedTerms = productTerms.filter(term => {
                         const normalizedTerm = term.toLowerCase().trim();
-                        // Check if term was resolved
                         if (resolvedAliases[term]) return false;
                         if (PRODUCT_ALIASES[normalizedTerm]) return false;
                         if (userPreferences?.some(p => p.alias.toLowerCase() === normalizedTerm)) return false;
-                        // Check if there's a direct CTGB match
                         if (matchedCtgbProducts.some(p =>
                             p.naam.toLowerCase() === normalizedTerm ||
                             p.naam.toLowerCase().startsWith(normalizedTerm + ' ')
                         )) return false;
-                        // Skip crop/variety names
                         if (KNOWN_CROP_NAMES.has(normalizedTerm)) return false;
                         return true;
                     });
@@ -2083,7 +2117,6 @@ export async function POST(req: Request) {
                             if (firstSuggestion.suggestedProduct) {
                                 console.log(`[${context}] Suggesting: "${firstSuggestion.originalTerm}" → "${firstSuggestion.suggestedProduct.naam}"`);
 
-                                // Send suggestion to frontend
                                 send({
                                     type: 'product_suggestion',
                                     originalInput: firstSuggestion.originalTerm,
@@ -2091,42 +2124,12 @@ export async function POST(req: Request) {
                                     message: `Bedoel je "${firstSuggestion.suggestedProduct.naam}"? (Zeg "Ja" om dit te onthouden)`
                                 });
 
-                                // DON'T return here - continue with the flow using the suggested product
-                                // The suggestion is informational; the user can confirm later
-                                // Add the suggestion to resolvedAliases so the AI can use it
                                 resolvedAliases[firstSuggestion.originalTerm] = firstSuggestion.suggestedProduct.naam;
                             }
                         }
                     }
 
-                    // === PHASE 3: Parcel Group Detection ===
-                    const { hasGroupKeyword, groupType, groupValue } = detectParcelGroups(rawInput);
-                    let preResolvedParcelIds: string[] | null = null;
-
-                    if (hasGroupKeyword && groupType && groupValue) {
-                        console.log(`[${context}] Group keyword detected: type="${groupType}", value="${groupValue}"`);
-                        console.log(`[${context}] All parcels crops: ${allParcels.map(p => `${p.name}:${p.crop || 'NO_CROP'}`).join(', ')}`);
-
-                        const matchedParcels = resolveParcelGroup(groupType, groupValue, allParcels);
-                        console.log(`[${context}] Matched parcels for "${groupValue}": ${matchedParcels.length} - ${matchedParcels.map(p => p.name).join(', ')}`);
-
-                        if (matchedParcels.length > 0) {
-                            preResolvedParcelIds = matchedParcels.map(p => p.id);
-                        } else {
-                            console.warn(`[${context}] WARNING: No parcels matched for group "${groupValue}"! This might indicate missing crop data on parcels.`);
-                        }
-                    }
-
-                    // === PHASE 4: Get relevant products via RAG ===
-                    // Use resolved aliases for better product search
-                    const searchInput = Object.values(resolvedAliases).length > 0
-                        ? `${rawInput} ${Object.values(resolvedAliases).join(' ')}`
-                        : rawInput;
-
-                    const relevantProducts = await getRelevantProducts(searchInput);
-
-                    // Add frequently used products to context if they're not already included
-                    // Note: Using matchedCtgbProducts (from input) instead of loading all 1000+ products
+                    // === Merge relevant products with matched CTGB products ===
                     const relevantProductNames = new Set(relevantProducts.map(p => p.naam.toLowerCase()));
                     const additionalProducts = matchedCtgbProducts.filter(p =>
                         frequentProducts.includes(p.naam) && !relevantProductNames.has(p.naam.toLowerCase())
