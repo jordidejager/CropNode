@@ -62,6 +62,11 @@ export function createSupabaseClient() {
 export const supabase = createSupabaseClient();
 
 /**
+ * Check if we're running on the server
+ */
+const isServer = typeof window === 'undefined';
+
+/**
  * Create a Supabase client with SERVICE ROLE key for server-side use.
  * This BYPASSES Row Level Security - use only in trusted server contexts!
  *
@@ -69,19 +74,26 @@ export const supabase = createSupabaseClient();
  * - API routes that need to access all users' data
  * - Background jobs
  * - Admin operations
+ *
+ * NOTE: On client-side, this falls back to anon client silently.
+ * Client-side code should work with RLS via user session.
  */
 export function createServiceRoleClient() {
-  // Debug: Check if service role key is available
-  const hasServiceKey = !!supabaseServiceRoleKey;
-  const keyPreview = supabaseServiceRoleKey ? `${supabaseServiceRoleKey.substring(0, 20)}...` : 'NOT SET';
-  console.log(`[supabase-client] Creating service role client. Has key: ${hasServiceKey}, Preview: ${keyPreview}`);
-
-  if (!supabaseServiceRoleKey) {
-    console.error('[supabase-client] CRITICAL: SUPABASE_SERVICE_ROLE_KEY not set! Falling back to anon client - RLS will block queries!');
+  // On client-side, always use anon client (service role key not available)
+  if (!isServer) {
+    // Silent fallback on client - this is expected behavior
     return createSupabaseClient();
   }
 
-  console.log('[supabase-client] Service role client created successfully - RLS will be bypassed');
+  // Server-side: Check if service role key is available
+  const hasServiceKey = !!supabaseServiceRoleKey;
+
+  if (!hasServiceKey) {
+    console.warn('[supabase-client] SUPABASE_SERVICE_ROLE_KEY not set on server. Using anon client - RLS may block queries.');
+    return createSupabaseClient();
+  }
+
+  console.log('[supabase-client] Service role client created - RLS will be bypassed');
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -98,12 +110,15 @@ export function createServiceRoleClient() {
  * BYPASSES RLS - only use in API routes and server actions
  *
  * Uses getter to ensure env vars are available at runtime (not build time)
+ * On client-side, silently falls back to anon client.
  */
 let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
 export function getSupabaseAdmin() {
   if (!_supabaseAdmin) {
-    console.log('[supabase-client] Lazy-initializing supabaseAdmin...');
+    if (isServer) {
+      console.log('[supabase-client] Lazy-initializing supabaseAdmin (server)...');
+    }
     _supabaseAdmin = createServiceRoleClient();
   }
   return _supabaseAdmin;
@@ -119,6 +134,7 @@ export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient>, {
 /**
  * Debug function to test database connectivity and RLS bypass
  * Call this to verify the service role client is working
+ * Only works on server-side
  */
 export async function testDatabaseConnection(): Promise<{
   success: boolean;
@@ -127,6 +143,10 @@ export async function testDatabaseConnection(): Promise<{
   viewCount: number;
   error?: string;
 }> {
+  if (!isServer) {
+    return { success: false, hasServiceKey: false, subParcelsCount: 0, viewCount: 0, error: 'testDatabaseConnection only works on server' };
+  }
+
   const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
   console.log(`[testDatabaseConnection] Service key available: ${hasServiceKey}`);
 

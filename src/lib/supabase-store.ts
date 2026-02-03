@@ -325,37 +325,41 @@ export type ActiveParcel = SprayableParcel;
  * Includes retry logic for transient network errors
  */
 export async function getSprayableParcels(): Promise<SprayableParcel[]> {
-  console.log('[getSprayableParcels] Fetching from v_sprayable_parcels view...');
-  console.log('[getSprayableParcels] Using supabaseAdmin client (should bypass RLS)');
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client (uses user session)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? supabaseAdmin : supabase;
+
+  if (isServer) {
+    console.log('[getSprayableParcels] Server-side: using supabaseAdmin (bypasses RLS)');
+  }
 
   // Use retry for transient network errors
-  // Use supabaseAdmin to bypass RLS (view inherits RLS from underlying tables)
   return withRetry(async () => {
-    const { data, error, count } = await supabaseAdmin
+    const { data, error } = await client
       .from('v_sprayable_parcels')
-      .select('*', { count: 'exact' })
+      .select('*')
       .order('name');
-
-    console.log(`[getSprayableParcels] Query result: data=${data?.length || 0} rows, count=${count}, error=${error?.message || 'none'}`);
 
     if (error) {
       // Throw on fetch errors so withRetry can handle them
       if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
         throw new Error(error.message);
       }
-      console.error('[getSprayableParcels] Supabase error:', error.message, error.code, error.details, error.hint);
+      console.error('[getSprayableParcels] Supabase error:', error.message, error.code);
       return [];
     }
 
     if (!data || data.length === 0) {
-      console.warn('[getSprayableParcels] No sprayable parcels found - running diagnostics...');
-      // Run full diagnostic
-      const diagnostic = await testDatabaseConnection();
-      console.log('[getSprayableParcels] Diagnostic result:', JSON.stringify(diagnostic, null, 2));
+      console.warn('[getSprayableParcels] No sprayable parcels found');
+      // Only run diagnostic on server
+      if (isServer) {
+        const diagnostic = await testDatabaseConnection();
+        console.log('[getSprayableParcels] Server diagnostic:', JSON.stringify(diagnostic, null, 2));
+      }
       return [];
     }
 
-    console.log(`[getSprayableParcels] SUCCESS: Found ${data.length} sprayable parcels`);
+    console.log(`[getSprayableParcels] Found ${data.length} sprayable parcels`);
 
     return data.map(item => {
       // Parse geometry if it's a string (Supabase may return it as string)
@@ -392,16 +396,16 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
  */
 export async function getSprayableParcelsById(ids: string[]): Promise<SprayableParcel[]> {
   if (!ids || ids.length === 0) {
-    console.log('[getSprayableParcelsById] No IDs provided');
     return [];
   }
 
-  console.log(`[getSprayableParcelsById] Fetching ${ids.length} parcels from view...`);
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client (uses user session)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? supabaseAdmin : supabase;
 
   // Use retry for transient network errors
-  // Use supabaseAdmin to bypass RLS (view inherits RLS from underlying tables)
   return withRetry(async () => {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await client
       .from('v_sprayable_parcels')
       .select('*')
       .in('id', ids);
@@ -1373,7 +1377,10 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
     .filter(Boolean);
   if (normalizedNames.length === 0) return [];
 
-  console.log(`[getCtgbProductsByNames] Fetching ${names.length} products: ${normalizedNames.slice(0, 3).join(', ')}...`);
+  // Use supabaseAdmin on server, regular supabase on client
+  // (CTGB products table doesn't have RLS, but keep consistent)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? supabaseAdmin : supabase;
 
   // Use retry for transient network errors
   return withRetry(async () => {
@@ -1386,7 +1393,7 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
       return `naam.ilike.%${n}%,naam.ilike.%${coreWord}%`;
     }).join(',');
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await client
       .from('ctgb_products')
       .select('*')
       .or(orConditions);
