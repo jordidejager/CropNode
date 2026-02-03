@@ -27,7 +27,8 @@ import {
     Bug,
     LogOut,
     Menu,
-    X
+    X,
+    User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -502,19 +503,36 @@ function SidebarContent() {
                         "flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 mb-3 transition-all duration-300",
                         isCollapsed ? "justify-center p-2" : "p-3"
                     )}>
-                        <div className="size-9 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner">
-                            <span className="text-[10px] font-black text-emerald-400">{userInitials || '?'}</span>
-                        </div>
-                        {!isCollapsed && (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="flex flex-col overflow-hidden flex-1"
-                            >
-                                <span className="text-xs font-bold text-white truncate">{userEmail?.split('@')[0] || 'Gebruiker'}</span>
-                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider truncate">{userEmail || 'Laden...'}</span>
-                            </motion.div>
-                        )}
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link
+                                    href="/profile"
+                                    className={cn(
+                                        "flex items-center gap-3 flex-1 min-w-0 group",
+                                        isCollapsed ? "justify-center" : ""
+                                    )}
+                                >
+                                    <div className="size-9 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-emerald-500/30 group-hover:border-emerald-500/50 transition-all">
+                                        <span className="text-[10px] font-black text-emerald-400">{userInitials || '?'}</span>
+                                    </div>
+                                    {!isCollapsed && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="flex flex-col overflow-hidden flex-1"
+                                        >
+                                            <span className="text-xs font-bold text-white truncate group-hover:text-emerald-400 transition-colors">{userEmail?.split('@')[0] || 'Gebruiker'}</span>
+                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider truncate">Profiel bekijken</span>
+                                        </motion.div>
+                                    )}
+                                </Link>
+                            </TooltipTrigger>
+                            {isCollapsed && (
+                                <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
+                                    Mijn Profiel
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
                         {!isCollapsed && (
                             <form action={logout}>
                                 <Tooltip>

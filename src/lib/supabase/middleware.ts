@@ -85,8 +85,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Routes die beschermd moeten worden
-  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|command-center|parcels|crop-care|research|perceelhistorie|bedrijf-dashboard|team-tasks)/)
-  const isLoginPage = request.nextUrl.pathname === '/login'
+  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|command-center|parcels|crop-care|research|perceelhistorie|bedrijf-dashboard|team-tasks|profile)/)
+  const isAuthPage = request.nextUrl.pathname === '/login'
+    || request.nextUrl.pathname === '/forgot-password'
+    || request.nextUrl.pathname === '/reset-password'
 
   // Niet ingelogd en probeert beschermde route te bezoeken
   if (!user && isProtectedRoute) {
@@ -104,8 +106,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Ingelogd en probeert login pagina te bezoeken
-  if (user && isLoginPage) {
+  // Ingelogd en probeert auth pagina te bezoeken (behalve reset-password)
+  if (user && isAuthPage && request.nextUrl.pathname !== '/reset-password') {
     const url = request.nextUrl.clone()
     url.pathname = '/command-center'
     return NextResponse.redirect(url)

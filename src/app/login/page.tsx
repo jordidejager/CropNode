@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -272,6 +273,17 @@ export default function LoginPage() {
                   </RadioGroup>
                 </div>
               </>
+            )}
+
+            {mode === 'login' && (
+              <div className="text-right">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-slate-400 hover:text-emerald-400 transition-colors"
+                >
+                  Wachtwoord vergeten?
+                </Link>
+              </div>
             )}
 
             <Button
