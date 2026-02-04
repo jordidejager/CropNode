@@ -37,7 +37,7 @@ export function Navbar() {
             <div className="w-9 h-9 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-600/30 transition-colors">
               <Sprout className="w-5 h-5 text-emerald-400" />
             </div>
-            <span className="font-display text-xl text-slate-100">CropOS</span>
+            <span className="font-display text-xl text-slate-100">CropNode</span>
           </Link>
 
           {/* Desktop Navigation */}

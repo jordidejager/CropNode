@@ -25,10 +25,10 @@ export function FinalCTA() {
         className="relative z-10 max-w-3xl mx-auto text-center"
       >
         <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-slate-100 mb-4">
-          Klaar om je bedrijf slim te beheren?
+          Begin vandaag, in 30 seconden
         </h2>
         <p className="text-slate-400 text-lg sm:text-xl mb-8 max-w-xl mx-auto">
-          Je eerste registratie staat er binnen 30 seconden.
+          Maak gratis een account aan en doe je eerste registratie. Geen gedoe, geen verplichtingen.
         </p>
 
         <Button

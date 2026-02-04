@@ -2,23 +2,23 @@
 
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Sprout, ShieldCheck, Server, Users } from 'lucide-react';
+import { Sprout, ShieldCheck, MapPin } from 'lucide-react';
 
 const trustItems = [
-  {
-    icon: Sprout,
-    label: 'Gebouwd door een fruitteler',
-    sublabel: 'voor fruittelers',
-  },
   {
     icon: ShieldCheck,
     label: 'Gevalideerd tegen de',
     sublabel: 'officiële CTGB-database',
   },
   {
-    icon: Server,
-    label: 'Nederlandse data',
-    sublabel: 'op Europese servers',
+    icon: MapPin,
+    label: 'Ontworpen voor',
+    sublabel: 'Nederlandse teeltbedrijven',
+  },
+  {
+    icon: Sprout,
+    label: 'Gebouwd door',
+    sublabel: 'een fruitteler',
   },
 ];
 
@@ -40,11 +40,8 @@ export function TrustBlock() {
           className="text-center mb-12"
         >
           <h2 className="font-display text-2xl sm:text-3xl text-slate-100 mb-3">
-            Gebouwd voor de fruitteelt
+            Gebouwd voor de Nederlandse fruitteelt
           </h2>
-          <p className="text-slate-400">
-            Met kennis van de praktijk, gevalideerd door de branche.
-          </p>
         </motion.div>
 
         {/* Trust Items */}

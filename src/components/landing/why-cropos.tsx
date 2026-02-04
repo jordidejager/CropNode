@@ -8,20 +8,20 @@ import { Clock, FolderOpen, ShieldCheck } from 'lucide-react';
 const cards = [
   {
     icon: Clock,
-    problem: 'Registreren kost meer tijd dan het werk zelf',
-    solution: 'Typ het zoals je het zegt — de AI snapt wat je bedoelt',
+    problem: 'Administratie bijhouden kost je avonden en weekenden',
+    solution: 'Eén zin typen is genoeg — CropNode herkent percelen, middelen en doseringen automatisch',
     color: 'emerald',
   },
   {
     icon: FolderOpen,
-    problem: 'Data verspreid over spreadsheets, apps en papier',
-    solution: 'Eén platform voor percelen, spuitregistraties, uren en meer',
+    problem: 'Alles staat overal: Excel, papier, WhatsApp, je hoofd',
+    solution: 'Percelen, registraties, uren en voorraad — eindelijk op één plek',
     color: 'emerald',
   },
   {
     icon: ShieldCheck,
-    problem: 'Geen idee of je nog binnen de regels zit',
-    solution: 'Automatische CTGB-controle bij elke registratie',
+    problem: 'Bij een controle moet je maar hopen dat alles klopt',
+    solution: 'Elke registratie wordt direct getoetst aan de CTGB-database',
     color: 'emerald',
   },
 ];
@@ -80,7 +80,7 @@ function Card({
   );
 }
 
-export function WhyCropOS() {
+export function WhyCropNode() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-100px' });
 
@@ -99,10 +99,10 @@ export function WhyCropOS() {
           className="text-center mb-16"
         >
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-slate-100 mb-4">
-            Waarom CropOS?
+            Waarom CropNode?
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            Fruittelers verdienen beter dan losse spreadsheets en tijdrovende administratie.
+            Minder administratie, meer overzicht. CropNode is gebouwd voor hoe jij werkt.
           </p>
         </motion.div>
 
@@ -116,3 +116,6 @@ export function WhyCropOS() {
     </section>
   );
 }
+
+// Keep backward compatibility export
+export { WhyCropNode as WhyCropOS };

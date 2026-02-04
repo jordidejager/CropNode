@@ -14,7 +14,7 @@ export function Footer() {
               <Sprout className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
-              <span className="font-display text-slate-100">CropOS</span>
+              <span className="font-display text-slate-100">CropNode</span>
               <span className="hidden sm:inline text-slate-500 ml-2 text-sm">
                 — Het platform voor moderne fruitteelt
               </span>
@@ -39,7 +39,7 @@ export function Footer() {
 
           {/* Copyright */}
           <p className="text-slate-600 text-sm">
-            © {currentYear} CropOS
+            © {currentYear} CropNode
           </p>
         </div>
       </div>

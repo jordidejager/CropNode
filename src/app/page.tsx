@@ -1,7 +1,7 @@
 import {
   Navbar,
   Hero,
-  WhyCropOS,
+  WhyCropNode,
   PlatformOverview,
   TrustBlock,
   Pricing,
@@ -14,7 +14,7 @@ export default function LandingPage() {
     <main className="min-h-screen bg-[#020617] overflow-x-hidden">
       <Navbar />
       <Hero />
-      <WhyCropOS />
+      <WhyCropNode />
       <PlatformOverview />
       <TrustBlock />
       <Pricing />

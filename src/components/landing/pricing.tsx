@@ -10,7 +10,7 @@ const tiers = [
   {
     name: 'Gratis',
     price: '0',
-    description: 'Ontdek CropOS',
+    description: 'Probeer CropNode',
     features: [
       '2 slimme invoeren per dag',
       'Perceelbeheer',
@@ -35,7 +35,7 @@ const tiers = [
   {
     name: 'Pro',
     price: '25',
-    description: 'Je hele bedrijf op één plek',
+    description: 'Voor het complete bedrijf',
     features: [
       'Onbeperkt slimme invoeren',
       'Alles van Basis',
@@ -150,7 +150,7 @@ export function Pricing() {
           className="text-center mb-12 sm:mb-16"
         >
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-slate-100 mb-4">
-            Eenvoudige prijzen
+            Eerlijke prijzen
           </h2>
           <p className="text-slate-400 text-lg max-w-xl mx-auto">
             Geen creditcard nodig. Geen proefperiode. Gratis is echt gratis.

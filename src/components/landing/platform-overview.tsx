@@ -17,7 +17,7 @@ const features = [
     icon: MessageSquareText,
     title: 'Slim registreren',
     description:
-      'Typ een spuitregistratie in gewoon Nederlands. CropOS herkent je percelen, producten en doseringen automatisch.',
+      'Typ een spuitregistratie zoals je het tegen een collega zou zeggen. CropNode herkent je percelen, producten en doseringen — en controleert het direct.',
     visual: SmartInputVisual,
   },
   {
@@ -25,7 +25,7 @@ const features = [
     icon: MapPin,
     title: 'Perceelbeheer',
     description:
-      'Importeer je percelen vanuit RVO of teken ze zelf op de kaart. Tot op blokniveau, met ras, onderstam en plantjaar.',
+      'Je percelen op de kaart, tot op blokniveau. Importeer vanuit RVO of teken zelf. Met ras, onderstam, plantjaar en plantafstand erbij.',
     visual: ParcelsVisual,
   },
   {
@@ -33,7 +33,7 @@ const features = [
     icon: Shield,
     title: 'Gewasbescherming',
     description:
-      'Altijd actuele CTGB-data. Zoek middelen, check toelatingen, en houd je voorraad bij.',
+      'Doorzoek de complete CTGB-database. Check toelatingen, bekijk veiligheidstermijnen en houd je middelenvoorraad bij.',
     visual: CropProtectionVisual,
   },
   {
@@ -41,7 +41,7 @@ const features = [
     icon: Clock,
     title: 'Urenregistratie',
     description:
-      'Houd bij wie waar werkt. Van snoeien tot plukken — per perceel, per taak.',
+      'Wie werkt waar, en hoe lang? Van snoeien tot plukken — registreer uren per taak, per perceel, per persoon.',
     visual: TimeTrackingVisual,
   },
   {
@@ -49,7 +49,7 @@ const features = [
     icon: BookOpen,
     title: 'Research Hub',
     description:
-      'Actuele informatie over ziekten en plagen in appel en peer. Van schurft tot fruitmot.',
+      'Alles over ziekten en plagen in appel en peer. Herken schurft, fruitmot of bacterievuur en vind direct de juiste aanpak.',
     visual: ResearchVisual,
   },
 ];
@@ -208,10 +208,10 @@ export function PlatformOverview() {
           className="text-center mb-16"
         >
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-slate-100 mb-4">
-            Alles wat je nodig hebt
+            Je hele bedrijf, overzichtelijk
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            Van spuitregistratie tot perceelbeheer — één platform voor je hele bedrijf.
+            Van het veld tot het kantoor — CropNode groeit mee met je bedrijf.
           </p>
         </motion.div>
 

@@ -237,8 +237,8 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="mt-6 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0"
             >
-              CropOS brengt je percelen, gewasbescherming, uren en bedrijfsdata samen in
-              één slim platform. Begin met typen — CropOS begrijpt de rest.
+              Percelen, gewasbescherming, uren en bedrijfsdata — alles op één plek.
+              Typ wat je gedaan hebt, CropNode regelt de rest.
             </motion.p>
 
             <motion.div
@@ -260,7 +260,7 @@ export function Hero() {
                 onClick={scrollToDemo}
                 className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-white text-base h-12 px-8"
               >
-                Bekijk hoe het werkt
+                Ontdek de mogelijkheden
               </Button>
             </motion.div>
           </div>

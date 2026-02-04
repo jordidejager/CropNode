@@ -19,18 +19,18 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'CropOS — Het platform voor moderne fruitteelt',
-  description: 'CropOS brengt je percelen, gewasbescherming, uren en bedrijfsdata samen in één slim platform. Begin met typen — CropOS begrijpt de rest.',
+  title: 'CropNode — Het platform voor moderne fruitteelt',
+  description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer — typ het zoals je het zegt.',
   openGraph: {
-    title: 'CropOS — Het platform voor moderne fruitteelt',
-    description: 'CropOS brengt je percelen, gewasbescherming, uren en bedrijfsdata samen in één slim platform.',
+    title: 'CropNode — Het platform voor moderne fruitteelt',
+    description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer.',
     type: 'website',
     locale: 'nl_NL',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CropOS — Het platform voor moderne fruitteelt',
-    description: 'CropOS brengt je percelen, gewasbescherming, uren en bedrijfsdata samen in één slim platform.',
+    title: 'CropNode — Het platform voor moderne fruitteelt',
+    description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer.',
   },
 };
 
