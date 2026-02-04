@@ -29,7 +29,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                   <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]">
                     <Leaf className="size-4 text-white" />
                   </div>
-                  <span className="text-sm font-black text-white">AgriSprayer</span>
+                  <span className="text-sm font-black text-white">CropNode</span>
                 </div>
               </div>
               <div className="flex-1" />

@@ -117,5 +117,3 @@ export function WhyCropNode() {
   );
 }
 
-// Keep backward compatibility export
-export { WhyCropNode as WhyCropOS };

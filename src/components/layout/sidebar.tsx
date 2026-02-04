@@ -357,8 +357,7 @@ function SidebarContent() {
                             animate={{ opacity: 1, x: 0 }}
                             className="flex flex-col overflow-hidden flex-1"
                         >
-                            <span className="text-lg font-black text-white tracking-tight truncate">AgriSprayer</span>
-                            <span className="text-[9px] text-emerald-500/60 font-black uppercase tracking-[0.2em]">Professional</span>
+                            <span className="text-xl font-black text-white tracking-tight truncate">CropNode</span>
                         </motion.div>
                     )}
 

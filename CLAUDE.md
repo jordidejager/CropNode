@@ -1,4 +1,4 @@
-# CLAUDE.md - CropOS (AgriSprayer Pro)
+# CLAUDE.md - CropNode
 
 > Een intelligente gewasbeschermingsmanagement-applicatie voor Nederlandse fruitteelt (appels en peren).
 

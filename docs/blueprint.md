@@ -1,4 +1,4 @@
-# **App Name**: AgriSprayer Pro
+# **App Name**: CropNode
 
 ## Core Features:
 

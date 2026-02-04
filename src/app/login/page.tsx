@@ -158,7 +158,7 @@ export default function LoginPage() {
             </CardTitle>
             <CardDescription className="text-slate-400 mt-2">
               {mode === 'login'
-                ? 'Log in op je AgriSprayer Pro account'
+                ? 'Log in op je CropNode account'
                 : 'Maak een nieuw account aan'}
             </CardDescription>
           </div>

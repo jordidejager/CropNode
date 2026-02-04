@@ -1,5 +1,5 @@
 /**
- * ValidationService voor AgriSprayer Pro - Slimme Invoer 2.0
+ * ValidationService voor CropNode - Slimme Invoer 2.0
  *
  * Valideert bespuitingen tegen CTGB-wetgeving met focus op:
  * 1. Cumulatieve werkzame stof limieten per seizoen

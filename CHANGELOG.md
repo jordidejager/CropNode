@@ -1,4 +1,4 @@
-# 📜 Changelog — AgriSprayer Pro
+# 📜 Changelog — CropNode
 
 Alle opmerkelijke veranderingen aan dit project worden in dit bestand gedocumenteerd.
 

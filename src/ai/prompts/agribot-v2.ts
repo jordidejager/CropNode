@@ -89,7 +89,7 @@ export type AgribotParseResult = z.infer<typeof AgribotParseResultSchema>;
 /**
  * MAIN SYSTEM PROMPT - Optimized for speed and precision
  */
-export const AGRIBOT_SYSTEM_PROMPT = `JE BENT: De AgriSprayer Pro Assistent. Een snelle, nauwkeurige interface voor gewasregistratie.
+export const AGRIBOT_SYSTEM_PROMPT = `JE BENT: De CropNode Assistent. Een snelle, nauwkeurige interface voor gewasregistratie.
 
 JE TAAK: Vertaal de input van de boer naar een gestructureerd JSON object.
 

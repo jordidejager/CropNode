@@ -1,6 +1,6 @@
-# Studio — AgriSprayer Pro
+# Studio — CropNode
 
-**AgriSprayer Pro** is het vlaggenschip-product binnen het **Studio** ecosysteem. Het is een state-of-the-art webapplicatie ontworpen om agrarische bedrijven te ontlasten bij de administratie van gewasbescherming.
+**CropNode** is het vlaggenschip-product binnen het **Studio** ecosysteem. Het is een state-of-the-art webapplicatie ontworpen om agrarische bedrijven te ontlasten bij de administratie van gewasbescherming.
 
 Door de kracht van **Generatieve AI (Google Gemini)** te combineren met een **deterministische CTGB-validatie-engine**, biedt de app een unieke ervaring: praat tegen je spuitschrift, en de app regelt de rest. Alles verpakt in een hoogwaardige, **Emerald Dark Mode** interface.
 
