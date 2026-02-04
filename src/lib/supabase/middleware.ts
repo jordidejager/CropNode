@@ -113,5 +113,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Ingelogd en bezoekt landing page (/) -> redirect naar command-center
+  if (user && request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/command-center'
+    return NextResponse.redirect(url)
+  }
+
   return supabaseResponse
 }
