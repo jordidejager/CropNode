@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Sprout, Menu, X } from 'lucide-react';
+import { Logo } from '@/components/ui/logo';
+import { Menu, X } from 'lucide-react';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -33,11 +34,8 @@ export function Navbar() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-600/30 transition-colors">
-              <Sprout className="w-5 h-5 text-emerald-400" />
-            </div>
-            <span className="font-display text-xl text-slate-100">CropNode</span>
+          <Link href="/" className="flex items-center">
+            <Logo variant="horizontal" theme="dark" width={140} height={32} />
           </Link>
 
           {/* Desktop Navigation */}

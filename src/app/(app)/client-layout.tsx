@@ -2,7 +2,8 @@
 
 import { Suspense } from 'react';
 import { Sidebar, MobileSidebarProvider, MobileMenuButton } from '@/components/layout/sidebar';
-import { Bell, Loader2, Leaf } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
+import { Logo, LogoIcon } from '@/components/ui/logo';
 import { Button } from '@/components/ui/button';
 import { QueryProvider } from '@/lib/query-provider';
 
@@ -25,12 +26,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
               {/* Mobile: hamburger + logo */}
               <div className="flex items-center gap-3 md:hidden">
                 <MobileMenuButton />
-                <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]">
-                    <Leaf className="size-4 text-white" />
-                  </div>
-                  <span className="text-sm font-black text-white">CropNode</span>
-                </div>
+                <Logo variant="horizontal" theme="dark" width={100} height={24} />
               </div>
               <div className="flex-1" />
               <Button variant="ghost" size="icon" className="rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">

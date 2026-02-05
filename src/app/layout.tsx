@@ -21,6 +21,12 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: 'CropNode — Het platform voor moderne fruitteelt',
   description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer — typ het zoals je het zegt.',
+  icons: {
+    icon: [
+      { url: '/logo/cropnode-icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/logo/cropnode-icon.svg',
+  },
   openGraph: {
     title: 'CropNode — Het platform voor moderne fruitteelt',
     description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer.',

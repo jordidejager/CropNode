@@ -19,7 +19,6 @@ import {
     ChevronRight,
     PanelLeftClose,
     PanelLeftOpen,
-    Leaf,
     MessageSquare,
     Clock,
     Users,
@@ -30,6 +29,7 @@ import {
     X,
     User
 } from 'lucide-react';
+import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -348,16 +348,15 @@ function SidebarContent() {
                     "h-16 flex items-center gap-3 mb-4 shrink-0 relative",
                     isCollapsed ? "px-4 justify-center" : "px-6"
                 )}>
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-                        <Leaf className="size-5 text-white" />
-                    </div>
-                    {!isCollapsed && (
+                    {isCollapsed ? (
+                        <LogoIcon theme="dark" size={32} />
+                    ) : (
                         <motion.div
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="flex flex-col overflow-hidden flex-1"
+                            className="flex items-center overflow-hidden"
                         >
-                            <span className="text-xl font-black text-white tracking-tight truncate">CropNode</span>
+                            <Logo variant="horizontal" theme="dark" width={140} height={32} />
                         </motion.div>
                     )}
 
@@ -649,11 +648,7 @@ function SidebarSkeleton() {
     return (
         <aside className="h-screen sticky top-0 bg-[#020617] border-r border-white/5 w-72 flex flex-col z-50 shrink-0">
             <div className="h-16 flex items-center gap-3 mb-4 px-6">
-                <div className="size-8 rounded-lg bg-emerald-500/20 animate-pulse" />
-                <div className="flex-1 space-y-1">
-                    <div className="h-5 bg-white/5 rounded w-24 animate-pulse" />
-                    <div className="h-2 bg-white/5 rounded w-16 animate-pulse" />
-                </div>
+                <div className="h-8 w-32 bg-white/5 rounded animate-pulse" />
             </div>
             <nav className="flex-1 px-3 space-y-2">
                 {[1, 2, 3, 4, 5].map(i => (

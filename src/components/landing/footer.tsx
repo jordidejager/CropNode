@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Sprout } from 'lucide-react';
+import { Logo } from '@/components/ui/logo';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -10,15 +10,10 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           {/* Logo & Tagline */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center">
-              <Sprout className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <span className="font-display text-slate-100">CropNode</span>
-              <span className="hidden sm:inline text-slate-500 ml-2 text-sm">
-                — Het platform voor moderne fruitteelt
-              </span>
-            </div>
+            <Logo variant="horizontal" theme="dark" width={120} height={28} />
+            <span className="hidden sm:inline text-slate-500 text-sm">
+              — Het platform voor moderne fruitteelt
+            </span>
           </div>
 
           {/* Links */}

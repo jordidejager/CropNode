@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Loader2, Sprout, Clock } from 'lucide-react'
+import { Loader2, Clock } from 'lucide-react'
+import { Logo } from '@/components/ui/logo'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -149,8 +150,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4">
       <Card className="w-full max-w-md bg-slate-900/50 border-white/10 backdrop-blur-md">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center">
-            <Sprout className="w-8 h-8 text-emerald-400" />
+          <div className="mx-auto flex justify-center">
+            <Logo variant="stacked" theme="dark" width={140} height={70} />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-slate-100">
