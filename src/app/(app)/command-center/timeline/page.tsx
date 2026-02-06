@@ -20,6 +20,7 @@ import {
     MoreHorizontal,
     Plus,
     Loader2,
+    Eye,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -263,18 +264,33 @@ function TimelineContent() {
 
                             {/* Actions */}
                             <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 h-8"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleResume(conversation.id);
-                                    }}
-                                >
-                                    <Play className="h-3.5 w-3.5 mr-1.5" />
-                                    Hervatten
-                                </Button>
+                                {conversation.status === 'completed' ? (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 h-8"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push('/crop-care/logs');
+                                        }}
+                                    >
+                                        <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                        Bekijk Spuitschrift
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 h-8"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleResume(conversation.id);
+                                        }}
+                                    >
+                                        <Play className="h-3.5 w-3.5 mr-1.5" />
+                                        Hervatten
+                                    </Button>
+                                )}
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

@@ -25,6 +25,7 @@ import type { LogbookEntry, LogStatus, SprayRegistrationGroup, SprayRegistration
 import { RegistrationGroupCard } from '@/components/registration-group-card';
 import { ProductInfoCard, ProductInfoCompact } from '@/components/product-info-card';
 import { RegistrationBottomSheet } from '@/components/registration-bottom-sheet';
+import { DoelorganismeSelector } from '@/components/doelorganisme-selector';
 import type { CtgbProduct } from '@/lib/types';
 import { useTransition, useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -177,6 +178,7 @@ interface StatusPanelProps {
         dosage: number;
         unit: string;
         targetReason?: string;
+        doelorganisme?: string;
     }>;
     date?: string;
     validationResult?: {
@@ -195,7 +197,7 @@ interface StatusPanelProps {
     onRemoveParcel?: (parcelId: string) => void;
     onRemoveParcelGroup?: (parcelIds: string[]) => void;
     onUpdateDosage?: (productIndex: number, newDosage: number) => void;
-    onUpdateProduct?: (productIndex: number, updates: { dosage?: number; unit?: string }) => void;
+    onUpdateProduct?: (productIndex: number, updates: { dosage?: number; unit?: string; doelorganisme?: string }) => void;
 }
 
 // Helper function to extract main parcel name from sub-parcel name
@@ -257,6 +259,18 @@ const StatusPanel = React.memo(function StatusPanel({
 
     const totalArea = useMemo(() => {
         return selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    }, [selectedParcels]);
+
+    // Get the primary crop from selected parcels (for doelorganisme filtering)
+    const primaryCrop = useMemo(() => {
+        const crops = selectedParcels.map(p => p.crop).filter(Boolean);
+        if (crops.length === 0) return undefined;
+        // Return the most common crop
+        const cropCounts = crops.reduce((acc, crop) => {
+            acc[crop!] = (acc[crop!] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(cropCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
     }, [selectedParcels]);
 
     const productTotals = useMemo(() => {
@@ -381,15 +395,28 @@ const StatusPanel = React.memo(function StatusPanel({
                                 <Popover key={`product-${i}-${product.product}`}>
                                     <div className="group/product bg-white/[0.03] rounded-lg p-3 border border-white/[0.06] hover:border-white/[0.1] transition-colors">
                                         <div className="flex justify-between items-start">
-                                            <PopoverTrigger asChild>
-                                                <button className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity">
-                                                    <p className="text-sm text-white font-medium truncate">{product.product}</p>
-                                                    {product.targetReason && (
-                                                        <p className="text-xs text-white/40 mt-0.5">{product.targetReason}</p>
-                                                    )}
-                                                    <p className="text-[10px] text-white/30 mt-1">Klik om aan te passen</p>
-                                                </button>
-                                            </PopoverTrigger>
+                                            <div className="flex-1 min-w-0">
+                                                <PopoverTrigger asChild>
+                                                    <button className="text-left hover:opacity-80 transition-opacity mb-2">
+                                                        <p className="text-sm text-white font-medium truncate">{product.product}</p>
+                                                        {product.targetReason && (
+                                                            <p className="text-xs text-white/40 mt-0.5">{product.targetReason}</p>
+                                                        )}
+                                                    </button>
+                                                </PopoverTrigger>
+                                                {/* Doelorganisme Selector */}
+                                                <DoelorganismeSelector
+                                                    productName={product.product}
+                                                    gewas={primaryCrop}
+                                                    selectedDoelorganisme={product.doelorganisme}
+                                                    onSelect={(doelorganisme) => {
+                                                        if (onUpdateProduct) {
+                                                            onUpdateProduct(i, { doelorganisme });
+                                                        }
+                                                    }}
+                                                    compact
+                                                />
+                                            </div>
                                             <div className="text-right flex-shrink-0 ml-3">
                                                 <div className="group/dosage relative inline-flex items-center gap-1">
                                                     {onUpdateDosage && (
@@ -826,7 +853,7 @@ function SmartInputContent() {
     // Data hooks
     const { data: dashboardData, isLoading: isLoadingDashboard } = useDashboardStats();
     const { data: products = [], isLoading: isLoadingProducts } = useCtgbProducts();
-    const { invalidateLogbook, invalidateSpuitschrift, invalidateDashboard } = useInvalidateQueries();
+    const { invalidateLogbook, invalidateSpuitschrift, invalidateDashboard, invalidateConversations } = useInvalidateQueries();
 
     // Derived data
     const entries = dashboardData?.logbook || [];
@@ -1015,7 +1042,8 @@ function SmartInputContent() {
                 products: confirmationData.products,
                 date: confirmationData.date || new Date(),
                 rawInput: chatHistory.find(m => m.role === 'user')?.content || 'Bevestigde registratie',
-                validationMessage: confirmationData.validationResult?.validationMessage || null
+                validationMessage: confirmationData.validationResult?.validationMessage || null,
+                sessionId: currentSessionId // Mark session as completed
             });
 
             if (!result.success) {
@@ -1042,6 +1070,7 @@ function SmartInputContent() {
             invalidateLogbook();
             invalidateDashboard();
             invalidateSpuitschrift();
+            invalidateConversations(); // Refresh timeline to show completed status
 
             // Record feedback
             try {
@@ -1076,7 +1105,7 @@ function SmartInputContent() {
             toast({ variant: 'destructive', title: 'Fout', description: e.message });
             setDraftStatus('confirming');
         }
-    }, [confirmationData, chatHistory, invalidateLogbook, invalidateDashboard, invalidateSpuitschrift, toast]);
+    }, [confirmationData, chatHistory, currentSessionId, invalidateLogbook, invalidateDashboard, invalidateSpuitschrift, invalidateConversations, toast]);
 
     // ============================================================================
     // GROUPED REGISTRATION HANDLERS (V2)
@@ -1129,7 +1158,7 @@ function SmartInputContent() {
 
         setSavingUnitId('all');
         try {
-            const result = await confirmAllUnits(groupedConfirmation);
+            const result = await confirmAllUnits(groupedConfirmation, currentSessionId);
 
             if (result.success) {
                 setGroupedConfirmation(prev => prev ? {
@@ -1140,6 +1169,7 @@ function SmartInputContent() {
                 invalidateLogbook();
                 invalidateDashboard();
                 invalidateSpuitschrift();
+                invalidateConversations(); // Refresh timeline to show completed status
 
                 setChatHistory(prev => [...prev, {
                     role: 'assistant',
@@ -1170,7 +1200,7 @@ function SmartInputContent() {
         } finally {
             setSavingUnitId(null);
         }
-    }, [groupedConfirmation, invalidateLogbook, invalidateDashboard, invalidateSpuitschrift, toast]);
+    }, [groupedConfirmation, currentSessionId, invalidateLogbook, invalidateDashboard, invalidateSpuitschrift, invalidateConversations, toast]);
 
     const handleEditUnit = useCallback((unit: SprayRegistrationUnit) => {
         // Convert unit to regular confirmation data for editing

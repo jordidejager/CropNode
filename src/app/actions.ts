@@ -17,10 +17,14 @@ import {
     setUserPreference,
     dbDeleteLogbookEntries,
     getTargetsForProduct,
+    getDoelorganismenForProduct,
+    getUserDoelorganismeHistory,
+    type DoelorganismeOption,
     addInventoryMovement,
     getAllCtgbProducts,
     addSpuitschriftEntry,
     deleteSpuitschriftEntry as dbDeleteSpuitschriftEntry,
+    updateSpuitschriftEntry as dbUpdateSpuitschriftEntry,
     getSpuitschriftEntry,
     getParcelHistoryEntries,
     // Field Signals
@@ -644,6 +648,7 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
     date: Date | string;
     rawInput?: string;
     validationMessage?: string | null;
+    sessionId?: string | null; // Optional: ID of the conversation session to mark as completed
 }): Promise<{ success: boolean; message?: string; spuitschriftId?: string }> {
     try {
         if (!draftData.plots || draftData.plots.length === 0) {
@@ -732,6 +737,17 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
             spuitschriftId: newSpuitschriftEntry.id,
         });
 
+        // Update conversation status to 'completed' if sessionId was provided
+        if (draftData.sessionId) {
+            try {
+                await updateConversationStatus(draftData.sessionId, 'completed');
+                console.log(`[confirmDraftDirectToSpuitschrift] Updated session ${draftData.sessionId} to completed`);
+            } catch (e) {
+                // Don't fail the whole operation if status update fails
+                console.warn('[confirmDraftDirectToSpuitschrift] Could not update conversation status:', e);
+            }
+        }
+
         revalidatePath('/');
         revalidatePath('/crop-care/logs');
         revalidatePath('/crop-care/inventory');
@@ -768,6 +784,7 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
 /**
  * Bevestig een enkele unit uit een groep naar spuitschrift.
  * Elke unit wordt als losse spuitschrift entry opgeslagen.
+ * Note: sessionId should NOT be passed here - use confirmAllUnits to update session status once
  */
 export async function confirmSingleUnit(
     unit: SprayRegistrationUnit,
@@ -779,15 +796,18 @@ export async function confirmSingleUnit(
         products: unit.products,
         date,
         rawInput: `${rawInput} [${unit.label || 'Unit'}]`,
+        // Don't pass sessionId here - it will be updated once after all units are confirmed
     });
 }
 
 /**
  * Bevestig alle units in een groep naar spuitschrift.
  * Roept confirmSingleUnit aan voor elke pending unit.
+ * Updates the conversation status to 'completed' after successful confirmation.
  */
 export async function confirmAllUnits(
-    group: SprayRegistrationGroup
+    group: SprayRegistrationGroup,
+    sessionId?: string | null // Optional: ID of the conversation session to mark as completed
 ): Promise<{
     success: boolean;
     message?: string;
@@ -821,6 +841,17 @@ export async function confirmAllUnits(
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;
 
+    // Update conversation status to 'completed' if at least one unit was confirmed
+    if (sessionId && successCount > 0) {
+        try {
+            await updateConversationStatus(sessionId, 'completed');
+            console.log(`[confirmAllUnits] Updated session ${sessionId} to completed`);
+        } catch (e) {
+            // Don't fail the whole operation if status update fails
+            console.warn('[confirmAllUnits] Could not update conversation status:', e);
+        }
+    }
+
     if (failCount === 0) {
         return {
             success: true,
@@ -849,6 +880,173 @@ export async function deleteSpuitschriftEntry(entryId: string) {
     revalidatePath('/crop-care/inventory');
 }
 
+/**
+ * Update a confirmed spuitschrift entry (inline editing)
+ * Re-validates the data and updates all related records
+ */
+export async function updateSpuitschriftEntryAction(
+    entryId: string,
+    updates: {
+        date?: Date | string;
+        plots?: string[];
+        products?: ProductEntry[];
+    }
+): Promise<{
+    success: boolean;
+    message?: string;
+    validationMessage?: string | null;
+    status?: 'Akkoord' | 'Waarschuwing';
+    errorCount?: number;
+    warningCount?: number;
+}> {
+    try {
+        // Get current user ID from server-side auth
+        const userId = await getServerUserId();
+        if (!userId) {
+            return { success: false, message: 'Niet ingelogd. Log opnieuw in en probeer het opnieuw.' };
+        }
+
+        // Get the existing entry
+        const existingEntry = await getSpuitschriftEntry(entryId);
+        if (!existingEntry) {
+            return { success: false, message: 'Spuitschrift regel niet gevonden.' };
+        }
+
+        // Merge updates with existing data
+        const finalPlots = updates.plots ?? existingEntry.plots;
+        const finalProducts = updates.products ?? existingEntry.products;
+        const finalDate = updates.date
+            ? (updates.date instanceof Date ? updates.date : new Date(updates.date))
+            : existingEntry.date;
+
+        // Fetch parcels for validation
+        const [allParcels, sprayableParcels, allCtgbProducts, parcelHistory] = await Promise.all([
+            getParcels(),
+            getSprayableParcelsById(finalPlots),
+            getAllCtgbProducts(),
+            getParcelHistoryEntries(),
+        ]);
+
+        // Build parcel objects for validation (convert SprayableParcel to Parcel format)
+        const selectedParcels: Parcel[] = finalPlots
+            .map(parcelId => {
+                const legacyParcel = allParcels.find(p => p.id === parcelId);
+                if (legacyParcel) return legacyParcel;
+
+                const sprayable = sprayableParcels.find(sp => sp.id === parcelId);
+                if (sprayable) {
+                    return {
+                        id: sprayable.id,
+                        name: sprayable.name,
+                        area: sprayable.area,
+                        crop: sprayable.crop,
+                        variety: sprayable.variety,
+                        location: sprayable.location || null,
+                        geometry: sprayable.geometry,
+                        source: sprayable.source,
+                        rvoId: sprayable.rvoId,
+                        subParcels: [{
+                            id: sprayable.id,
+                            crop: sprayable.crop,
+                            variety: sprayable.variety,
+                            area: sprayable.area,
+                        }]
+                    } as Parcel;
+                }
+                return undefined;
+            })
+            .filter((p): p is Parcel => p !== undefined);
+
+        // Validate the updated data
+        const validationMessages: string[] = [];
+        let errorCount = 0;
+        let warningCount = 0;
+
+        for (const productEntry of finalProducts) {
+            const matchingProduct = allCtgbProducts.find(m =>
+                m.naam?.toLowerCase() === productEntry.product.toLowerCase() ||
+                m.toelatingsnummer === productEntry.product
+            );
+
+            if (!matchingProduct) {
+                validationMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in CTGB database.`);
+                warningCount++;
+                continue;
+            }
+
+            for (const parcel of selectedParcels) {
+                // Filter history for this parcel, excluding entries from this spuitschrift (to avoid self-counting)
+                const history = parcelHistory.filter(h =>
+                    h.parcelId === parcel.id && h.spuitschriftId !== entryId
+                );
+
+                const result = await validateSprayApplication(
+                    parcel,
+                    matchingProduct,
+                    productEntry.dosage,
+                    productEntry.unit,
+                    finalDate,
+                    history,
+                    allCtgbProducts,
+                    undefined,
+                    productEntry.targetReason
+                );
+
+                for (const flag of result.flags) {
+                    const prefix = flag.type === 'error' ? '❌' : flag.type === 'warning' ? '⚠️' : 'ℹ️';
+                    const msg = `${prefix} ${flag.message}`;
+
+                    if (!validationMessages.includes(msg)) {
+                        validationMessages.push(msg);
+                        if (flag.type === 'error') errorCount++;
+                        else if (flag.type === 'warning') warningCount++;
+                    }
+                }
+            }
+        }
+
+        // Block save if there are errors
+        if (errorCount > 0) {
+            return {
+                success: false,
+                message: 'Kan niet opslaan vanwege validatiefouten.',
+                validationMessage: validationMessages.join('\n'),
+                errorCount,
+                warningCount,
+            };
+        }
+
+        // Determine status
+        const status: 'Akkoord' | 'Waarschuwing' = warningCount > 0 ? 'Waarschuwing' : 'Akkoord';
+        const validationMessage = validationMessages.length > 0 ? validationMessages.join('\n') : null;
+
+        // Update the entry
+        await dbUpdateSpuitschriftEntry(entryId, {
+            date: finalDate,
+            plots: finalPlots,
+            products: finalProducts,
+            validationMessage,
+            status,
+        }, userId);
+
+        revalidatePath('/');
+        revalidatePath('/crop-care/logs');
+        revalidatePath('/crop-care/inventory');
+
+        return {
+            success: true,
+            message: 'Wijzigingen opgeslagen.',
+            validationMessage,
+            status,
+            errorCount,
+            warningCount,
+        };
+    } catch (error) {
+        console.error('[updateSpuitschriftEntryAction] Error:', error);
+        const message = error instanceof Error ? error.message : 'Onbekende fout bij opslaan.';
+        return { success: false, message };
+    }
+}
 
 export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{ success: boolean; message?: string }> {
     try {
@@ -971,6 +1169,70 @@ export async function addNewStock(formData: FormData): Promise<{ success: boolea
 
 export async function getTargetsForProductAction(productName: string): Promise<string[]> {
     return await getTargetsForProduct(productName);
+}
+
+/**
+ * Get doelorganismen for a product with full voorschrift details
+ * @param productName - Name of the CTGB product
+ * @param gewas - Optional crop to filter by (e.g. 'Appel', 'Peer')
+ * @returns Array of DoelorganismeOption with usage details
+ */
+export async function getDoelorganismenForProductAction(
+    productName: string,
+    gewas?: string
+): Promise<DoelorganismeOption[]> {
+    return await getDoelorganismenForProduct(productName, gewas);
+}
+
+/**
+ * Get previously used doelorganismen from user's spuitschrift history
+ * Used for auto-selection of the most likely doelorganisme
+ */
+export async function getUserDoelorganismeHistoryAction(
+    productName: string
+): Promise<string[]> {
+    return await getUserDoelorganismeHistory(productName);
+}
+
+/**
+ * Get doelorganismen with auto-selection based on user history
+ * Returns both available options and the recommended selection
+ */
+export async function getDoelorganismenWithAutoSelectAction(
+    productName: string,
+    gewas?: string
+): Promise<{
+    options: DoelorganismeOption[];
+    autoSelected?: string;
+    autoSelectReason?: 'history' | 'default';
+}> {
+    const [options, history] = await Promise.all([
+        getDoelorganismenForProduct(productName, gewas),
+        getUserDoelorganismeHistory(productName)
+    ]);
+
+    // Auto-select: prefer user history, then first common option
+    let autoSelected: string | undefined;
+    let autoSelectReason: 'history' | 'default' | undefined;
+
+    if (history.length > 0) {
+        // Find first historical choice that's still available
+        const historyMatch = history.find(h =>
+            options.some(o => o.naam === h)
+        );
+        if (historyMatch) {
+            autoSelected = historyMatch;
+            autoSelectReason = 'history';
+        }
+    }
+
+    // Fallback to first option if no history
+    if (!autoSelected && options.length > 0) {
+        autoSelected = options[0].naam;
+        autoSelectReason = 'default';
+    }
+
+    return { options, autoSelected, autoSelectReason };
 }
 
 export async function saveProductPreferenceAction(alias: string, preferred: string) {
@@ -1449,5 +1711,138 @@ export async function deleteConversation(id: string): Promise<{ success: boolean
     } catch (error: any) {
         console.error('Error deleting conversation:', error);
         return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// Manual Spray Entry (from Spuitschrift page)
+// ============================================
+
+interface AddManualSprayEntryInput {
+    date: Date;
+    plots: string[];
+    products: ProductEntry[];
+    notes?: string;
+}
+
+/**
+ * Add a manual spray entry directly to the spuitschrift.
+ * This bypasses the smart input flow and adds entries directly.
+ */
+export async function addManualSprayEntry(
+    input: AddManualSprayEntryInput
+): Promise<{ success: boolean; message?: string; spuitschriftId?: string }> {
+    try {
+        const userId = await getServerUserId();
+        if (!userId) {
+            return { success: false, message: 'Niet ingelogd. Log opnieuw in.' };
+        }
+
+        const { date, plots, products, notes } = input;
+
+        // Validation: must have at least one parcel and one product
+        if (!plots || plots.length === 0) {
+            return { success: false, message: 'Selecteer minimaal één perceel.' };
+        }
+
+        if (!products || products.length === 0) {
+            return { success: false, message: 'Voeg minimaal één middel toe.' };
+        }
+
+        // Validate products have required fields
+        const validProducts = products.filter(p => p.product && p.product.trim());
+        if (validProducts.length === 0) {
+            return { success: false, message: 'Voeg minimaal één middel met naam toe.' };
+        }
+
+        // Fetch parcels for validation and history
+        const [allParcels, sprayableParcels] = await Promise.all([
+            getParcels(),
+            getSprayableParcelsById(plots)
+        ]);
+
+        // Run CTGB validation
+        const { isValid, validationMessage, warningCount, updatedProducts } = await validateSprayData(
+            { plots, products: validProducts },
+            allParcels,
+            date
+        );
+
+        // Use updated products if available (normalized names)
+        const finalProducts = updatedProducts || validProducts;
+
+        // Build raw input for display
+        const rawInputParts = [
+            `Handmatige invoer: ${finalProducts.map(p => `${p.product} ${p.dosage} ${p.unit}`).join(', ')}`,
+        ];
+        if (notes) {
+            rawInputParts.push(`Notities: ${notes}`);
+        }
+        const rawInput = rawInputParts.join(' | ');
+
+        // Create spuitschrift entry
+        const spuitschriftEntry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'> = {
+            originalLogbookId: null, // No logbook entry - direct manual entry
+            originalRawInput: rawInput,
+            date: date,
+            plots: plots,
+            products: finalProducts,
+            status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
+            createdAt: new Date(),
+            ...(validationMessage && { validationMessage }),
+        };
+
+        const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
+
+        // Create dummy logbook entry for parcel history function
+        const dummyLogbookEntry: LogbookEntry = {
+            id: `manual-${Date.now()}`,
+            rawInput: rawInput,
+            status: 'Akkoord',
+            date: date,
+            createdAt: new Date(),
+            parsedData: {
+                plots: plots,
+                products: finalProducts,
+            },
+            validationMessage: validationMessage || undefined,
+        };
+
+        // Process parcel history and inventory movements
+        await addParcelHistoryEntries({
+            logbookEntry: dummyLogbookEntry,
+            parcels: allParcels,
+            sprayableParcels,
+            isConfirmation: true,
+            spuitschriftId: newSpuitschriftEntry.id,
+        });
+
+        // Revalidate relevant paths
+        revalidatePath('/');
+        revalidatePath('/crop-care/logs');
+        revalidatePath('/crop-care/inventory');
+        revalidatePath('/command-center/timeline');
+
+        return {
+            success: true,
+            message: 'Bespuiting succesvol toegevoegd aan het spuitschrift.',
+            spuitschriftId: newSpuitschriftEntry.id
+        };
+    } catch (error) {
+        console.error('[addManualSprayEntry] Error:', error);
+        let message = 'Onbekende fout bij opslaan.';
+
+        if (error instanceof Error) {
+            const errorMsg = error.message.toLowerCase();
+            if (errorMsg.includes('fetch failed') || errorMsg.includes('network') || errorMsg.includes('econnreset')) {
+                message = 'Geen verbinding met de database. Controleer je internetverbinding en probeer het opnieuw.';
+            } else if (errorMsg.includes('timeout')) {
+                message = 'De verbinding duurde te lang. Probeer het opnieuw.';
+            } else {
+                message = error.message;
+            }
+        }
+
+        return { success: false, message };
     }
 }
