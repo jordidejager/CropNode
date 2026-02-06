@@ -3240,13 +3240,35 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                         // Bug 3 Fix: Create a set of valid parcel IDs for filtering
                         const validParcelIdSet = new Set(allParcels.map(p => p.id));
 
-                        // Bug 3 Fix: Filter plot IDs to only include valid ones
-                        const specifiedPlotIds = correctedOutput.plots.filter(id => validParcelIdSet.has(id));
+                        // CRITICAL: Resolve parcel NAMES to IDs before filtering
+                        // The AI might return names like "Stadhoek" instead of UUIDs
+                        const resolvedPlotIds = correctedOutput.plots.map(plotIdOrName => {
+                            // If it's already a valid ID, use it
+                            if (validParcelIdSet.has(plotIdOrName)) {
+                                return plotIdOrName;
+                            }
+                            // Otherwise, try to find by name (exact, partial, or contains)
+                            const plotLower = plotIdOrName.toLowerCase();
+                            const parcel = allParcels.find(p => {
+                                const nameLower = p.name.toLowerCase();
+                                return nameLower === plotLower ||
+                                       nameLower.includes(plotLower) ||
+                                       plotLower.includes(nameLower.split(' ')[0]); // Match first word
+                            });
+                            if (parcel) {
+                                console.log(`[${context}] Resolved parcel name "${plotIdOrName}" to ID "${parcel.id}" (${parcel.name})`);
+                            }
+                            return parcel?.id || plotIdOrName;
+                        });
+
+                        // Now filter to only valid IDs
+                        const specifiedPlotIds = resolvedPlotIds.filter(id => validParcelIdSet.has(id));
                         const existingPlotIds = (previousDraft?.plots || []).filter(id => validParcelIdSet.has(id));
 
-                        // Log if any phantom IDs were filtered
+                        // Log if any IDs couldn't be resolved
                         if (specifiedPlotIds.length < correctedOutput.plots.length) {
-                            console.warn(`[${context}] Filtered ${correctedOutput.plots.length - specifiedPlotIds.length} phantom specified plot IDs`);
+                            const unresolvedPlots = correctedOutput.plots.filter((_, i) => !validParcelIdSet.has(resolvedPlotIds[i]));
+                            console.warn(`[${context}] Could not resolve ${unresolvedPlots.length} plot names: ${unresolvedPlots.join(', ')}`);
                         }
                         if (previousDraft && existingPlotIds.length < previousDraft.plots.length) {
                             console.warn(`[${context}] Filtered ${previousDraft.plots.length - existingPlotIds.length} phantom existing plot IDs`);
@@ -3422,15 +3444,24 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                             const today = new Date().toISOString().split('T')[0];
                             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+                            // Get the original draft date (this is what the user initially said)
+                            const originalDraftDate = previousDraft.date
+                                ? new Date(previousDraft.date).toISOString().split('T')[0]
+                                : today;
+
                             // Parse splitDate (e.g., "gisteren" -> yesterday)
                             let splitDateStr = correctedOutput.splitDate || yesterday;
-                            let remainingDateStr = correctedOutput.remainingDate || today;
+
+                            // CRITICAL: For remaining parcels, ALWAYS use the original draft date
+                            // Don't trust AI's remainingDate - it often hallucinates random dates
+                            let remainingDateStr = originalDraftDate;
 
                             // Convert Dutch date words to ISO dates
                             if (splitDateStr.toLowerCase() === 'gisteren') splitDateStr = yesterday;
                             if (splitDateStr.toLowerCase() === 'vandaag') splitDateStr = today;
-                            if (remainingDateStr.toLowerCase() === 'gisteren') remainingDateStr = yesterday;
-                            if (remainingDateStr.toLowerCase() === 'vandaag') remainingDateStr = today;
+                            // Only override remainingDate if user explicitly mentions it
+                            if (correctedOutput.remainingDate?.toLowerCase() === 'gisteren') remainingDateStr = yesterday;
+                            if (correctedOutput.remainingDate?.toLowerCase() === 'vandaag') remainingDateStr = today;
 
                             // Override AI dates if input clearly mentions gisteren/vandaag
                             // This handles cases where AI returns incorrect ISO dates
@@ -3438,9 +3469,14 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                                 console.log(`[${context}] Overriding splitDate from "${splitDateStr}" to yesterday (input mentions gisteren)`);
                                 splitDateStr = yesterday;
                             }
+                            // Keep original draft date for remaining unless user explicitly says otherwise
                             if (inputLower.includes('de rest vandaag') || inputLower.includes('vandaag de rest')) {
                                 remainingDateStr = today;
+                            } else if (inputLower.includes('de rest gisteren') || inputLower.includes('gisteren de rest')) {
+                                remainingDateStr = yesterday;
                             }
+
+                            console.log(`[${context}] SPLIT dates: splitDate=${splitDateStr}, remainingDate=${remainingDateStr}, originalDraftDate=${originalDraftDate}`);
 
                             // Get parcel names for the split group
                             const splitParcelInfo = splitParcelIds.map(id => {
