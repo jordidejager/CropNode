@@ -140,6 +140,7 @@ export type SprayRegistrationUnit = {
   products: ProductEntry[];  // Specifieke producten/doseringen
   label?: string;            // UI label, bijv. "Appels (zonder Kanzi)"
   status: 'pending' | 'confirmed';  // Individuele status per unit
+  date?: Date;               // Optionele datum per unit (overschrijft group.date voor date-split scenarios)
 };
 
 /**

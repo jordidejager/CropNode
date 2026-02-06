@@ -101,7 +101,7 @@ type StreamMessage =
     | { type: 'extracting' }
     | { type: 'partial'; data: any }
     | { type: 'complete'; data: any; merged?: boolean; reply?: string }
-    | { type: 'grouped_complete'; group: SprayRegistrationGroup; reply: string; parcels?: Array<{ id: string; name: string; area: number | null }> }  // V2: Grouped registrations
+    | { type: 'grouped_complete'; group: SprayRegistrationGroup; reply: string; parcels?: Array<{ id: string; name: string; area: number | null }>; isSplit?: boolean; splitParcelIds?: string[] }  // V2: Grouped registrations
     | { type: 'answer'; message: string; intent: string; data?: unknown }
     | { type: 'agent_thinking' }
     | { type: 'agent_tool_call'; tool: string; input?: unknown }
@@ -267,9 +267,16 @@ const StatusPanel = React.memo(function StatusPanel({
     }, [products, totalArea]);
 
     const formattedDate = useMemo(() => {
-        return date
-            ? format(new Date(date), 'EEEE d MMMM', { locale: nl })
-            : format(new Date(), 'EEEE d MMMM', { locale: nl });
+        // Defensive date parsing to handle various date formats
+        if (date) {
+            const parsedDate = date instanceof Date ? date : new Date(date);
+            // Check if the date is valid
+            if (!isNaN(parsedDate.getTime())) {
+                return format(parsedDate, 'EEEE d MMMM', { locale: nl });
+            }
+        }
+        // Fallback to today
+        return format(new Date(), 'EEEE d MMMM', { locale: nl });
     }, [date]);
 
     const getValidationStyle = useCallback((status?: string) => {
@@ -1080,7 +1087,9 @@ function SmartInputContent() {
 
         setSavingUnitId(unit.id);
         try {
-            const result = await confirmSingleUnit(unit, groupedConfirmation.date, groupedConfirmation.rawInput);
+            // Use unit-specific date if available (for date-split scenarios), otherwise fall back to group date
+            const unitDate = unit.date || groupedConfirmation.date;
+            const result = await confirmSingleUnit(unit, unitDate, groupedConfirmation.rawInput);
 
             if (!result.success) {
                 toast({
@@ -1261,15 +1270,39 @@ function SmartInputContent() {
                 crop: p.crop
             }));
 
-            // Prioritize confirmationData if it has any data (for slot-filling scenarios)
-            const currentDraft = confirmationData && (confirmationData.plots?.length > 0 || confirmationData.products?.length > 0)
-                ? {
+            // Prioritize: 1) confirmationData (slot-filling), 2) groupedConfirmation (multi-unit), 3) activeDraft (saved)
+            let currentDraft: { id: string; plots: string[]; products: any[]; date?: string } | null = null;
+
+            if (confirmationData && (confirmationData.plots?.length > 0 || confirmationData.products?.length > 0)) {
+                // Use confirmation data (for slot-filling scenarios)
+                currentDraft = {
                     id: activeDraft?.id || 'temp-draft',
                     plots: confirmationData.plots,
                     products: confirmationData.products,
                     date: confirmationData.date
-                }
-                : activeDraft;
+                };
+            } else if (groupedConfirmation && groupedConfirmation.units.length > 0) {
+                // Convert grouped confirmation back to draft format for follow-up messages
+                // Flatten all unit plots into a single list for the API
+                const allPlots = groupedConfirmation.units.flatMap(u => u.plots);
+                // Use products from first unit (they should be the same or similar)
+                const baseProducts = groupedConfirmation.units[0]?.products || [];
+                currentDraft = {
+                    id: 'grouped-draft',
+                    plots: allPlots,
+                    products: baseProducts,
+                    date: typeof groupedConfirmation.date === 'string'
+                        ? groupedConfirmation.date
+                        : groupedConfirmation.date.toISOString().split('T')[0]
+                };
+                console.log('[handleSubmit] Converting groupedConfirmation to draft:', {
+                    unitCount: groupedConfirmation.units.length,
+                    totalPlots: allPlots.length,
+                    productCount: baseProducts.length
+                });
+            } else if (activeDraft) {
+                currentDraft = activeDraft;
+            }
 
             const response = await fetch('/api/analyze-input', {
                 method: 'POST',
@@ -1310,7 +1343,98 @@ function SmartInputContent() {
                                 break;
                             case 'grouped_complete':
                                 // V2: Handle grouped registrations with variations
-                                setGroupedConfirmation(message.group);
+                                console.log('[grouped_complete] Received:', {
+                                    groupId: message.group?.groupId,
+                                    unitCount: message.group?.units?.length,
+                                    units: message.group?.units?.map(u => ({
+                                        id: u.id,
+                                        label: u.label,
+                                        plotCount: u.plots?.length,
+                                        hasDate: !!u.date
+                                    })),
+                                    parcelCount: message.parcels?.length,
+                                    isSplit: message.isSplit,
+                                    splitParcelIds: message.splitParcelIds,
+                                    reply: message.reply?.substring(0, 50)
+                                });
+
+                                // Validate the group has units
+                                if (!message.group || !message.group.units || message.group.units.length === 0) {
+                                    console.error('[grouped_complete] Invalid group: no units');
+                                    break;
+                                }
+
+                                // Handle SPLIT responses differently - MERGE instead of REPLACE
+                                if (message.isSplit && message.splitParcelIds && groupedConfirmation) {
+                                    console.log('[grouped_complete] SPLIT MERGE: Merging split into existing groups');
+
+                                    const splitParcelIdSet = new Set(message.splitParcelIds);
+
+                                    // Find the split unit and remaining unit from the response
+                                    // Split unit contains the splitParcelIds, remaining unit contains the rest
+                                    const splitUnit = message.group.units.find(u =>
+                                        u.plots.some(p => splitParcelIdSet.has(p))
+                                    );
+                                    const remainingUnit = message.group.units.find(u =>
+                                        !u.plots.some(p => splitParcelIdSet.has(p))
+                                    );
+
+                                    console.log('[grouped_complete] SPLIT MERGE:', {
+                                        splitUnit: splitUnit ? { id: splitUnit.id, plots: splitUnit.plots.length } : null,
+                                        remainingUnit: remainingUnit ? { id: remainingUnit.id, plots: remainingUnit.plots.length } : null,
+                                        existingUnits: groupedConfirmation.units.length
+                                    });
+
+                                    // Build merged units array
+                                    const mergedUnits: SprayRegistrationUnit[] = [];
+
+                                    // Process existing units
+                                    for (const existingUnit of groupedConfirmation.units) {
+                                        // Check if this unit contains any of the split parcels
+                                        const hasSplitParcels = existingUnit.plots.some(p => splitParcelIdSet.has(p));
+
+                                        if (hasSplitParcels) {
+                                            // This unit needs to be updated - remove split parcels
+                                            // Use the remainingUnit from the response if available
+                                            if (remainingUnit && remainingUnit.plots.length > 0) {
+                                                mergedUnits.push({
+                                                    ...existingUnit,
+                                                    id: remainingUnit.id, // Use new ID to trigger re-render
+                                                    plots: remainingUnit.plots,
+                                                    label: remainingUnit.label,
+                                                    date: remainingUnit.date
+                                                });
+                                            }
+                                            // If remaining is empty, don't add it (all parcels were split off)
+                                        } else {
+                                            // This unit has no split parcels - keep it unchanged
+                                            mergedUnits.push(existingUnit);
+                                        }
+                                    }
+
+                                    // Add the new split unit
+                                    if (splitUnit) {
+                                        mergedUnits.push(splitUnit);
+                                    }
+
+                                    console.log('[grouped_complete] SPLIT MERGE result:', {
+                                        totalUnits: mergedUnits.length,
+                                        units: mergedUnits.map(u => ({ id: u.id, label: u.label, plots: u.plots.length }))
+                                    });
+
+                                    // Create the merged group
+                                    const mergedGroup: SprayRegistrationGroup = {
+                                        ...message.group,
+                                        groupId: `group-merged-${Date.now()}`,
+                                        units: mergedUnits
+                                    };
+
+                                    setGroupedConfirmation(mergedGroup);
+                                } else {
+                                    // Regular grouped_complete - replace entirely
+                                    setGroupedConfirmation(message.group);
+                                }
+
                                 // Store the parcels from the API response for accurate lookups
                                 if (message.parcels && message.parcels.length > 0) {
                                     setGroupedParcels(message.parcels);

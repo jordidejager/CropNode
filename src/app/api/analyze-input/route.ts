@@ -15,7 +15,8 @@ import {
 import {
     getActiveParcels, getUserPreferences, setUserPreference, getParcelHistoryEntries, getCtgbProductsByNames,
     searchCtgbProducts, getCtgbProductByName, getLogbookEntries, type ActiveParcel,
-    getTaskTypes, getActiveTaskSessions, startTaskSession, stopTaskSession
+    getTaskTypes, getActiveTaskSessions, startTaskSession, stopTaskSession, addTaskLog,
+    getSprayableParcels, type SprayableParcel
 } from '@/lib/supabase-store';
 import { resolveProductAlias, PRODUCT_ALIASES, getFrequentlyUsedProducts } from '@/lib/product-aliases';
 import { detectParcelGroups, resolveParcelGroup, buildParcelContextWithGroups } from '@/lib/parcel-resolver';
@@ -40,10 +41,12 @@ import {
 } from '@/lib/correction-service';
 import type { IntentType, IntentWithParams, QueryProductParams, QueryHistoryParams, QueryRegulationParams } from '@/ai/schemas/intents';
 import type { CtgbProduct, SprayRegistrationGroup, SprayRegistrationUnit, ConfidenceBreakdown } from '@/lib/types';
-import { extractQueryParams, isQueryIntent, isLikelySprayRegistration } from '@/ai/schemas/intents';
+import { extractQueryParams, isQueryIntent, isLikelySprayRegistration, isDateSplitPattern } from '@/ai/schemas/intents';
 import { parseSprayApplicationV2, type RegistrationUnit } from '@/ai/flows/parse-spray-application';
 // Punt 7: Combined intent + spray parsing for optimization
 import { classifyAndParseSpray, shouldUseCombinedFlow, splitCombinedOutput, type ClassifyAndParseOutput } from '@/ai/flows/classify-and-parse-spray';
+// Hours registration AI parsing
+import { parseHoursRegistration, isLikelyHoursRegistration, type HoursEntry, type ParseHoursOutput } from '@/ai/flows/parse-hours-registration';
 
 /**
  * Fase 2.6.1: Defensive Validation
@@ -366,8 +369,8 @@ function checkMissingSlots(
  */
 
 // Action types for multi-turn conversation
-const ActionType = z.enum(['new', 'add', 'remove', 'update']).describe(
-    'Type of action: new=fresh registration, add=add to existing, remove=remove from existing, update=modify values'
+const ActionType = z.enum(['new', 'add', 'remove', 'update', 'split']).describe(
+    'Type of action: new=fresh registration, add=add to existing, remove=remove from existing, update=modify values, split=split into multiple groups with different dates'
 );
 
 const IntentSchema = z.object({
@@ -382,7 +385,11 @@ const IntentSchema = z.object({
     })),
     productsToRemove: z.array(z.string()).optional().describe('Product names to remove'),
     date: z.string().optional().describe('Date in YYYY-MM-DD format if mentioned'),
-    updateField: z.string().optional().describe('Which field to update (for update action)')
+    updateField: z.string().optional().describe('Which field to update (for update action)'),
+    // Split action fields: for creating two groups with different dates
+    splitParcels: z.array(z.string()).optional().describe('Parcel IDs to split off into a new group (for split action)'),
+    splitDate: z.string().optional().describe('Date for the split-off parcels (YYYY-MM-DD format)'),
+    remainingDate: z.string().optional().describe('Date for the remaining parcels (YYYY-MM-DD format)')
 });
 
 // Type for the previous draft context
@@ -567,25 +574,48 @@ function validateAIAgainstRegex(
 /**
  * Convert AI V2 output to SprayRegistrationGroup
  * Now includes optional confidence information (Punt 4)
+ *
+ * Bug 3 Fix: Validates plot IDs against known parcels to filter out phantom UUIDs
+ * that the AI might hallucinate. Only plots that exist in validParcelIds are included.
  */
 function convertToRegistrationGroup(
     registrations: RegistrationUnit[],
     date: Date,
     rawInput: string,
-    confidence?: ConfidenceBreakdown
+    confidence?: ConfidenceBreakdown,
+    validParcelIds?: Set<string>
 ): SprayRegistrationGroup {
-    const units: SprayRegistrationUnit[] = registrations.map((reg, index) => ({
-        id: `unit-${Date.now()}-${index}`,
-        plots: reg.plots,
-        products: reg.products.map(p => ({
-            product: p.product,
-            dosage: p.dosage,
-            unit: p.unit,
-            targetReason: p.targetReason,
-        })),
-        label: reg.label,
-        status: 'pending' as const,
-    }));
+    const units: SprayRegistrationUnit[] = registrations
+        .map((reg, index) => {
+            // Bug 3 Fix: Filter plot IDs to only include valid ones
+            let validPlots = reg.plots;
+            if (validParcelIds && validParcelIds.size > 0) {
+                const originalCount = reg.plots.length;
+                validPlots = reg.plots.filter(id => validParcelIds.has(id));
+                if (validPlots.length < originalCount) {
+                    console.warn(`[convertToRegistrationGroup] Filtered ${originalCount - validPlots.length} phantom plot IDs from unit ${index + 1}`);
+                }
+            }
+
+            return {
+                id: `unit-${Date.now()}-${index}`,
+                plots: validPlots,
+                products: reg.products.map(p => ({
+                    product: p.product,
+                    dosage: p.dosage,
+                    unit: p.unit,
+                    targetReason: p.targetReason,
+                })),
+                label: reg.label,
+                status: 'pending' as const,
+            };
+        })
+        // Bug 3 Fix: Remove units that have no valid plots after filtering
+        .filter(unit => unit.plots.length > 0);
+
+    if (units.length === 0) {
+        console.error('[convertToRegistrationGroup] All units filtered out - no valid plot IDs found');
+    }
 
     return {
         groupId: `group-${Date.now()}`,
@@ -671,12 +701,22 @@ function generateConversationalReply(
             return `Oké, verwijderd uit de registratie.`;
 
         case 'update':
-            if (firstProduct?.dosage) {
-                return `Check, ik heb de dosering aangepast naar ${firstProduct.dosage} ${firstProduct.unit}/ha.`;
-            } else if (data.date) {
-                return `Oké, datum aangepast. Zie rechts voor het overzicht.`;
+            // Check updateField first to determine what was actually changed
+            if (data.updateField === 'date' || (data.date && !data.updateField)) {
+                // Date was updated (either explicitly via updateField or implicitly via date presence without other changes)
+                return `Oké, datum aangepast naar ${data.date}. Zie rechts voor het overzicht.`;
+            } else if (data.updateField === 'dosage' || firstProduct?.dosage) {
+                return `Check, ik heb de dosering aangepast naar ${firstProduct?.dosage || 0} ${firstProduct?.unit || 'L'}/ha.`;
+            } else if (data.updateField === 'product') {
+                return `Oké, product aangepast. Zie rechts voor het overzicht.`;
+            } else if (data.updateField === 'plots') {
+                return `Oké, percelen aangepast. Zie rechts voor het overzicht.`;
             }
             return `Aangepast. Controleer rechts of het klopt.`;
+
+        case 'split':
+            // Split action has its own handling, but provide fallback message
+            return `Registratie gesplitst in meerdere groepen met verschillende datums.`;
 
         default:
             return `Registratie bijgewerkt. Zie rechts voor de details.`;
@@ -1733,82 +1773,215 @@ export async function POST(req: Request) {
                     }
 
                     if (mode === 'workforce') {
-                        // Workforce mode: Handle time tracking directly (no parcel data needed)
-                        const isStartCommand = /^start\s+/i.test(rawInput.trim());
-                        const isStopCommand = /^stop/i.test(rawInput.trim());
-
+                        // Workforce mode: AI-powered hours registration
+                        // Supports: timer commands, natural language hours input, corrections
                         try {
                             const taskTypes = await getTaskTypes();
                             const activeSessions = await getActiveTaskSessions();
+                            const sprayableParcels = await getSprayableParcels();
+                            const availableTaskNames = taskTypes.map(t => t.name).join(',');
 
-                            if (isStartCommand) {
-                                const taskName = rawInput.replace(/^start\s+/i, '').trim().toLowerCase();
-                                const matchedTaskType = taskTypes.find(t =>
-                                    t.name.toLowerCase().includes(taskName) ||
-                                    taskName.includes(t.name.toLowerCase())
-                                );
+                            // Build parcel context for AI
+                            const parcelContext = JSON.stringify(
+                                sprayableParcels.map(p => ({ id: p.id, name: p.name, crop: p.crop, variety: p.variety }))
+                            );
 
-                                if (!matchedTaskType) {
+                            // Use AI to parse the input
+                            safeSend({ type: 'parsing' });
+                            const parseResult = await parseHoursRegistration({
+                                userInput: rawInput,
+                                availableParcels: parcelContext,
+                                availableTaskTypes: availableTaskNames,
+                                chatContext: chatContext || undefined,
+                            });
+
+                            console.log('[workforce] Parse result:', JSON.stringify(parseResult, null, 2));
+
+                            // Handle timer commands
+                            if (parseResult.isTimerCommand) {
+                                if (parseResult.timerAction === 'start' && parseResult.timerTaskType) {
+                                    const taskName = parseResult.timerTaskType.toLowerCase();
+                                    const matchedTaskType = taskTypes.find(t =>
+                                        t.name.toLowerCase().includes(taskName) ||
+                                        taskName.includes(t.name.toLowerCase())
+                                    );
+
+                                    if (!matchedTaskType) {
+                                        const availableTasks = taskTypes.map(t => t.name).join(', ');
+                                        safeSend({
+                                            type: 'answer',
+                                            message: `Taak "${parseResult.timerTaskType}" niet gevonden.\n\n**Beschikbare taken:** ${availableTasks}\n\nProbeer: "Start [taaknaam]"`,
+                                            intent: 'LOG_HOURS',
+                                            data: { action: 'error', availableTasks: taskTypes }
+                                        });
+                                    } else {
+                                        const session = await startTaskSession({
+                                            taskTypeId: matchedTaskType.id,
+                                            subParcelId: null,
+                                            startTime: new Date(),
+                                            peopleCount: 1,
+                                            notes: `Gestart via Slimme Invoer: "${rawInput}"`
+                                        });
+
+                                        safeSend({
+                                            type: 'workforce_action',
+                                            action: 'start',
+                                            data: {
+                                                sessionId: session.id,
+                                                taskType: matchedTaskType.name,
+                                                startTime: session.startTime.toISOString()
+                                            },
+                                            message: `⏱️ Timer gestart voor **${matchedTaskType.name}**\n\nZeg "Stop" om de timer te stoppen.`
+                                        });
+                                    }
+                                } else if (parseResult.timerAction === 'stop') {
+                                    if (activeSessions.length === 0) {
+                                        safeSend({
+                                            type: 'answer',
+                                            message: `Geen actieve timer gevonden.\n\nStart eerst een taak met "Start [taaknaam]"`,
+                                            intent: 'LOG_HOURS'
+                                        });
+                                    } else {
+                                        const session = activeSessions[0];
+                                        const endTime = new Date();
+                                        const startTime = new Date(session.startTime);
+                                        const diffMs = endTime.getTime() - startTime.getTime();
+                                        const hoursWorked = diffMs / (1000 * 60 * 60);
+
+                                        await stopTaskSession(session.id, endTime, hoursWorked);
+
+                                        const hours = Math.floor(hoursWorked);
+                                        const minutes = Math.round((hoursWorked - hours) * 60);
+                                        const timeStr = hours > 0 ? `${hours}u ${minutes}m` : `${minutes}m`;
+
+                                        safeSend({
+                                            type: 'workforce_action',
+                                            action: 'stop',
+                                            data: {
+                                                sessionId: session.id,
+                                                taskType: session.taskTypeName,
+                                                duration: timeStr,
+                                                hoursWorked
+                                            },
+                                            message: `✅ Timer gestopt voor **${session.taskTypeName}**\n\n**Gewerkte tijd:** ${timeStr}\n**Personen:** ${session.peopleCount}\n\nDe uren zijn geregistreerd.`
+                                        });
+                                    }
+                                }
+                            }
+                            // Handle natural language hours registration
+                            else if (parseResult.isHoursRegistration && parseResult.entries.length > 0) {
+                                const registeredEntries: Array<{ entry: HoursEntry; taskLog?: any }> = [];
+
+                                for (const entry of parseResult.entries) {
+                                    // Find matching task type
+                                    const matchedTaskType = taskTypes.find(t =>
+                                        t.name.toLowerCase() === entry.activity.toLowerCase() ||
+                                        t.name.toLowerCase().includes(entry.activity.toLowerCase()) ||
+                                        entry.activity.toLowerCase().includes(t.name.toLowerCase())
+                                    );
+
+                                    if (!matchedTaskType) {
+                                        console.log(`[workforce] Task type not found for activity: ${entry.activity}`);
+                                        // Still record the entry for the response, but note it wasn't saved
+                                        registeredEntries.push({ entry });
+                                        continue;
+                                    }
+
+                                    // Find matching parcels (fuzzy match by name)
+                                    let matchedParcelId: string | null = null;
+                                    if (entry.parcelNames.length > 0) {
+                                        const parcelName = entry.parcelNames[0].toLowerCase();
+                                        const matchedParcel = sprayableParcels.find(p =>
+                                            p.name.toLowerCase().includes(parcelName) ||
+                                            parcelName.includes(p.name.toLowerCase())
+                                        );
+                                        if (matchedParcel) {
+                                            matchedParcelId = matchedParcel.id;
+                                        }
+                                    }
+
+                                    // Create task log
+                                    try {
+                                        const taskLog = await addTaskLog({
+                                            startDate: new Date(entry.date),
+                                            endDate: new Date(entry.date),
+                                            days: 1, // Single day registration
+                                            subParcelId: matchedParcelId,
+                                            taskTypeId: matchedTaskType.id,
+                                            peopleCount: entry.peopleCount,
+                                            hoursPerPerson: entry.hours,
+                                            notes: entry.notes || `Via Slimme Invoer: "${rawInput}"`,
+                                        });
+                                        registeredEntries.push({ entry, taskLog });
+                                    } catch (logError: any) {
+                                        console.error('[workforce] Failed to create task log:', logError);
+                                        registeredEntries.push({ entry });
+                                    }
+                                }
+
+                                // Build response message
+                                const successCount = registeredEntries.filter(e => e.taskLog).length;
+                                const totalEntries = registeredEntries.length;
+
+                                let message = '';
+                                if (successCount === totalEntries && totalEntries > 0) {
+                                    message = `✅ **${totalEntries} urenregistratie${totalEntries > 1 ? 's' : ''} opgeslagen**\n\n`;
+                                    for (const { entry, taskLog } of registeredEntries) {
+                                        const parcelStr = entry.parcelNames.length > 0 ? ` op ${entry.parcelNames.join(', ')}` : '';
+                                        const peopleStr = entry.peopleCount > 1 ? ` (${entry.peopleCount} personen)` : '';
+                                        message += `• **${entry.hours}u ${entry.activity}**${parcelStr}${peopleStr}\n`;
+                                        message += `  📅 ${entry.date}\n`;
+                                    }
+                                } else if (successCount > 0) {
+                                    message = `⚠️ **${successCount}/${totalEntries} registraties opgeslagen**\n\n`;
+                                    for (const { entry, taskLog } of registeredEntries) {
+                                        const status = taskLog ? '✅' : '❌';
+                                        const parcelStr = entry.parcelNames.length > 0 ? ` op ${entry.parcelNames.join(', ')}` : '';
+                                        message += `${status} **${entry.hours}u ${entry.activity}**${parcelStr}\n`;
+                                    }
+                                    message += '\nSommige taaktypes werden niet gevonden in de database.';
+                                } else {
+                                    // No task types matched - suggest available types
                                     const availableTasks = taskTypes.map(t => t.name).join(', ');
-                                    safeSend({
-                                        type: 'answer',
-                                        message: `Taak "${taskName}" niet gevonden.\n\n**Beschikbare taken:** ${availableTasks}\n\nProbeer: "Start [taaknaam]"`,
-                                        intent: 'LOG_HOURS',
-                                        data: { action: 'error', availableTasks: taskTypes }
-                                    });
-                                } else {
-                                    const session = await startTaskSession({
-                                        taskTypeId: matchedTaskType.id,
-                                        subParcelId: null,
-                                        startTime: new Date(),
-                                        peopleCount: 1,
-                                        notes: `Gestart via Slimme Invoer: "${rawInput}"`
-                                    });
-
-                                    safeSend({
-                                        type: 'workforce_action',
-                                        action: 'start',
-                                        data: {
-                                            sessionId: session.id,
-                                            taskType: matchedTaskType.name,
-                                            startTime: session.startTime.toISOString()
-                                        },
-                                        message: `⏱️ Timer gestart voor **${matchedTaskType.name}**\n\nZeg "Stop" om de timer te stoppen.`
-                                    });
+                                    message = `❌ **Kon geen registraties opslaan**\n\nDe activiteit werd niet herkend.\n\n**Beschikbare taken:** ${availableTasks}`;
                                 }
-                            } else if (isStopCommand) {
-                                if (activeSessions.length === 0) {
-                                    safeSend({
-                                        type: 'answer',
-                                        message: `Geen actieve timer gevonden.\n\nStart eerst een taak met "Start [taaknaam]"`,
-                                        intent: 'LOG_HOURS'
-                                    });
-                                } else {
-                                    const session = activeSessions[0];
-                                    const endTime = new Date();
-                                    const startTime = new Date(session.startTime);
-                                    const diffMs = endTime.getTime() - startTime.getTime();
-                                    const hoursWorked = diffMs / (1000 * 60 * 60);
 
-                                    await stopTaskSession(session.id, endTime, hoursWorked);
-
-                                    const hours = Math.floor(hoursWorked);
-                                    const minutes = Math.round((hoursWorked - hours) * 60);
-                                    const timeStr = hours > 0 ? `${hours}u ${minutes}m` : `${minutes}m`;
-
-                                    safeSend({
-                                        type: 'workforce_action',
-                                        action: 'stop',
-                                        data: {
-                                            sessionId: session.id,
-                                            taskType: session.taskTypeName,
-                                            duration: timeStr,
-                                            hoursWorked
-                                        },
-                                        message: `✅ Timer gestopt voor **${session.taskTypeName}**\n\n**Gewerkte tijd:** ${timeStr}\n**Personen:** ${session.peopleCount}\n\nDe uren zijn geregistreerd.`
-                                    });
-                                }
-                            } else {
+                                safeSend({
+                                    type: 'workforce_action',
+                                    action: 'log',
+                                    data: {
+                                        entries: registeredEntries.map(e => ({
+                                            hours: e.entry.hours,
+                                            activity: e.entry.activity,
+                                            parcels: e.entry.parcelNames,
+                                            date: e.entry.date,
+                                            peopleCount: e.entry.peopleCount,
+                                            teamMembers: e.entry.teamMembers,
+                                            saved: !!e.taskLog,
+                                            taskLogId: e.taskLog?.id,
+                                        })),
+                                        successCount,
+                                        totalCount: totalEntries,
+                                    },
+                                    message
+                                });
+                            }
+                            // Handle corrections
+                            else if (parseResult.isCorrection) {
+                                safeSend({
+                                    type: 'answer',
+                                    message: `🔄 **Correctie gedetecteerd**\n\n${parseResult.correctionType}: ${parseResult.correctedValue}\n\n*Correctie functionaliteit wordt binnenkort uitgebreid.*`,
+                                    intent: 'LOG_HOURS',
+                                    data: {
+                                        isCorrection: true,
+                                        correctionType: parseResult.correctionType,
+                                        correctedField: parseResult.correctedField,
+                                        correctedValue: parseResult.correctedValue,
+                                    }
+                                });
+                            }
+                            // Show status/help
+                            else {
                                 if (activeSessions.length > 0) {
                                     const session = activeSessions[0];
                                     const startTime = new Date(session.startTime);
@@ -1827,7 +2000,7 @@ export async function POST(req: Request) {
                                     const availableTasks = taskTypes.map(t => t.name).join(', ');
                                     safeSend({
                                         type: 'answer',
-                                        message: `**Urenregistratie**\n\n• "Start [taak]" - timer starten\n• "Stop" - timer stoppen\n\n**Taken:** ${availableTasks}`,
+                                        message: parseResult.replyMessage || `**Urenregistratie**\n\n• "Start [taak]" - timer starten\n• "Stop" - timer stoppen\n• "3 uur gesnoeid op Plantsoen" - directe registratie\n\n**Taken:** ${availableTasks}`,
                                         intent: 'LOG_HOURS'
                                     });
                                 }
@@ -2656,13 +2829,32 @@ export async function POST(req: Request) {
                                 confidenceBreakdown.overall = Math.max(0, Math.min(1, confidenceBreakdown.overall + regexValidation.confidenceAdjustment));
                                 console.log(`[${context}] Confidence breakdown: intent=${intentResult.confidence.toFixed(2)}, products=${productConfidenceScores.join(',')}, parcels=${parcelResolutionConfidence.toFixed(2)}, overall=${confidenceBreakdown.overall.toFixed(2)}${regexValidation.confidenceAdjustment !== 0 ? ` (regex: ${regexValidation.reason})` : ''}`);
 
-                                // Convert to SprayRegistrationGroup
+                                // Bug 3 Fix: Create a set of valid parcel IDs to filter out phantom UUIDs
+                                // Conference fix: When group keyword detected (e.g., "alle conference"),
+                                // ONLY allow parcels from the pre-resolved set to prevent variety mixing
+                                let validParcelIds: Set<string>;
+                                if (hasGroupKeyword && preResolvedParcelIds && preResolvedParcelIds.length > 0) {
+                                    validParcelIds = new Set(preResolvedParcelIds);
+                                    console.log(`[${context}] Enforcing pre-resolved parcels for "${groupValue}": ${validParcelIds.size} allowed`);
+                                } else {
+                                    validParcelIds = new Set(allParcels.map(p => p.id));
+                                }
+
+                                // Convert to SprayRegistrationGroup (with phantom UUID filtering)
                                 const group = convertToRegistrationGroup(
                                     v2Result.registrations,
                                     parsedDate,
                                     rawInput,
-                                    confidenceBreakdown
+                                    confidenceBreakdown,
+                                    validParcelIds
                                 );
+
+                                // Bug 3 Fix: Check if any units remain after filtering
+                                if (group.units.length === 0) {
+                                    console.error(`[${context}] All registrations filtered out - no valid plot IDs found`);
+                                    send({ type: 'error', message: 'Geen geldige percelen gevonden. De AI heeft mogelijk onjuiste perceel-IDs gegenereerd.' });
+                                    return;
+                                }
 
                                 // Generate reply for grouped registrations
                                 const unitCount = group.units.length;
@@ -2724,7 +2916,38 @@ ${hasDraft ? `
 3. Een UPDATE/WIJZIGING maakt (action: "update")
    Triggers: "maak er X van", "verander naar", "moet X zijn", "wijzig", "pas aan"
 
-4. Een COMPLEET NIEUWE registratie start (action: "new")
+4. Een DATUM-SPLIT maakt (action: "split") ⭐ NIEUW
+   Triggers (expliciet): "X trouwens gisteren", "de rest vandaag", "X gisteren, Y vandaag", "eigenlijk gisteren"
+   Triggers (impliciet): "X heb ik gisteren gespoten", "X was gisteren", "X gisteren gedaan", "alleen X gisteren"
+
+   BELANGRIJK: Als de gebruiker zegt dat EEN SPECIFIEK perceel (uit de draft) op een ANDERE datum is gespoten,
+   is dit ALTIJD een split actie! De rest van de draft blijft op de oorspronkelijke datum.
+
+   Dit splitst de registratie in TWEE groepen met verschillende datums.
+   Zet de afgesplitste percelen in splitParcels en hun datum in splitDate.
+   Zet de datum voor de overige percelen in remainingDate.
+
+   Voorbeeld 1: "Plantsoen trouwens gisteren gespoten, de rest vandaag"
+   → action: "split"
+   → splitParcels: [IDs van Plantsoen-percelen]
+   → splitDate: "gisteren"
+   → remainingDate: "vandaag"
+
+   Voorbeeld 2: "Stadhoek heb ik gisteren gespoten"
+   → action: "split"
+   → splitParcels: [IDs van Stadhoek-percelen]
+   → splitDate: "gisteren"
+   → remainingDate: "vandaag" (default: behoud oorspronkelijke datum of vandaag)
+
+   Voorbeeld 3: "Plantsoen heb ik gisteren gespoten de rest vandaag"
+   → action: "split"
+   → splitParcels: [IDs van Plantsoen-percelen]
+   → splitDate: "gisteren"
+   → remainingDate: "vandaag"
+
+   → plots: [] (niet nodig, we splitsen de bestaande draft)
+
+5. Een COMPLEET NIEUWE registratie start (action: "new")
    Triggers: Volledige nieuwe bespuiting met percelen EN middelen
 
 HUIDIGE DRAFT:
@@ -2807,7 +3030,8 @@ ${hasDraft ? 'Bepaal of dit een correctie/toevoeging/update is op de huidige dra
 
 Extraheer de intentie en retourneer als JSON met het juiste "action" type.
 ${preResolvedParcelIds ? `Gebruik de pre-resolved perceel IDs voor "${groupValue}".` : ''}
-${Object.keys(resolvedAliases).length > 0 ? `Gebruik de product aliassen: ${aliasHints}` : ''}`,
+${Object.keys(resolvedAliases).length > 0 ? `Gebruik de product aliassen: ${aliasHints}` : ''}
+${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECTEERD: De input bevat een datum-split patroon. Gebruik action="split" met splitParcels en splitDate.` : ''}`,
                         system: systemPrompt,
                         output: { schema: IntentSchema },
                     });
@@ -2925,9 +3149,21 @@ ${Object.keys(resolvedAliases).length > 0 ? `Gebruik de product aliassen: ${alia
                         const existingProductNames = previousDraft?.products.map(p => p.product.toLowerCase()) || [];
                         const hasNewProducts = newProductNames.some(n => !existingProductNames.includes(n));
 
-                        // Check if the specified plots are a subset of the existing plots
-                        const specifiedPlotIds = correctedOutput.plots;
-                        const existingPlotIds = previousDraft?.plots || [];
+                        // Bug 3 Fix: Create a set of valid parcel IDs for filtering
+                        const validParcelIdSet = new Set(allParcels.map(p => p.id));
+
+                        // Bug 3 Fix: Filter plot IDs to only include valid ones
+                        const specifiedPlotIds = correctedOutput.plots.filter(id => validParcelIdSet.has(id));
+                        const existingPlotIds = (previousDraft?.plots || []).filter(id => validParcelIdSet.has(id));
+
+                        // Log if any phantom IDs were filtered
+                        if (specifiedPlotIds.length < correctedOutput.plots.length) {
+                            console.warn(`[${context}] Filtered ${correctedOutput.plots.length - specifiedPlotIds.length} phantom specified plot IDs`);
+                        }
+                        if (previousDraft && existingPlotIds.length < previousDraft.plots.length) {
+                            console.warn(`[${context}] Filtered ${previousDraft.plots.length - existingPlotIds.length} phantom existing plot IDs`);
+                        }
+
                         const isSubset = specifiedPlotIds.length > 0 &&
                             specifiedPlotIds.length < existingPlotIds.length &&
                             specifiedPlotIds.every(p => existingPlotIds.includes(p));
@@ -2990,6 +3226,192 @@ ${Object.keys(resolvedAliases).length > 0 ? `Gebruik de product aliassen: ${alia
                                 parcels: allParcels.map(p => ({ id: p.id, name: p.name, area: p.area }))
                             });
                             return;
+                        }
+
+                        // === PHASE 7b: Handle SPLIT action (date-based split) ===
+                        // Creates ONE registration group with TWO units, each having their own date
+                        if (previousDraft && correctedOutput.action === 'split' && correctedOutput.splitParcels?.length) {
+                            console.log(`[${context}] Processing SPLIT action: splitting ${correctedOutput.splitParcels.length} parcels`);
+
+                            // Bug 3 Fix: Create a set of valid parcel IDs to filter out phantom UUIDs
+                            const validParcelIdSet = new Set(allParcels.map(p => p.id));
+
+                            // Bug 3 Fix: Also filter previousDraft.plots to only include valid ones
+                            const validDraftPlots = previousDraft.plots.filter(id => validParcelIdSet.has(id));
+                            if (validDraftPlots.length < previousDraft.plots.length) {
+                                console.warn(`[${context}] Filtered ${previousDraft.plots.length - validDraftPlots.length} phantom draft plot IDs`);
+                            }
+                            const draftPlotSet = new Set(validDraftPlots);
+
+                            // CRITICAL FIX: Extract the parcel name mentioned in the user input
+                            // and ONLY split parcels whose names actually contain that text
+                            // This prevents the AI from selecting unrelated parcels
+                            const inputLower = rawInput.toLowerCase();
+
+                            // Extract parcel name from common split patterns
+                            // Patterns: "X trouwens gisteren", "X heb ik gisteren", "X gisteren gespoten"
+                            const splitNamePatterns = [
+                                // "Plantsoen trouwens gisteren" or "Plantsoen heb ik gisteren gespoten de rest vandaag"
+                                /^(\w+(?:\s+\w+)?)\s+(?:trouwens|heb\s+ik|was|is)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Plantsoen gisteren gespoten"
+                                /^(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)\s+(?:gespoten|gedaan|behandeld)/i,
+                                // "alleen Plantsoen gisteren" or "wel Plantsoen gisteren"
+                                /(?:alleen|wel)\s+(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Stadhoek heb ik gisteren gespoten" - word at start followed by date phrase
+                                /^(\w+)\s+.*(?:gisteren|vandaag|vorige\s+week)/i,
+                            ];
+
+                            let mentionedParcelName: string | null = null;
+                            for (const pattern of splitNamePatterns) {
+                                const match = rawInput.match(pattern);
+                                if (match && match[1]) {
+                                    mentionedParcelName = match[1].toLowerCase().trim();
+                                    console.log(`[${context}] Extracted parcel name from input: "${mentionedParcelName}"`);
+                                    break;
+                                }
+                            }
+
+                            // Filter split parcels: must be in draft AND (if we extracted a name) must contain that name
+                            const rawSplitParcelIds = correctedOutput.splitParcels;
+                            const splitParcelIds = rawSplitParcelIds.filter(id => {
+                                const isValid = validParcelIdSet.has(id);
+                                const isInDraft = draftPlotSet.has(id);
+
+                                if (!isValid || !isInDraft) {
+                                    if (isValid && !isInDraft) {
+                                        const parcel = allParcels.find(p => p.id === id);
+                                        console.warn(`[${context}] Split parcel "${parcel?.name || id}" is not in draft - filtering out`);
+                                    }
+                                    return false;
+                                }
+
+                                // CRITICAL: If we extracted a parcel name from the input,
+                                // only include parcels whose names contain that text
+                                if (mentionedParcelName) {
+                                    const parcel = allParcels.find(p => p.id === id);
+                                    const parcelNameLower = parcel?.name?.toLowerCase() || '';
+                                    const nameMatches = parcelNameLower.includes(mentionedParcelName);
+
+                                    if (!nameMatches) {
+                                        console.warn(`[${context}] Split parcel "${parcel?.name}" does not match mentioned name "${mentionedParcelName}" - filtering out`);
+                                        return false;
+                                    }
+                                }
+
+                                return true;
+                            });
+
+                            console.log(`[${context}] Split parcel filtering: ${rawSplitParcelIds.length} raw -> ${splitParcelIds.length} after validation`);
+                            if (splitParcelIds.length < rawSplitParcelIds.length) {
+                                const filteredCount = rawSplitParcelIds.length - splitParcelIds.length;
+                                console.warn(`[${context}] Filtered ${filteredCount} split parcel IDs (not in draft, phantom, or name mismatch)`);
+                            }
+
+                            const remainingParcelIds = validDraftPlots.filter(id => !splitParcelIds.includes(id));
+
+                            // Resolve dates
+                            const today = new Date().toISOString().split('T')[0];
+                            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+                            // Parse splitDate (e.g., "gisteren" -> yesterday)
+                            let splitDateStr = correctedOutput.splitDate || yesterday;
+                            let remainingDateStr = correctedOutput.remainingDate || today;
+
+                            // Convert Dutch date words to ISO dates
+                            if (splitDateStr.toLowerCase() === 'gisteren') splitDateStr = yesterday;
+                            if (splitDateStr.toLowerCase() === 'vandaag') splitDateStr = today;
+                            if (remainingDateStr.toLowerCase() === 'gisteren') remainingDateStr = yesterday;
+                            if (remainingDateStr.toLowerCase() === 'vandaag') remainingDateStr = today;
+
+                            // Get parcel names for the split group
+                            const splitParcelInfo = splitParcelIds.map(id => {
+                                const parcel = allParcels.find(p => p.id === id);
+                                return parcel || { id, name: id, area: null };
+                            });
+                            const splitLabel = splitParcelInfo.map(p => p.name).join(', ');
+
+                            // Get parcel names for the remaining group
+                            const remainingParcelInfo = remainingParcelIds.map(id => {
+                                const parcel = allParcels.find(p => p.id === id);
+                                return parcel || { id, name: id, area: null };
+                            });
+                            const remainingLabel = remainingParcelIds.length <= 3
+                                ? remainingParcelInfo.map(p => p.name).join(', ')
+                                : `Overige ${remainingParcelIds.length} percelen`;
+
+                            // Format dates for display
+                            const splitDateDisplay = splitDateStr === yesterday ? 'gisteren' :
+                                                     splitDateStr === today ? 'vandaag' : splitDateStr;
+                            const remainingDateDisplay = remainingDateStr === yesterday ? 'gisteren' :
+                                                         remainingDateStr === today ? 'vandaag' : remainingDateStr;
+
+                            // Validate we have parcels to split
+                            if (splitParcelIds.length === 0) {
+                                console.warn(`[${context}] SPLIT: No valid split parcels after filtering - falling back to update`);
+                                // Fall through to normal flow if no valid split parcels
+                            } else {
+                                // Create ONE group with TWO units, each having their own date
+                                // This is important because the frontend only handles one grouped_complete message
+                                // Filter out units with no plots (edge case from phantom UUID filtering)
+                                const units: SprayRegistrationUnit[] = [];
+
+                                if (splitParcelIds.length > 0) {
+                                    units.push({
+                                        id: `unit-split-${Date.now()}`,
+                                        label: `${splitLabel} (${splitDateDisplay})`,
+                                        plots: splitParcelIds,
+                                        products: previousDraft.products,
+                                        status: 'pending',
+                                        date: new Date(splitDateStr) // Unit-specific date for the split-off parcels
+                                    });
+                                }
+
+                                if (remainingParcelIds.length > 0) {
+                                    units.push({
+                                        id: `unit-remaining-${Date.now() + 1}`,
+                                        label: `${remainingLabel} (${remainingDateDisplay})`,
+                                        plots: remainingParcelIds,
+                                        products: previousDraft.products,
+                                        status: 'pending',
+                                        date: new Date(remainingDateStr) // Unit-specific date for remaining parcels
+                                    });
+                                }
+
+                                if (units.length === 0) {
+                                    console.error(`[${context}] SPLIT: No valid units after filtering - this should not happen`);
+                                    send({ type: 'error', message: 'Geen geldige percelen voor de split operatie.' });
+                                    return;
+                                }
+
+                                const combinedGroup: SprayRegistrationGroup = {
+                                    groupId: `group-split-${Date.now()}`,
+                                    date: new Date(remainingDateStr), // Group date is the "main" date
+                                    rawInput: rawInput,
+                                    units: units
+                                };
+
+                                console.log(`[${context}] SPLIT: Sending grouped_complete with ${units.length} units:`, {
+                                    splitParcels: splitParcelIds.length,
+                                    remainingParcels: remainingParcelIds.length,
+                                    splitDate: splitDateStr,
+                                    remainingDate: remainingDateStr
+                                });
+
+                                const reply = `Begrepen! Ik heb de registratie gesplitst:\n• ${splitLabel}: datum ${splitDateDisplay}\n• ${remainingLabel}: datum ${remainingDateDisplay}\n\nJe ziet nu twee registratiekaarten met verschillende datums.`;
+
+                                // Send ONE grouped_complete message with both units
+                                // isSplit flag tells frontend to MERGE instead of REPLACE
+                                send({
+                                    type: 'grouped_complete',
+                                    group: combinedGroup,
+                                    reply: reply,
+                                    parcels: allParcels.map(p => ({ id: p.id, name: p.name, area: p.area })),
+                                    isSplit: true,
+                                    splitParcelIds: splitParcelIds // Tell frontend which parcels were split off
+                                });
+
+                                return;
+                            }
                         }
 
                         const mergedOutput = mergeDrafts(correctedOutput, previousDraft || null);

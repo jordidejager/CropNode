@@ -24,6 +24,7 @@ import { z } from 'zod';
  */
 export const IntentType = z.enum([
   'REGISTER_SPRAY',
+  'LOG_HOURS',
   'QUERY_PRODUCT',
   'QUERY_HISTORY',
   'QUERY_REGULATION',
@@ -73,6 +74,18 @@ export const INTENT_SIGNALS: Record<IntentType, string[]> = {
     // [NIEUW] Variatie-patronen wijzen op registratie, niet query
     'maar ook', 'behalve', 'halve dosering'
   ],
+  LOG_HOURS: [
+    // Uren/tijd indicatoren
+    'uur', 'uren', 'u gewerkt', 'uur gewerkt', 'hele dag', 'halve dag',
+    // Activiteiten
+    'gesnoeid', 'snoeien', 'gedund', 'dunnen', 'geplukt', 'plukken',
+    'gemaaid', 'maaien', 'gesorteerd', 'sorteren', 'onderhoud',
+    'boomverzorging', 'gewerkt op', 'gewerkt aan',
+    // Team indicatoren
+    'met z\'n', 'samen met', 'man', 'personen', 'persoon', 'mensen',
+    // Timer commands (not NL parsing, but for completeness)
+    'start timer', 'stop timer'
+  ],
   QUERY_PRODUCT: [
     'welke middelen', 'wat kan ik', 'wat mag ik', 'alternatieven',
     'waarmee', 'welk middel', 'tegen'
@@ -99,9 +112,58 @@ export const INTENT_SIGNALS: Record<IntentType, string[]> = {
   ],
   MODIFY_DRAFT: [
     'niet', 'toch niet', 'behalve', 'zonder', 'ook', 'en ook',
-    'voeg toe', 'verwijder', 'wijzig', 'pas aan'
+    'voeg toe', 'verwijder', 'wijzig', 'pas aan',
+    // Date-split patterns (when hasDraft is true, these indicate modifications)
+    'trouwens', 'de rest', 'eigenlijk', 'andere', 'overige'
   ],
 };
+
+/**
+ * Detect date-split patterns like:
+ * - "Plantsoen trouwens gisteren gespoten, de rest vandaag"
+ * - "X gisteren, Y vandaag"
+ * - "de rest eigenlijk vorige week"
+ * - "Stadhoek heb ik gisteren gespoten" (implicit split - Bug 1 fix)
+ *
+ * These patterns indicate the user wants to split the draft into multiple
+ * registration groups with different dates.
+ */
+export function isDateSplitPattern(input: string): boolean {
+  const dateSplitPatterns = [
+    // "X trouwens gisteren/vandaag/vorige week"
+    /\btrouwens\s+(gisteren|vandaag|vorige\s+week|maandag|dinsdag|woensdag|donderdag|vrijdag)/i,
+    // "de rest vandaag/gisteren"
+    /\bde\s+rest\s+(vandaag|gisteren|vorige\s+week|gewoon\s+vandaag)/i,
+    // "X gisteren, Y vandaag" or "X gisteren en Y vandaag"
+    /\b(gisteren|vandaag|vorige\s+week).{0,30}\b(gisteren|vandaag|vorige\s+week|de\s+rest)/i,
+    // "eigenlijk gisteren gespoten"
+    /\beigenlijk\s+(gisteren|vandaag|vorige\s+week)/i,
+    // "de overige vandaag" or "andere percelen gisteren"
+    /\b(overige|andere)\s+(percelen\s+)?(gisteren|vandaag|vorige\s+week)/i,
+
+    // === Bug 1 Fix: Implicit date-split patterns ===
+    // "X heb ik gisteren gespoten" - implies X is different from the rest
+    /\b\w+\s+heb\s+ik\s+(gisteren|vandaag|vorige\s+week)\s+(gespoten|gedaan|behandeld)/i,
+    // "X was gisteren" or "X is gisteren gespoten"
+    /\b\w+\s+(was|is|heb)\s+(gisteren|vandaag|vorige\s+week)/i,
+    // "X gisteren gespoten" (without "heb ik") - direct statement
+    /^\w+\s+(gisteren|vandaag|vorige\s+week)\s+(gespoten|gedaan|behandeld)/i,
+    // "gisteren de X gespoten" or "gisteren X gedaan"
+    /\b(gisteren|vandaag|vorige\s+week)\s+(de\s+)?\w+\s+(gespoten|gedaan|behandeld)/i,
+    // "X deed ik gisteren" or "X gespoten gisteren"
+    /\b\w+\s+(deed\s+ik|gespoten)\s+(gisteren|vandaag|vorige\s+week)/i,
+    // "alleen X gisteren" or "wel X gisteren"
+    /\b(alleen|wel)\s+\w+\s+(gisteren|vandaag|vorige\s+week)/i,
+    // "alleen X was gisteren" - with "was" between name and date
+    /\b(alleen|wel)\s+\w+\s+was\s+(gisteren|vandaag|vorige\s+week)/i,
+    // "oh ja X was gisteren" - with "oh ja" prefix
+    /\boh\s+ja\s+\w+\s+(was|heb\s+ik)?\s*(gisteren|vandaag|vorige\s+week)/i,
+    // "ja X was gisteren" - with "ja" prefix
+    /^ja\s+\w+\s+(was|heb\s+ik)?\s*(gisteren|vandaag|vorige\s+week)/i,
+  ];
+
+  return dateSplitPatterns.some(pattern => pattern.test(input));
+}
 
 /**
  * Pre-filter functie die op basis van signaalwoorden een waarschijnlijk intent detecteert.
@@ -127,6 +189,12 @@ export function preClassifyIntent(
 
   // Check voor MODIFY_DRAFT als er een draft is
   if (hasDraft) {
+    // Special case: Date-split patterns like "X gisteren, Y vandaag" or "X trouwens gisteren"
+    // These indicate modifying dates of specific parcels within the draft
+    if (isDateSplitPattern(normalizedInput)) {
+      return { intent: 'MODIFY_DRAFT', confidence: 0.9 };
+    }
+
     const modifySignals = INTENT_SIGNALS.MODIFY_DRAFT;
     for (const signal of modifySignals) {
       if (normalizedInput.includes(signal)) {

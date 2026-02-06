@@ -158,6 +158,43 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'spuitzwavel': 'Kumulus WG',
     'solubor': 'Solubor DF',
     'borium': 'Solubor DF',
+
+    // ============================================
+    // Common Typos / Fuzzy Matching
+    // ============================================
+    // Surround typos
+    'surond': 'SURROUND® WP CROP PROTECTANT',
+    'suround': 'SURROUND® WP CROP PROTECTANT',
+    'surrond': 'SURROUND® WP CROP PROTECTANT',
+    'surrround': 'SURROUND® WP CROP PROTECTANT',
+    'surrund': 'SURROUND® WP CROP PROTECTANT',
+    // Merpan typos
+    'merspan': 'Merpan Spuitkorrel',
+    'merpaan': 'Merpan Spuitkorrel',
+    'merapn': 'Merpan Spuitkorrel',
+    'mrpan': 'Merpan Spuitkorrel',
+    // Captan typos
+    'kaptan': 'Merpan Spuitkorrel',
+    'capton': 'Merpan Spuitkorrel',
+    'captna': 'Merpan Spuitkorrel',
+    // Delan typos
+    'delaan': 'Delan DF',
+    'delen': 'Delan DF',
+    'dlean': 'Delan DF',
+    // Scala typos
+    'skala': 'Scala',
+    'scalla': 'Scala',
+    // Bellis typos
+    'belis': 'Bellis',
+    'belliss': 'Bellis',
+    // Calypso typos
+    'kalypso': 'Calypso',
+    'calyps': 'Calypso',
+    // Other common typos
+    'movneto': 'Movento 150 OD',
+    'pirimoor': 'Pirimor',
+    'karaet': 'Karate Zeon',
+    'regallus': 'Regalis Plus',
 };
 
 // ============================================

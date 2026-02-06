@@ -780,9 +780,10 @@ export async function confirmAllUnits(
         };
     }
 
-    // Confirm each unit
+    // Confirm each unit (use unit-specific date if available for date-split scenarios)
     for (const unit of pendingUnits) {
-        const result = await confirmSingleUnit(unit, group.date, group.rawInput);
+        const unitDate = unit.date || group.date;
+        const result = await confirmSingleUnit(unit, unitDate, group.rawInput);
         results.push({
             unitId: unit.id,
             success: result.success,

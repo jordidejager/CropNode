@@ -24,8 +24,11 @@ type ActiveParcel = SprayableParcel;
  * Patronen voor het detecteren van groepsaanduidingen
  */
 const GROUP_PATTERNS = {
-    // "alle X" patronen
+    // "alle X" patronen voor gewassen
     allCrops: /alle?\s+(appels?|peren?|kersen?|pruimen?|aardbeien?|frambozen?|druiven?|aardappels?|uien?|tomaten?|paprika'?s?)/i,
+
+    // "alle X" patronen voor rassen (bijv. "alle conference", "alle elstar")
+    allVarieties: /alle?\s+(elstars?|jonagolds?|braeburns?|goldens?|conferences?|doyennes?|boskoops?|lucas|beurr[ée]\s*alexandre\s*lucas)/i,
 
     // "de X" patronen (voor rassen)
     theVariety: /de\s+(elstars?|jonagolds?|braeburns?|goldens?|conferences?|doyennes?|boskoop)/i,
@@ -82,9 +85,12 @@ const VARIETY_MAPPINGS: Record<string, string[]> = {
     'goldens': ['golden', 'golden delicious'],
     'conference': ['conference'],
     'conferences': ['conference'],
-    'doyenne': ['doyenne', 'doyenné'],
-    'doyennes': ['doyenne', 'doyenné'],
+    'doyenne': ['doyenne', 'doyenné', 'doyenne du comice'],
+    'doyennes': ['doyenne', 'doyenné', 'doyenne du comice'],
     'boskoop': ['boskoop', 'goudreinette'],
+    'boskoops': ['boskoop', 'goudreinette'],
+    'lucas': ['lucas', 'beurré alexandre lucas', 'beurre alexandre lucas'],
+    'beurré alexandre lucas': ['lucas', 'beurré alexandre lucas', 'beurre alexandre lucas'],
 };
 
 // ============================================
@@ -180,6 +186,17 @@ export function detectParcelGroups(userInput: string): {
     const cropMatch = normalizedInput.match(GROUP_PATTERNS.allCrops);
     if (cropMatch) {
         return { hasGroupKeyword: true, groupType: 'crop', groupValue: cropMatch[1].toLowerCase() };
+    }
+
+    // Check "alle [ras]" (e.g., "alle conference", "alle elstar")
+    const allVarietyMatch = normalizedInput.match(GROUP_PATTERNS.allVarieties);
+    if (allVarietyMatch) {
+        // Normalize variety name (handle "lucas" -> "beurré alexandre lucas")
+        let varietyValue = allVarietyMatch[1].toLowerCase();
+        if (varietyValue === 'lucas' || varietyValue.includes('beurr')) {
+            varietyValue = 'beurré alexandre lucas';
+        }
+        return { hasGroupKeyword: true, groupType: 'variety', groupValue: varietyValue };
     }
 
     // Check "de [ras]"

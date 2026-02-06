@@ -9,6 +9,8 @@
  * - "Maak het 1.5 kg" → update dosering
  */
 
+import { isDateSplitPattern } from '@/ai/schemas/intents';
+
 // ============================================
 // Types
 // ============================================
@@ -23,6 +25,7 @@ export type CorrectionType =
     | 'add_back_plots'        // "voeg weer toe", "nee voeg die toe" (3.1.3)
     | 'update_dosage'         // "maak het 1.5 kg", "nee, 2 liter"
     | 'update_date'           // "niet vandaag, gisteren"
+    | 'replace_product'       // "niet surround maar captan", "nee het was captan"
     | 'cancel_all'            // "stop", "annuleer", "begin opnieuw"
     | 'confirm'               // "ja", "klopt", "bevestig"
     | 'undo'                  // "ongedaan maken", "undo", "herstel" (3.1.2)
@@ -34,6 +37,7 @@ export interface CorrectionResult {
     target?: string;     // Specifiek item dat verwijderd/gewijzigd moet worden
     targets?: string[];  // Meerdere items (bijv. "Busje en Jachthoek niet")
     newValue?: any;      // Nieuwe waarde bij update
+    oldProduct?: string; // Voor replace_product: het te vervangen product
     explanation?: string; // Voor debugging
 }
 
@@ -99,6 +103,28 @@ const UPDATE_PATTERNS = [
 
 // Pattern to extract product name before "moet" (e.g., "Surround moet 3 kg zijn" -> "Surround")
 const PRODUCT_UPDATE_PATTERN = /(\w+)\s*moet\s*(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)/i;
+
+// Product replacement patterns - for switching one product with another
+// e.g., "niet surround maar captan", "nee het was captan niet surround"
+const PRODUCT_REPLACE_PATTERNS = [
+    // "niet X maar Y", "geen X maar Y"
+    /(?:niet|geen)\s+(\w+)\s+maar\s+(\w+)/i,
+    // "nee het was Y niet X", "nee het was Y"
+    /nee\s+(?:het\s+)?was\s+(\w+)(?:\s+niet\s+(\w+))?/i,
+    // "fout, moet X zijn", "verkeerd, X"
+    /(?:fout|verkeerd)[,\s]+(?:moet\s+)?(\w+)(?:\s+zijn)?/i,
+    // "ik bedoelde X", "sorry, X bedoel ik"
+    /(?:ik\s+)?bedoel(?:de)?\s+(\w+)/i,
+    // "sorry, X"
+    /sorry[,\s]+(\w+)/i,
+];
+
+// Common product names for matching
+const KNOWN_PRODUCTS = [
+    'captan', 'merpan', 'surround', 'delan', 'scala', 'topsin', 'chorus',
+    'bellis', 'frupica', 'teldor', 'switch', 'luna', 'geoxe', 'fontelis',
+    'flint', 'folicur', 'score', 'syllit', 'thiram', 'malvin', 'dithane',
+];
 
 // Bevestiging patronen
 const CONFIRM_PATTERNS = [
@@ -177,6 +203,18 @@ export function detectCorrection(
 ): CorrectionResult {
     const normalizedInput = input.toLowerCase().trim();
 
+    // Bug 2 Fix: Skip correction detection for date-split patterns
+    // These should be handled by the intent router, not the correction service
+    // Patterns like "Stadhoek heb ik gisteren gespoten" look like removal/modification
+    // but are actually date-split requests
+    if (draft && isDateSplitPattern(normalizedInput)) {
+        return {
+            type: 'none',
+            confidence: 0,
+            explanation: 'Date-split patroon gedetecteerd - geen correctie'
+        };
+    }
+
     // 1. Check voor bevestiging (hoogste prioriteit bij slot filling)
     if (CONFIRM_PATTERNS.some(p => p.test(normalizedInput))) {
         return {
@@ -202,6 +240,46 @@ export function detectCorrection(
             confidence: 0.9,
             explanation: 'Undo/herstel patroon gedetecteerd'
         };
+    }
+
+    // 2.55. Check voor product replacement (e.g., "niet surround maar captan")
+    // This must come BEFORE other negation checks to catch replacement patterns
+    for (const pattern of PRODUCT_REPLACE_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            // Extract product names from the match
+            let newProduct: string | null = null;
+            let oldProduct: string | null = null;
+
+            if (pattern.source.includes('maar')) {
+                // "niet X maar Y" pattern - X is old, Y is new
+                oldProduct = match[1]?.toLowerCase();
+                newProduct = match[2]?.toLowerCase();
+            } else if (pattern.source.includes('was')) {
+                // "nee het was Y niet X" pattern - Y is new, X is old (optional)
+                newProduct = match[1]?.toLowerCase();
+                oldProduct = match[2]?.toLowerCase();
+            } else {
+                // Other patterns - just the new product
+                newProduct = match[1]?.toLowerCase();
+            }
+
+            // Validate that the new product is a known product
+            if (newProduct && KNOWN_PRODUCTS.includes(newProduct)) {
+                // If we have a draft and oldProduct is not specified, use draft's product
+                if (!oldProduct && draft?.products?.length) {
+                    oldProduct = draft.products[0].product.toLowerCase();
+                }
+
+                return {
+                    type: 'replace_product',
+                    confidence: 0.85,
+                    target: newProduct,
+                    oldProduct: oldProduct,
+                    explanation: `Product vervanging: ${oldProduct || 'huidig product'} → ${newProduct}`
+                };
+            }
+        }
     }
 
     // 2.6. Check voor "voeg toe" / "zet terug" (3.1.3) - BEFORE remove checks!
@@ -620,6 +698,35 @@ export function applyCorrection(
             }
             break;
 
+        case 'replace_product':
+            // Replace one product with another
+            if (correction.target && newDraft.products.length > 0) {
+                const newProductName = correction.target;
+                const oldProductName = correction.oldProduct;
+
+                // Find the product to replace (by oldProduct name or first product)
+                let productIndex = 0;
+                if (oldProductName) {
+                    const idx = newDraft.products.findIndex(p =>
+                        p.product.toLowerCase().includes(oldProductName)
+                    );
+                    if (idx >= 0) productIndex = idx;
+                }
+
+                // Keep the dosage and unit from the old product
+                const oldDosage = newDraft.products[productIndex].dosage;
+                const oldUnit = newDraft.products[productIndex].unit;
+
+                // Replace with the new product name (capitalize first letter)
+                const capitalizedName = newProductName.charAt(0).toUpperCase() + newProductName.slice(1);
+                newDraft.products[productIndex] = {
+                    product: capitalizedName,
+                    dosage: oldDosage,
+                    unit: oldUnit
+                };
+            }
+            break;
+
         case 'cancel_all':
             newDraft.plots = [];
             newDraft.products = [];
@@ -681,6 +788,11 @@ export function getCorrectionMessage(
                 return `Oké, de dosering is aangepast naar ${correction.newValue.amount} ${correction.newValue.unit}.`;
             }
             return 'Oké, de dosering is aangepast.';
+
+        case 'replace_product':
+            const newProductName = correction.target || 'nieuw product';
+            const oldProductName = correction.oldProduct || 'oud product';
+            return `Oké, ik heb ${oldProductName} vervangen door ${newProductName}.`;
 
         case 'cancel_all':
             return 'Oké, de registratie is geannuleerd. Je kunt opnieuw beginnen.';

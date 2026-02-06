@@ -373,20 +373,41 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
     console.log(`[getSprayableParcels] FALLBACK: Found ${subData.length} sub_parcels directly`);
 
     // Map sub_parcels to SprayableParcel format (without parent parcel info)
+    // Name format matches the view: "SubParcelName (Variety)" or "Crop Variety - id"
     return subData.map(sp => ({
       id: sp.id,
-      name: sp.name || `${sp.crop || 'Perceel'} ${sp.variety || ''}`.trim(),
+      name: generateSubParcelName(sp),
       area: sp.area,
       crop: sp.crop || 'Onbekend',
       variety: sp.variety,
       parcelId: sp.parcel_id || sp.id,
-      parcelName: sp.name || 'Onbekend',
+      parcelName: sp.name || sp.crop || 'Onbekend',
       location: null,
       geometry: null,
       source: null,
       rvoId: null,
     }));
   });
+}
+
+/**
+ * Generate a readable name for a sub_parcel (used in fallback when view is empty)
+ * Matches the format of the v_sprayable_parcels view:
+ * - "SubParcelName (Variety)" when name is set
+ * - "Crop Variety - id" when no name
+ */
+function generateSubParcelName(sp: any): string {
+  const variety = sp.variety || sp.crop || 'Onbekend';
+
+  if (sp.name && sp.name.trim() !== '') {
+    // Has a name: "Coleswei (Beurré Alexandre Lucas)"
+    return `${sp.name} (${variety})`;
+  } else {
+    // No name: "Peer Conference - 8d123f2a"
+    const crop = sp.crop || 'Perceel';
+    const idPrefix = typeof sp.id === 'string' ? sp.id.substring(0, 8) : '';
+    return `${crop} ${sp.variety || ''} - ${idPrefix}`.trim();
+  }
 }
 
 /**
@@ -472,14 +493,15 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
 
     console.log(`[getSprayableParcelsById] FALLBACK: Found ${subData.length}/${ids.length} sub_parcels`);
 
+    // Use same name format as view
     return subData.map(sp => ({
       id: sp.id,
-      name: sp.name || `${sp.crop || 'Perceel'} ${sp.variety || ''}`.trim(),
+      name: generateSubParcelName(sp),
       area: sp.area,
       crop: sp.crop || 'Onbekend',
       variety: sp.variety,
       parcelId: sp.parcel_id || sp.id,
-      parcelName: sp.name || 'Onbekend',
+      parcelName: sp.name || sp.crop || 'Onbekend',
       location: null,
       geometry: null,
       source: null,

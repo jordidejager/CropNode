@@ -268,8 +268,14 @@ function UnitPanel({
                                 <span className="text-white font-semibold">
                                     {unit.label || `Registratie`}
                                 </span>
-                                <div className="text-white/40 text-xs mt-0.5">
-                                    {totalArea.toFixed(2)} ha • {unit.products.length} middel{unit.products.length !== 1 ? 'en' : ''}
+                                <div className="text-white/40 text-xs mt-0.5 flex items-center gap-2">
+                                    {unit.date && (
+                                        <span className="flex items-center gap-1 text-blue-400/80">
+                                            <Calendar className="h-3 w-3" />
+                                            {format(unit.date instanceof Date ? unit.date : new Date(unit.date), 'd MMM', { locale: nl })}
+                                        </span>
+                                    )}
+                                    <span>{totalArea.toFixed(2)} ha • {unit.products.length} middel{unit.products.length !== 1 ? 'en' : ''}</span>
                                 </div>
                             </div>
                         </div>
@@ -539,7 +545,9 @@ export function RegistrationGroupCard({
         return initial;
     });
 
-    const formattedDate = format(group.date, 'EEEE d MMMM', { locale: nl });
+    // Defensive Date parsing: group.date might be a string from JSON serialization
+    const groupDate = group.date instanceof Date ? group.date : new Date(group.date);
+    const formattedDate = format(groupDate, 'EEEE d MMMM', { locale: nl });
     const pendingUnits = group.units.filter(u => u.status === 'pending');
     const confirmedUnits = group.units.filter(u => u.status === 'confirmed');
     const canConfirmAll = pendingUnits.every(unit => {

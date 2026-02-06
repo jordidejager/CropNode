@@ -27,7 +27,12 @@ import {
     LogOut,
     Menu,
     X,
-    User
+    User,
+    Apple,
+    Thermometer,
+    BarChart3,
+    SlidersHorizontal,
+    Truck
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -127,6 +132,17 @@ const menuStructure: NavItem[] = [
             { label: 'Voorraad', href: '/crop-care/inventory', icon: Package },
             { label: 'Database Gewasbescherming', href: '/crop-care/db-protection', icon: Database },
             { label: 'Database Meststoffen', href: '/crop-care/db-fertilizer', icon: Sprout },
+        ]
+    },
+    {
+        label: 'Harvest Hub',
+        icon: Apple,
+        items: [
+            { label: 'Oogstregistratie', href: '/harvest-hub/registration', icon: ClipboardList },
+            { label: 'Koelcelbeheer', href: '/harvest-hub/cold-storage', icon: Thermometer },
+            { label: 'Perceelanalyse', href: '/harvest-hub/field-analysis', icon: BarChart3 },
+            { label: 'Sortering & Kwaliteit', href: '/harvest-hub/quality', icon: SlidersHorizontal },
+            { label: 'Afleveroverzicht', href: '/harvest-hub/deliveries', icon: Truck },
         ]
     },
     {
