@@ -1,6 +1,6 @@
 # Slimme Invoer - Technische Documentatie
 
-> Laatste update: 3 februari 2026 (v2.0 - inclusief 7-punts optimalisatie)
+> Laatste update: 6 februari 2026 (v2.1 - RLS fix, datum-split variaties)
 
 Dit document beschrijft de volledige werking van de "Slimme Invoer" functionaliteit in het AgriBot Command Center. Het systeem verwerkt natuurlijke taal invoer van gebruikers en zet deze om naar gestructureerde registraties, queries en acties.
 
@@ -21,7 +21,9 @@ Dit document beschrijft de volledige werking van de "Slimme Invoer" functionalit
 11. [Frontend Componenten](#11-frontend-componenten)
 12. [Praktijkvoorbeeld: Complete Flow](#12-praktijkvoorbeeld-complete-flow)
 13. [Optimalisaties (7-Punts Upgrade)](#13-optimalisaties-7-punts-upgrade)
-14. [Bestandsoverzicht](#14-bestandsoverzicht)
+14. [Server-Side Auth & RLS](#14-server-side-auth--rls)
+15. [Anti-Hallucinatie Maatregelen](#15-anti-hallucinatie-maatregelen-v21)
+16. [Bestandsoverzicht](#16-bestandsoverzicht)
 
 ---
 
@@ -195,6 +197,39 @@ Ondersteunde datum-formaten:
 | "3 dagen geleden" | Datum - 3 dagen |
 | "15 januari" | 15-01-{huidig jaar} |
 | "15-01-2026" | Exacte datum |
+
+### 3.4 Datum-Split Variaties (v2.1)
+
+Het systeem ondersteunt **datum-gebaseerde splitsing** van registraties waar verschillende percelen op verschillende dagen zijn bespoten:
+
+**Ondersteunde patronen:**
+
+| Patroon | Voorbeeld | Resultaat |
+|---------|-----------|-----------|
+| Perceel + "was gisteren" | "Oh ja stadhoek was gisteren" | Split: stadhoek → gisteren, rest → vandaag |
+| "Alleen" + perceel + datum | "Alleen stadhoek was gisteren" | Split: stadhoek → gisteren, rest → vandaag |
+| "Behalve" + perceel + datum | "Behalve thuis, dat was eergisteren" | Split: thuis → eergisteren, rest → vandaag |
+| Meerdere datum-splits | "Stadhoek gisteren, thuis eergisteren" | 2+ aparte units met eigen datum |
+
+**Flow:**
+```
+Input: "Alle appels met Captan. Oh ja stadhoek was gisteren"
+
+Resultaat:
+├── Unit 1: Stadhoek
+│   ├── Datum: gisteren (2026-02-05)
+│   └── Products: [Captan]
+│
+└── Unit 2: Overige appels
+    ├── Datum: vandaag (2026-02-06)
+    └── Products: [Captan]
+```
+
+**Implementatie:**
+- Detectie via regex: `/(?:oh\s*ja\s*)?(\w+)\s+was\s+(gisteren|eergisteren|vandaag)/i`
+- "Alleen" prefix: `/alleen\s+(\w+)\s+was\s+(gisteren|eergisteren)/i`
+- AI parser maakt aparte `SprayRegistrationUnit` per unieke datum
+- Elke unit krijgt `unit.date` property voor unit-specifieke datum
 
 ---
 
@@ -964,7 +999,180 @@ if (likelySpray && !hasDraft) {
 
 ---
 
-## 14. Bestandsoverzicht
+## 14. Server-Side Auth & RLS
+
+### 14.1 Probleem: RLS Policy Violation
+
+Bij het bevestigen van registraties naar de `spuitschrift` tabel trad een Row-Level Security (RLS) fout op:
+
+```
+new row violates row-level security policy for table "spuitschrift"
+```
+
+**Oorzaak:**
+- Server Actions in Next.js draaien server-side zonder toegang tot browser cookies
+- De browser-based Supabase client (`supabase.auth.getUser()`) kon geen user sessie vinden
+- `userId` was `null`, waardoor RLS de insert blokkeerde
+
+### 14.2 Oplossing: Server-Side Auth + Admin Client
+
+**1. Server-side userId ophalen (`/src/app/actions.ts`):**
+
+```typescript
+import { createClient as createServerClient } from '@/lib/supabase/server';
+
+async function getServerUserId(): Promise<string | null> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        return user?.id || null;
+    } catch {
+        return null;
+    }
+}
+```
+
+De `createServerClient` functie uit `/src/lib/supabase/server.ts` heeft wél toegang tot cookies omdat deze specifiek is ontworpen voor server-side gebruik.
+
+**2. Admin client voor database inserts (`/src/lib/supabase-store.ts`):**
+
+```typescript
+export async function addSpuitschriftEntry(
+  entry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'>,
+  providedUserId?: string | null  // ← Nieuw: userId van server action
+): Promise<SpuitschriftEntry> {
+  // Gebruik provided userId (van server action) of fallback
+  const userId = providedUserId ?? await getCurrentUserId();
+
+  if (!userId) {
+    throw new Error('Geen gebruiker ingelogd.');
+  }
+
+  // Gebruik supabaseAdmin (service role) om RLS te bypassen
+  // De userId is hierboven gevalideerd, dus dit is veilig
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    throw new Error('Database configuratie fout: SUPABASE_SERVICE_ROLE_KEY ontbreekt.');
+  }
+
+  const { data, error } = await adminClient
+    .from('spuitschrift')
+    .insert({ ...snakeCaseEntry, user_id: userId })
+    .select()
+    .single();
+
+  // ...
+}
+```
+
+**3. Confirmation functions gebruiken nu `getServerUserId()`:**
+
+```typescript
+export async function confirmDraftDirectToSpuitschrift(draftData: {...}) {
+    // Get current user ID from server-side auth (belangrijk voor RLS)
+    const userId = await getServerUserId();
+    if (!userId) {
+        return { success: false, message: 'Niet ingelogd.' };
+    }
+
+    // ... validatie ...
+
+    const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
+    // ...
+}
+```
+
+### 14.3 Architectuur Samenvatting
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Frontend (Browser)                          │
+│                                                                  │
+│  CommandBar → confirmAllUnits() → Server Action                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Server Action (Node.js)                     │
+│                                                                  │
+│  confirmDraftDirectToSpuitschrift()                              │
+│       │                                                          │
+│       ├── getServerUserId()                                      │
+│       │      └── createServerClient() (met cookie access)        │
+│       │             └── supabase.auth.getUser() → userId         │
+│       │                                                          │
+│       └── addSpuitschriftEntry(entry, userId)                    │
+│              └── getSupabaseAdmin() (service role key)           │
+│                     └── INSERT met user_id = userId              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Supabase (Database)                         │
+│                                                                  │
+│  RLS Policy: user_id = auth.uid() OR service_role                │
+│       └── ✓ Insert toegestaan (valid user_id + service role)     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 14.4 Belangrijke Bestanden
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `/src/app/actions.ts` | `getServerUserId()` functie toegevoegd |
+| `/src/lib/supabase-store.ts` | `addSpuitschriftEntry` accepteert `providedUserId` parameter |
+| `/src/lib/supabase/server.ts` | Server-side Supabase client met cookie access (bestaand) |
+| `/src/lib/supabase-client.ts` | `getSupabaseAdmin()` functie voor service role client (bestaand) |
+
+---
+
+## 15. Anti-Hallucinatie Maatregelen (v2.1)
+
+### 15.1 Probleem: AI voegt niet-genoemde producten toe
+
+Bij input zoals "Vandaag gespoten alle conference met surround" voegde de AI soms producten toe die niet in de input stonden (bijv. "Merpan Spuitkorrel").
+
+**Oorzaak:**
+- Alle voorbeelden in de AI prompts gebruikten "Merpan" als voorbeeld product
+- De AI werd hierdoor "geprimed" en zag Merpan als een soort default
+- Bij onzekerheid kopieerde de AI productnamen uit de voorbeelden
+
+### 15.2 Oplossing: Prompt Engineering
+
+**1. Sterkere anti-hallucinatie instructies:**
+
+```
+⚠️ **ALLERBELANGRIJKST - GEEN HALLUCINATIES:**
+- Parse UITSLUITEND producten die de gebruiker LETTERLIJK in de tekst noemt
+- NOOIT producten verzinnen, toevoegen, of uit voorbeelden kopiëren
+- Als gebruiker "surround" zegt, output ALLEEN "surround" - NIET ook "Merpan"
+- De voorbeelden hieronder zijn ter illustratie van het FORMAT, NIET de productnamen!
+```
+
+**2. Gediversifieerde voorbeelden:**
+
+In plaats van alle voorbeelden met Merpan, nu gevarieerd:
+- Delan, Captan, Score, Bellis, Surround
+
+**3. Expliciet negatief voorbeeld:**
+
+```
+**⚠️ FOUT VOORBEELD - DOE DIT NOOIT:**
+Input: "Alle conference met Surround"
+FOUT: products: "Merpan:0:L,Surround:0:L" ← NOOIT producten toevoegen die NIET in de input staan!
+GOED: products: "Surround:0:L" ← ALLEEN het genoemde product
+```
+
+### 15.3 Aangepaste Bestanden
+
+| Bestand | Wijziging |
+|---------|-----------|
+| `/src/ai/flows/classify-and-parse-spray.ts` | Anti-hallucinatie instructies + gediversifieerde voorbeelden |
+| `/src/ai/flows/parse-spray-application.ts` | Zelfde wijzigingen voor V1 en V2 prompts |
+
+---
+
+## 16. Bestandsoverzicht
 
 ### Core AI/Processing
 
@@ -1029,9 +1237,26 @@ De Slimme Invoer functionaliteit is een **geavanceerd NLP-systeem** dat:
 1. **Natuurlijke taal** omzet naar gestructureerde data
 2. **Multi-turn conversaties** ondersteunt met correctie-detectie
 3. **Complexe variaties** herkent ("alle X behalve Y")
-4. **Real-time feedback** geeft via streaming
-5. **CTGB-wetgeving** valideert
-6. **Semantisch zoekt** in product databases
-7. **Tool-calling** gebruikt voor complexe queries
+4. **Datum-splits** verwerkt ("stadhoek was gisteren") *(v2.1)*
+5. **Real-time feedback** geeft via streaming
+6. **CTGB-wetgeving** valideert
+7. **Semantisch zoekt** in product databases
+8. **Tool-calling** gebruikt voor complexe queries
+9. **Server-side auth** correct afhandelt voor RLS *(v2.1)*
 
 Het systeem is ontworpen voor **snelheid** (pre-classificatie zonder AI calls), **nauwkeurigheid** (5-niveau product resolutie), en **gebruiksgemak** (natuurlijke taal invoer met directe visuele feedback).
+
+---
+
+## Changelog
+
+### v2.1 (6 februari 2026)
+- **Datum-split variaties**: Ondersteuning voor "Oh ja stadhoek was gisteren" en "Alleen stadhoek was gisteren" patronen
+- **RLS fix**: Server-side authenticatie voor bevestigingsflow met `getServerUserId()` en admin client
+- **Bugfix**: Bevestigen van registraties naar spuitschrift werkt nu correct
+- **Anti-hallucinatie fix**: AI prompts versterkt om product hallucinaties te voorkomen (bijv. Merpan toevoegen terwijl alleen Surround genoemd werd)
+
+### v2.0 (3 februari 2026)
+- **7-punts optimalisatie**: Parallelle resolutie, sessie-caching, AI fallback logging, etc.
+- **Gecombineerde intent + parsing**: 50% minder AI calls voor spray registraties
+- **Feedback loop**: Systeem leert van gebruikerscorrecties

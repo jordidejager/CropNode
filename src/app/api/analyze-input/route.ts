@@ -2918,7 +2918,7 @@ ${hasDraft ? `
 
 4. Een DATUM-SPLIT maakt (action: "split") ⭐ NIEUW
    Triggers (expliciet): "X trouwens gisteren", "de rest vandaag", "X gisteren, Y vandaag", "eigenlijk gisteren"
-   Triggers (impliciet): "X heb ik gisteren gespoten", "X was gisteren", "X gisteren gedaan", "alleen X gisteren"
+   Triggers (impliciet): "X heb ik gisteren gespoten", "X was gisteren", "X gisteren gedaan", "alleen X gisteren", "oh ja X was gisteren", "X gisteren, de rest vandaag"
 
    BELANGRIJK: Als de gebruiker zegt dat EEN SPECIFIEK perceel (uit de draft) op een ANDERE datum is gespoten,
    is dit ALTIJD een split actie! De rest van de draft blijft op de oorspronkelijke datum.
@@ -2942,6 +2942,18 @@ ${hasDraft ? `
    Voorbeeld 3: "Plantsoen heb ik gisteren gespoten de rest vandaag"
    → action: "split"
    → splitParcels: [IDs van Plantsoen-percelen]
+   → splitDate: "gisteren"
+   → remainingDate: "vandaag"
+
+   Voorbeeld 4: "Oh ja Stadhoek was gisteren" of "Alleen Stadhoek was gisteren"
+   → action: "split"
+   → splitParcels: [IDs van Stadhoek-percelen]
+   → splitDate: "gisteren"
+   → remainingDate: "vandaag"
+
+   Voorbeeld 5: "Stadhoek gisteren, de rest vandaag"
+   → action: "split"
+   → splitParcels: [IDs van Stadhoek-percelen]
    → splitDate: "gisteren"
    → remainingDate: "vandaag"
 
@@ -3137,6 +3149,82 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                             }
                         }
 
+                        // === PHASE 6.7: Force SPLIT action when date-split pattern detected ===
+                        // If the AI didn't detect split but we have a clear pattern, force it
+                        const patternDetected = isDateSplitPattern(rawInput);
+                        console.log(`[${context}] Force-split check: previousDraft=${!!previousDraft}, action=${correctedOutput.action}, patternDetected=${patternDetected}`);
+                        if (previousDraft && correctedOutput.action !== 'split' && patternDetected) {
+                            console.log(`[${context}] Force-split: Pattern detected but AI returned action="${correctedOutput.action}"`);
+
+                            // Extract parcel name from input using various patterns
+                            const forceSplitPatterns = [
+                                // "Oh ja X was gisteren"
+                                /oh\s+ja\s+(\w+)\s+(?:was|heb)/i,
+                                // "Alleen X was gisteren"
+                                /alleen\s+(\w+)\s+(?:was|heb|gisteren)/i,
+                                // "X gisteren, de rest vandaag"
+                                /^(\w+)\s+gisteren/i,
+                                // "X was gisteren"
+                                /^(\w+)\s+was\s+gisteren/i,
+                                // "X trouwens gisteren"
+                                /^(\w+)\s+trouwens\s+gisteren/i,
+                                // "X heb ik gisteren"
+                                /^(\w+)\s+heb\s+ik\s+gisteren/i,
+                            ];
+
+                            let extractedParcelName: string | null = null;
+                            for (const pattern of forceSplitPatterns) {
+                                const match = rawInput.match(pattern);
+                                if (match && match[1]) {
+                                    extractedParcelName = match[1].toLowerCase();
+                                    console.log(`[${context}] Force-split: Extracted parcel name "${extractedParcelName}" using pattern ${pattern}`);
+                                    break;
+                                }
+                            }
+
+                            console.log(`[${context}] Force-split: extractedParcelName=${extractedParcelName}, draftPlots=${previousDraft.plots.length}, allParcels=${allParcels.length}, parcelInfo=${parcelInfo?.length || 0}`);
+                            if (extractedParcelName) {
+                                // Find matching parcel IDs from the draft
+                                // Check both allParcels (from DB) and parcelInfo (from request) for name matching
+                                const matchingParcelIds = previousDraft.plots.filter(plotId => {
+                                    // Try allParcels first
+                                    const parcel = allParcels.find(p => p.id === plotId);
+                                    if (parcel?.name?.toLowerCase().includes(extractedParcelName!)) {
+                                        return true;
+                                    }
+                                    // Fall back to parcelInfo from request
+                                    const parcelFromRequest = parcelInfo?.find(p => p.id === plotId);
+                                    if (parcelFromRequest?.name?.toLowerCase().includes(extractedParcelName!)) {
+                                        return true;
+                                    }
+                                    return false;
+                                });
+
+                                if (matchingParcelIds.length > 0) {
+                                    console.log(`[${context}] Force-split: Found ${matchingParcelIds.length} parcels matching "${extractedParcelName}": ${matchingParcelIds.join(', ')}`);
+                                    correctedOutput.action = 'split';
+                                    correctedOutput.splitParcels = matchingParcelIds;
+                                    correctedOutput.splitDate = 'gisteren';
+                                    correctedOutput.remainingDate = 'vandaag';
+
+                                    // Inherit products from draft if not present
+                                    if (correctedOutput.products.length === 0 && previousDraft.products.length > 0) {
+                                        console.log(`[${context}] Force-split: Inheriting ${previousDraft.products.length} products from draft`);
+                                        correctedOutput.products = [...previousDraft.products];
+                                    }
+
+                                    // Set plots to draft plots for split processing
+                                    if (correctedOutput.plots.length === 0) {
+                                        correctedOutput.plots = [...previousDraft.plots];
+                                    }
+
+                                    console.log(`[${context}] Force-split COMPLETE: action=${correctedOutput.action}, splitParcels=${correctedOutput.splitParcels?.length}, plots=${correctedOutput.plots.length}, products=${correctedOutput.products.length}`);
+                                } else {
+                                    console.log(`[${context}] Force-split: No parcels found matching "${extractedParcelName}"`);
+                                }
+                            }
+                        }
+
                         // === PHASE 7: Merge with previous draft if applicable ===
                         // SPECIAL CASE: If adding new products to a SUBSET of existing plots,
                         // create a grouped registration instead of merging
@@ -3250,13 +3338,20 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
 
                             // Extract parcel name from common split patterns
                             // Patterns: "X trouwens gisteren", "X heb ik gisteren", "X gisteren gespoten"
+                            // IMPORTANT: More specific patterns should come first to avoid false matches
                             const splitNamePatterns = [
-                                // "Plantsoen trouwens gisteren" or "Plantsoen heb ik gisteren gespoten de rest vandaag"
-                                /^(\w+(?:\s+\w+)?)\s+(?:trouwens|heb\s+ik|was|is)\s+(?:gisteren|vandaag|vorige\s+week)/i,
-                                // "Plantsoen gisteren gespoten"
-                                /^(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)\s+(?:gespoten|gedaan|behandeld)/i,
+                                // "alleen Plantsoen was gisteren" - specific pattern with "was" after name
+                                /(?:alleen|wel)\s+(\w+)\s+was\s+(?:gisteren|vandaag|vorige\s+week)/i,
                                 // "alleen Plantsoen gisteren" or "wel Plantsoen gisteren"
                                 /(?:alleen|wel)\s+(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "oh ja Plantsoen was gisteren"
+                                /oh\s+ja\s+(\w+)\s+(?:was|heb\s+ik)?\s*(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Plantsoen trouwens gisteren" or "Plantsoen heb ik gisteren gespoten de rest vandaag"
+                                /^(\w+(?:\s+\w+)?)\s+(?:trouwens|heb\s+ik)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Plantsoen was gisteren" - single word at start followed by was + date
+                                /^(\w+)\s+was\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Plantsoen gisteren gespoten"
+                                /^(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)\s+(?:gespoten|gedaan|behandeld)/i,
                                 // "Stadhoek heb ik gisteren gespoten" - word at start followed by date phrase
                                 /^(\w+)\s+.*(?:gisteren|vandaag|vorige\s+week)/i,
                             ];
@@ -3322,6 +3417,16 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                             if (splitDateStr.toLowerCase() === 'vandaag') splitDateStr = today;
                             if (remainingDateStr.toLowerCase() === 'gisteren') remainingDateStr = yesterday;
                             if (remainingDateStr.toLowerCase() === 'vandaag') remainingDateStr = today;
+
+                            // Override AI dates if input clearly mentions gisteren/vandaag
+                            // This handles cases where AI returns incorrect ISO dates
+                            if (inputLower.includes('gisteren') && splitDateStr !== yesterday) {
+                                console.log(`[${context}] Overriding splitDate from "${splitDateStr}" to yesterday (input mentions gisteren)`);
+                                splitDateStr = yesterday;
+                            }
+                            if (inputLower.includes('de rest vandaag') || inputLower.includes('vandaag de rest')) {
+                                remainingDateStr = today;
+                            }
 
                             // Get parcel names for the split group
                             const splitParcelInfo = splitParcelIds.map(id => {

@@ -199,7 +199,12 @@ Bepaal de intent:
 Als de intent REGISTER_SPRAY of MODIFY_DRAFT is, parse dan ook de spray data:
 
 ### Kritieke Regels:
-- ALLEEN producten die de gebruiker EXPLICIET noemt
+⚠️ **ALLERBELANGRIJKST - GEEN HALLUCINATIES:**
+- Parse UITSLUITEND producten die de gebruiker LETTERLIJK in de tekst noemt
+- NOOIT producten verzinnen, toevoegen, of uit voorbeelden kopiëren
+- Als gebruiker "surround" zegt, output ALLEEN "surround" - NIET ook "Merpan" of andere producten
+- De voorbeelden hieronder zijn ter illustratie van het FORMAT, NIET de productnamen!
+
 - Dosering = 0 als niet gespecificeerd (systeem vult aan)
 - Unit = "L" als niet gespecificeerd
 - Datum = ${new Date().toISOString().split('T')[0]} voor "vandaag"
@@ -218,15 +223,15 @@ Bij variaties (maar, behalve, halve dosering, etc.) maak **meerdere registration
 
 **BELANGRIJK: Output altijd in PLAT formaat (comma-separated strings):**
 - plotIds: "plot1,plot2,plot3" (komma-gescheiden IDs)
-- productList: "Merpan:0:L,Score:0.5:L" (formaat: naam:dosering:unit)
+- productList: "Product:dosering:unit,Product2:dosering:unit" (formaat: naam:dosering:unit)
 - plots: "plot1,plot2" (voor simpele registraties)
-- products: "Captan:2:L" (voor simpele registraties)
+- products: "ProductNaam:2:L" (voor simpele registraties)
 
 **Voorbeeld: Extra product voor subset**
-"Alle appels met Merpan, maar Kanzi ook Score"
+"Alle appels met Delan, maar Kanzi ook Score"
 → isGrouped: true, registrations: [
-    { plotIds: "appel1,appel2,appel3", productList: "Merpan:0:L", label: "Appels (zonder Kanzi)" },
-    { plotIds: "kanzi1", productList: "Merpan:0:L,Score:0:L", label: "Kanzi" }
+    { plotIds: "appel1,appel2,appel3", productList: "Delan:0:L", label: "Appels (zonder Kanzi)" },
+    { plotIds: "kanzi1", productList: "Delan:0:L,Score:0:L", label: "Kanzi" }
   ]
 
 **Voorbeeld: Halve dosering voor subset**
@@ -237,8 +242,13 @@ Bij variaties (maar, behalve, halve dosering, etc.) maak **meerdere registration
   ]
 
 **Voorbeeld: Simpele registratie**
-"Alle appels met Merpan"
-→ isGrouped: false, plots: "appel1,appel2,appel3", products: "Merpan:0:L"
+"Alle peren met Surround"
+→ isGrouped: false, plots: "peer1,peer2", products: "Surround:0:L"
+
+**⚠️ FOUT VOORBEELD - DOE DIT NOOIT:**
+Input: "Alle conference met Surround"
+FOUT: products: "Merpan:0:L,Surround:0:L" ← NOOIT producten toevoegen die NIET in de input staan!
+GOED: products: "Surround:0:L" ← ALLEEN het genoemde product
 
 ### Perceel Matching:
 - "alle appels" → alle percelen met crop='Appel'

@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import {
     addLogbookEntry,
     updateLogbookEntry,
@@ -53,6 +54,19 @@ import { parseSoilReport } from '@/ai/flows/parse-soil-report';
 import { addSoilSample } from '@/lib/supabase-store';
 import pdf from 'pdf-parse';
 
+// ============================================
+// Auth Helper - Get current user ID from server-side auth
+// ============================================
+
+async function getServerUserId(): Promise<string | null> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        return user?.id || null;
+    } catch {
+        return null;
+    }
+}
 
 const formSchema = z.object({
     rawInput: z.string().min(10, 'Voer alsjeblieft een geldige bespuiting in.'),
@@ -534,6 +548,12 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             return { success: false, message: 'Geen data om te bevestigen.' };
         }
 
+        // Get current user ID from server-side auth (important for RLS)
+        const userId = await getServerUserId();
+        if (!userId) {
+            return { success: false, message: 'Niet ingelogd. Log opnieuw in en probeer het opnieuw.' };
+        }
+
         // Fetch both legacy parcels (for validation) and sprayable parcels (for history)
         const [allParcels, sprayableParcels] = await Promise.all([
             getParcels(),
@@ -576,7 +596,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             createdAt: entry.createdAt || new Date(),
             ...(validationMessage && { validationMessage: validationMessage }),
         };
-        const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry);
+        const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
 
         // Verwerk de voorraadmutaties - try sprayableParcels first, fallback to parcels
         await addParcelHistoryEntries({
@@ -633,6 +653,12 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
             return { success: false, message: 'Geen producten opgegeven.' };
         }
 
+        // Get current user ID from server-side auth (important for RLS)
+        const userId = await getServerUserId();
+        if (!userId) {
+            return { success: false, message: 'Niet ingelogd. Log opnieuw in en probeer het opnieuw.' };
+        }
+
         // Fetch parcels for validation and history
         const [allParcels, sprayableParcels] = await Promise.all([
             getParcels(),
@@ -681,7 +707,7 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
             ...(validationMessage && { validationMessage }),
         };
 
-        const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry);
+        const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
 
         // Maak een dummy logbook entry voor de parcel history function
         const dummyLogbookEntry: LogbookEntry = {
@@ -1143,19 +1169,6 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
-// Helper to get current user ID from server-side auth
-import { createClient as createServerClient } from '@/lib/supabase/server';
-
-async function getCurrentUserId(): Promise<string | null> {
-    try {
-        const supabase = await createServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        return user?.id || null;
-    } catch {
-        return null;
-    }
-}
-
 export async function createFieldSignalAction(
     content: string,
     mediaUrl: string | undefined,
@@ -1268,7 +1281,7 @@ export async function saveConversationAsDraft(data: ConversationData): Promise<{
     }
 
     try {
-        const userId = await getCurrentUserId();
+        const userId = await getServerUserId();
         if (!userId) {
             return { success: false, error: "Not authenticated" };
         }
@@ -1333,7 +1346,7 @@ export async function loadConversation(id: string): Promise<{ success: boolean; 
     }
 
     try {
-        const userId = await getCurrentUserId();
+        const userId = await getServerUserId();
         if (!userId) {
             return { success: false, error: "Not authenticated" };
         }
@@ -1361,7 +1374,7 @@ export async function getConversations(status?: 'draft' | 'active' | 'completed'
 
     try {
         // Get current user ID for filtering
-        const userId = await getCurrentUserId();
+        const userId = await getServerUserId();
         if (!userId) {
             console.error('[getConversations] No authenticated user');
             return [];
@@ -1393,7 +1406,7 @@ export async function updateConversationStatus(id: string, status: 'draft' | 'ac
     }
 
     try {
-        const userId = await getCurrentUserId();
+        const userId = await getServerUserId();
         if (!userId) {
             return { success: false, error: "Not authenticated" };
         }
@@ -1419,7 +1432,7 @@ export async function deleteConversation(id: string): Promise<{ success: boolean
     }
 
     try {
-        const userId = await getCurrentUserId();
+        const userId = await getServerUserId();
         if (!userId) {
             return { success: false, error: "Not authenticated" };
         }

@@ -102,9 +102,11 @@ Your goal is to identify:
 3.  The date of the application if mentioned.
 
 CRITICAL RULES:
+⚠️ **ALLERBELANGRIJKST - GEEN HALLUCINATIES:**
 -   ONLY PARSE PRODUCTS EXPLICITLY MENTIONED BY THE USER.
     -   DO NOT add products that are not in the user's input.
     -   DO NOT suggest or assume additional products.
+    -   If the user says "surround", ONLY output "surround" - NEVER add other products!
     -   If the user says "coragen en score", ONLY output those two products.
     -   NEVER add extra products like "Spuitzwavel" or similar unless the user explicitly mentions them.
 -   If the user does NOT specify a dosage, set dosage to 0 (the system will auto-fill from the database).
@@ -180,9 +182,12 @@ Your goal is to identify:
 3.  The date of the application if mentioned.
 
 CRITICAL RULES:
+⚠️ **ALLERBELANGRIJKST - GEEN HALLUCINATIES:**
 -   ONLY PARSE PRODUCTS EXPLICITLY MENTIONED BY THE USER.
     -   DO NOT add products that are not in the user's input.
     -   DO NOT suggest or assume additional products.
+    -   DO NOT copy product names from the examples below - those are for FORMAT illustration only!
+    -   If the user says "surround", ONLY output "surround" - NEVER add other products like "Merpan"!
     -   If the user says "coragen en score", ONLY output those two products.
     -   NEVER add extra products like "Spuitzwavel" or similar unless the user explicitly mentions them.
 -   If the user does NOT specify a dosage, set dosage to 0 (the system will auto-fill from the database).
@@ -214,10 +219,10 @@ When the user mentions variations, exceptions, or different treatments for subse
 **Trigger words (Nederlands):** "maar", "behalve", "uitgezonderd", "niet de", "alleen de", "halve dosering", "dubbele dosering", "ook nog", "extra", "zonder", "overgeslagen", "toch niet"
 
 **Example 1: Extra product for a subset**
-User: "Alle appels met Merpan, maar Kanzi ook Score"
+User: "Alle appels met Delan, maar Kanzi ook Score"
 → registrations: [
-    { plots: [all apple IDs EXCEPT Kanzi], products: [{Merpan}], label: "Appels (zonder Kanzi)", reason: "base" },
-    { plots: [only Kanzi IDs], products: [{Merpan}, {Score}], label: "Kanzi", reason: "addition" }
+    { plots: [all apple IDs EXCEPT Kanzi], products: [{Delan}], label: "Appels (zonder Kanzi)", reason: "base" },
+    { plots: [only Kanzi IDs], products: [{Delan}, {Score}], label: "Kanzi", reason: "addition" }
   ]
 
 **Example 2: Different dosage for subset**
@@ -235,9 +240,9 @@ User: "Alle fruit behalve Tessa met Score"
 (Note: Tessa is excluded entirely, so no registration for Tessa)
 
 **Example 4: Simple input (no variations)**
-User: "Alle appels met Merpan"
+User: "Alle peren met Surround"
 → registrations: [
-    { plots: [all apple IDs], products: [{Merpan}], label: "Appels" }
+    { plots: [all pear IDs], products: [{Surround}], label: "Peren" }
   ]
 
 **Example 5: Non-standard word order (Punt 5 - handle flexible Dutch)**
@@ -247,10 +252,15 @@ User: "Captan overal op behalve Conference"
   ]
 
 **Example 6: Past tense with skip**
-User: "Peren gehad met Merpan, Conference overgeslagen"
+User: "Peren gehad met Bellis, Conference overgeslagen"
 → registrations: [
-    { plots: [all pear IDs EXCEPT Conference], products: [{Merpan}], label: "Peren (zonder Conference)", reason: "base" }
+    { plots: [all pear IDs EXCEPT Conference], products: [{Bellis}], label: "Peren (zonder Conference)", reason: "base" }
   ]
+
+**⚠️ FOUT VOORBEELD - DOE DIT NOOIT:**
+Input: "Alle conference met Surround"
+FOUT: products: [{Merpan}, {Surround}] ← NOOIT producten toevoegen die NIET in de input staan!
+GOED: products: [{Surround}] ← ALLEEN het genoemde product
 
 **Example 7: Block reference instead of variety**
 User: "Alles behalve blok 3 met Score"

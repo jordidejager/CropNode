@@ -1,6 +1,6 @@
 // Use server-compatible supabase client (no 'use client' directive)
 // supabaseAdmin bypasses RLS for server-side operations
-import { supabase, supabaseAdmin, testDatabaseConnection } from './supabase-client';
+import { supabase, getSupabaseAdmin, testDatabaseConnection } from './supabase-client';
 import { withRetry } from './retry-utils';
 import type {
   LogbookEntry,
@@ -137,9 +137,17 @@ export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
   });
 }
 
-export async function addSpuitschriftEntry(entry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'>): Promise<SpuitschriftEntry> {
+export async function addSpuitschriftEntry(
+  entry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'>,
+  providedUserId?: string | null
+): Promise<SpuitschriftEntry> {
   const id = crypto.randomUUID();
-  const userId = await getCurrentUserId();
+  // Use provided userId (from server action) or fall back to getCurrentUserId
+  const userId = providedUserId ?? await getCurrentUserId();
+
+  if (!userId) {
+    throw new Error('Geen gebruiker ingelogd. Log opnieuw in en probeer het opnieuw.');
+  }
 
   // Safely parse dates with fallback to current date
   const parseDate = (d: any): string => {
@@ -164,15 +172,22 @@ export async function addSpuitschriftEntry(entry: Omit<SpuitschriftEntry, 'id' |
     status: entry.status,
   };
 
-  // Use retry for network resilience
+  // Use supabaseAdmin to bypass RLS (server actions don't have cookie access)
+  // The userId is validated above, so we're safe to bypass RLS
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    throw new Error('Database configuratie fout: SUPABASE_SERVICE_ROLE_KEY is niet ingesteld.');
+  }
+
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const { data, error } = await adminClient
       .from('spuitschrift')
       .insert(snakeCaseEntry)
       .select()
-      .single();
+      .single() as { data: { id: string } | null; error: Error | null };
 
     if (error) throw new Error(error.message);
+    if (!data) throw new Error('Geen data ontvangen van database');
 
     return {
       id: data.id,
@@ -327,7 +342,7 @@ export type ActiveParcel = SprayableParcel;
 export async function getSprayableParcels(): Promise<SprayableParcel[]> {
   // Use supabaseAdmin on server (bypasses RLS), regular supabase on client (uses user session)
   const isServer = typeof window === 'undefined';
-  const client = isServer ? supabaseAdmin : supabase;
+  const client = isServer ? getSupabaseAdmin() : supabase;
 
   // Use retry for transient network errors
   return withRetry(async () => {
@@ -451,7 +466,7 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
   }
 
   const isServer = typeof window === 'undefined';
-  const client = isServer ? supabaseAdmin : supabase;
+  const client = isServer ? getSupabaseAdmin() : supabase;
 
   return withRetry(async () => {
     // First try the view
@@ -1429,7 +1444,7 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
   // Use supabaseAdmin on server, regular supabase on client
   // (CTGB products table doesn't have RLS, but keep consistent)
   const isServer = typeof window === 'undefined';
-  const client = isServer ? supabaseAdmin : supabase;
+  const client = isServer ? getSupabaseAdmin() : supabase;
 
   // Use retry for transient network errors
   return withRetry(async () => {

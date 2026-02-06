@@ -50,28 +50,55 @@ async function sendSmartInput(
   input: string,
   history: ChatMessage[] = [],
   existingDraft?: DraftContext,
-  parcelInfo?: Array<{ id: string; name: string }>
+  parcelInfo?: Array<{ id: string; name: string }>,
+  maxRetries: number = 2
 ): Promise<SmartInputResponse> {
-  const response = await request.post(`${BASE_URL}/api/analyze-input`, {
-    data: {
-      rawInput: input,
-      previousDraft: existingDraft || null,
-      chatHistory: history,
-      parcelInfo: parcelInfo || [],
-      mode: 'registration',
-    },
-    timeout: 60000,
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok()) {
-    throw new Error(`API request failed: ${response.status()}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`  Retry attempt ${attempt}/${maxRetries} for input: "${input.substring(0, 40)}..."`);
+        // Wait before retry with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+
+      const response = await request.post(`${BASE_URL}/api/analyze-input`, {
+        data: {
+          rawInput: input,
+          previousDraft: existingDraft || null,
+          chatHistory: history,
+          parcelInfo: parcelInfo || [],
+          mode: 'registration',
+        },
+        timeout: 60000,
+      });
+
+      if (!response.ok()) {
+        throw new Error(`API request failed: ${response.status()}`);
+      }
+
+      // Success - parse and return response
+      return parseSmartInputResponse(await response.text());
+    } catch (error) {
+      lastError = error as Error;
+      console.log(`  Request failed (attempt ${attempt + 1}): ${lastError.message}`);
+
+      // Only retry on timeout or 5xx errors
+      if (!lastError.message.includes('timeout') && !lastError.message.includes('50')) {
+        throw lastError;
+      }
+    }
   }
 
-  const responseText = await response.text();
+  throw lastError || new Error('All retry attempts failed');
+}
+
+function parseSmartInputResponse(responseText: string): SmartInputResponse {
   const lines = responseText.split('\n').filter(line => line.trim());
   const messages: Array<{ type: string; [key: string]: unknown }> = [];
 
-  let result: SmartInputResponse = { messages };
+  const result: SmartInputResponse = { messages };
 
   for (const line of lines) {
     try {
@@ -86,6 +113,14 @@ async function sendSmartInput(
       } else if (parsed.type === 'complete') {
         result.finalData = parsed.data;
         result.reply = parsed.reply;
+      } else if (parsed.type === 'slot_request') {
+        console.log(`  SLOT_REQUEST: ${parsed.slotRequest?.missingSlot || 'unknown'} - ${parsed.slotRequest?.question || JSON.stringify(parsed)}`);
+        const draft = parsed.slotRequest?.currentDraft;
+        if (draft) {
+          console.log(`    currentDraft: plots=${draft.plots?.length || 0}, products=${draft.products?.length || 0}`);
+        }
+      } else if (parsed.type === 'error') {
+        console.log(`  ERROR: ${parsed.message || JSON.stringify(parsed)}`);
       }
     } catch {
       // Skip non-JSON lines
@@ -321,7 +356,12 @@ test.describe('Smart Input Variations - Datum Split', () => {
           console.log(`  Note: No yesterday unit found`);
         }
       } else {
+        // Log what we got instead
         console.log(`  Note: No grouped response`);
+        console.log(`  Messages: ${step2.messages.map(m => m.type).join(', ')}`);
+        if (step2.finalData) {
+          console.log(`  FinalData action: ${step2.finalData.action}`);
+        }
       }
     });
   }
