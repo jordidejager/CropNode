@@ -3278,9 +3278,21 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                             const firstSubsetParcel = subsetParcelInfo[0];
                             const subsetLabel = firstSubsetParcel?.name || subsetParcelNames;
 
-                            const groupDate = correctedOutput.date
-                                ? new Date(correctedOutput.date)
+                            // Use previousDraft date if available, otherwise today
+                            // Don't trust correctedOutput.date for product additions - it might be hallucinated
+                            const groupDate = previousDraft!.date
+                                ? new Date(previousDraft!.date)
                                 : new Date();
+
+                            // Count remaining plots for better label
+                            const remainingPlots = existingPlotIds.filter(id => !specifiedPlotIds.includes(id));
+                            const remainingCount = remainingPlots.length;
+                            const remainingLabel = remainingCount <= 3
+                                ? remainingPlots.map(id => {
+                                    const p = allParcels.find(parcel => parcel.id === id);
+                                    return p?.name || id;
+                                }).join(', ')
+                                : `Overige ${remainingCount} percelen`;
 
                             const group: SprayRegistrationGroup = {
                                 groupId: `group-${Date.now()}`,
@@ -3289,17 +3301,19 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                                 units: [
                                     {
                                         id: `unit-original-${Date.now()}`,
-                                        label: `Overige percelen`,
-                                        plots: existingPlotIds.filter(id => !specifiedPlotIds.includes(id)),
+                                        label: remainingLabel,
+                                        plots: remainingPlots,
                                         products: previousDraft!.products,
-                                        status: 'pending'
+                                        status: 'pending',
+                                        date: groupDate // Inherit date from group
                                     },
                                     {
                                         id: `unit-new-${Date.now() + 1}`,
                                         label: subsetLabel,
                                         plots: specifiedPlotIds,
                                         products: allProductsForSubset,
-                                        status: 'pending'
+                                        status: 'pending',
+                                        date: groupDate // Inherit date from group
                                     }
                                 ]
                             };
@@ -3444,11 +3458,23 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                                 ? remainingParcelInfo.map(p => p.name).join(', ')
                                 : `Overige ${remainingParcelIds.length} percelen`;
 
-                            // Format dates for display
-                            const splitDateDisplay = splitDateStr === yesterday ? 'gisteren' :
-                                                     splitDateStr === today ? 'vandaag' : splitDateStr;
-                            const remainingDateDisplay = remainingDateStr === yesterday ? 'gisteren' :
-                                                         remainingDateStr === today ? 'vandaag' : remainingDateStr;
+                            // Format dates for display - NEVER show raw ISO strings
+                            const formatDateDisplay = (dateStr: string): string => {
+                                if (dateStr === yesterday) return 'gisteren';
+                                if (dateStr === today) return 'vandaag';
+                                // Format any other date nicely
+                                try {
+                                    const date = new Date(dateStr);
+                                    if (!isNaN(date.getTime())) {
+                                        return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+                                    }
+                                } catch {
+                                    // Fallback
+                                }
+                                return 'vandaag'; // Default to today if date is invalid
+                            };
+                            const splitDateDisplay = formatDateDisplay(splitDateStr);
+                            const remainingDateDisplay = formatDateDisplay(remainingDateStr);
 
                             // Validate we have parcels to split
                             if (splitParcelIds.length === 0) {
