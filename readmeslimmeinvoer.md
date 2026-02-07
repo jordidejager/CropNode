@@ -1342,6 +1342,7 @@ Het systeem is ontworpen voor **snelheid** (pre-classificatie zonder AI calls), 
 - **Halve dosering**: Ondersteuning voor "halve dosering" modifier met automatische berekening
 - **Test script**: Comprehensive test suite in `/scripts/test-multi-turn-corrections.ts`
 - **Timeline fix**: Voltooide sessies worden nu correct getoond in de Tijdlijn "Voltooid" tab
+- **Split parcel extraction fix**: Verbeterde extractie van perceelnamen bij datum-splits om false matches te voorkomen (bijv. "gewoon" in "de rest wel gewoon vandaag")
 
 ### v2.1 (6 februari 2026)
 - **Datum-split variaties**: Ondersteuning voor "Oh ja stadhoek was gisteren" en "Alleen stadhoek was gisteren" patronen
