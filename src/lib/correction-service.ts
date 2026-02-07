@@ -1,21 +1,33 @@
 /**
- * Correction Service (Fase 3.1.1)
+ * Correction Service (Fase 3.1.1 + Multi-Turn Upgrade)
  *
  * Detecteert en verwerkt correcties in gebruikersinvoer.
- * Voorbeelden:
+ * Ondersteunt zowel simpele DraftContext als complexe SprayRegistrationGroup.
+ *
+ * Simpele correcties:
  * - "Nee, niet die" → verwijder laatste item
  * - "Verwijder de elstar" → verwijder specifiek perceel
  * - "Toch niet dat middel" → verwijder laatste product
  * - "Maak het 1.5 kg" → update dosering
+ *
+ * Multi-turn correcties (werkt met SprayRegistrationGroup):
+ * - "Nee de Merpan is 0,5" → update dosering voor specifiek product
+ * - "Oh en de Kanzi ook" → voeg perceel toe aan bestaande registratie
+ * - "Perceel X was trouwens gisteren" → split naar eigen unit met andere datum
+ * - "Bij de Conference nog Score bijgedaan" → voeg product toe aan specifieke percelen
+ * - "De Conference maar 1.5L" → split perceel met afwijkende dosering
+ * - "Niet Merpan maar Captan" → vervang product in alle units
  */
 
 import { isDateSplitPattern } from '@/ai/schemas/intents';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry } from '@/lib/types';
 
 // ============================================
 // Types
 // ============================================
 
 export type CorrectionType =
+    // === Basic Corrections (existing) ===
     | 'remove_last_plot'      // "niet dat perceel", "niet die"
     | 'remove_last_product'   // "niet dat middel", "toch niet"
     | 'remove_specific_plot'  // "verwijder de elstar"
@@ -23,13 +35,41 @@ export type CorrectionType =
     | 'remove_all_plots'      // "geen percelen", "verwijder alle percelen"
     | 'remove_all_products'   // "geen middelen"
     | 'add_back_plots'        // "voeg weer toe", "nee voeg die toe" (3.1.3)
-    | 'update_dosage'         // "maak het 1.5 kg", "nee, 2 liter"
+    | 'update_dosage'         // "maak het 1.5 kg", "nee, 2 liter" (global)
     | 'update_date'           // "niet vandaag, gisteren"
     | 'replace_product'       // "niet surround maar captan", "nee het was captan"
     | 'cancel_all'            // "stop", "annuleer", "begin opnieuw"
     | 'confirm'               // "ja", "klopt", "bevestig"
     | 'undo'                  // "ongedaan maken", "undo", "herstel" (3.1.2)
-    | 'none';                 // Geen correctie gedetecteerd
+    // === Multi-Turn Corrections (new) ===
+    | 'update_dosage_specific'    // "nee de merpan is 0,5" - dosering voor specifiek product
+    | 'add_plot_to_existing'      // "oh en de Kanzi ook" - perceel toevoegen aan base registratie
+    | 'add_plot_different_date'   // "perceel X was trouwens gisteren" - perceel met eigen datum
+    | 'add_product_to_plots'      // "bij perceel Y nog Score bijgedaan" - product aan subset
+    | 'update_dosage_for_plots'   // "perceel XY maar halve dosering" - dosering voor subset
+    | 'swap_product'              // "niet Merpan maar Captan" - product vervangen
+    | 'update_date_for_plots'     // "de Conference was eergisteren" - datum wijzigen voor subset
+    | 'override_dosage_for_plots' // "Conference maar 1.5" - afwijkende dosering voor subset
+    | 'none';                     // Geen correctie gedetecteerd
+
+/**
+ * Extended entities for multi-turn corrections
+ */
+export interface CorrectionEntities {
+    // Target product (for product-specific operations)
+    targetProduct?: string;
+    // Target parcels (by name or variety)
+    targetParcels?: string[];        // Parcel IDs or names
+    targetVariety?: string;          // Variety name (e.g., "Conference")
+    targetCrop?: string;             // Crop type (e.g., "peren")
+    // Values
+    newDosage?: { amount: number; unit: string };
+    newDate?: Date;
+    newProduct?: string;             // For add_product_to_plots or swap_product
+    // Modifiers
+    dosageMultiplier?: number;       // e.g., 0.5 for "halve dosering"
+    reason?: string;                 // e.g., "reduced_dosage", "different_timing"
+}
 
 export interface CorrectionResult {
     type: CorrectionType;
@@ -39,6 +79,8 @@ export interface CorrectionResult {
     newValue?: any;      // Nieuwe waarde bij update
     oldProduct?: string; // Voor replace_product: het te vervangen product
     explanation?: string; // Voor debugging
+    // Extended entities for multi-turn corrections
+    entities?: CorrectionEntities;
 }
 
 export interface ParcelInfo {
@@ -191,6 +233,134 @@ const PRODUCT_INDICATORS = [
 ];
 
 // ============================================
+// Multi-Turn Correction Patterns (NEW)
+// ============================================
+
+// Pattern: "nee de merpan is 0,5" / "dosering captan moet 2L" / "score op 0.3"
+const SPECIFIC_PRODUCT_DOSAGE_PATTERNS = [
+    // "de merpan is 0.5", "merpan is 0,5" (with optional unit)
+    /(?:de\s+)?(\w+)\s+(?:is|op)\s+(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)?/i,
+    // "dosering merpan moet 0.5 zijn", "dosering van captan is 2"
+    /dosering\s+(?:van\s+)?(\w+)\s+(?:moet|is)\s+(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)?/i,
+    // "nee de merpan 0.5" - very short form (with optional unit)
+    /(?:nee\s+)?(?:de\s+)?(\w+)\s+(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)?/i,
+    // "nee dosering is 0,5" - without product name, means update all/single product
+    /(?:nee\s+)?dosering\s+(?:is|op|moet)\s+(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)?/i,
+];
+
+// Pattern: "oh en de Kanzi ook" / "perceel X ook" / "doe de Elstar er ook bij"
+const ADD_PLOT_PATTERNS = [
+    // "oh en de Kanzi ook", "en de Conference ook", "Elstar ook"
+    /(?:oh\s+)?(?:en\s+)?(?:de\s+)?(\w+)\s+ook/i,
+    // "perceel X ook", "perceel Stadhoek er ook bij"
+    /perceel\s+(\w+)\s+(?:er\s+)?ook(?:\s+bij)?/i,
+    // "doe de X er ook bij", "voeg X toe"
+    /(?:doe\s+)?(?:de\s+)?(\w+)\s+(?:er\s+)?(?:ook\s+)?bij/i,
+];
+
+// Pattern: "perceel X was trouwens gisteren" / "de Kanzi heb ik maandag gedaan"
+const ADD_PLOT_DIFFERENT_DATE_PATTERNS = [
+    // "perceel X was gisteren/maandag/..."
+    /perceel\s+(\w+)\s+was\s+(?:trouwens\s+)?(gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|\d{1,2}[-\/]\d{1,2})/i,
+    // "de X heb ik gisteren gedaan"
+    /(?:de\s+)?(\w+)\s+heb\s+ik\s+(gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|\d{1,2}[-\/]\d{1,2})\s+(?:gedaan|gespoten)/i,
+    // "X was trouwens gisteren"
+    /(\w+)\s+was\s+(?:trouwens\s+)?(gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)/i,
+];
+
+// Pattern: "bij perceel Y nog Score bijgedaan" / "de Conference ook met Delan"
+const ADD_PRODUCT_TO_PLOTS_PATTERNS = [
+    // "bij perceel X nog Y bijgedaan"
+    /bij\s+(?:perceel\s+)?(\w+)\s+(?:nog\s+)?(\w+)\s+(?:bijgedaan|erbij|toegevoegd)/i,
+    // "bij de X nog Y bijgedaan" (variety-based)
+    /bij\s+(?:de\s+)?(\w+)\s+(?:nog\s+)?(\w+)\s+(?:bijgedaan|erbij|toegevoegd)/i,
+    // "de Conference ook met Delan", "Kanzi ook met Score"
+    /(?:de\s+)?(\w+)\s+ook\s+(?:met|plus)\s+(\w+)/i,
+    // "voor X nog Y gespoten"
+    /(?:voor|op)\s+(?:de\s+)?(\w+)\s+(?:nog\s+)?(\w+)\s+gespoten/i,
+];
+
+// Pattern: "perceel XY maar halve dosering" / "de Conference op 1.5L"
+const DOSAGE_FOR_PLOTS_PATTERNS = [
+    // "perceel X maar halve dosering", "Kanzi halve dosering"
+    /(?:perceel\s+)?(\w+)\s+(?:maar\s+)?halve\s+dosering/i,
+    // "de Conference op 1.5L", "Stadhoek 2L"
+    /(?:de\s+)?(\w+)\s+(?:op\s+)?(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)/i,
+    // "voor X maar 1.5", "X maar 1.5 kg"
+    /(?:voor\s+)?(?:de\s+)?(\w+)\s+maar\s+(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)?/i,
+];
+
+// Pattern: "de Conference was eergisteren" / "stadhoek en thuis waren maandag"
+const DATE_FOR_PLOTS_PATTERNS = [
+    // "de X was eergisteren", "Conference was gisteren"
+    /(?:de\s+)?(\w+)\s+was\s+(gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)/i,
+    // "X en Y waren maandag"
+    /(\w+(?:\s+en\s+\w+)*)\s+waren\s+(gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)/i,
+];
+
+// Pattern: "niet Merpan maar Captan" / "vervang Score door Bellis"
+const SWAP_PRODUCT_PATTERNS = [
+    // "niet X maar Y", "geen X maar Y"
+    /(?:niet|geen)\s+(\w+)\s+maar\s+(\w+)/i,
+    // "vervang X door Y", "wissel X met Y"
+    /(?:vervang|wissel)\s+(\w+)\s+(?:door|met|voor)\s+(\w+)/i,
+    // "X moet Y zijn", "X wordt Y"
+    /(\w+)\s+(?:moet|wordt)\s+(\w+)(?:\s+zijn)?/i,
+];
+
+// Known varieties for parcel matching
+const KNOWN_VARIETIES = new Set([
+    'tessa', 'elstar', 'jonagold', 'braeburn', 'golden', 'boskoop', 'goudreinette',
+    'greenstar', 'kanzi', 'junami', 'wellant', 'delbar', 'fuji', 'gala', 'granny',
+    'cox', 'santana', 'topaz', 'rubinette', 'honeycrisp', 'jazz', 'red prince',
+    'conference', 'doyenne', 'comice', 'gieser', 'concorde', 'xenia', 'williams',
+    'stadhoek', 'thuis', 'plantsoen', 'busje', 'jachthoek', 'schele', 'coleswei'  // Common parcel names
+]);
+
+// ============================================
+// Date Parsing Helper
+// ============================================
+
+/**
+ * Parse relative date strings to Date objects
+ */
+function parseRelativeDate(dateStr: string): Date {
+    const now = new Date();
+    const lower = dateStr.toLowerCase();
+
+    if (lower === 'gisteren') {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        return d;
+    }
+    if (lower === 'eergisteren') {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 2);
+        return d;
+    }
+
+    // Day of week
+    const days = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+    const dayIndex = days.indexOf(lower);
+    if (dayIndex >= 0) {
+        const d = new Date(now);
+        const currentDay = d.getDay();
+        let diff = currentDay - dayIndex;
+        if (diff <= 0) diff += 7; // Go back to previous week
+        d.setDate(d.getDate() - diff);
+        return d;
+    }
+
+    // Try to parse as date string
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+        return parsed;
+    }
+
+    return now;
+}
+
+// ============================================
 // Main Detection Function
 // ============================================
 
@@ -275,7 +445,7 @@ export function detectCorrection(
                     type: 'replace_product',
                     confidence: 0.85,
                     target: newProduct,
-                    oldProduct: oldProduct,
+                    oldProduct: oldProduct || undefined,
                     explanation: `Product vervanging: ${oldProduct || 'huidig product'} → ${newProduct}`
                 };
             }
@@ -290,6 +460,204 @@ export function detectCorrection(
             explanation: 'Toevoegen/terugzetten patroon gedetecteerd - gebruik undo'
         };
     }
+
+    // ============================================
+    // 2.7. Multi-Turn Correction Detection (NEW)
+    // ============================================
+
+    // 2.7.1. Check for swap_product: "niet Merpan maar Captan", "vervang Score door Bellis"
+    for (const pattern of SWAP_PRODUCT_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const oldProduct = match[1]?.toLowerCase();
+            const newProduct = match[2]?.toLowerCase();
+
+            // Both must be known products for swap
+            if (oldProduct && newProduct &&
+                (KNOWN_PRODUCTS.includes(oldProduct) || KNOWN_PRODUCTS.includes(newProduct))) {
+                return {
+                    type: 'swap_product',
+                    confidence: 0.9,
+                    oldProduct: oldProduct,
+                    target: newProduct,
+                    entities: {
+                        targetProduct: oldProduct,
+                        newProduct: newProduct
+                    },
+                    explanation: `Product swap: ${oldProduct} → ${newProduct}`
+                };
+            }
+        }
+    }
+
+    // 2.7.2. Check for add_product_to_plots: "bij perceel Y nog Score bijgedaan"
+    for (const pattern of ADD_PRODUCT_TO_PLOTS_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const parcelName = match[1]?.toLowerCase();
+            const productName = match[2]?.toLowerCase();
+
+            if (parcelName && productName && KNOWN_PRODUCTS.includes(productName)) {
+                return {
+                    type: 'add_product_to_plots',
+                    confidence: 0.85,
+                    target: productName,
+                    entities: {
+                        targetParcels: [parcelName],
+                        targetVariety: KNOWN_VARIETIES.has(parcelName) ? parcelName : undefined,
+                        newProduct: productName
+                    },
+                    explanation: `Product ${productName} toevoegen aan ${parcelName}`
+                };
+            }
+        }
+    }
+
+    // 2.7.3. Check for add_plot_different_date: "perceel X was trouwens gisteren"
+    for (const pattern of ADD_PLOT_DIFFERENT_DATE_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const parcelName = match[1]?.toLowerCase();
+            const dateStr = match[2]?.toLowerCase();
+
+            if (parcelName && dateStr) {
+                const parsedDate = parseRelativeDate(dateStr);
+                return {
+                    type: 'add_plot_different_date',
+                    confidence: 0.85,
+                    target: parcelName,
+                    entities: {
+                        targetParcels: [parcelName],
+                        targetVariety: KNOWN_VARIETIES.has(parcelName) ? parcelName : undefined,
+                        newDate: parsedDate,
+                        reason: 'different_timing'
+                    },
+                    explanation: `Perceel ${parcelName} met afwijkende datum ${dateStr}`
+                };
+            }
+        }
+    }
+
+    // 2.7.4. Check for update_date_for_plots: "de Conference was eergisteren"
+    for (const pattern of DATE_FOR_PLOTS_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            // Could be single or multiple parcels (X en Y)
+            const parcelStr = match[1]?.toLowerCase();
+            const dateStr = match[2]?.toLowerCase();
+
+            if (parcelStr && dateStr) {
+                const parcels = parcelStr.split(/\s+en\s+/).map(p => p.trim());
+                const parsedDate = parseRelativeDate(dateStr);
+                return {
+                    type: 'update_date_for_plots',
+                    confidence: 0.85,
+                    targets: parcels,
+                    entities: {
+                        targetParcels: parcels,
+                        newDate: parsedDate
+                    },
+                    explanation: `Datum wijzigen voor ${parcels.join(', ')} naar ${dateStr}`
+                };
+            }
+        }
+    }
+
+    // 2.7.5. Check for add_plot_to_existing: "oh en de Kanzi ook"
+    for (const pattern of ADD_PLOT_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const parcelName = match[1]?.toLowerCase();
+
+            // Must be a known variety or parcel name
+            if (parcelName && KNOWN_VARIETIES.has(parcelName)) {
+                return {
+                    type: 'add_plot_to_existing',
+                    confidence: 0.8,
+                    target: parcelName,
+                    entities: {
+                        targetParcels: [parcelName],
+                        targetVariety: parcelName
+                    },
+                    explanation: `Perceel/ras ${parcelName} toevoegen aan registratie`
+                };
+            }
+        }
+    }
+
+    // 2.7.6. Check for override_dosage_for_plots / update_dosage_for_plots
+    // "perceel X maar halve dosering", "de Conference maar 1.5L"
+    for (const pattern of DOSAGE_FOR_PLOTS_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const parcelName = match[1]?.toLowerCase();
+
+            // Check for "halve dosering" pattern
+            if (/halve\s+dosering/i.test(normalizedInput) && parcelName) {
+                return {
+                    type: 'override_dosage_for_plots',
+                    confidence: 0.85,
+                    target: parcelName,
+                    entities: {
+                        targetParcels: [parcelName],
+                        targetVariety: KNOWN_VARIETIES.has(parcelName) ? parcelName : undefined,
+                        dosageMultiplier: 0.5,
+                        reason: 'reduced_dosage'
+                    },
+                    explanation: `Halve dosering voor ${parcelName}`
+                };
+            }
+
+            // Check for specific dosage pattern (e.g., "Conference maar 1.5L")
+            const dosage = match[2];
+            const unit = match[3];
+            if (parcelName && dosage && KNOWN_VARIETIES.has(parcelName)) {
+                const amount = parseFloat(dosage.replace(',', '.'));
+                return {
+                    type: 'override_dosage_for_plots',
+                    confidence: 0.85,
+                    target: parcelName,
+                    entities: {
+                        targetParcels: [parcelName],
+                        targetVariety: parcelName,
+                        newDosage: { amount, unit: normalizeUnit(unit || 'L') },
+                        reason: 'custom_dosage'
+                    },
+                    explanation: `Afwijkende dosering ${amount} ${unit || 'L'} voor ${parcelName}`
+                };
+            }
+        }
+    }
+
+    // 2.7.7. Check for update_dosage_specific: "nee de merpan is 0,5"
+    for (const pattern of SPECIFIC_PRODUCT_DOSAGE_PATTERNS) {
+        const match = normalizedInput.match(pattern);
+        if (match) {
+            const productName = match[1]?.toLowerCase();
+            const dosage = match[2];
+            const unit = match[3];
+
+            // Product must be a known product name
+            if (productName && dosage && KNOWN_PRODUCTS.includes(productName)) {
+                const amount = parseFloat(dosage.replace(',', '.'));
+                return {
+                    type: 'update_dosage_specific',
+                    confidence: 0.9,
+                    target: productName,
+                    newValue: { amount, unit: normalizeUnit(unit || 'L') },
+                    entities: {
+                        targetProduct: productName,
+                        newDosage: { amount, unit: normalizeUnit(unit || 'L') }
+                    },
+                    explanation: `Dosering ${productName} wijzigen naar ${amount} ${unit || 'L'}`
+                };
+            }
+        }
+    }
+
+    // ============================================
+    // End Multi-Turn Detection
+    // ============================================
 
     // 3. Check voor negatie + specifieke update (bijv. "nee, 1.5 kg")
     const dosageMatch = normalizedInput.match(/(\d+[,.]?\d*)\s*(kg|l|liter|ml|g)/i);
@@ -806,7 +1174,585 @@ export function getCorrectionMessage(
         case 'add_back_plots':
             return 'Oké, ik zet de verwijderde percelen weer terug.';
 
+        // Multi-turn correction messages
+        case 'update_dosage_specific':
+            if (correction.entities?.targetProduct && correction.entities?.newDosage) {
+                return `Oké, de dosering van ${correction.entities.targetProduct} is aangepast naar ${correction.entities.newDosage.amount} ${correction.entities.newDosage.unit}.`;
+            }
+            return 'Oké, de dosering is aangepast.';
+
+        case 'add_plot_to_existing':
+            return `Oké, ${correction.target || 'perceel'} is toegevoegd aan de registratie.`;
+
+        case 'add_plot_different_date':
+            if (correction.entities?.newDate) {
+                const dateStr = correction.entities.newDate.toLocaleDateString('nl-NL');
+                return `Oké, ${correction.target} is toegevoegd met datum ${dateStr}.`;
+            }
+            return `Oké, ${correction.target} is toegevoegd met een andere datum.`;
+
+        case 'add_product_to_plots':
+            return `Oké, ${correction.entities?.newProduct || 'product'} is toegevoegd aan ${correction.entities?.targetParcels?.join(', ') || 'de percelen'}.`;
+
+        case 'update_dosage_for_plots':
+        case 'override_dosage_for_plots':
+            if (correction.entities?.dosageMultiplier === 0.5) {
+                return `Oké, halve dosering toegepast voor ${correction.target}.`;
+            }
+            if (correction.entities?.newDosage) {
+                return `Oké, dosering aangepast naar ${correction.entities.newDosage.amount} ${correction.entities.newDosage.unit} voor ${correction.target}.`;
+            }
+            return `Oké, dosering aangepast voor ${correction.target}.`;
+
+        case 'swap_product':
+            return `Oké, ${correction.oldProduct} is vervangen door ${correction.target}.`;
+
+        case 'update_date_for_plots':
+            if (correction.entities?.newDate) {
+                const dateStr = correction.entities.newDate.toLocaleDateString('nl-NL');
+                return `Oké, datum gewijzigd naar ${dateStr} voor ${correction.targets?.join(', ') || correction.target}.`;
+            }
+            return `Oké, datum gewijzigd voor ${correction.targets?.join(', ') || correction.target}.`;
+
         default:
             return '';
     }
+}
+
+// ============================================
+// Apply Grouped Correction (Multi-Turn)
+// ============================================
+
+/**
+ * Helper: Find parcels by variety or name in parcel info
+ */
+function findParcelsByVarietyOrName(
+    varietyOrName: string,
+    parcelInfo: ParcelInfo[]
+): string[] {
+    const lower = varietyOrName.toLowerCase();
+    return parcelInfo
+        .filter(p =>
+            p.variety?.toLowerCase() === lower ||
+            p.variety?.toLowerCase().includes(lower) ||
+            p.name.toLowerCase().includes(lower)
+        )
+        .map(p => p.id);
+}
+
+/**
+ * Helper: Generate unique unit ID
+ */
+function generateUnitId(): string {
+    return `unit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Helper: Deep clone products array
+ */
+function cloneProducts(products: ProductEntry[]): ProductEntry[] {
+    return products.map(p => ({
+        product: p.product,
+        dosage: p.dosage,
+        unit: p.unit,
+        targetReason: p.targetReason,
+        doelorganisme: p.doelorganisme
+    }));
+}
+
+/**
+ * Apply a correction to a SprayRegistrationGroup (multi-unit draft)
+ * Supports splitting, merging, and modifying units
+ */
+export function applyGroupedCorrection(
+    correction: CorrectionResult,
+    group: SprayRegistrationGroup,
+    parcelInfo: ParcelInfo[]
+): SprayRegistrationGroup {
+    // Deep clone the group
+    const newGroup: SprayRegistrationGroup = {
+        ...group,
+        groupId: group.groupId,
+        date: new Date(group.date),
+        rawInput: group.rawInput,
+        units: group.units.map(u => ({
+            ...u,
+            id: u.id,
+            plots: [...u.plots],
+            products: cloneProducts(u.products),
+            label: u.label,
+            status: u.status,
+            date: u.date ? new Date(u.date) : undefined
+        }))
+    };
+
+    const entities = correction.entities;
+
+    switch (correction.type) {
+        // ============================================
+        // update_dosage_specific
+        // Update dosage for a specific product in ALL units
+        // ============================================
+        case 'update_dosage_specific': {
+            if (!entities?.targetProduct || !entities?.newDosage) break;
+
+            const targetLower = entities.targetProduct.toLowerCase();
+
+            for (const unit of newGroup.units) {
+                for (const product of unit.products) {
+                    const productLower = product.product.toLowerCase();
+                    if (productLower.includes(targetLower) ||
+                        targetLower.includes(productLower.split(' ')[0].replace(/[®™]/g, ''))) {
+                        product.dosage = entities.newDosage.amount;
+                        product.unit = entities.newDosage.unit;
+                    }
+                }
+            }
+            break;
+        }
+
+        // ============================================
+        // add_plot_to_existing
+        // Add parcel(s) to the base (first) unit
+        // ============================================
+        case 'add_plot_to_existing': {
+            if (!entities?.targetParcels && !entities?.targetVariety) break;
+
+            // Find parcel IDs to add
+            let plotIdsToAdd: string[] = [];
+
+            if (entities.targetVariety) {
+                plotIdsToAdd = findParcelsByVarietyOrName(entities.targetVariety, parcelInfo);
+            } else if (entities.targetParcels) {
+                // Try to resolve names to IDs
+                for (const nameOrId of entities.targetParcels) {
+                    const found = findParcelsByVarietyOrName(nameOrId, parcelInfo);
+                    if (found.length > 0) {
+                        plotIdsToAdd.push(...found);
+                    } else {
+                        // Assume it's already an ID
+                        plotIdsToAdd.push(nameOrId);
+                    }
+                }
+            }
+
+            // Add to first unit (base registration), avoiding duplicates
+            if (newGroup.units.length > 0 && plotIdsToAdd.length > 0) {
+                const existingPlots = new Set(newGroup.units.flatMap(u => u.plots));
+                const newPlots = plotIdsToAdd.filter(id => !existingPlots.has(id));
+                newGroup.units[0].plots.push(...newPlots);
+            }
+            break;
+        }
+
+        // ============================================
+        // add_plot_different_date
+        // Create new unit with parcels and different date
+        // ============================================
+        case 'add_plot_different_date': {
+            if (!entities?.targetParcels && !entities?.targetVariety) break;
+            if (!entities?.newDate) break;
+
+            // Find parcel IDs
+            let plotIds: string[] = [];
+            if (entities.targetVariety) {
+                plotIds = findParcelsByVarietyOrName(entities.targetVariety, parcelInfo);
+            } else if (entities.targetParcels) {
+                for (const nameOrId of entities.targetParcels) {
+                    const found = findParcelsByVarietyOrName(nameOrId, parcelInfo);
+                    plotIds.push(...(found.length > 0 ? found : [nameOrId]));
+                }
+            }
+
+            if (plotIds.length === 0) break;
+
+            // Remove these plots from existing units
+            for (const unit of newGroup.units) {
+                unit.plots = unit.plots.filter(p => !plotIds.includes(p));
+            }
+
+            // Remove empty units
+            newGroup.units = newGroup.units.filter(u => u.plots.length > 0);
+
+            // Create new unit with the different date
+            const baseProducts = group.units[0]?.products || [];
+            const newUnit: SprayRegistrationUnit = {
+                id: generateUnitId(),
+                plots: plotIds,
+                products: cloneProducts(baseProducts),
+                label: entities.targetVariety
+                    ? `${entities.targetVariety.charAt(0).toUpperCase()}${entities.targetVariety.slice(1)} (${entities.newDate.toLocaleDateString('nl-NL')})`
+                    : `Split (${entities.newDate.toLocaleDateString('nl-NL')})`,
+                status: 'pending',
+                date: entities.newDate
+            };
+
+            newGroup.units.push(newUnit);
+            break;
+        }
+
+        // ============================================
+        // add_product_to_plots
+        // Add a product to specific parcels (creates new unit if needed)
+        // ============================================
+        case 'add_product_to_plots': {
+            if (!entities?.newProduct) break;
+            if (!entities?.targetParcels && !entities?.targetVariety) break;
+
+            // Find target parcel IDs
+            let targetPlotIds: string[] = [];
+            if (entities.targetVariety) {
+                targetPlotIds = findParcelsByVarietyOrName(entities.targetVariety, parcelInfo);
+            } else if (entities.targetParcels) {
+                for (const nameOrId of entities.targetParcels) {
+                    const found = findParcelsByVarietyOrName(nameOrId, parcelInfo);
+                    targetPlotIds.push(...(found.length > 0 ? found : [nameOrId]));
+                }
+            }
+
+            if (targetPlotIds.length === 0) break;
+
+            // Find or create a unit that contains exactly these plots
+            // Strategy: Check if there's an existing unit with these plots
+            const targetSet = new Set(targetPlotIds);
+            let matchingUnit = newGroup.units.find(u => {
+                const unitSet = new Set(u.plots);
+                return targetPlotIds.every(id => unitSet.has(id)) &&
+                       u.plots.every(id => targetSet.has(id));
+            });
+
+            if (matchingUnit) {
+                // Add product to existing unit
+                const newProduct: ProductEntry = {
+                    product: entities.newProduct.charAt(0).toUpperCase() + entities.newProduct.slice(1),
+                    dosage: 0, // Will be filled by CTGB validation
+                    unit: 'L'
+                };
+                matchingUnit.products.push(newProduct);
+            } else {
+                // Need to split: remove target plots from other units and create new unit
+
+                // Remove target plots from existing units
+                for (const unit of newGroup.units) {
+                    unit.plots = unit.plots.filter(p => !targetSet.has(p));
+                }
+
+                // Clean up empty units
+                newGroup.units = newGroup.units.filter(u => u.plots.length > 0);
+
+                // Create new unit with base products + new product
+                const baseProducts = group.units[0]?.products || [];
+                const newProduct: ProductEntry = {
+                    product: entities.newProduct.charAt(0).toUpperCase() + entities.newProduct.slice(1),
+                    dosage: 0,
+                    unit: 'L'
+                };
+
+                const newUnit: SprayRegistrationUnit = {
+                    id: generateUnitId(),
+                    plots: targetPlotIds,
+                    products: [...cloneProducts(baseProducts), newProduct],
+                    label: entities.targetVariety
+                        ? `${entities.targetVariety.charAt(0).toUpperCase()}${entities.targetVariety.slice(1)} + ${entities.newProduct}`
+                        : `Met extra ${entities.newProduct}`,
+                    status: 'pending'
+                };
+
+                newGroup.units.push(newUnit);
+            }
+            break;
+        }
+
+        // ============================================
+        // override_dosage_for_plots / update_dosage_for_plots
+        // Create unit with modified dosage for specific parcels
+        // ============================================
+        case 'override_dosage_for_plots':
+        case 'update_dosage_for_plots': {
+            if (!entities?.targetParcels && !entities?.targetVariety) break;
+
+            // Find target parcel IDs
+            let targetPlotIds: string[] = [];
+            if (entities.targetVariety) {
+                targetPlotIds = findParcelsByVarietyOrName(entities.targetVariety, parcelInfo);
+            } else if (entities.targetParcels) {
+                for (const nameOrId of entities.targetParcels) {
+                    const found = findParcelsByVarietyOrName(nameOrId, parcelInfo);
+                    targetPlotIds.push(...(found.length > 0 ? found : [nameOrId]));
+                }
+            }
+
+            if (targetPlotIds.length === 0) break;
+
+            const targetSet = new Set(targetPlotIds);
+
+            // Remove target plots from existing units
+            for (const unit of newGroup.units) {
+                unit.plots = unit.plots.filter(p => !targetSet.has(p));
+            }
+
+            // Clean up empty units
+            newGroup.units = newGroup.units.filter(u => u.plots.length > 0);
+
+            // Create new unit with modified dosage
+            const baseProducts = group.units[0]?.products || [];
+            const modifiedProducts = cloneProducts(baseProducts);
+
+            // Apply dosage modification
+            for (const product of modifiedProducts) {
+                if (entities.dosageMultiplier) {
+                    product.dosage = product.dosage * entities.dosageMultiplier;
+                } else if (entities.newDosage) {
+                    // If specific product target, only modify that product
+                    if (entities.targetProduct) {
+                        const targetLower = entities.targetProduct.toLowerCase();
+                        if (product.product.toLowerCase().includes(targetLower)) {
+                            product.dosage = entities.newDosage.amount;
+                            product.unit = entities.newDosage.unit;
+                        }
+                    } else {
+                        // Modify all products
+                        product.dosage = entities.newDosage.amount;
+                        product.unit = entities.newDosage.unit;
+                    }
+                }
+            }
+
+            const labelSuffix = entities.dosageMultiplier === 0.5 ? '(halve dosering)'
+                : entities.newDosage ? `(${entities.newDosage.amount} ${entities.newDosage.unit})`
+                : '(aangepaste dosering)';
+
+            const newUnit: SprayRegistrationUnit = {
+                id: generateUnitId(),
+                plots: targetPlotIds,
+                products: modifiedProducts,
+                label: entities.targetVariety
+                    ? `${entities.targetVariety.charAt(0).toUpperCase()}${entities.targetVariety.slice(1)} ${labelSuffix}`
+                    : `Aangepast ${labelSuffix}`,
+                status: 'pending'
+            };
+
+            newGroup.units.push(newUnit);
+            break;
+        }
+
+        // ============================================
+        // swap_product
+        // Replace product in ALL units
+        // ============================================
+        case 'swap_product': {
+            if (!entities?.targetProduct || !entities?.newProduct) break;
+
+            const oldLower = entities.targetProduct.toLowerCase();
+            const newName = entities.newProduct.charAt(0).toUpperCase() + entities.newProduct.slice(1);
+
+            for (const unit of newGroup.units) {
+                for (const product of unit.products) {
+                    const productLower = product.product.toLowerCase();
+                    if (productLower.includes(oldLower) ||
+                        oldLower.includes(productLower.split(' ')[0].replace(/[®™]/g, ''))) {
+                        product.product = newName;
+                        // Keep existing dosage and unit
+                    }
+                }
+            }
+            break;
+        }
+
+        // ============================================
+        // update_date_for_plots
+        // Change date for specific parcels (split to new unit)
+        // ============================================
+        case 'update_date_for_plots': {
+            if (!entities?.newDate) break;
+            if (!entities?.targetParcels && !entities?.targetVariety) break;
+
+            // Find target parcel IDs
+            let targetPlotIds: string[] = [];
+            if (entities.targetVariety) {
+                targetPlotIds = findParcelsByVarietyOrName(entities.targetVariety, parcelInfo);
+            } else if (entities.targetParcels) {
+                for (const nameOrId of entities.targetParcels) {
+                    const found = findParcelsByVarietyOrName(nameOrId, parcelInfo);
+                    targetPlotIds.push(...(found.length > 0 ? found : [nameOrId]));
+                }
+            }
+
+            if (targetPlotIds.length === 0) break;
+
+            const targetSet = new Set(targetPlotIds);
+
+            // Check if these plots are already in a unit with that date
+            const existingUnit = newGroup.units.find(u => {
+                if (!u.date) return false;
+                const sameDate = u.date.toDateString() === entities.newDate!.toDateString();
+                const hasTargetPlots = u.plots.some(p => targetSet.has(p));
+                return sameDate && hasTargetPlots;
+            });
+
+            if (existingUnit) {
+                // Just update the date (already correct)
+                break;
+            }
+
+            // Remove target plots from existing units
+            for (const unit of newGroup.units) {
+                unit.plots = unit.plots.filter(p => !targetSet.has(p));
+            }
+
+            // Clean up empty units
+            newGroup.units = newGroup.units.filter(u => u.plots.length > 0);
+
+            // Create new unit with the new date
+            const baseProducts = group.units[0]?.products || [];
+            const newUnit: SprayRegistrationUnit = {
+                id: generateUnitId(),
+                plots: targetPlotIds,
+                products: cloneProducts(baseProducts),
+                label: `${entities.targetParcels?.join(', ') || entities.targetVariety || 'Gesplitst'} (${entities.newDate.toLocaleDateString('nl-NL')})`,
+                status: 'pending',
+                date: entities.newDate
+            };
+
+            newGroup.units.push(newUnit);
+            break;
+        }
+
+        // ============================================
+        // Basic corrections (delegate to simple applyCorrection logic)
+        // ============================================
+        case 'remove_specific_plot':
+        case 'remove_all_plots': {
+            const plotsToRemove = correction.targets || (correction.target ? [correction.target] : []);
+            const removeSet = new Set(plotsToRemove.map(p => p.toLowerCase()));
+
+            for (const unit of newGroup.units) {
+                unit.plots = unit.plots.filter(p => {
+                    // Check by ID
+                    if (removeSet.has(p.toLowerCase())) return false;
+
+                    // Check by parcel name
+                    const info = parcelInfo.find(pi => pi.id === p);
+                    if (info && removeSet.has(info.name.toLowerCase())) return false;
+                    if (info && info.variety && removeSet.has(info.variety.toLowerCase())) return false;
+
+                    return true;
+                });
+            }
+
+            // Clean up empty units
+            newGroup.units = newGroup.units.filter(u => u.plots.length > 0);
+            break;
+        }
+
+        case 'remove_specific_product':
+        case 'remove_all_products': {
+            const productsToRemove = correction.targets || (correction.target ? [correction.target] : []);
+            const removeSet = new Set(productsToRemove.map(p => p.toLowerCase()));
+
+            for (const unit of newGroup.units) {
+                unit.products = unit.products.filter(p => {
+                    const productLower = p.product.toLowerCase();
+                    for (const toRemove of removeSet) {
+                        if (productLower.includes(toRemove) || toRemove.includes(productLower.split(' ')[0])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+            }
+
+            // Clean up units with no products
+            newGroup.units = newGroup.units.filter(u => u.products.length > 0);
+            break;
+        }
+
+        case 'update_dosage': {
+            if (!correction.newValue) break;
+
+            // Update dosage for all products in all units (or specific product if target specified)
+            for (const unit of newGroup.units) {
+                for (const product of unit.products) {
+                    if (correction.target) {
+                        const targetLower = correction.target.toLowerCase();
+                        if (product.product.toLowerCase().includes(targetLower)) {
+                            product.dosage = correction.newValue.amount;
+                            product.unit = correction.newValue.unit;
+                        }
+                    } else {
+                        // Update all products
+                        product.dosage = correction.newValue.amount;
+                        product.unit = correction.newValue.unit;
+                    }
+                }
+            }
+            break;
+        }
+
+        case 'replace_product': {
+            if (!correction.target) break;
+
+            const oldLower = (correction.oldProduct || '').toLowerCase();
+            const newName = correction.target.charAt(0).toUpperCase() + correction.target.slice(1);
+
+            for (const unit of newGroup.units) {
+                for (const product of unit.products) {
+                    const productLower = product.product.toLowerCase();
+                    // If oldProduct specified, only replace that one
+                    if (oldLower) {
+                        if (productLower.includes(oldLower)) {
+                            product.product = newName;
+                        }
+                    } else if (unit.products.length === 1) {
+                        // If only one product, replace it
+                        product.product = newName;
+                    }
+                }
+            }
+            break;
+        }
+
+        case 'cancel_all': {
+            newGroup.units = [];
+            break;
+        }
+
+        default:
+            // Unknown correction type, return unchanged
+            break;
+    }
+
+    return newGroup;
+}
+
+/**
+ * Generate a message for a grouped correction
+ */
+export function getGroupedCorrectionMessage(
+    correction: CorrectionResult,
+    originalGroup: SprayRegistrationGroup,
+    newGroup: SprayRegistrationGroup
+): string {
+    // Use the standard message generator, but with additional context for grouped operations
+    const baseMessage = getCorrectionMessage(
+        correction,
+        // Convert first unit to DraftContext format for message generation
+        {
+            plots: originalGroup.units.flatMap(u => u.plots),
+            products: originalGroup.units[0]?.products || [],
+            date: originalGroup.date.toISOString()
+        },
+        {
+            plots: newGroup.units.flatMap(u => u.plots),
+            products: newGroup.units[0]?.products || [],
+            date: newGroup.date.toISOString()
+        }
+    );
+
+    // Add unit count info if relevant
+    if (newGroup.units.length !== originalGroup.units.length) {
+        return `${baseMessage} (${newGroup.units.length} registratie${newGroup.units.length === 1 ? '' : 's'})`;
+    }
+
+    return baseMessage;
 }
