@@ -3376,29 +3376,56 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
                             // Patterns: "X trouwens gisteren", "X heb ik gisteren", "X gisteren gespoten"
                             // IMPORTANT: More specific patterns should come first to avoid false matches
                             const splitNamePatterns = [
-                                // "alleen Plantsoen was gisteren" - specific pattern with "was" after name
-                                /(?:alleen|wel)\s+(\w+)\s+was\s+(?:gisteren|vandaag|vorige\s+week)/i,
-                                // "alleen Plantsoen gisteren" or "wel Plantsoen gisteren"
-                                /(?:alleen|wel)\s+(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)/i,
-                                // "oh ja Plantsoen was gisteren"
-                                /oh\s+ja\s+(\w+)\s+(?:was|heb\s+ik)?\s*(?:gisteren|vandaag|vorige\s+week)/i,
-                                // "Plantsoen trouwens gisteren" or "Plantsoen heb ik gisteren gespoten de rest vandaag"
-                                /^(\w+(?:\s+\w+)?)\s+(?:trouwens|heb\s+ik)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Stadhoek gisteren gespoten" - parcel name at start + date + action verb
+                                /^(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)\s+(?:gespoten|gedaan|behandeld)/i,
                                 // "Plantsoen was gisteren" - single word at start followed by was + date
                                 /^(\w+)\s+was\s+(?:gisteren|vandaag|vorige\s+week)/i,
-                                // "Plantsoen gisteren gespoten"
-                                /^(\w+(?:\s+\w+)?)\s+(?:gisteren|vandaag|vorige\s+week)\s+(?:gespoten|gedaan|behandeld)/i,
-                                // "Stadhoek heb ik gisteren gespoten" - word at start followed by date phrase
-                                /^(\w+)\s+.*(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "Plantsoen trouwens gisteren" or "Plantsoen heb ik gisteren gespoten de rest vandaag"
+                                /^(\w+(?:\s+\w+)?)\s+(?:trouwens|heb\s+ik)\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "oh ja Plantsoen was gisteren"
+                                /oh\s+ja\s+(\w+)\s+(?:was|heb\s+ik)?\s*(?:gisteren|vandaag|vorige\s+week)/i,
+                                // "alleen Plantsoen was gisteren" - specific pattern with "was" after name
+                                /(?:alleen|wel)\s+(\w+)\s+was\s+(?:gisteren|vandaag|vorige\s+week)/i,
+                                // NOTE: Removed generic "alleen/wel X gisteren" pattern as it causes false matches
+                                // with phrases like "de rest wel gewoon vandaag" → incorrectly extracts "gewoon"
                             ];
+
+                            // Common Dutch words that should NOT be treated as parcel names
+                            const nonParcelWords = new Set([
+                                'gewoon', 'ook', 'wel', 'niet', 'maar', 'dan', 'nog', 'al', 'toch',
+                                'rest', 'andere', 'overige', 'allemaal', 'alles', 'beide', 'alle'
+                            ]);
+
+                            // Get all parcel names from draft for validation
+                            const draftParcelNames = validDraftPlots.map(id => {
+                                const p = allParcels.find(pp => pp.id === id);
+                                return p?.name?.toLowerCase() || '';
+                            }).filter(Boolean);
 
                             let mentionedParcelName: string | null = null;
                             for (const pattern of splitNamePatterns) {
                                 const match = rawInput.match(pattern);
                                 if (match && match[1]) {
-                                    mentionedParcelName = match[1].toLowerCase().trim();
-                                    console.log(`[${context}] Extracted parcel name from input: "${mentionedParcelName}"`);
-                                    break;
+                                    const candidate = match[1].toLowerCase().trim();
+
+                                    // Skip if it's a common Dutch word
+                                    if (nonParcelWords.has(candidate)) {
+                                        console.log(`[${context}] Skipping non-parcel word: "${candidate}"`);
+                                        continue;
+                                    }
+
+                                    // Validate that this name actually matches a parcel in the draft
+                                    const matchesParcel = draftParcelNames.some(name =>
+                                        name.includes(candidate) || candidate.includes(name.split(' ')[0])
+                                    );
+
+                                    if (matchesParcel) {
+                                        mentionedParcelName = candidate;
+                                        console.log(`[${context}] Extracted parcel name from input: "${mentionedParcelName}"`);
+                                        break;
+                                    } else {
+                                        console.log(`[${context}] Candidate "${candidate}" doesn't match any draft parcel - trying next pattern`);
+                                    }
                                 }
                             }
 
