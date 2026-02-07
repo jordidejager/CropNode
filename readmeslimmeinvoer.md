@@ -1,6 +1,6 @@
 # Slimme Invoer - Technische Documentatie
 
-> Laatste update: 6 februari 2026 (v2.1 - RLS fix, datum-split variaties)
+> Laatste update: 7 februari 2026 (v2.2 - Multi-Turn Correction Service Upgrade)
 
 Dit document beschrijft de volledige werking van de "Slimme Invoer" functionaliteit in het AgriBot Command Center. Het systeem verwerkt natuurlijke taal invoer van gebruikers en zet deze om naar gestructureerde registraties, queries en acties.
 
@@ -339,19 +339,100 @@ const varietyPatterns = {
 
 Het systeem detecteert en verwerkt **correcties in vervolgberichten**:
 
+#### Basis Correcties
+
 | Type | Trigger woorden | Actie |
 |------|-----------------|-------|
 | `remove_last_plot` | "niet dat perceel", "niet die" | Verwijder laatste perceel |
 | `remove_last_product` | "niet dat middel" | Verwijder laatste product |
 | `remove_specific_plot` | "verwijder de elstar" | Verwijder specifiek perceel |
 | `remove_specific_product` | "verwijder captan" | Verwijder specifiek product |
-| `update_dosage` | "maak het 1.5 kg" | Update dosering |
+| `update_dosage` | "maak het 1.5 kg" | Update dosering (globaal) |
 | `update_date` | "niet vandaag, gisteren" | Update datum |
 | `cancel_all` | "stop", "annuleer" | Annuleer alles |
 | `confirm` | "ja", "klopt" | Bevestig registratie |
 | `undo` | "ongedaan maken" | Herstel laatste actie |
 
-### 6.2 Negatie Patroon Herkenning
+#### Multi-Turn Correcties (v2.2)
+
+In de praktijk verfijnen telers hun registratie in meerdere berichten. De volgende correctie types ondersteunen **complexe unit-splitting en -merging**:
+
+| Type | Voorbeeld trigger | Actie |
+|------|-------------------|-------|
+| `update_dosage_specific` | "nee de merpan is 0,5" | Update dosering voor specifiek product |
+| `add_plot_to_existing` | "oh en de Kanzi ook" | Perceel toevoegen aan base registratie |
+| `add_plot_different_date` | "stadhoek was trouwens gisteren" | Perceel splitsen naar eigen unit met andere datum |
+| `add_product_to_plots` | "bij Conference nog Score bijgedaan" | Product toevoegen aan specifieke percelen |
+| `override_dosage_for_plots` | "thuis maar halve dosering" | Afwijkende dosering voor subset percelen |
+| `swap_product` | "vervang merpan door captan" | Product vervangen in alle units |
+| `update_date_for_plots` | "stadhoek en thuis waren maandag" | Datum wijzigen voor subset percelen |
+
+### 6.2 Multi-Turn Sessie Voorbeeld
+
+```
+Bericht 1: "gisteren alle peren gespoten met merpan"
+→ Draft: 1 unit, alle peren, Merpan, gisteren
+
+Bericht 2: "nee de merpan is 0,5"
+→ Draft: update dosering Merpan naar 0.5 in alle units
+
+Bericht 3: "perceel stadhoek was trouwens eergisteren"
+→ Draft: split stadhoek naar eigen unit met datum eergisteren
+
+Bericht 4: "bij de Conference nog Score bijgedaan"
+→ Draft: Conference percelen krijgen extra product Score
+
+Bericht 5: "perceel thuis maar halve dosering gespoten"
+→ Draft: thuis wordt eigen unit met Merpan 0.25 (helft van 0.5)
+
+Bericht 6: "klopt, opslaan"
+→ Bevestig alle units naar spuitschrift
+```
+
+### 6.3 Entity Extraction
+
+Voor multi-turn correcties extraheert het systeem **target entities**:
+
+```typescript
+interface CorrectionEntities {
+  // Target product (voor product-specifieke operaties)
+  targetProduct?: string;
+
+  // Target percelen (op naam of ras)
+  targetParcels?: string[];
+  targetVariety?: string;   // bijv. "Conference"
+  targetCrop?: string;      // bijv. "peren"
+
+  // Nieuwe waarden
+  newDosage?: { amount: number; unit: string };
+  newDate?: Date;
+  newProduct?: string;
+
+  // Modifiers
+  dosageMultiplier?: number;  // bijv. 0.5 voor "halve dosering"
+  reason?: string;            // bijv. "reduced_dosage"
+}
+```
+
+### 6.4 applyGroupedCorrection
+
+De `applyGroupedCorrection()` functie past correcties toe op een `SprayRegistrationGroup`:
+
+```typescript
+function applyGroupedCorrection(
+  correction: CorrectionResult,
+  group: SprayRegistrationGroup,
+  parcelInfo: ParcelInfo[]
+): SprayRegistrationGroup
+```
+
+**Capabilities:**
+- **Unit splitting**: Percelen uit bestaande unit halen en nieuwe unit maken
+- **Unit merging**: Percelen combineren in bestaande unit
+- **Product modification**: Producten toevoegen/vervangen/dosering aanpassen
+- **Date handling**: Aparte datum per unit voor split-registraties
+
+### 6.5 Negatie Patroon Herkenning
 
 ```typescript
 const NEGATION_PATTERNS = [
@@ -367,7 +448,7 @@ const NEGATION_PATTERNS = [
 ];
 ```
 
-### 6.3 Context-aware Correcties
+### 6.6 Context-aware Correcties
 
 Het systeem houdt **conversatie-context** bij:
 
@@ -1227,6 +1308,7 @@ GOED: products: "Surround:0:L" ← ALLEEN het genoemde product
 | `/e2e/grouped-registrations.spec.ts` | Grouped registrations tests |
 | `/e2e/ctgb-validation.spec.ts` | CTGB validatie tests |
 | `/scripts/test-smart-input-v2.ts` | Direct V2 parsing tests |
+| `/scripts/test-multi-turn-corrections.ts` | **NIEUW** Multi-turn correctie tests (v2.2) |
 
 ---
 
@@ -1243,12 +1325,23 @@ De Slimme Invoer functionaliteit is een **geavanceerd NLP-systeem** dat:
 7. **Semantisch zoekt** in product databases
 8. **Tool-calling** gebruikt voor complexe queries
 9. **Server-side auth** correct afhandelt voor RLS *(v2.1)*
+10. **Unit splitting/merging** voor multi-turn registraties *(v2.2)*
+11. **Entity extraction** voor intelligente correcties *(v2.2)*
 
 Het systeem is ontworpen voor **snelheid** (pre-classificatie zonder AI calls), **nauwkeurigheid** (5-niveau product resolutie), en **gebruiksgemak** (natuurlijke taal invoer met directe visuele feedback).
 
 ---
 
 ## Changelog
+
+### v2.2 (7 februari 2026)
+- **Multi-Turn Correction Service Upgrade**: Uitgebreide ondersteuning voor complexe correcties in meerdere berichten
+- **8 nieuwe correctie types**: `update_dosage_specific`, `add_plot_to_existing`, `add_plot_different_date`, `add_product_to_plots`, `override_dosage_for_plots`, `swap_product`, `update_date_for_plots`, `update_dosage_for_plots`
+- **Entity extraction**: Automatische detectie van target product, perceel, dosering en datum in correctieberichten
+- **`applyGroupedCorrection()`**: Nieuwe functie voor unit splitting, merging en modificatie
+- **Halve dosering**: Ondersteuning voor "halve dosering" modifier met automatische berekening
+- **Test script**: Comprehensive test suite in `/scripts/test-multi-turn-corrections.ts`
+- **Timeline fix**: Voltooide sessies worden nu correct getoond in de Tijdlijn "Voltooid" tab
 
 ### v2.1 (6 februari 2026)
 - **Datum-split variaties**: Ondersteuning voor "Oh ja stadhoek was gisteren" en "Alleen stadhoek was gisteren" patronen
