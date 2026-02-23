@@ -13,6 +13,50 @@ Het Command Center is de centrale invoerinterface voor spuitregistraties via nat
 
 ---
 
+## Slimme Invoer V2 (Hybride Architectuur)
+
+**Locatie:** `/smart-input-v2/page.tsx`
+
+V2 is een volledig herontworpen systeem met betere performance:
+
+| Aspect | V1 | V2 |
+|--------|----|----|
+| Context Loading | Server-side per request | Client-side cached |
+| Response Time | 6-12s | 1-3s |
+| Validation | Client-side | Server-side (6 rules) |
+| Unit Detection | Manual | Smart (kg/ha vs L/ha) |
+
+### V2 Endpoints
+
+| Endpoint | Functie |
+|----------|---------|
+| `/api/smart-input-v2` | Hybride verwerking (pipeline + agent) |
+| `/api/smart-input-v2/context` | Context loading (parcels, products, history) |
+
+### V2 Bestanden
+
+| Bestand | Functie |
+|---------|---------|
+| `/smart-input-v2/page.tsx` | V2 pagina met context loading |
+| `/src/lib/types-v2.ts` | SmartInputUserContext types |
+| `/src/lib/draft-validator.ts` | Server-side 6-rule validation |
+
+### V2 Tests
+
+| Bestand | Functie |
+|---------|---------|
+| `/scripts/regression-corpus.ts` | 53 test scenarios |
+| `/scripts/run-regression-tests.ts` | CLI test runner |
+| `/e2e/smart-input-v2.spec.ts` | Playwright E2E tests |
+
+**Run Tests:**
+```bash
+npx tsx scripts/run-regression-tests.ts --verbose
+npm run test:e2e:headed
+```
+
+---
+
 ## Componenten en Verantwoordelijkheden
 
 ### Page Components

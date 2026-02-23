@@ -590,6 +590,11 @@ function checkCropAllowed(ctx: ValidationContext): ValidationFlag[] {
 function checkDosage(ctx: ValidationContext): ValidationFlag[] {
   const flags: ValidationFlag[] = [];
 
+  // Skip validation when dosage is 0 (not yet specified by user)
+  if (ctx.dosage === 0) {
+    return flags;
+  }
+
   if (!ctx.product.gebruiksvoorschriften || ctx.product.gebruiksvoorschriften.length === 0) {
     return flags;
   }

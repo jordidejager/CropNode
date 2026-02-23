@@ -935,21 +935,23 @@ export async function updateSpuitschriftEntryAction(
 
                 const sprayable = sprayableParcels.find(sp => sp.id === parcelId);
                 if (sprayable) {
+                    // Convert SprayableParcel to Parcel format for validation
+                    // Note: SprayableParcel has string|null location, Parcel expects {lat,lng}|undefined
                     return {
                         id: sprayable.id,
                         name: sprayable.name,
-                        area: sprayable.area,
+                        area: sprayable.area ?? 0,
                         crop: sprayable.crop,
-                        variety: sprayable.variety,
-                        location: sprayable.location || null,
+                        variety: sprayable.variety ?? undefined,
+                        location: undefined, // Location format differs, not needed for validation
                         geometry: sprayable.geometry,
-                        source: sprayable.source,
-                        rvoId: sprayable.rvoId,
+                        source: sprayable.source ?? undefined,
+                        rvoId: sprayable.rvoId ?? undefined,
                         subParcels: [{
                             id: sprayable.id,
                             crop: sprayable.crop,
-                            variety: sprayable.variety,
-                            area: sprayable.area,
+                            variety: sprayable.variety ?? undefined,
+                            area: sprayable.area ?? 0,
                         }]
                     } as Parcel;
                 }

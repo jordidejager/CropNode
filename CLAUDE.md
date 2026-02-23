@@ -361,7 +361,8 @@ src/
 │   │   ├── team-tasks/          # Urenregistratie
 │   │   └── profile/             # Gebruikersprofiel
 │   ├── api/                     # API routes
-│   │   ├── analyze-input/       # AI parsing endpoint
+│   │   ├── analyze-input/       # AI parsing endpoint (V1)
+│   │   ├── smart-input-v2/      # Slimme Invoer V2 endpoint + context
 │   │   ├── validate/            # CTGB validatie
 │   │   ├── ctgb/search/         # Product zoeken
 │   │   └── chat/                # Streaming chat
@@ -382,6 +383,8 @@ src/
 │   ├── ctgb-validator.ts       # CTGB validatie logica
 │   ├── correction-service.ts   # Correctie detectie
 │   ├── feedback-service.ts     # User learning loop
+│   ├── draft-validator.ts      # Server-side draft validatie (V2)
+│   ├── types-v2.ts             # Slimme Invoer V2 types
 │   └── types.ts                # TypeScript definities
 │
 └── middleware.ts               # Auth middleware
@@ -409,6 +412,9 @@ User correcties worden opgeslagen in `smart_input_feedback` tabel om toekomstige
 ### 6. Work Day Weighting
 Task logging: Ma-Vr = 1 dag, Za = 0.5 dag, Zo = 0 dagen. Automatische berekening van werkdagen in datumbereik.
 
+### 7. Slimme Invoer V2 Hybride Architectuur
+Bericht 1 gaat door snelle pipeline (classify + parse in 1 call), vervolgberichten via AI Agent met tools. Client-side context caching reduceert response tijd van 6-12s naar 1-3s. Server-side draft validation met 6 business rules vóór UI rendering.
+
 ---
 
 ## Environment Variables
@@ -433,11 +439,18 @@ NEXT_PUBLIC_FIREBASE_API_KEY=...
 ## Development Commands
 
 ```bash
-npm run dev        # Start dev server (Turbopack)
-npm run build      # Production build
-npm run lint       # ESLint
-npm run typecheck  # TypeScript check
-npm test           # Playwright tests
+npm run dev           # Start dev server (Turbopack)
+npm run build         # Production build
+npm run lint          # ESLint
+npm run typecheck     # TypeScript check
+npm run test:e2e      # Playwright E2E tests
+npm run test:e2e:ui   # Playwright interactive UI
+npm run test:e2e:headed  # Playwright met zichtbare browser
+
+# Regression tests Slimme Invoer V2
+npx tsx scripts/run-regression-tests.ts           # Alle 53 tests
+npx tsx scripts/run-regression-tests.ts --verbose # Met details
+npx tsx scripts/run-regression-tests.ts --category=simpel  # Per categorie
 ```
 
 ---

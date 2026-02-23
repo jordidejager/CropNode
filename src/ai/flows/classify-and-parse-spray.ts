@@ -253,8 +253,14 @@ GOED: products: "Surround:0:L" ← ALLEEN het genoemde product
 ### Perceel Matching:
 - "alle appels" → alle percelen met crop='Appel'
 - "alle peren" → alle percelen met crop='Peer'
-- "alle elstar" → alle percelen met variety='Elstar'
-- "overal" / "alles" → alle perceel IDs
+- "alle elstar" / "de elstar" → alle percelen met variety='Elstar'
+- "alle conference" / "de conference" → alle percelen met variety='Conference'
+- "overal" / "alles" / "alle bomen" → alle perceel IDs
+
+⚠️ **KRITIEK: Gebruik ALTIJD de exacte 'id' waarde uit de percelenlijst hieronder!**
+- NOOIT perceelnamen of rasnamen als ID gebruiken
+- De 'id' velden zijn UUIDs die beginnen met letters/cijfers zoals "8d123f2a-..."
+- Filter percelen op crop/variety en retourneer hun 'id' waarden
 
 {{#if previousDraft}}
 ### Actieve Draft (voor MODIFY_DRAFT):
@@ -263,7 +269,7 @@ Pas de wijzigingen uit de input toe op deze draft.
 {{/if}}
 
 {{#if plots}}
-### Beschikbare Percelen:
+### Beschikbare Percelen (gebruik de 'id' waarde, NIET de 'name'):
 {{{plots}}}
 {{/if}}
 

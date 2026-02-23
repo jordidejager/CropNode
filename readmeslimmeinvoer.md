@@ -1,6 +1,6 @@
 # Slimme Invoer - Technische Documentatie
 
-> Laatste update: 7 februari 2026 (v2.2 - Multi-Turn Correction Service Upgrade)
+> Laatste update: 22 februari 2026 (v2.3 - Slimme Invoer V2 Herarchitectuur)
 
 Dit document beschrijft de volledige werking van de "Slimme Invoer" functionaliteit in het AgriBot Command Center. Het systeem verwerkt natuurlijke taal invoer van gebruikers en zet deze om naar gestructureerde registraties, queries en acties.
 
@@ -24,6 +24,7 @@ Dit document beschrijft de volledige werking van de "Slimme Invoer" functionalit
 14. [Server-Side Auth & RLS](#14-server-side-auth--rls)
 15. [Anti-Hallucinatie Maatregelen](#15-anti-hallucinatie-maatregelen-v21)
 16. [Bestandsoverzicht](#16-bestandsoverzicht)
+17. [Slimme Invoer V2 — Hybride Architectuur](#17-slimme-invoer-v2--hybride-architectuur)
 
 ---
 
@@ -1332,7 +1333,277 @@ Het systeem is ontworpen voor **snelheid** (pre-classificatie zonder AI calls), 
 
 ---
 
+## 17. Slimme Invoer V2 — Hybride Architectuur
+
+### 17.1 Overzicht
+
+Slimme Invoer V2 is een **volledig herontworpen systeem** met een hybride aanpak:
+
+| Bericht | Verwerkingsmethode | Latency |
+|---------|-------------------|---------|
+| Eerste bericht | Snelle pipeline (classify + parse) | 1-3s |
+| Vervolgberichten | AI Agent met tool calling | 2-5s |
+
+**Key Improvements:**
+- Client-side context caching (80% snellere responses)
+- Server-side draft validation (6 business rules)
+- Smart unit detection (kg/ha vs L/ha)
+- Regression test suite (53 scenarios)
+- Playwright E2E tests
+
+### 17.2 Client-Side Context Loading
+
+#### Probleem
+Server-side database calls bij elk bericht kostten 200-400ms per call × 4-6 calls = 1-2.5 seconden overhead.
+
+#### Oplossing
+Context wordt **eenmalig geladen bij page mount** en met elk bericht meegestuurd.
+
+**Context Endpoint:** `/api/smart-input-v2/context`
+
+```typescript
+interface SmartInputUserContext {
+  parcels: Array<{
+    id: string;
+    name: string;
+    crop: string;
+    variety: string | null;
+    area: number | null;
+  }>;
+  products: CtgbProductSlim[];       // Slim subset van CTGB data
+  recentHistory: ParcelHistorySlim[]; // Laatste 100 entries
+  productAliases: ProductAlias[];
+  loadedAt: string;
+}
+```
+
+**Frontend Loading:**
+```typescript
+const [userContext, setUserContext] = useState<SmartInputUserContext | null>(null);
+
+useEffect(() => {
+  fetch('/api/smart-input-v2/context')
+    .then(r => r.json())
+    .then(setUserContext);
+}, []);
+
+// Elk bericht stuurt context mee
+await fetch('/api/smart-input-v2', {
+  body: JSON.stringify({
+    message,
+    conversationHistory,
+    currentDraft,
+    userContext  // ← Context meegestuurd
+  })
+});
+```
+
+**Impact:** Response tijd van 6-12s naar **1-3s** (80% reductie).
+
+### 17.3 Server-Side Draft Validation
+
+Elke draft wordt gevalideerd vóór rendering met 6 deterministische checks.
+
+**Bestand:** `/src/lib/draft-validator.ts`
+
+#### Validatie Regels
+
+| # | Check | Severity | Beschrijving |
+|---|-------|----------|--------------|
+| 1 | Parcel Consistency | Error | Elk perceel ID moet bestaan in UserContext |
+| 2 | No Duplicate Parcels | Warning | Perceel niet in 2 units met zelfde producten |
+| 3 | Date Logic | Error/Warning | Niet >90 dagen oud, niet in toekomst |
+| 4 | Product Presence | Error | Elke unit heeft ≥1 product |
+| 5 | Dosage Range | Warning/Error | >0 en <CTGB max dosering |
+| 6 | Total Usage | Info | Area × dosage sanity check |
+
+**Validation Result:**
+```typescript
+interface DraftValidationResult {
+  isValid: boolean;           // true als geen errors
+  issues: DraftValidationIssue[];
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+}
+
+interface DraftValidationIssue {
+  severity: 'error' | 'warning' | 'info';
+  code: string;               // 'UNKNOWN_PARCEL', 'HIGH_DOSAGE', etc.
+  message: string;
+  field?: string;             // 'plots', 'dosage', 'date'
+  unitId?: string;
+  productIndex?: number;
+  suggestion?: string;
+}
+```
+
+### 17.4 Smart Unit Detection
+
+Vaste producten (spuitkorrels) gebruiken automatisch `kg/ha`, vloeibare producten `L/ha`.
+
+**Detectie Logica:**
+```typescript
+function getDefaultUnitForProduct(productName: string): string {
+  const nameLower = productName.toLowerCase();
+
+  // Vaste stoffen
+  if (nameLower.includes('spuitkorrel') ||
+      nameLower.includes(' wp') ||
+      nameLower.includes(' wg') ||
+      nameLower.includes(' df') ||
+      nameLower.includes(' wdg')) {
+    return 'kg/ha';
+  }
+
+  // Vloeibare stoffen
+  if (nameLower.includes(' sc') ||
+      nameLower.includes(' ec') ||
+      nameLower.includes(' sl')) {
+    return 'L/ha';
+  }
+
+  // Fallback: check CTGB dosering
+  return parseUnitFromCtgbDosering(product) || 'L/ha';
+}
+```
+
+**Voorbeelden:**
+| Product | Formaat | Unit |
+|---------|---------|------|
+| Merpan Spuitkorrel | WP | kg/ha |
+| Delan WG | WG | kg/ha |
+| Score 250 EC | EC | L/ha |
+| Luna Sensation | SC | L/ha |
+
+### 17.5 Regression Test Corpus
+
+53 test scenarios verdeeld over 10 categorieën.
+
+**Bestanden:**
+- `/scripts/regression-corpus.ts` — Test definities
+- `/scripts/run-regression-tests.ts` — Test runner
+
+**Run Commando's:**
+```bash
+# Alle tests
+npx tsx scripts/run-regression-tests.ts
+
+# Specifieke categorie
+npx tsx scripts/run-regression-tests.ts --category=simpel
+
+# Specifieke test
+npx tsx scripts/run-regression-tests.ts --id=simpel-001
+
+# Verbose output
+npx tsx scripts/run-regression-tests.ts --verbose
+```
+
+**Categorieën:**
+
+| Categorie | Aantal | Beschrijving |
+|-----------|--------|--------------|
+| simpel | 5 | Basis registraties |
+| exception | 6 | "behalve", "niet" patronen |
+| tankmenging | 5 | Meerdere producten |
+| multi-turn | 8 | Correcties in vervolgberichten |
+| informeel | 5 | Informele taal |
+| datum | 6 | Datum variaties |
+| variatie | 6 | Afwijkende doseringen |
+| correctie | 5 | Specifieke correctie-types |
+| groep | 4 | Perceelgroepen |
+| edge | 3 | Edge cases |
+
+**Test Structuur:**
+```typescript
+interface RegressionTest {
+  id: string;
+  categorie: string;
+  beschrijving: string;
+  berichten: string[];           // Sequentie van user berichten
+  verwacht: {
+    aantalUnits?: number;
+    producten?: string[];
+    doseringen?: Record<string, number>;
+    datumRelatief?: 'vandaag' | 'gisteren' | 'eergisteren';
+    perceelCriteria?: {
+      crop?: string;
+      variety?: string;
+      minAantal?: number;
+      maxAantal?: number;
+      nietAanwezig?: string[];
+    };
+  };
+}
+```
+
+### 17.6 Playwright E2E Tests
+
+UI tests die de volledige gebruikerservaring valideren.
+
+**Bestand:** `/e2e/smart-input-v2.spec.ts`
+
+**Run Commando's:**
+```bash
+# Alle E2E tests
+npm run test:e2e
+
+# Met zichtbare browser
+npm run test:e2e:headed
+
+# Playwright UI (interactief)
+npm run test:e2e:ui
+
+# Debug mode
+npm run test:e2e:debug
+
+# Alleen smart-input-v2
+npx playwright test e2e/smart-input-v2.spec.ts --headed
+```
+
+**Test Suites:**
+
+| Suite | Tests | Focus |
+|-------|-------|-------|
+| Basic Registration | 5 | Simpele parsing, dosering, tank mixes |
+| Corrections | 4 | Percelen verwijderen, dosering toevoegen |
+| Exceptions | 2 | "behalve", "niet" handling |
+| Confirmation | 2 | Save button, validation warnings |
+| UI States | 3 | Loading, processing indicators |
+| Mobile | 1 | iPhone SE viewport |
+| Error Handling | 2 | Empty input, unknown products |
+
+**Configuratie:** `/playwright.config.ts`
+- 120s timeout per test (voor AI response)
+- Single worker (database consistency)
+- Screenshots/video on failure
+- HTML report in `playwright-report/`
+
+### 17.7 Bestandsoverzicht V2
+
+| Bestand | Functie |
+|---------|---------|
+| `/src/app/api/smart-input-v2/route.ts` | Hybride endpoint |
+| `/src/app/api/smart-input-v2/context/route.ts` | Context loading |
+| `/src/app/(app)/command-center/smart-input-v2/page.tsx` | V2 pagina |
+| `/src/lib/draft-validator.ts` | Server-side validatie |
+| `/src/lib/types-v2.ts` | V2 types |
+| `/scripts/regression-corpus.ts` | 53 test scenarios |
+| `/scripts/run-regression-tests.ts` | Test runner |
+| `/e2e/smart-input-v2.spec.ts` | Playwright E2E tests |
+
+---
+
 ## Changelog
+
+### v2.3 (22 februari 2026)
+- **Slimme Invoer V2**: Complete herarchitectuur met hybride aanpak (pipeline + agent)
+- **Client-side context loading**: 80% snellere responses door caching
+- **Server-side draft validation**: 6 business rules vóór UI rendering
+- **Smart unit detection**: Automatische kg/ha vs L/ha op basis van productformulering
+- **Last used dosage lookup**: Automatisch vorige dosering uit spuithistorie
+- **Regression test corpus**: 53 testscenario's in 10 categorieën
+- **Playwright E2E tests**: Volledige UI test coverage
 
 ### v2.2 (7 februari 2026)
 - **Multi-Turn Correction Service Upgrade**: Uitgebreide ondersteuning voor complexe correcties in meerdere berichten

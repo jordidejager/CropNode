@@ -37,11 +37,13 @@ export const getCachedCtgbProducts = unstable_cache(
   async (): Promise<CtgbProduct[]> => {
     console.log('[server-cache] Fetching CTGB products from database...');
 
+    // NOTE: Increased limit from 1000 to 2000 because we have 1047+ products
+    // Products starting with W-Z were being cut off (including WOPRO Luisweg)
     const { data, error } = await supabase
       .from('ctgb_products')
       .select('*')
       .order('naam')
-      .limit(1000);
+      .limit(2000);
 
     if (error) {
       console.error('[server-cache] Error fetching CTGB products:', error.message);

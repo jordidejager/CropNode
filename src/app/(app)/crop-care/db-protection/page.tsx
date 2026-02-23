@@ -6,7 +6,18 @@ import { MiddelenOverzichtClientPage } from '../my-products/client-page';
 import { ProductDatabaseSkeleton, ErrorState } from '@/components/ui/data-states';
 import { CardTitle, CardDescription } from '@/components/ui/card';
 
-const HARD_FRUIT_CROPS = ['appel', 'peer', 'pitvruchten', 'vruchtbomen'];
+// Extended list of crop terms used by CTGB for hard fruit
+// Includes variations, plurals, and related terms
+const HARD_FRUIT_CROPS = [
+    'appel', 'appels', 'appelboom', 'appelbomen',
+    'peer', 'peren', 'perenboom', 'perenbomen',
+    'pitvruchten', 'pitfruit', 'pitvrucht',
+    'vruchtbomen', 'vruchtboom',
+    'fruitgewassen', 'fruitteelt', 'fruit',
+    'hardfruit', 'hard fruit',
+    'malus',  // Latin for apple
+    'pyrus',  // Latin for pear
+];
 
 export default function CtgbDatabasePage() {
     const {

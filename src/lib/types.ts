@@ -111,12 +111,27 @@ export type AddressSuggestion = {
 
 export type LogStatus = 'Nieuw' | 'Analyseren...' | 'Te Controleren' | 'Akkoord' | 'Fout' | 'Waarschuwing' | 'Afgekeurd';
 
+/**
+ * Doelorganisme met bijbehorende gebruiksvoorschriften
+ * Gebruikt voor UI weergave in doelorganisme selector
+ */
+export type DoelorganismeOption = {
+  naam: string;                    // e.g. "Schurft (Venturia inaequalis)"
+  dosering?: string;               // e.g. "1,5 l/ha"
+  interval?: string;               // e.g. "min. 7 dagen"
+  maxToepassingen?: number;        // e.g. 6
+  veiligheidstermijn?: string;     // e.g. "21 dagen"
+  opmerkingen?: string[];          // Any wCodes or remarks
+  gewas: string;                   // The crop this applies to
+};
+
 export type ProductEntry = {
   product: string;
   dosage: number;
   unit: string;
   targetReason?: string; // Doelorganisme uit gebruikersinvoer (bijv. "luis", "schurft")
   doelorganisme?: string; // Geselecteerd doelorganisme uit CTGB voorschriften
+  availableDoelorganismen?: DoelorganismeOption[]; // Beschikbare opties uit CTGB (voor UI)
 };
 
 export type ParsedSprayData = {
@@ -507,4 +522,232 @@ export type PestDisease = {
   // Relations
   relatedProducts: string[];   // CTGB product IDs
   externalLinks: ExternalLink[];
+};
+
+// ============================================
+// Storage (Koelcelbeheer) Types
+// ============================================
+
+export type BlockedPosition = {
+  row: number;
+  col: number;
+};
+
+export type StorageCellStatus = 'active' | 'cooling_down' | 'inactive';
+
+// Cell side for door/evaporator placement
+export type CellSide = 'north' | 'south' | 'east' | 'west';
+
+// Door position along a cell wall
+export type DoorPosition = {
+  side: CellSide;
+  startCol: number;  // Start position along that side (0-indexed)
+  endCol: number;    // End position (can span multiple columns)
+};
+
+// Evaporator position along a cell wall
+export type EvaporatorPosition = {
+  side: CellSide;
+  startCol: number;
+  endCol: number;
+};
+
+// Position of cell in complex overview grid
+export type ComplexPosition = {
+  x: number;        // Grid column in complex
+  y: number;        // Grid row in complex
+  rotation: 0 | 90 | 180 | 270;
+};
+
+// Height overrides per position: "row-col" -> maxHeight
+export type PositionHeightOverrides = Record<string, number>;
+
+// Storage Complex - container for multiple cells in 2D layout
+export type StorageComplex = {
+  id: string;
+  name: string;
+  gridWidth: number;    // Complex grid width (cells can span multiple units)
+  gridHeight: number;   // Complex grid height
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type StorageCell = {
+  id: string;
+  name: string;
+  width: number;          // columns (crate positions)
+  depth: number;          // rows (crate positions)
+  blockedPositions: BlockedPosition[];
+  status: StorageCellStatus;
+  // Enhanced fields for redesign
+  maxStackHeight: number;                      // Default max crates stacked (default 8)
+  doorPositions: DoorPosition[];               // Door placements
+  evaporatorPositions: EvaporatorPosition[];   // Evaporator placements
+  positionHeightOverrides: PositionHeightOverrides; // Per-position height limits
+  complexId: string | null;                    // Link to complex for layout
+  complexPosition: ComplexPosition;            // Position and rotation in complex
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// Variety count in a storage cell
+export type VarietyCount = {
+  variety: string;
+  count: number;
+};
+
+export type StorageCellSummary = StorageCell & {
+  totalPositions: number;
+  filledPositions: number;
+  fillPercentage: number;
+  dominantVariety: string | null;
+  totalCrates: number;        // Sum of all quantities (actual crates stored)
+  varietyCounts: VarietyCount[];  // Breakdown by variety
+  totalCapacity: number;      // Sum of all max heights (accounts for overrides)
+};
+
+export type QualityClass = 'Klasse I' | 'Klasse II' | 'Industrie';
+
+export type StoragePosition = {
+  id: string;
+  cellId: string;
+  rowIndex: number;
+  colIndex: number;
+  variety: string | null;
+  subParcelId: string | null;
+  subParcelName?: string | null;
+  dateStored: Date | null;
+  quantity: number;       // Stack height (how many crates stacked)
+  qualityClass: QualityClass | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type StoragePositionInput = Omit<StoragePosition, 'id' | 'createdAt' | 'updatedAt'>;
+
+// ============================================================================
+// Sub-parcel Storage System (new in migration 008)
+// ============================================================================
+
+// Color palette for sub-parcels (10 distinguishable colors on dark background)
+export const SUB_PARCEL_COLORS = [
+  { hex: '#ef4444', name: 'Rood' },      // red-500
+  { hex: '#f97316', name: 'Oranje' },    // orange-500
+  { hex: '#eab308', name: 'Geel' },      // yellow-500
+  { hex: '#22c55e', name: 'Groen' },     // green-500
+  { hex: '#06b6d4', name: 'Cyaan' },     // cyan-500
+  { hex: '#3b82f6', name: 'Blauw' },     // blue-500
+  { hex: '#8b5cf6', name: 'Paars' },     // violet-500
+  { hex: '#ec4899', name: 'Roze' },      // pink-500
+  { hex: '#14b8a6', name: 'Teal' },      // teal-500
+  { hex: '#f59e0b', name: 'Amber' },     // amber-500
+] as const;
+
+// Pick number for harvest tracking (apples/pears are picked multiple times)
+export type PickNumber = 1 | 2 | 3 | 4 | 5;
+
+// Cell sub-parcel: links a sub-parcel to a storage cell with display properties
+export type CellSubParcel = {
+  id: string;
+  cellId: string;
+  parcelId: string | null;
+  subParcelId: string | null;
+  variety: string;
+  color: string;           // Hex color (e.g., '#ef4444')
+  pickDate: Date;          // Plukdatum
+  pickNumber: PickNumber;  // 1e t/m 5e pluk
+  notes: string | null;
+  harvestRegistrationId: string | null;  // Link to harvest registration for tracking
+  createdAt: Date;
+  updatedAt: Date;
+  // Computed from view (when using getCellSubParcels)
+  totalCrates?: number;
+  positionsUsed?: number;
+  // Joined data for display
+  parcelName?: string;
+  subParcelName?: string;
+};
+
+export type CellSubParcelInput = Omit<CellSubParcel, 'id' | 'createdAt' | 'updatedAt' | 'totalCrates' | 'positionsUsed' | 'parcelName' | 'subParcelName'>;
+
+// Position content: one layer in a stack (multiple layers = mixed stack)
+export type PositionContent = {
+  id: string;
+  cellId: string;
+  rowIndex: number;
+  colIndex: number;
+  cellSubParcelId: string;
+  stackCount: number;      // Number of crates from this sub-parcel in this layer
+  stackOrder: number;      // Order in stack (1 = bottom, 2 = second from bottom, etc.)
+  createdAt: Date;
+  updatedAt: Date;
+  // Joined data for display
+  variety?: string;
+  color?: string;
+};
+
+export type PositionContentInput = Omit<PositionContent, 'id' | 'createdAt' | 'updatedAt' | 'variety' | 'color'>;
+
+// Aggregated position stack for floor plan rendering
+export type PositionStack = {
+  rowIndex: number;
+  colIndex: number;
+  contents: PositionContent[];  // Ordered by stackOrder (1 = bottom)
+  totalHeight: number;          // Sum of all stackCounts
+  maxHeight: number;            // Allowed max for this position (from cell config)
+  isMixed: boolean;             // true if more than one sub-parcel
+  dominantColor: string;        // Color of the sub-parcel with most crates
+};
+
+// Layer in a position stack (for rendering split colors)
+export type StackLayer = {
+  cellSubParcelId: string;
+  variety: string;
+  color: string;
+  stackCount: number;
+  stackOrder: number;
+  percentageOfTotal: number;   // For proportional rendering (0-100)
+};
+
+// ============================================================================
+// Harvest Registration Types (Oogstregistratie)
+// ============================================================================
+
+export type HarvestStorageStatus = 'not_stored' | 'partially_stored' | 'fully_stored';
+
+export type HarvestRegistration = {
+  id: string;
+  parcelId: string | null;
+  subParcelId: string | null;
+  variety: string;
+  harvestDate: Date;
+  pickNumber: PickNumber;
+  totalCrates: number;
+  qualityClass: QualityClass | null;
+  weightPerCrate: number | null;
+  season: string;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  // Computed from view (when using getHarvestRegistrations)
+  parcelName?: string;
+  subParcelName?: string;
+  storedCrates?: number;
+  remainingCrates?: number;
+  storageStatus?: HarvestStorageStatus;
+  cellNames?: string;
+};
+
+export type HarvestRegistrationInput = {
+  parcelId?: string | null;
+  subParcelId?: string | null;
+  variety: string;
+  harvestDate: Date;
+  pickNumber: PickNumber;
+  totalCrates: number;
+  qualityClass?: QualityClass | null;
+  weightPerCrate?: number | null;
+  season: string;
+  notes?: string | null;
 };

@@ -113,7 +113,11 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     // Dunning / Groeiregulatie
     // ============================================
     'surround': 'SURROUND® WP CROP PROTECTANT',
+    'surround wp': 'SURROUND® WP CROP PROTECTANT',
+    'surround wp crop protectant': 'SURROUND® WP CROP PROTECTANT',
+    'surround* wp crop protectant': 'SURROUND® WP CROP PROTECTANT',  // AI sometimes uses * instead of ®
     'kaoline': 'SURROUND® WP CROP PROTECTANT',
+    'kaolin': 'SURROUND® WP CROP PROTECTANT',
     'regalis': 'Regalis Plus',
     'prohexadion': 'Regalis Plus',
     'prohexadion-calcium': 'Regalis Plus',
@@ -137,6 +141,13 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'propyzamide': 'Kerb Flo',
     'spotlight': 'Spotlight Plus',
     'carfentrazone': 'Spotlight Plus',
+
+    // ============================================
+    // Bladluis specifiek
+    // ============================================
+    'wopro': 'WOPRO Luisweg',
+    'wopro luisweg': 'WOPRO Luisweg',
+    'luisweg': 'WOPRO Luisweg',
 
     // ============================================
     // Diverse / Overige
@@ -228,6 +239,8 @@ export async function resolveProductAlias(
     parcelHistory: ParcelHistoryEntry[]
 ): Promise<ResolvedProduct> {
     const normalizedInput = inputName.toLowerCase().trim();
+    // Also create a version stripped of special characters for fuzzy matching
+    const strippedInput = normalizedInput.replace(/[®™*©]/g, '').replace(/\s+/g, ' ').trim();
 
     // === FASE 1: Snelle lookups parallel uitvoeren (0ms, geen I/O) ===
     // Niveau 1, 2, en 3 zijn allemaal in-memory lookups
@@ -251,11 +264,27 @@ export async function resolveProductAlias(
 
     // Niveau 2: Statische alias mapping (in-memory object)
     const checkStaticAlias = (): ResolvedProduct | null => {
-        if (PRODUCT_ALIASES[normalizedInput]) {
-            const aliasTarget = PRODUCT_ALIASES[normalizedInput];
+        // Try exact match first, then stripped version
+        let aliasTarget = PRODUCT_ALIASES[normalizedInput] || PRODUCT_ALIASES[strippedInput];
+
+        // If no exact match, try fuzzy match by iterating through all aliases
+        if (!aliasTarget) {
+            // Normalize both input and alias keys for comparison
+            const normalizeForMatch = (s: string) => s.toLowerCase().replace(/[®™*©\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+            const inputNorm = normalizeForMatch(normalizedInput);
+
+            for (const [aliasKey, aliasValue] of Object.entries(PRODUCT_ALIASES)) {
+                if (normalizeForMatch(aliasKey) === inputNorm) {
+                    aliasTarget = aliasValue;
+                    break;
+                }
+            }
+        }
+
+        if (aliasTarget) {
             // Verify the alias target exists in CTGB database
             const targetExists = ctgbProducts.some(p =>
-                p.naam?.toLowerCase() === aliasTarget.toLowerCase()
+                p.naam?.toLowerCase() === aliasTarget!.toLowerCase()
             );
             if (targetExists) {
                 return {

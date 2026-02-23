@@ -18,7 +18,29 @@ import type {
   ProductionHistory,
   FieldSignal,
   FieldSignalReaction,
-  ActiveTaskSession
+  ActiveTaskSession,
+  ProductEntry,
+  StorageComplex,
+  StorageCell,
+  StorageCellSummary,
+  StoragePosition,
+  StoragePositionInput,
+  BlockedPosition,
+  StorageCellStatus,
+  DoorPosition,
+  EvaporatorPosition,
+  ComplexPosition,
+  PositionHeightOverrides,
+  CellSubParcel,
+  CellSubParcelInput,
+  PositionContent,
+  PositionContentInput,
+  PositionStack,
+  PickNumber,
+  QualityClass,
+  HarvestRegistration,
+  HarvestRegistrationInput,
+  HarvestStorageStatus,
 } from './types';
 
 // ============================================
@@ -216,6 +238,161 @@ export async function deleteSpuitschriftEntry(entryId: string): Promise<void> {
     .eq('id', entryId);
 
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Update an existing spuitschrift entry
+ * Also handles cascade updates to parcel_history and inventory_movements
+ */
+export async function updateSpuitschriftEntry(
+  entryId: string,
+  updates: {
+    date?: Date;
+    plots?: string[];
+    products?: ProductEntry[];
+    validationMessage?: string | null;
+    status?: 'Akkoord' | 'Waarschuwing';
+  },
+  providedUserId?: string | null
+): Promise<SpuitschriftEntry> {
+  const userId = providedUserId ?? await getCurrentUserId();
+  if (!userId) {
+    throw new Error('Geen gebruiker ingelogd. Log opnieuw in en probeer het opnieuw.');
+  }
+
+  // Build update payload
+  const updatePayload: Record<string, unknown> = {};
+  if (updates.date !== undefined) {
+    updatePayload.date = updates.date instanceof Date ? updates.date.toISOString() : updates.date;
+  }
+  if (updates.plots !== undefined) {
+    updatePayload.plots = updates.plots;
+  }
+  if (updates.products !== undefined) {
+    updatePayload.products = updates.products;
+  }
+  if (updates.validationMessage !== undefined) {
+    updatePayload.validation_message = updates.validationMessage;
+  }
+  if (updates.status !== undefined) {
+    updatePayload.status = updates.status;
+  }
+
+  // Use supabaseAdmin to bypass RLS (server actions don't have cookie access)
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) {
+    throw new Error('Database configuratie fout: SUPABASE_SERVICE_ROLE_KEY is niet ingesteld.');
+  }
+
+  return withRetry(async () => {
+    // Update the spuitschrift entry
+    const { data, error } = await adminClient
+      .from('spuitschrift')
+      .update(updatePayload)
+      .eq('id', entryId)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('Geen data ontvangen van database');
+
+    // If plots or products changed, we need to update parcel_history and inventory_movements
+    if (updates.plots !== undefined || updates.products !== undefined) {
+      // Delete old parcel_history and inventory_movements
+      await adminClient
+        .from('parcel_history')
+        .delete()
+        .eq('spuitschrift_id', entryId);
+
+      await adminClient
+        .from('inventory_movements')
+        .delete()
+        .eq('reference_id', entryId);
+
+      // Re-create parcel_history and inventory_movements with new data
+      const finalPlots = updates.plots ?? data.plots;
+      const finalProducts = updates.products ?? data.products;
+      const finalDate = updates.date ?? new Date(data.date);
+
+      // Fetch sprayable parcels for the new plots
+      const sprayableParcels = await getSprayableParcelsById(finalPlots);
+
+      const historyEntries: any[] = [];
+      const inventoryEntries: any[] = [];
+      const productUsage: Record<string, { totalAmount: number; unit: string; parcelIds: Set<string> }> = {};
+
+      for (const subParcelId of finalPlots) {
+        const sprayableParcel = sprayableParcels.find(p => p.id === subParcelId);
+        if (!sprayableParcel) continue;
+
+        for (const productEntry of finalProducts) {
+          historyEntries.push({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            log_id: data.original_logbook_id || entryId,
+            spuitschrift_id: entryId,
+            parcel_id: sprayableParcel.id,
+            parcel_name: sprayableParcel.name,
+            crop: sprayableParcel.crop,
+            variety: sprayableParcel.variety,
+            product: productEntry.product,
+            dosage: productEntry.dosage,
+            unit: productEntry.unit,
+            date: finalDate instanceof Date ? finalDate.toISOString() : finalDate,
+          });
+
+          if (!productUsage[productEntry.product]) {
+            productUsage[productEntry.product] = { totalAmount: 0, unit: productEntry.unit, parcelIds: new Set() };
+          }
+          if (sprayableParcel.area) {
+            productUsage[productEntry.product].totalAmount += productEntry.dosage * sprayableParcel.area;
+          }
+          productUsage[productEntry.product].parcelIds.add(subParcelId);
+        }
+      }
+
+      // Create inventory movements
+      for (const [productName, usage] of Object.entries(productUsage)) {
+        if (usage.totalAmount > 0) {
+          inventoryEntries.push({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            product_name: productName,
+            quantity: -usage.totalAmount,
+            unit: usage.unit,
+            type: 'usage',
+            date: finalDate instanceof Date ? finalDate.toISOString() : finalDate,
+            description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
+            reference_id: entryId,
+          });
+        }
+      }
+
+      // Insert new records
+      if (historyEntries.length > 0) {
+        const { error: historyError } = await adminClient.from('parcel_history').insert(historyEntries);
+        if (historyError) console.error('Error inserting parcel history:', historyError);
+      }
+
+      if (inventoryEntries.length > 0) {
+        const { error: invError } = await adminClient.from('inventory_movements').insert(inventoryEntries);
+        if (invError) console.error('Error inserting inventory movements:', invError);
+      }
+    }
+
+    return {
+      id: data.id,
+      spuitschriftId: data.spuitschrift_id,
+      originalLogbookId: data.original_logbook_id,
+      originalRawInput: data.original_raw_input,
+      date: new Date(data.date),
+      createdAt: new Date(data.created_at),
+      plots: data.plots,
+      products: data.products,
+      validationMessage: data.validation_message,
+      status: data.status,
+    } as SpuitschriftEntry;
+  });
 }
 
 // ============================================
@@ -1114,6 +1291,72 @@ export async function getParcelHistoryEntries(): Promise<ParcelHistoryEntry[]> {
 }
 
 /**
+ * Get the last used dosage for a specific product from spray history
+ * Used to suggest dosages when user doesn't specify one
+ */
+export async function getLastUsedDosage(productName: string): Promise<{ dosage: number; unit: string; date: Date } | null> {
+  if (!productName) return null;
+
+  const normalizedProduct = productName.toLowerCase().trim();
+
+  const { data, error } = await supabase
+    .from('parcel_history')
+    .select('dosage, unit, date')
+    .ilike('product', `%${normalizedProduct}%`)
+    .gt('dosage', 0)
+    .order('date', { ascending: false })
+    .limit(1);
+
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+
+  return {
+    dosage: data[0].dosage,
+    unit: data[0].unit,
+    date: new Date(data[0].date),
+  };
+}
+
+/**
+ * Get last used dosages for multiple products at once
+ * More efficient than calling getLastUsedDosage multiple times
+ */
+export async function getLastUsedDosages(productNames: string[]): Promise<Map<string, { dosage: number; unit: string; date: Date }>> {
+  const result = new Map<string, { dosage: number; unit: string; date: Date }>();
+  if (!productNames || productNames.length === 0) return result;
+
+  // Get recent history and filter locally (more efficient than multiple queries)
+  const { data, error } = await supabase
+    .from('parcel_history')
+    .select('product, dosage, unit, date')
+    .gt('dosage', 0)
+    .order('date', { ascending: false })
+    .limit(500);
+
+  if (error || !data) return result;
+
+  // Find the most recent entry for each product
+  for (const productName of productNames) {
+    const normalizedProduct = productName.toLowerCase().trim();
+    const match = data.find(entry =>
+      entry.product?.toLowerCase().includes(normalizedProduct) ||
+      normalizedProduct.includes(entry.product?.toLowerCase() || '')
+    );
+
+    if (match) {
+      result.set(productName, {
+        dosage: match.dosage,
+        unit: match.unit,
+        date: new Date(match.date),
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
  * Add parcel history entries for a spray application
  * Now works with SprayableParcel[] (sub-parcels as unit of work)
  * Also accepts legacy Parcel[] for backward compatibility
@@ -1277,6 +1520,10 @@ export async function getProducts(): Promise<string[]> {
 export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduct[]> {
   if (!searchTerm || searchTerm.length < 2) return [];
 
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
   const normalizedSearch = searchTerm.toLowerCase().trim();
   const searchPattern = `%${normalizedSearch}%`;
 
@@ -1284,7 +1531,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
 
   return withRetry(async () => {
     // First try exact/partial match on naam
-    const { data: nameData, error: nameError } = await supabase
+    const { data: nameData, error: nameError } = await client
       .from('ctgb_products')
       .select('*')
       .ilike('naam', searchPattern)
@@ -1304,7 +1551,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     console.log('[searchCtgbProducts] No name matches, trying fallback search...');
 
     // Fallback: search in werkzame_stoffen or toelatingsnummer
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('ctgb_products')
       .select('*')
       .or(`werkzame_stoffen.cs.{${normalizedSearch}},toelatingsnummer.ilike.${searchPattern}`)
@@ -1324,7 +1571,11 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
 export async function getCtgbProductByNumber(toelatingsnummer: string): Promise<CtgbProduct | null> {
   if (!toelatingsnummer) return null;
 
-  const { data, error } = await supabase
+  // Use supabaseAdmin on server (bypasses RLS)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
     .from('ctgb_products')
     .select('*')
     .eq('toelatingsnummer', toelatingsnummer)
@@ -1338,7 +1589,11 @@ export async function getCtgbProductByNumber(toelatingsnummer: string): Promise<
 export async function getCtgbProductByName(naam: string): Promise<CtgbProduct | null> {
   if (!naam) return null;
 
-  const { data, error } = await supabase
+  // Use supabaseAdmin on server (bypasses RLS)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
     .from('ctgb_products')
     .select('*')
     .eq('naam', naam)
@@ -1350,12 +1605,18 @@ export async function getCtgbProductByName(naam: string): Promise<CtgbProduct | 
 }
 
 export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client (uses user session)
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
   return withRetry(async () => {
-    const { data, error } = await supabase
+    // NOTE: Increased limit from 1000 to 2000 because we have 1047+ products
+    // Products starting with W-Z were being cut off (including WOPRO Luisweg)
+    const { data, error } = await client
       .from('ctgb_products')
       .select('*')
       .order('naam')
-      .limit(1000);
+      .limit(2000);
 
     if (error) {
       // Throw to trigger retry for network errors
@@ -1377,7 +1638,11 @@ export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
 }
 
 export async function getTargetsForProduct(productName: string): Promise<string[]> {
-  const { data, error } = await supabase
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
     .from('ctgb_products')
     .select('gebruiksvoorschriften')
     .eq('naam', productName)
@@ -1398,10 +1663,168 @@ export async function getTargetsForProduct(productName: string): Promise<string[
   return Array.from(targets).sort();
 }
 
+/**
+ * Doelorganisme met bijbehorende gebruiksvoorschriften
+ * Gebruikt voor UI weergave in doelorganisme selector
+ */
+export interface DoelorganismeOption {
+  naam: string;                    // e.g. "Schurft (Venturia inaequalis)"
+  dosering?: string;               // e.g. "1,5 l/ha"
+  interval?: string;               // e.g. "min. 7 dagen"
+  maxToepassingen?: number;        // e.g. 6
+  veiligheidstermijn?: string;     // e.g. "21 dagen"
+  opmerkingen?: string[];          // Any wCodes or remarks
+  gewas: string;                   // The crop this applies to
+}
+
+/**
+ * Teelt hiërarchie voor fuzzy matching
+ * Matches parcelCrop (e.g. 'Appel') with CTGB gewas (e.g. 'pitvruchten')
+ */
+const CROP_HIERARCHY_STORE: Record<string, string[]> = {
+  'appel': ['appel', 'appels', 'pitvruchten', 'pitfruit', 'vruchtbomen', 'fruitgewassen', 'fruit'],
+  'peer': ['peer', 'peren', 'pitvruchten', 'pitfruit', 'vruchtbomen', 'fruitgewassen', 'fruit'],
+  'kers': ['kers', 'kersen', 'steenvruchten', 'steenfruit', 'vruchtbomen', 'fruitgewassen', 'fruit'],
+  'pruim': ['pruim', 'pruimen', 'steenvruchten', 'steenfruit', 'vruchtbomen', 'fruitgewassen', 'fruit'],
+};
+
+/**
+ * Get all doelorganismen for a product + gewas combination
+ * Returns structured data with dosering, interval, etc.
+ *
+ * @param productName - Name of the CTGB product
+ * @param gewas - Optional crop to filter by (e.g. 'Appel', 'Peer')
+ * @returns Array of DoelorganismeOption with usage details
+ */
+export async function getDoelorganismenForProduct(
+  productName: string,
+  gewas?: string
+): Promise<DoelorganismeOption[]> {
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
+    .from('ctgb_products')
+    .select('gebruiksvoorschriften')
+    .eq('naam', productName)
+    .single();
+
+  if (error || !data) return [];
+
+  const voorschriften = data.gebruiksvoorschriften as CtgbGebruiksvoorschrift[];
+  const doelorganismenMap = new Map<string, DoelorganismeOption>();
+
+  // Get crop hierarchy for matching
+  const normalizedGewas = gewas?.toLowerCase().trim();
+  let cropMatches: string[] = [];
+
+  if (normalizedGewas) {
+    // Find matching hierarchy
+    for (const [key, hierarchy] of Object.entries(CROP_HIERARCHY_STORE)) {
+      if (hierarchy.some(h => h.includes(normalizedGewas) || normalizedGewas.includes(h))) {
+        cropMatches = hierarchy;
+        break;
+      }
+    }
+    // If no hierarchy found, just use the gewas itself
+    if (cropMatches.length === 0) {
+      cropMatches = [normalizedGewas];
+    }
+  }
+
+  voorschriften.forEach(v => {
+    // Filter by gewas if provided
+    if (gewas && v.gewas) {
+      const voorschriftGewas = v.gewas.toLowerCase();
+      const matchesGewas = cropMatches.some(crop =>
+        voorschriftGewas.includes(crop) || crop.includes(voorschriftGewas.split(',')[0].trim())
+      );
+      if (!matchesGewas) return;
+    }
+
+    if (v.doelorganisme) {
+      // Split comma-separated doelorganismen but keep them as options
+      // Some are long like "Echte meeldauw (Podosphaera leucotricha), Schurft (Venturia inaequalis)"
+      const splitTargets = v.doelorganisme.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+      splitTargets.forEach(targetName => {
+        // Use first occurrence (most relevant) if already exists
+        if (!doelorganismenMap.has(targetName)) {
+          doelorganismenMap.set(targetName, {
+            naam: targetName,
+            dosering: v.dosering,
+            interval: v.interval,
+            maxToepassingen: v.maxToepassingen,
+            veiligheidstermijn: v.veiligheidstermijn,
+            opmerkingen: v.opmerkingen || v.wCodes,
+            gewas: v.gewas || gewas || 'Algemeen',
+          });
+        }
+      });
+    }
+  });
+
+  // Sort by name, but put common ones first
+  const commonTargets = ['schurft', 'meeldauw', 'luis', 'mot', 'spint', 'roest', 'vruchtrot'];
+  const results = Array.from(doelorganismenMap.values()).sort((a, b) => {
+    const aLower = a.naam.toLowerCase();
+    const bLower = b.naam.toLowerCase();
+    const aCommon = commonTargets.some(t => aLower.includes(t));
+    const bCommon = commonTargets.some(t => bLower.includes(t));
+
+    if (aCommon && !bCommon) return -1;
+    if (!aCommon && bCommon) return 1;
+    return a.naam.localeCompare(b.naam, 'nl');
+  });
+
+  return results;
+}
+
+/**
+ * Get previously used doelorganismen from user's spuitschrift history
+ * Used for auto-selection of the most likely doelorganisme
+ */
+export async function getUserDoelorganismeHistory(
+  productName: string
+): Promise<string[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('spuitschrift')
+    .select('products')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(50);
+
+  if (error || !data) return [];
+
+  // Extract doelorganismen from products where product name matches
+  const usedTargets: string[] = [];
+  const productLower = productName.toLowerCase();
+
+  data.forEach(entry => {
+    const products = entry.products as ProductEntry[];
+    products?.forEach(p => {
+      if (p.product?.toLowerCase() === productLower && p.doelorganisme) {
+        usedTargets.push(p.doelorganisme);
+      }
+    });
+  });
+
+  // Return unique targets in order of most recent first
+  return [...new Set(usedTargets)];
+}
+
 export async function getCtgbProductsBySubstance(substance: string): Promise<CtgbProduct[]> {
   if (!substance) return [];
 
-  const { data, error } = await supabase
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
     .from('ctgb_products')
     .select('*')
     .contains('werkzame_stoffen', [substance]);
@@ -1490,14 +1913,18 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
 }
 
 export async function getCtgbSyncStats(): Promise<CtgbSyncStats> {
-  const { count, error } = await supabase
+  // Use supabaseAdmin on server (bypasses RLS), regular supabase on client
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { count, error } = await client
     .from('ctgb_products')
     .select('*', { count: 'exact', head: true });
 
   if (error) return { count: 0 };
 
   // Get the most recent lastSyncedAt
-  const { data: lastSyncedData } = await supabase
+  const { data: lastSyncedData } = await client
     .from('ctgb_products')
     .select('last_synced_at')
     .not('last_synced_at', 'is', null)
@@ -1966,4 +2393,1263 @@ export async function deleteActiveTaskSession(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+}
+
+// ============================================
+// Storage (Koelcelbeheer) Functions
+// ============================================
+
+/**
+ * Get all storage cells with summary statistics (fill %, dominant variety)
+ */
+export async function getStorageCells(): Promise<StorageCellSummary[]> {
+  return withRetry(async () => {
+    const { data, error } = await supabase
+      .from('v_storage_cells_summary')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('[getStorageCells] Supabase error:', error.message);
+      throw new Error(error.message);
+    }
+
+    if (!data) return [];
+
+    return data.map(item => ({
+      id: item.id,
+      name: item.name,
+      width: item.width,
+      depth: item.depth,
+      blockedPositions: (item.blocked_positions || []) as BlockedPosition[],
+      status: item.status as StorageCellStatus,
+      maxStackHeight: item.max_stack_height ?? 8,
+      doorPositions: (item.door_positions || []) as DoorPosition[],
+      evaporatorPositions: (item.evaporator_positions || []) as EvaporatorPosition[],
+      positionHeightOverrides: (item.position_height_overrides || {}) as PositionHeightOverrides,
+      complexId: item.complex_id || null,
+      complexPosition: (item.complex_position || { x: 0, y: 0, rotation: 0 }) as ComplexPosition,
+      totalPositions: item.total_positions || 0,
+      filledPositions: item.filled_positions || 0,
+      fillPercentage: item.fill_percentage || 0,
+      dominantVariety: item.dominant_variety || null,
+      totalCrates: item.total_crates || 0,
+      varietyCounts: (item.variety_counts || []) as { variety: string; count: number }[],
+      totalCapacity: item.total_capacity || 0,
+      createdAt: new Date(item.created_at),
+      updatedAt: new Date(item.updated_at),
+    }));
+  });
+}
+
+/**
+ * Get a single storage cell by ID
+ */
+export async function getStorageCell(id: string): Promise<StorageCell | null> {
+  const { data, error } = await supabase
+    .from('storage_cells')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null; // Not found
+    throw new Error(error.message);
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    width: data.width,
+    depth: data.depth,
+    blockedPositions: (data.blocked_positions || []) as BlockedPosition[],
+    status: data.status as StorageCellStatus,
+    maxStackHeight: data.max_stack_height ?? 8,
+    doorPositions: (data.door_positions || []) as DoorPosition[],
+    evaporatorPositions: (data.evaporator_positions || []) as EvaporatorPosition[],
+    positionHeightOverrides: (data.position_height_overrides || {}) as PositionHeightOverrides,
+    complexId: data.complex_id || null,
+    complexPosition: (data.complex_position || { x: 0, y: 0, rotation: 0 }) as ComplexPosition,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Create a new storage cell
+ */
+export async function addStorageCell(
+  cell: Omit<StorageCell, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<StorageCell> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Niet ingelogd');
+
+  const { data, error } = await supabase
+    .from('storage_cells')
+    .insert({
+      user_id: userId,
+      name: cell.name,
+      width: cell.width,
+      depth: cell.depth,
+      blocked_positions: cell.blockedPositions,
+      status: cell.status,
+      max_stack_height: cell.maxStackHeight,
+      door_positions: cell.doorPositions,
+      evaporator_positions: cell.evaporatorPositions,
+      position_height_overrides: cell.positionHeightOverrides,
+      complex_id: cell.complexId,
+      complex_position: cell.complexPosition,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    name: data.name,
+    width: data.width,
+    depth: data.depth,
+    blockedPositions: (data.blocked_positions || []) as BlockedPosition[],
+    status: data.status as StorageCellStatus,
+    maxStackHeight: data.max_stack_height ?? 8,
+    doorPositions: (data.door_positions || []) as DoorPosition[],
+    evaporatorPositions: (data.evaporator_positions || []) as EvaporatorPosition[],
+    positionHeightOverrides: (data.position_height_overrides || {}) as PositionHeightOverrides,
+    complexId: data.complex_id || null,
+    complexPosition: (data.complex_position || { x: 0, y: 0, rotation: 0 }) as ComplexPosition,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Update a storage cell
+ */
+export async function updateStorageCell(
+  id: string,
+  updates: Partial<Omit<StorageCell, 'id' | 'createdAt' | 'updatedAt'>>
+): Promise<void> {
+  const updatePayload: Record<string, unknown> = {};
+  if (updates.name !== undefined) updatePayload.name = updates.name;
+  if (updates.width !== undefined) updatePayload.width = updates.width;
+  if (updates.depth !== undefined) updatePayload.depth = updates.depth;
+  if (updates.blockedPositions !== undefined) updatePayload.blocked_positions = updates.blockedPositions;
+  if (updates.status !== undefined) updatePayload.status = updates.status;
+  if (updates.maxStackHeight !== undefined) updatePayload.max_stack_height = updates.maxStackHeight;
+  if (updates.doorPositions !== undefined) updatePayload.door_positions = updates.doorPositions;
+  if (updates.evaporatorPositions !== undefined) updatePayload.evaporator_positions = updates.evaporatorPositions;
+  if (updates.positionHeightOverrides !== undefined) updatePayload.position_height_overrides = updates.positionHeightOverrides;
+  if (updates.complexId !== undefined) updatePayload.complex_id = updates.complexId;
+  if (updates.complexPosition !== undefined) updatePayload.complex_position = updates.complexPosition;
+
+  const { error } = await supabase
+    .from('storage_cells')
+    .update(updatePayload)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a storage cell (and all its positions via CASCADE)
+ */
+export async function deleteStorageCell(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('storage_cells')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Get all positions in a storage cell
+ */
+export async function getStoragePositions(cellId: string): Promise<StoragePosition[]> {
+  const { data, error } = await supabase
+    .from('storage_positions')
+    .select('*, sub_parcels(name, variety)')
+    .eq('cell_id', cellId);
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    cellId: item.cell_id,
+    rowIndex: item.row_index,
+    colIndex: item.col_index,
+    variety: item.variety,
+    subParcelId: item.sub_parcel_id,
+    subParcelName: item.sub_parcels?.name
+      ? `${item.sub_parcels.name} (${item.sub_parcels.variety})`
+      : null,
+    dateStored: item.date_stored ? new Date(item.date_stored) : null,
+    quantity: item.quantity,
+    qualityClass: item.quality_class,
+    notes: item.notes,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+  }));
+}
+
+/**
+ * Upsert a storage position (create or update based on cell_id + row + col)
+ */
+export async function upsertStoragePosition(
+  position: StoragePositionInput
+): Promise<StoragePosition> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Niet ingelogd');
+
+  const { data, error } = await supabase
+    .from('storage_positions')
+    .upsert(
+      {
+        cell_id: position.cellId,
+        user_id: userId,
+        row_index: position.rowIndex,
+        col_index: position.colIndex,
+        variety: position.variety,
+        sub_parcel_id: position.subParcelId,
+        date_stored: position.dateStored?.toISOString().split('T')[0],
+        quantity: position.quantity,
+        quality_class: position.qualityClass,
+        notes: position.notes,
+      },
+      {
+        onConflict: 'cell_id,row_index,col_index',
+      }
+    )
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    cellId: data.cell_id,
+    rowIndex: data.row_index,
+    colIndex: data.col_index,
+    variety: data.variety,
+    subParcelId: data.sub_parcel_id,
+    subParcelName: null, // Not joined in upsert
+    dateStored: data.date_stored ? new Date(data.date_stored) : null,
+    quantity: data.quantity,
+    qualityClass: data.quality_class,
+    notes: data.notes,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Clear a storage position (remove crate data)
+ */
+export async function clearStoragePosition(
+  cellId: string,
+  rowIndex: number,
+  colIndex: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('storage_positions')
+    .delete()
+    .match({ cell_id: cellId, row_index: rowIndex, col_index: colIndex });
+
+  if (error) throw new Error(error.message);
+}
+
+// ============================================
+// Storage Complex Functions
+// ============================================
+
+/**
+ * Get all storage complexes for the current user
+ */
+export async function getStorageComplexes(): Promise<StorageComplex[]> {
+  const { data, error } = await supabase
+    .from('storage_complex')
+    .select('*')
+    .order('name');
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    name: item.name,
+    gridWidth: item.grid_width,
+    gridHeight: item.grid_height,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+  }));
+}
+
+/**
+ * Get a single storage complex by ID
+ */
+export async function getStorageComplex(id: string): Promise<StorageComplex | null> {
+  const { data, error } = await supabase
+    .from('storage_complex')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw new Error(error.message);
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    gridWidth: data.grid_width,
+    gridHeight: data.grid_height,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Get or create the default complex for the current user
+ * Uses database function to ensure atomicity
+ */
+export async function getOrCreateDefaultComplex(): Promise<StorageComplex> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Niet ingelogd');
+
+  // Call the database function to get or create default complex
+  const { data: complexId, error: fnError } = await supabase
+    .rpc('get_or_create_default_complex', { p_user_id: userId });
+
+  if (fnError) throw new Error(fnError.message);
+
+  // Fetch the complex data
+  const complex = await getStorageComplex(complexId);
+  if (!complex) throw new Error('Kon standaard complex niet ophalen');
+
+  return complex;
+}
+
+/**
+ * Create a new storage complex
+ */
+export async function addStorageComplex(
+  complex: Omit<StorageComplex, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<StorageComplex> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Niet ingelogd');
+
+  const { data, error } = await supabase
+    .from('storage_complex')
+    .insert({
+      user_id: userId,
+      name: complex.name,
+      grid_width: complex.gridWidth,
+      grid_height: complex.gridHeight,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    name: data.name,
+    gridWidth: data.grid_width,
+    gridHeight: data.grid_height,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Update a storage complex
+ */
+export async function updateStorageComplex(
+  id: string,
+  updates: Partial<Omit<StorageComplex, 'id' | 'createdAt' | 'updatedAt'>>
+): Promise<void> {
+  const updatePayload: Record<string, unknown> = {};
+  if (updates.name !== undefined) updatePayload.name = updates.name;
+  if (updates.gridWidth !== undefined) updatePayload.grid_width = updates.gridWidth;
+  if (updates.gridHeight !== undefined) updatePayload.grid_height = updates.gridHeight;
+
+  const { error } = await supabase
+    .from('storage_complex')
+    .update(updatePayload)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a storage complex (cells will have complex_id set to NULL via ON DELETE SET NULL)
+ */
+export async function deleteStorageComplex(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('storage_complex')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Get all storage cells belonging to a specific complex
+ */
+export async function getStorageCellsByComplex(complexId: string): Promise<StorageCellSummary[]> {
+  const { data, error } = await supabase
+    .from('v_storage_cells_summary')
+    .select('*')
+    .eq('complex_id', complexId)
+    .order('name');
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    name: item.name,
+    width: item.width,
+    depth: item.depth,
+    blockedPositions: (item.blocked_positions || []) as BlockedPosition[],
+    status: item.status as StorageCellStatus,
+    maxStackHeight: item.max_stack_height ?? 8,
+    doorPositions: (item.door_positions || []) as DoorPosition[],
+    evaporatorPositions: (item.evaporator_positions || []) as EvaporatorPosition[],
+    positionHeightOverrides: (item.position_height_overrides || {}) as PositionHeightOverrides,
+    complexId: item.complex_id || null,
+    complexPosition: (item.complex_position || { x: 0, y: 0, rotation: 0 }) as ComplexPosition,
+    totalPositions: item.total_positions || 0,
+    filledPositions: item.filled_positions || 0,
+    fillPercentage: item.fill_percentage || 0,
+    dominantVariety: item.dominant_variety || null,
+    totalCrates: item.total_crates || 0,
+    varietyCounts: (item.variety_counts || []) as { variety: string; count: number }[],
+    totalCapacity: item.total_capacity || 0,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+  }));
+}
+
+// ============================================
+// Cell Sub-Parcels CRUD (migration 008)
+// ============================================
+
+/**
+ * Get all sub-parcels assigned to a cell with totals
+ */
+export async function getCellSubParcels(cellId: string): Promise<CellSubParcel[]> {
+  const { data, error } = await supabase
+    .from('v_cell_sub_parcel_totals')
+    .select('*')
+    .eq('cell_id', cellId)
+    .order('pick_date', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    cellId: item.cell_id,
+    parcelId: item.parcel_id,
+    subParcelId: item.sub_parcel_id,
+    variety: item.variety,
+    color: item.color,
+    pickDate: new Date(item.pick_date),
+    pickNumber: item.pick_number as PickNumber,
+    notes: item.notes,
+    harvestRegistrationId: item.harvest_registration_id || null,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    totalCrates: item.total_crates || 0,
+    positionsUsed: item.positions_used || 0,
+    parcelName: item.parcel_name || null,
+    subParcelName: item.sub_parcel_name || null,
+  }));
+}
+
+/**
+ * Create a new cell sub-parcel assignment
+ */
+export async function createCellSubParcel(input: CellSubParcelInput): Promise<CellSubParcel> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('cell_sub_parcels')
+    .insert({
+      cell_id: input.cellId,
+      user_id: userId,
+      parcel_id: input.parcelId,
+      sub_parcel_id: input.subParcelId,
+      variety: input.variety,
+      color: input.color,
+      pick_date: input.pickDate.toISOString().split('T')[0],
+      pick_number: input.pickNumber,
+      notes: input.notes,
+      harvest_registration_id: input.harvestRegistrationId && input.harvestRegistrationId !== '_none' ? input.harvestRegistrationId : null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    cellId: data.cell_id,
+    parcelId: data.parcel_id,
+    subParcelId: data.sub_parcel_id,
+    variety: data.variety,
+    color: data.color,
+    pickDate: new Date(data.pick_date),
+    pickNumber: data.pick_number as PickNumber,
+    notes: data.notes,
+    harvestRegistrationId: data.harvest_registration_id || null,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Update a cell sub-parcel assignment
+ */
+export async function updateCellSubParcel(
+  id: string,
+  updates: Partial<CellSubParcelInput>
+): Promise<CellSubParcel> {
+  const updateData: Record<string, unknown> = {};
+
+  if (updates.variety !== undefined) updateData.variety = updates.variety;
+  if (updates.color !== undefined) updateData.color = updates.color;
+  if (updates.pickDate !== undefined) updateData.pick_date = updates.pickDate.toISOString().split('T')[0];
+  if (updates.pickNumber !== undefined) updateData.pick_number = updates.pickNumber;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+  if (updates.parcelId !== undefined) updateData.parcel_id = updates.parcelId;
+  if (updates.subParcelId !== undefined) updateData.sub_parcel_id = updates.subParcelId;
+  if (updates.harvestRegistrationId !== undefined) updateData.harvest_registration_id = updates.harvestRegistrationId && updates.harvestRegistrationId !== '_none' ? updates.harvestRegistrationId : null;
+
+  const { data, error } = await supabase
+    .from('cell_sub_parcels')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    cellId: data.cell_id,
+    parcelId: data.parcel_id,
+    subParcelId: data.sub_parcel_id,
+    variety: data.variety,
+    color: data.color,
+    pickDate: new Date(data.pick_date),
+    pickNumber: data.pick_number as PickNumber,
+    notes: data.notes,
+    harvestRegistrationId: data.harvest_registration_id || null,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Delete a cell sub-parcel assignment (also deletes all position contents)
+ */
+export async function deleteCellSubParcel(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('cell_sub_parcels')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Get the next available color for a cell sub-parcel
+ */
+export async function getNextAvailableColor(cellId: string): Promise<string> {
+  const SUB_PARCEL_COLORS = [
+    '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
+    '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b',
+  ];
+
+  const { data } = await supabase
+    .from('cell_sub_parcels')
+    .select('color')
+    .eq('cell_id', cellId);
+
+  const usedColors = new Set(data?.map(d => d.color) || []);
+
+  for (const color of SUB_PARCEL_COLORS) {
+    if (!usedColors.has(color)) {
+      return color;
+    }
+  }
+
+  // If all colors are used, return a random one
+  return SUB_PARCEL_COLORS[Math.floor(Math.random() * SUB_PARCEL_COLORS.length)];
+}
+
+// ============================================
+// Position Contents CRUD (migration 008)
+// ============================================
+
+/**
+ * Get all position contents for a cell
+ */
+export async function getPositionContents(cellId: string): Promise<PositionContent[]> {
+  const { data, error } = await supabase
+    .from('storage_position_contents')
+    .select(`
+      *,
+      cell_sub_parcels!inner (
+        variety,
+        color
+      )
+    `)
+    .eq('cell_id', cellId)
+    .order('row_index')
+    .order('col_index')
+    .order('stack_order');
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    cellId: item.cell_id,
+    rowIndex: item.row_index,
+    colIndex: item.col_index,
+    cellSubParcelId: item.cell_sub_parcel_id,
+    stackCount: item.stack_count,
+    stackOrder: item.stack_order,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    variety: item.cell_sub_parcels?.variety,
+    color: item.cell_sub_parcels?.color,
+  }));
+}
+
+/**
+ * Get position contents as aggregated stacks for floor plan rendering
+ */
+export async function getPositionStacks(cellId: string, cell: StorageCell): Promise<Map<string, PositionStack>> {
+  const contents = await getPositionContents(cellId);
+  const stackMap = new Map<string, PositionStack>();
+
+  // Group by position
+  for (const content of contents) {
+    const key = `${content.rowIndex}-${content.colIndex}`;
+
+    if (!stackMap.has(key)) {
+      // Calculate max height for this position
+      let maxHeight = cell.maxStackHeight || 8;
+      const overrideKey = `${content.rowIndex}-${content.colIndex}`;
+      if (cell.positionHeightOverrides?.[overrideKey] !== undefined) {
+        maxHeight = cell.positionHeightOverrides[overrideKey];
+      }
+
+      stackMap.set(key, {
+        rowIndex: content.rowIndex,
+        colIndex: content.colIndex,
+        contents: [],
+        totalHeight: 0,
+        maxHeight,
+        isMixed: false,
+        dominantColor: '',
+      });
+    }
+
+    const stack = stackMap.get(key)!;
+    stack.contents.push(content);
+    stack.totalHeight += content.stackCount;
+  }
+
+  // Calculate isMixed and dominantColor for each stack
+  for (const stack of stackMap.values()) {
+    const uniqueSubParcels = new Set(stack.contents.map(c => c.cellSubParcelId));
+    stack.isMixed = uniqueSubParcels.size > 1;
+
+    // Find dominant color (sub-parcel with most crates)
+    const colorCounts = new Map<string, number>();
+    for (const content of stack.contents) {
+      const color = content.color || '#22c55e';
+      colorCounts.set(color, (colorCounts.get(color) || 0) + content.stackCount);
+    }
+
+    let maxCount = 0;
+    for (const [color, count] of colorCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        stack.dominantColor = color;
+      }
+    }
+  }
+
+  return stackMap;
+}
+
+/**
+ * Add content to a position (or append to existing stack)
+ */
+export async function addPositionContent(input: PositionContentInput): Promise<PositionContent> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  // Get the next stack order for this position
+  const { data: existing } = await supabase
+    .from('storage_position_contents')
+    .select('stack_order')
+    .eq('cell_id', input.cellId)
+    .eq('row_index', input.rowIndex)
+    .eq('col_index', input.colIndex)
+    .order('stack_order', { ascending: false })
+    .limit(1);
+
+  const nextOrder = existing && existing.length > 0 ? existing[0].stack_order + 1 : 1;
+
+  const { data, error } = await supabase
+    .from('storage_position_contents')
+    .insert({
+      cell_id: input.cellId,
+      user_id: userId,
+      row_index: input.rowIndex,
+      col_index: input.colIndex,
+      cell_sub_parcel_id: input.cellSubParcelId,
+      stack_count: input.stackCount,
+      stack_order: input.stackOrder || nextOrder,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    cellId: data.cell_id,
+    rowIndex: data.row_index,
+    colIndex: data.col_index,
+    cellSubParcelId: data.cell_sub_parcel_id,
+    stackCount: data.stack_count,
+    stackOrder: data.stack_order,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Update a position content layer
+ */
+export async function updatePositionContent(
+  id: string,
+  updates: { stackCount?: number; stackOrder?: number }
+): Promise<void> {
+  const updateData: Record<string, unknown> = {};
+
+  if (updates.stackCount !== undefined) updateData.stack_count = updates.stackCount;
+  if (updates.stackOrder !== undefined) updateData.stack_order = updates.stackOrder;
+
+  const { error } = await supabase
+    .from('storage_position_contents')
+    .update(updateData)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a position content layer
+ */
+export async function deletePositionContent(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('storage_position_contents')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Clear all contents from a position
+ */
+export async function clearPositionContents(
+  cellId: string,
+  rowIndex: number,
+  colIndex: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('storage_position_contents')
+    .delete()
+    .eq('cell_id', cellId)
+    .eq('row_index', rowIndex)
+    .eq('col_index', colIndex);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Assign a sub-parcel to multiple positions at once (batch operation)
+ */
+export async function assignSubParcelToPositions(
+  cellId: string,
+  cellSubParcelId: string,
+  positions: { rowIndex: number; colIndex: number; stackCount: number }[]
+): Promise<void> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  // For each position, get the next stack order and insert
+  for (const pos of positions) {
+    const { data: existing } = await supabase
+      .from('storage_position_contents')
+      .select('stack_order')
+      .eq('cell_id', cellId)
+      .eq('row_index', pos.rowIndex)
+      .eq('col_index', pos.colIndex)
+      .order('stack_order', { ascending: false })
+      .limit(1);
+
+    const nextOrder = existing && existing.length > 0 ? existing[0].stack_order + 1 : 1;
+
+    const { error } = await supabase
+      .from('storage_position_contents')
+      .insert({
+        cell_id: cellId,
+        user_id: userId,
+        row_index: pos.rowIndex,
+        col_index: pos.colIndex,
+        cell_sub_parcel_id: cellSubParcelId,
+        stack_count: pos.stackCount,
+        stack_order: nextOrder,
+      });
+
+    if (error) throw new Error(error.message);
+  }
+}
+
+/**
+ * Fill an entire row with a sub-parcel
+ */
+export async function fillRowWithSubParcel(
+  cellId: string,
+  cell: StorageCell,
+  rowIndex: number,
+  cellSubParcelId: string
+): Promise<void> {
+  const positions: { rowIndex: number; colIndex: number; stackCount: number }[] = [];
+
+  // Get existing contents to avoid filling already filled positions
+  const existingStacks = await getPositionStacks(cellId, cell);
+
+  for (let col = 0; col < cell.width; col++) {
+    const key = `${rowIndex}-${col}`;
+    const isBlocked = cell.blockedPositions.some(bp => bp.row === rowIndex && bp.col === col);
+
+    if (isBlocked) continue;
+
+    const existing = existingStacks.get(key);
+    if (existing && existing.totalHeight > 0) continue;
+
+    // Calculate max height for this position
+    let maxHeight = cell.maxStackHeight || 8;
+    if (cell.positionHeightOverrides?.[key] !== undefined) {
+      maxHeight = cell.positionHeightOverrides[key];
+    }
+
+    positions.push({ rowIndex, colIndex: col, stackCount: maxHeight });
+  }
+
+  if (positions.length > 0) {
+    await assignSubParcelToPositions(cellId, cellSubParcelId, positions);
+  }
+}
+
+/**
+ * Fill an entire column with a sub-parcel
+ */
+export async function fillColumnWithSubParcel(
+  cellId: string,
+  cell: StorageCell,
+  colIndex: number,
+  cellSubParcelId: string
+): Promise<void> {
+  const positions: { rowIndex: number; colIndex: number; stackCount: number }[] = [];
+
+  const existingStacks = await getPositionStacks(cellId, cell);
+
+  for (let row = 0; row < cell.depth; row++) {
+    const key = `${row}-${colIndex}`;
+    const isBlocked = cell.blockedPositions.some(bp => bp.row === row && bp.col === colIndex);
+
+    if (isBlocked) continue;
+
+    const existing = existingStacks.get(key);
+    if (existing && existing.totalHeight > 0) continue;
+
+    let maxHeight = cell.maxStackHeight || 8;
+    if (cell.positionHeightOverrides?.[key] !== undefined) {
+      maxHeight = cell.positionHeightOverrides[key];
+    }
+
+    positions.push({ rowIndex: row, colIndex, stackCount: maxHeight });
+  }
+
+  if (positions.length > 0) {
+    await assignSubParcelToPositions(cellId, cellSubParcelId, positions);
+  }
+}
+
+/**
+ * Fill all empty positions with a sub-parcel
+ */
+export async function fillAllEmptyPositions(
+  cellId: string,
+  cell: StorageCell,
+  cellSubParcelId: string
+): Promise<void> {
+  const positions: { rowIndex: number; colIndex: number; stackCount: number }[] = [];
+
+  const existingStacks = await getPositionStacks(cellId, cell);
+
+  for (let row = 0; row < cell.depth; row++) {
+    for (let col = 0; col < cell.width; col++) {
+      const key = `${row}-${col}`;
+      const isBlocked = cell.blockedPositions.some(bp => bp.row === row && bp.col === col);
+
+      if (isBlocked) continue;
+
+      const existing = existingStacks.get(key);
+      if (existing && existing.totalHeight > 0) continue;
+
+      let maxHeight = cell.maxStackHeight || 8;
+      if (cell.positionHeightOverrides?.[key] !== undefined) {
+        maxHeight = cell.positionHeightOverrides[key];
+      }
+
+      positions.push({ rowIndex: row, colIndex: col, stackCount: maxHeight });
+    }
+  }
+
+  if (positions.length > 0) {
+    await assignSubParcelToPositions(cellId, cellSubParcelId, positions);
+  }
+}
+
+// ============================================
+// Harvest Registrations CRUD (migration 009)
+// ============================================
+
+/**
+ * Calculate the season string from a date
+ * Season runs July to June (e.g., "2025-2026")
+ */
+function calculateSeason(date: Date): string {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // JavaScript months are 0-indexed
+
+  if (month >= 7) {
+    // July onwards is the new season
+    return `${year}-${year + 1}`;
+  } else {
+    // January-June is still the previous season
+    return `${year - 1}-${year}`;
+  }
+}
+
+/**
+ * Get all harvest registrations with computed storage totals
+ */
+export async function getHarvestRegistrations(options?: {
+  season?: string;
+  subParcelId?: string;
+  fromDate?: Date;
+  toDate?: Date;
+}): Promise<HarvestRegistration[]> {
+  let query = supabase
+    .from('v_harvest_registration_totals')
+    .select('*')
+    .order('harvest_date', { ascending: false });
+
+  if (options?.season) {
+    query = query.eq('season', options.season);
+  }
+  if (options?.subParcelId) {
+    query = query.eq('sub_parcel_id', options.subParcelId);
+  }
+  if (options?.fromDate) {
+    query = query.gte('harvest_date', options.fromDate.toISOString().split('T')[0]);
+  }
+  if (options?.toDate) {
+    query = query.lte('harvest_date', options.toDate.toISOString().split('T')[0]);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    parcelId: item.parcel_id,
+    subParcelId: item.sub_parcel_id,
+    variety: item.variety,
+    harvestDate: new Date(item.harvest_date),
+    pickNumber: item.pick_number as PickNumber,
+    totalCrates: item.total_crates,
+    qualityClass: item.quality_class as QualityClass | null,
+    weightPerCrate: item.weight_per_crate ? parseFloat(item.weight_per_crate) : null,
+    season: item.season,
+    notes: item.notes,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    parcelName: item.parcel_name || undefined,
+    subParcelName: item.sub_parcel_name || undefined,
+    storedCrates: item.stored_crates || 0,
+    remainingCrates: item.remaining_crates || item.total_crates,
+    storageStatus: item.storage_status as HarvestStorageStatus,
+    cellNames: item.cell_names || undefined,
+  }));
+}
+
+/**
+ * Get harvests for a specific date
+ */
+export async function getHarvestsForDate(date: Date): Promise<HarvestRegistration[]> {
+  const dateStr = date.toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('v_harvest_registration_totals')
+    .select('*')
+    .eq('harvest_date', dateStr)
+    .order('variety');
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    parcelId: item.parcel_id,
+    subParcelId: item.sub_parcel_id,
+    variety: item.variety,
+    harvestDate: new Date(item.harvest_date),
+    pickNumber: item.pick_number as PickNumber,
+    totalCrates: item.total_crates,
+    qualityClass: item.quality_class as QualityClass | null,
+    weightPerCrate: item.weight_per_crate ? parseFloat(item.weight_per_crate) : null,
+    season: item.season,
+    notes: item.notes,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    parcelName: item.parcel_name || undefined,
+    subParcelName: item.sub_parcel_name || undefined,
+    storedCrates: item.stored_crates || 0,
+    remainingCrates: item.remaining_crates || item.total_crates,
+    storageStatus: item.storage_status as HarvestStorageStatus,
+    cellNames: item.cell_names || undefined,
+  }));
+}
+
+/**
+ * Get available harvests for storage (with remaining crates)
+ */
+export async function getAvailableHarvestsForStorage(options?: {
+  variety?: string;
+  subParcelId?: string;
+}): Promise<HarvestRegistration[]> {
+  let query = supabase
+    .from('v_harvest_registration_totals')
+    .select('*')
+    .gt('remaining_crates', 0) // Only harvests with remaining crates
+    .order('harvest_date', { ascending: false });
+
+  if (options?.variety) {
+    query = query.eq('variety', options.variety);
+  }
+  if (options?.subParcelId) {
+    query = query.eq('sub_parcel_id', options.subParcelId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    parcelId: item.parcel_id,
+    subParcelId: item.sub_parcel_id,
+    variety: item.variety,
+    harvestDate: new Date(item.harvest_date),
+    pickNumber: item.pick_number as PickNumber,
+    totalCrates: item.total_crates,
+    qualityClass: item.quality_class as QualityClass | null,
+    weightPerCrate: item.weight_per_crate ? parseFloat(item.weight_per_crate) : null,
+    season: item.season,
+    notes: item.notes,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+    parcelName: item.parcel_name || undefined,
+    subParcelName: item.sub_parcel_name || undefined,
+    storedCrates: item.stored_crates || 0,
+    remainingCrates: item.remaining_crates || item.total_crates,
+    storageStatus: item.storage_status as HarvestStorageStatus,
+    cellNames: item.cell_names || undefined,
+  }));
+}
+
+/**
+ * Create a new harvest registration
+ */
+export async function createHarvestRegistration(
+  input: HarvestRegistrationInput
+): Promise<HarvestRegistration> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  // Auto-calculate season if not provided
+  const season = input.season || calculateSeason(input.harvestDate);
+
+  const { data, error } = await supabase
+    .from('harvest_registrations')
+    .insert({
+      user_id: userId,
+      parcel_id: input.parcelId,
+      sub_parcel_id: input.subParcelId,
+      variety: input.variety,
+      harvest_date: input.harvestDate.toISOString().split('T')[0],
+      pick_number: input.pickNumber,
+      total_crates: input.totalCrates,
+      quality_class: input.qualityClass,
+      weight_per_crate: input.weightPerCrate,
+      season: season,
+      notes: input.notes,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    parcelId: data.parcel_id,
+    subParcelId: data.sub_parcel_id,
+    variety: data.variety,
+    harvestDate: new Date(data.harvest_date),
+    pickNumber: data.pick_number as PickNumber,
+    totalCrates: data.total_crates,
+    qualityClass: data.quality_class as QualityClass | null,
+    weightPerCrate: data.weight_per_crate ? parseFloat(data.weight_per_crate) : null,
+    season: data.season,
+    notes: data.notes,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+    storedCrates: 0,
+    remainingCrates: data.total_crates,
+    storageStatus: 'not_stored',
+  };
+}
+
+/**
+ * Update a harvest registration
+ */
+export async function updateHarvestRegistration(
+  id: string,
+  updates: Partial<HarvestRegistrationInput>
+): Promise<HarvestRegistration> {
+  const updateData: Record<string, unknown> = {};
+
+  if (updates.parcelId !== undefined) updateData.parcel_id = updates.parcelId;
+  if (updates.subParcelId !== undefined) updateData.sub_parcel_id = updates.subParcelId;
+  if (updates.variety !== undefined) updateData.variety = updates.variety;
+  if (updates.harvestDate !== undefined) {
+    updateData.harvest_date = updates.harvestDate.toISOString().split('T')[0];
+    // Recalculate season if date changes
+    updateData.season = calculateSeason(updates.harvestDate);
+  }
+  if (updates.pickNumber !== undefined) updateData.pick_number = updates.pickNumber;
+  if (updates.totalCrates !== undefined) updateData.total_crates = updates.totalCrates;
+  if (updates.qualityClass !== undefined) updateData.quality_class = updates.qualityClass;
+  if (updates.weightPerCrate !== undefined) updateData.weight_per_crate = updates.weightPerCrate;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { data, error } = await supabase
+    .from('harvest_registrations')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  // Fetch the full data with computed fields from view
+  const harvests = await getHarvestRegistrations();
+  const updated = harvests.find(h => h.id === id);
+  if (updated) return updated;
+
+  // Fallback if view query fails
+  return {
+    id: data.id,
+    parcelId: data.parcel_id,
+    subParcelId: data.sub_parcel_id,
+    variety: data.variety,
+    harvestDate: new Date(data.harvest_date),
+    pickNumber: data.pick_number as PickNumber,
+    totalCrates: data.total_crates,
+    qualityClass: data.quality_class as QualityClass | null,
+    weightPerCrate: data.weight_per_crate ? parseFloat(data.weight_per_crate) : null,
+    season: data.season,
+    notes: data.notes,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
+}
+
+/**
+ * Delete a harvest registration
+ */
+export async function deleteHarvestRegistration(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('harvest_registrations')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Link a cell sub-parcel to a harvest registration
+ */
+export async function linkCellSubParcelToHarvest(
+  cellSubParcelId: string,
+  harvestRegistrationId: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from('cell_sub_parcels')
+    .update({ harvest_registration_id: harvestRegistrationId })
+    .eq('id', cellSubParcelId);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Get distinct seasons for filtering
+ */
+export async function getHarvestSeasons(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('harvest_registrations')
+    .select('season')
+    .order('season', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+
+  // Get unique seasons
+  const seasons = [...new Set(data.map(d => d.season))];
+  return seasons;
 }

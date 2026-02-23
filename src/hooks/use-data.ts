@@ -23,6 +23,49 @@ import {
     updateActiveTaskSession,
     stopTaskSession,
     deleteActiveTaskSession,
+    // Storage (Koelcelbeheer)
+    getStorageCells,
+    getStorageCell,
+    addStorageCell,
+    updateStorageCell,
+    deleteStorageCell,
+    getStoragePositions,
+    upsertStoragePosition,
+    clearStoragePosition,
+    // Storage Complex
+    getStorageComplexes,
+    getStorageComplex,
+    getOrCreateDefaultComplex,
+    addStorageComplex,
+    updateStorageComplex,
+    deleteStorageComplex,
+    getStorageCellsByComplex,
+    // Cell Sub-Parcels (new in migration 008)
+    getCellSubParcels,
+    createCellSubParcel,
+    updateCellSubParcel,
+    deleteCellSubParcel,
+    getNextAvailableColor,
+    // Position Contents (new in migration 008)
+    getPositionContents,
+    getPositionStacks,
+    addPositionContent,
+    updatePositionContent,
+    deletePositionContent,
+    clearPositionContents,
+    assignSubParcelToPositions,
+    fillRowWithSubParcel,
+    fillColumnWithSubParcel,
+    fillAllEmptyPositions,
+    // Harvest Registrations (new in migration 009)
+    getHarvestRegistrations,
+    getHarvestsForDate,
+    getAvailableHarvestsForStorage,
+    createHarvestRegistration,
+    updateHarvestRegistration,
+    deleteHarvestRegistration,
+    linkCellSubParcelToHarvest,
+    getHarvestSeasons,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import {
@@ -42,6 +85,18 @@ import type {
     TaskLog,
     TaskLogEnriched,
     ActiveTaskSession,
+    StorageComplex,
+    StorageCell,
+    StorageCellSummary,
+    StoragePosition,
+    StoragePositionInput,
+    CellSubParcel,
+    CellSubParcelInput,
+    PositionContent,
+    PositionContentInput,
+    PositionStack,
+    HarvestRegistration,
+    HarvestRegistrationInput,
 } from '@/lib/types';
 
 // ============================================
@@ -92,6 +147,34 @@ export const queryKeys = {
     // Conversations (Timeline)
     conversations: ['conversations'] as const,
     conversationsByStatus: (status?: 'draft' | 'active' | 'completed') => ['conversations', status] as const,
+
+    // Storage (Koelcelbeheer)
+    storageCells: ['storage-cells'] as const,
+    storageCell: (id: string) => ['storage-cells', id] as const,
+    storagePositions: (cellId: string) => ['storage-positions', cellId] as const,
+
+    // Storage Complex
+    storageComplexes: ['storage-complexes'] as const,
+    storageComplex: (id: string) => ['storage-complexes', id] as const,
+    defaultStorageComplex: ['storage-complexes', 'default'] as const,
+    storageCellsByComplex: (complexId: string) => ['storage-cells', 'by-complex', complexId] as const,
+
+    // Cell Sub-Parcels (new in migration 008)
+    cellSubParcels: (cellId: string) => ['cell-sub-parcels', cellId] as const,
+    cellSubParcel: (id: string) => ['cell-sub-parcels', 'single', id] as const,
+    nextAvailableColor: (cellId: string) => ['cell-sub-parcels', 'color', cellId] as const,
+
+    // Position Contents (new in migration 008)
+    positionContents: (cellId: string) => ['position-contents', cellId] as const,
+    positionStacks: (cellId: string) => ['position-stacks', cellId] as const,
+
+    // Harvest Registrations (new in migration 009)
+    harvestRegistrations: ['harvest-registrations'] as const,
+    harvestRegistrationsBySeason: (season: string) => ['harvest-registrations', 'season', season] as const,
+    harvestRegistrationsByDate: (date: string) => ['harvest-registrations', 'date', date] as const,
+    harvestRegistration: (id: string) => ['harvest-registrations', id] as const,
+    availableHarvestsForStorage: ['harvest-registrations', 'available'] as const,
+    harvestSeasons: ['harvest-seasons'] as const,
 };
 
 // ============================================
@@ -545,3 +628,642 @@ export function useDeleteConversation() {
 
 // Re-export ConversationListItem type for convenience
 export type { ConversationListItem };
+
+// ============================================
+// Storage Hooks (Koelcelbeheer)
+// ============================================
+
+/**
+ * Fetch all storage cells with summary statistics
+ */
+export function useStorageCells() {
+    return useQuery({
+        queryKey: queryKeys.storageCells,
+        queryFn: getStorageCells,
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
+}
+
+/**
+ * Fetch a single storage cell by ID
+ */
+export function useStorageCell(id: string) {
+    return useQuery({
+        queryKey: queryKeys.storageCell(id),
+        queryFn: () => getStorageCell(id),
+        enabled: !!id,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+/**
+ * Fetch all positions in a storage cell
+ */
+export function useStoragePositions(cellId: string) {
+    return useQuery({
+        queryKey: queryKeys.storagePositions(cellId),
+        queryFn: () => getStoragePositions(cellId),
+        enabled: !!cellId,
+        staleTime: 30 * 1000, // 30 seconds - positions change frequently
+    });
+}
+
+/**
+ * Create a new storage cell
+ */
+export function useAddStorageCell() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: addStorageCell,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+        },
+    });
+}
+
+/**
+ * Update a storage cell
+ */
+export function useUpdateStorageCell() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<StorageCell> }) =>
+            updateStorageCell(id, updates),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(id) });
+        },
+    });
+}
+
+/**
+ * Delete a storage cell
+ */
+export function useDeleteStorageCell() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: deleteStorageCell,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+        },
+    });
+}
+
+/**
+ * Upsert a storage position (create or update)
+ */
+export function useUpsertStoragePosition() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: upsertStoragePosition,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storagePositions(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+        },
+    });
+}
+
+/**
+ * Clear a storage position (remove crate data)
+ */
+export function useClearStoragePosition() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ cellId, rowIndex, colIndex }: { cellId: string; rowIndex: number; colIndex: number }) =>
+            clearStoragePosition(cellId, rowIndex, colIndex),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storagePositions(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+        },
+    });
+}
+
+// ============================================
+// Storage Complex Hooks
+// ============================================
+
+/**
+ * Fetch all storage complexes
+ */
+export function useStorageComplexes() {
+    return useQuery({
+        queryKey: queryKeys.storageComplexes,
+        queryFn: getStorageComplexes,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
+/**
+ * Fetch a single storage complex by ID
+ */
+export function useStorageComplex(id: string) {
+    return useQuery({
+        queryKey: queryKeys.storageComplex(id),
+        queryFn: () => getStorageComplex(id),
+        enabled: !!id,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+/**
+ * Get or create the default storage complex
+ */
+export function useDefaultStorageComplex() {
+    return useQuery({
+        queryKey: queryKeys.defaultStorageComplex,
+        queryFn: getOrCreateDefaultComplex,
+        staleTime: 10 * 60 * 1000, // 10 minutes - default complex rarely changes
+    });
+}
+
+/**
+ * Create a new storage complex
+ */
+export function useAddStorageComplex() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: addStorageComplex,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageComplexes });
+        },
+    });
+}
+
+/**
+ * Update a storage complex
+ */
+export function useUpdateStorageComplex() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<StorageComplex> }) =>
+            updateStorageComplex(id, updates),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageComplexes });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageComplex(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.defaultStorageComplex });
+        },
+    });
+}
+
+/**
+ * Delete a storage complex
+ */
+export function useDeleteStorageComplex() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: deleteStorageComplex,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageComplexes });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCells });
+        },
+    });
+}
+
+/**
+ * Fetch all storage cells belonging to a specific complex
+ */
+export function useStorageCellsByComplex(complexId: string) {
+    return useQuery({
+        queryKey: queryKeys.storageCellsByComplex(complexId),
+        queryFn: () => getStorageCellsByComplex(complexId),
+        enabled: !!complexId,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+// ============================================
+// Cell Sub-Parcels Hooks (migration 008)
+// ============================================
+
+/**
+ * Fetch all sub-parcels assigned to a storage cell
+ */
+export function useCellSubParcels(cellId: string) {
+    return useQuery({
+        queryKey: queryKeys.cellSubParcels(cellId),
+        queryFn: () => getCellSubParcels(cellId),
+        enabled: !!cellId,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+/**
+ * Create a new cell sub-parcel assignment
+ */
+export function useCreateCellSubParcel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: createCellSubParcel,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.nextAvailableColor(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(data.cellId) });
+        },
+    });
+}
+
+/**
+ * Update a cell sub-parcel
+ */
+export function useUpdateCellSubParcel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<CellSubParcelInput> }) =>
+            updateCellSubParcel(id, updates),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcel(data.id) });
+        },
+    });
+}
+
+/**
+ * Delete a cell sub-parcel (cascades to position contents)
+ */
+export function useDeleteCellSubParcel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, cellId }: { id: string; cellId: string }) => deleteCellSubParcel(id),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.nextAvailableColor(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+/**
+ * Get the next available color for a cell
+ */
+export function useNextAvailableColor(cellId: string) {
+    return useQuery({
+        queryKey: queryKeys.nextAvailableColor(cellId),
+        queryFn: () => getNextAvailableColor(cellId),
+        enabled: !!cellId,
+        staleTime: 30 * 1000, // 30 seconds - can change when sub-parcels are added
+    });
+}
+
+// ============================================
+// Position Contents Hooks (migration 008)
+// ============================================
+
+/**
+ * Fetch all position contents for a cell (raw data)
+ */
+export function usePositionContents(cellId: string) {
+    return useQuery({
+        queryKey: queryKeys.positionContents(cellId),
+        queryFn: () => getPositionContents(cellId),
+        enabled: !!cellId,
+        staleTime: 1 * 60 * 1000,
+    });
+}
+
+/**
+ * Fetch aggregated position stacks for a cell (for rendering)
+ */
+export function usePositionStacks(cellId: string, cell: StorageCell | null) {
+    return useQuery({
+        queryKey: queryKeys.positionStacks(cellId),
+        queryFn: () => getPositionStacks(cellId, cell!),
+        enabled: !!cellId && !!cell,
+        staleTime: 1 * 60 * 1000,
+    });
+}
+
+/**
+ * Add content to a position
+ */
+export function useAddPositionContent() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: addPositionContent,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(data.cellId) });
+        },
+    });
+}
+
+/**
+ * Update position content
+ */
+export function useUpdatePositionContent() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<PositionContentInput> }) =>
+            updatePositionContent(id, updates),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(data.cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(data.cellId) });
+        },
+    });
+}
+
+/**
+ * Delete position content
+ */
+export function useDeletePositionContent() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, cellId }: { id: string; cellId: string }) => deletePositionContent(id),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+/**
+ * Clear all contents from a position
+ */
+export function useClearPositionContents() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ cellId, rowIndex, colIndex }: { cellId: string; rowIndex: number; colIndex: number }) =>
+            clearPositionContents(cellId, rowIndex, colIndex),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+// ============================================
+// Batch Assignment Hooks (migration 008)
+// ============================================
+
+/**
+ * Assign a sub-parcel to multiple positions at once
+ */
+export function useAssignSubParcelToPositions() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            cellId,
+            cellSubParcelId,
+            positions,
+        }: {
+            cellId: string;
+            cellSubParcelId: string;
+            positions: Array<{ rowIndex: number; colIndex: number; stackCount: number }>;
+        }) => assignSubParcelToPositions(cellId, cellSubParcelId, positions),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+/**
+ * Fill an entire row with a sub-parcel
+ */
+export function useFillRowWithSubParcel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            cellId,
+            cellSubParcelId,
+            rowIndex,
+            stackCount,
+            cell,
+        }: {
+            cellId: string;
+            cellSubParcelId: string;
+            rowIndex: number;
+            stackCount: number;
+            cell: StorageCell;
+        }) => fillRowWithSubParcel(cellId, cellSubParcelId, rowIndex, stackCount, cell),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+/**
+ * Fill an entire column with a sub-parcel
+ */
+export function useFillColumnWithSubParcel() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            cellId,
+            cellSubParcelId,
+            colIndex,
+            stackCount,
+            cell,
+        }: {
+            cellId: string;
+            cellSubParcelId: string;
+            colIndex: number;
+            stackCount: number;
+            cell: StorageCell;
+        }) => fillColumnWithSubParcel(cellId, cellSubParcelId, colIndex, stackCount, cell),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+/**
+ * Fill all empty positions with a sub-parcel
+ */
+export function useFillAllEmptyPositions() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            cellId,
+            cellSubParcelId,
+            stackCount,
+            cell,
+        }: {
+            cellId: string;
+            cellSubParcelId: string;
+            stackCount: number;
+            cell: StorageCell;
+        }) => fillAllEmptyPositions(cellId, cellSubParcelId, stackCount, cell),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.storageCell(cellId) });
+        },
+    });
+}
+
+// ============================================
+// Harvest Registration Hooks (migration 009)
+// ============================================
+
+/**
+ * Fetch all harvest registrations with computed storage totals
+ */
+export function useHarvestRegistrations(options?: {
+    season?: string;
+    subParcelId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+}) {
+    const queryKey = options?.season
+        ? queryKeys.harvestRegistrationsBySeason(options.season)
+        : queryKeys.harvestRegistrations;
+
+    return useQuery({
+        queryKey,
+        queryFn: () => getHarvestRegistrations(options),
+        staleTime: 30 * 1000, // 30 seconds
+    });
+}
+
+/**
+ * Fetch harvests for a specific date
+ */
+export function useHarvestsForDate(date: Date) {
+    const dateStr = date.toISOString().split('T')[0];
+
+    return useQuery({
+        queryKey: queryKeys.harvestRegistrationsByDate(dateStr),
+        queryFn: () => getHarvestsForDate(date),
+        staleTime: 30 * 1000,
+    });
+}
+
+/**
+ * Fetch available harvests for storage (with remaining crates)
+ */
+export function useAvailableHarvestsForStorage(options?: {
+    variety?: string;
+    subParcelId?: string;
+}) {
+    return useQuery({
+        queryKey: queryKeys.availableHarvestsForStorage,
+        queryFn: () => getAvailableHarvestsForStorage(options),
+        staleTime: 30 * 1000,
+    });
+}
+
+/**
+ * Fetch distinct seasons for filtering
+ */
+export function useHarvestSeasons() {
+    return useQuery({
+        queryKey: queryKeys.harvestSeasons,
+        queryFn: getHarvestSeasons,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
+/**
+ * Create a new harvest registration
+ */
+export function useCreateHarvestRegistration() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (input: HarvestRegistrationInput) => createHarvestRegistration(input),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestRegistrations });
+            queryClient.invalidateQueries({ queryKey: queryKeys.availableHarvestsForStorage });
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestSeasons });
+        },
+    });
+}
+
+/**
+ * Update a harvest registration
+ */
+export function useUpdateHarvestRegistration() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            updates,
+        }: {
+            id: string;
+            updates: Partial<HarvestRegistrationInput>;
+        }) => updateHarvestRegistration(id, updates),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestRegistrations });
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestRegistration(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.availableHarvestsForStorage });
+        },
+    });
+}
+
+/**
+ * Delete a harvest registration
+ */
+export function useDeleteHarvestRegistration() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteHarvestRegistration(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestRegistrations });
+            queryClient.invalidateQueries({ queryKey: queryKeys.availableHarvestsForStorage });
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestSeasons });
+        },
+    });
+}
+
+/**
+ * Link a cell sub-parcel to a harvest registration
+ */
+export function useLinkCellSubParcelToHarvest() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            cellSubParcelId,
+            harvestRegistrationId,
+            cellId,
+        }: {
+            cellSubParcelId: string;
+            harvestRegistrationId: string | null;
+            cellId: string;
+        }) => linkCellSubParcelToHarvest(cellSubParcelId, harvestRegistrationId),
+        onSuccess: (_, { cellId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.harvestRegistrations });
+            queryClient.invalidateQueries({ queryKey: queryKeys.availableHarvestsForStorage });
+            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+        },
+    });
+}

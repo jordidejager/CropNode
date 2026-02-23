@@ -4,6 +4,56 @@ Alle opmerkelijke veranderingen aan dit project worden in dit bestand gedocument
 
 ## [Unreleased]
 
+### 🚀 Slimme Invoer V2 — Complete Herarchitectuur
+
+**Slimme Invoer 2.0** is een volledig herontworpen hybride systeem voor spray registraties:
+- **Bericht 1**: Snelle pipeline (classify + parse in 1 AI call) → Direct naar Draft
+- **Bericht 2+**: AI Agent met tools neemt conversatie over voor correcties
+
+**Nieuwe Features:**
+
+#### Client-Side Context Loading
+- Context endpoint (`/api/smart-input-v2/context`) laadt alle user data in één call
+- Percelen, producten, spuithistorie en aliassen worden client-side gecached
+- **Impact**: Response tijd van 6-12s naar 1-3s (80% sneller)
+
+#### Server-Side Draft Validation
+- 6 business rules validatie vóór UI rendering:
+  1. Parcel consistency (ID moet bestaan)
+  2. No duplicate parcels (tenzij andere producten)
+  3. Date logic (niet toekomst, niet >90 dagen oud)
+  4. Product presence (≥1 product per unit)
+  5. Dosage range (>0 en <CTGB max)
+  6. Total usage sanity check
+
+#### Smart Unit Detection
+- Automatische eenheid detectie op basis van productformulering
+- Spuitkorrel, WP, WG, DF → `kg/ha`
+- SC, EC, SL → `L/ha`
+- Fallback naar CTGB dosering parsing
+
+#### Regression Test Corpus
+- 53 testscenario's in 10 categorieën
+- CLI runner: `npx tsx scripts/run-regression-tests.ts`
+- Categorieën: simpel, exception, tankmenging, multi-turn, informeel, datum, variatie, correctie, groep, edge
+
+#### Playwright E2E Tests
+- Volledige UI tests in `/e2e/smart-input-v2.spec.ts`
+- Tests: basic registration, corrections, exceptions, confirmation, UI states, mobile, error handling
+- Run: `npm run test:e2e` of `npx playwright test e2e/smart-input-v2.spec.ts --headed`
+
+**Nieuwe Bestanden:**
+- `/src/app/api/smart-input-v2/route.ts` — Hybride endpoint
+- `/src/app/api/smart-input-v2/context/route.ts` — Context loading endpoint
+- `/src/app/(app)/command-center/smart-input-v2/page.tsx` — V2 pagina
+- `/src/lib/draft-validator.ts` — Server-side validatie
+- `/src/lib/types-v2.ts` — V2 types
+- `/scripts/regression-corpus.ts` — 53 test scenarios
+- `/scripts/run-regression-tests.ts` — Test runner
+- `/e2e/smart-input-v2.spec.ts` — Playwright E2E tests
+
+---
+
 ### 🤖 AgriBot Development — Fase 2.2 (RAG voor CTGB Kennisbank) ✅
 - **Semantic Search Ready**: Vector embeddings voor CTGB producten.
 - **Database Schema**: `sql/add_embedding_column.sql` — pgvector migratie met HNSW index.

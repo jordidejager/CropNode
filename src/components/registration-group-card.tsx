@@ -29,8 +29,9 @@ import { nl } from 'date-fns/locale';
 import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ConfidenceBreakdown } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DoelorganismeSelector } from '@/components/doelorganisme-selector';
 
-type ParcelLike = { id: string; name: string; area: number | null };
+type ParcelLike = { id: string; name: string; area: number | null; crop?: string; variety?: string | null };
 
 interface ValidationResultPerUnit {
     [unitId: string]: {
@@ -235,6 +236,18 @@ function UnitPanel({
         }));
     }, [unit.products, totalArea]);
 
+    // Get the primary crop from selected parcels (for doelorganisme filtering)
+    const primaryCrop = useMemo(() => {
+        const crops = selectedParcels.map(p => p.crop).filter(Boolean) as string[];
+        if (crops.length === 0) return undefined;
+        // Return the most common crop
+        const cropCounts = crops.reduce((acc, crop) => {
+            acc[crop] = (acc[crop] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(cropCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+    }, [selectedParcels]);
+
     const getValidationStyle = useCallback((status?: string) => {
         if (isConfirmed) return { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30' };
         switch (status) {
@@ -365,6 +378,17 @@ function UnitPanel({
                                                     {product.targetReason && (
                                                         <p className="text-xs text-white/40 mt-0.5">{product.targetReason}</p>
                                                     )}
+                                                    {/* Doelorganisme Display (read-only in group card) */}
+                                                    <div className="mt-1.5">
+                                                        <DoelorganismeSelector
+                                                            productName={product.product}
+                                                            gewas={primaryCrop}
+                                                            selectedDoelorganisme={product.doelorganisme}
+                                                            onSelect={() => {}} // Read-only in group card
+                                                            disabled={isConfirmed}
+                                                            compact
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="text-right flex-shrink-0 ml-3">
                                                     <span className="text-sm font-medium text-emerald-400">
