@@ -72,7 +72,10 @@ export const INTENT_SIGNALS: Record<IntentType, string[]> = {
     // [NIEUW] Gewas + product patronen
     'appels met', 'peren met', 'fruit met', 'alle appels', 'alle peren',
     // [NIEUW] Variatie-patronen wijzen op registratie, niet query
-    'maar ook', 'behalve', 'halve dosering'
+    'maar ook', 'behalve', 'halve dosering',
+    // [NIEUW] Strooien/bemesting patronen (ook registraties)
+    'gestrooid', 'strooien', 'bemest', 'bemesting', 'kunstmest',
+    'uitgereden', 'uitgestrooid',
   ],
   LOG_HOURS: [
     // Uren/tijd indicatoren
@@ -372,6 +375,11 @@ export function isLikelySprayRegistration(userInput: string): boolean {
 
   // Bevat spray-gerelateerde woorden
   if (/(gespoten|spuiten|bespuiting|behandeld|gespuit)/i.test(normalizedInput)) {
+    return true;
+  }
+
+  // Bevat strooien/bemesting-gerelateerde woorden
+  if (/(gestrooid|strooien|bemest|bemesting|kunstmest|uitgereden|uitgestrooid)/i.test(normalizedInput)) {
     return true;
   }
 

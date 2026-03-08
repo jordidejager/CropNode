@@ -387,9 +387,16 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                             {generateProductSummary()}
                         </p>
                     </div>
-                    <div className="text-right hidden sm:block">
-                        <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
-                        <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
+                    <div className="flex items-center gap-3">
+                        {entry.registrationType === 'spreading' && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
+                                Strooien
+                            </Badge>
+                        )}
+                        <div className="text-right hidden sm:block">
+                            <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
+                            <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
+                        </div>
                     </div>
                 </div>
             </AccordionTrigger>
@@ -529,7 +536,14 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                                     <TableBody>
                                         {productsWithTotals.map((p, index) => (
                                             <TableRow key={index}>
-                                                <TableCell className="font-medium">{p.product}</TableCell>
+                                                <TableCell className="font-medium">
+                                                    <span>{p.product}</span>
+                                                    {p.source === 'fertilizer' && (
+                                                        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
+                                                            meststof
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="text-right">{p.dosage} {p.unit}/ha</TableCell>
                                                 <TableCell className="text-right">{p.totalUsed} {p.unit}</TableCell>
                                             </TableRow>

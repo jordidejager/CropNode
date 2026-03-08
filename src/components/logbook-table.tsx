@@ -219,7 +219,7 @@ const LogbookTableRow = ({
                             onProductsChange={setEditedProducts}
                             isEditing={false}
                         />
-                    ) : (entry.parsedData?.products ? <span className="whitespace-pre-wrap">{entry.parsedData.products.map(p => `${p.product} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
+                    ) : (entry.parsedData?.products ? <span className="whitespace-pre-wrap">{entry.parsedData.products.map(p => `${p.product}${p.source === 'fertilizer' ? ' [meststof]' : ''} (${p.dosage} ${p.unit})`).join(', ')}</span> : '-')}
                 </TableCell>
                 <TableCell className="align-top">
                     <Badge

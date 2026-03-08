@@ -189,8 +189,30 @@ export function validateApplication(
   const warnings: ValidationWarning[] = [];
   const substanceReports: SubstanceReport[] = [];
 
-  // 1. Find the CTGB product
-  const product = ctgbProducts.get(task.productName.toLowerCase());
+  // 1. Find the CTGB product (with alias resolution and fuzzy matching)
+  const searchName = task.productName.toLowerCase().trim();
+  let product = ctgbProducts.get(searchName);
+
+  if (!product) {
+    // Try alias resolution
+    const { resolveAlias } = require('./product-matcher');
+    const aliasTarget = resolveAlias(searchName);
+    if (aliasTarget) {
+      product = ctgbProducts.get(aliasTarget.toLowerCase()) || undefined;
+    }
+  }
+
+  if (!product) {
+    // Fuzzy: prefix/contains match
+    for (const [key, p] of ctgbProducts) {
+      if (key.startsWith(searchName) || searchName.startsWith(key) ||
+          key.includes(searchName) || searchName.includes(key)) {
+        product = p;
+        break;
+      }
+    }
+  }
+
   if (!product) {
     errors.push({
       code: 'PRODUCT_NOT_FOUND',
@@ -711,7 +733,51 @@ export function quickValidate(
   crop: string,
   ctgbProducts: Map<string, CtgbProduct>
 ): { valid: boolean; hint: string | null } {
-  const product = ctgbProducts.get(productName.toLowerCase());
+  const searchName = productName.toLowerCase().trim();
+  let product = ctgbProducts.get(searchName);
+
+  if (!product) {
+    // Try alias and fuzzy matching
+    const { resolveAlias } = require('./product-matcher');
+    const aliasTarget = resolveAlias(searchName);
+    if (aliasTarget) product = ctgbProducts.get(aliasTarget.toLowerCase()) || undefined;
+  }
+
+  if (!product) {
+    // Prefix match - prefer exact first-word match
+    let bestPrefixMatch: CtgbProduct | undefined;
+    let bestPrefixScore = Infinity;
+    for (const [key, p] of ctgbProducts) {
+      if (key.startsWith(searchName) || searchName.startsWith(key)) {
+        const firstWord = key.split(/[\s-]/)[0];
+        const score = firstWord === searchName ? 0 : (p.naam?.length || 999);
+        if (score < bestPrefixScore) {
+          bestPrefixScore = score;
+          bestPrefixMatch = p;
+        }
+      }
+    }
+    product = bestPrefixMatch;
+  }
+
+  if (!product && searchName.length >= 5) {
+    // Contains match - only for terms 5+ chars to prevent false positives
+    let bestContainsMatch: CtgbProduct | undefined;
+    let bestContainsScore = Infinity;
+    for (const [key, p] of ctgbProducts) {
+      if (key.includes(searchName) || searchName.includes(key)) {
+        // Prefer word-start matches
+        const words = key.split(/[\s-]/);
+        const wordStart = words.some(w => w.startsWith(searchName)) ? 0 : 1000;
+        const score = wordStart + (p.naam?.length || 999);
+        if (score < bestContainsScore) {
+          bestContainsScore = score;
+          bestContainsMatch = p;
+        }
+      }
+    }
+    product = bestContainsMatch;
+  }
 
   if (!product) {
     return { valid: false, hint: `Product "${productName}" niet gevonden` };

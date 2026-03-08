@@ -84,8 +84,10 @@ interface ConfirmationData {
         dosage: number;
         unit: string;
         targetReason?: string;
+        source?: 'ctgb' | 'fertilizer';
     }>;
     date?: string;
+    registrationType?: 'spraying' | 'spreading';
     validationResult?: {
         status: string;
         validationMessage?: string;
@@ -1043,7 +1045,8 @@ function SmartInputContent() {
                 date: confirmationData.date || new Date(),
                 rawInput: chatHistory.find(m => m.role === 'user')?.content || 'Bevestigde registratie',
                 validationMessage: confirmationData.validationResult?.validationMessage || null,
-                sessionId: currentSessionId // Mark session as completed
+                sessionId: currentSessionId, // Mark session as completed
+                registrationType: confirmationData.registrationType,
             });
 
             if (!result.success) {
@@ -1118,7 +1121,7 @@ function SmartInputContent() {
         try {
             // Use unit-specific date if available (for date-split scenarios), otherwise fall back to group date
             const unitDate = unit.date || groupedConfirmation.date;
-            const result = await confirmSingleUnit(unit, unitDate, groupedConfirmation.rawInput);
+            const result = await confirmSingleUnit(unit, unitDate, groupedConfirmation.rawInput, groupedConfirmation.registrationType);
 
             if (!result.success) {
                 toast({

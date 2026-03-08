@@ -219,7 +219,8 @@ Als de intent REGISTER_SPRAY of MODIFY_DRAFT is, parse dan ook de spray data:
 {{/if}}
 
 ### Variaties & Uitzonderingen:
-Bij variaties (maar, behalve, halve dosering, etc.) maak **meerdere registrations**:
+Bij variaties met EXTRA producten of HALVE dosering: maak **meerdere registrations** (isGrouped: true).
+Bij simpele uitzonderingen ("maar X niet", "behalve X", "zonder X"): maak **één registration** zonder de uitgezonderde percelen.
 
 **BELANGRIJK: Output altijd in PLAT formaat (comma-separated strings):**
 - plotIds: "plot1,plot2,plot3" (komma-gescheiden IDs)
@@ -227,23 +228,49 @@ Bij variaties (maar, behalve, halve dosering, etc.) maak **meerdere registration
 - plots: "plot1,plot2" (voor simpele registraties)
 - products: "ProductNaam:2:L" (voor simpele registraties)
 
-**Voorbeeld: Extra product voor subset**
+**Voorbeeld: Simpele registratie (één product)**
+"Alle appels met Score 0.3L"
+→ isGrouped: false, plots: "[alle appel-perceel IDs]", products: "Score:0.3:L"
+
+"Alle peren met Surround"
+→ isGrouped: false, plots: "[alle peer-perceel IDs]", products: "Surround:0:L"
+
+**Voorbeeld: Tankmix - meerdere producten op dezelfde percelen (NIET isGrouped)**
+"Alle peren met Merpan 0.7 kg en Score 0.2L"
+→ isGrouped: false, plots: "[alle peer-perceel IDs]", products: "Merpan:0.7:kg,Score:0.2:L"
+
+"Vandaag alle conference met merpan 0.7 kg en score 0.2L"
+→ isGrouped: false, plots: "[alle conference-perceel IDs]", products: "Merpan:0.7:kg,Score:0.2:L"
+
+"Alle appels met Delan 0.5 kg, Score 0.3L en Calypso 0.25L"
+→ isGrouped: false, plots: "[alle appel-perceel IDs]", products: "Delan:0.5:kg,Score:0.3:L,Calypso:0.25:L"
+
+"Merpan 0.7 kg + score 0.2L op alle peren"
+→ isGrouped: false, plots: "[alle peer-perceel IDs]", products: "Merpan:0.7:kg,Score:0.2:L"
+
+⚠️ **Tankmix = ALLE producten op DEZELFDE percelen. Dit is NIET hetzelfde als variaties (isGrouped)!**
+Tankmix herkennen: "en", "+", ",", "met X en Y", "X + Y", "X, Y en Z" → comma-separated in products string
+
+**Voorbeeld: Uitzondering - percelen uitsluiten (NIET isGrouped)**
+"Alle peren met Merpan 2L maar conference niet"
+→ isGrouped: false, plots: "[alle peer-perceel IDs MINUS conference IDs]", products: "Merpan:2:L"
+
+"Alle appels behalve de Elstar met Score 0.3L"
+→ isGrouped: false, plots: "[alle appel-perceel IDs MINUS elstar IDs]", products: "Score:0.3:L"
+
+**Voorbeeld: Extra product voor subset (WEL isGrouped)**
 "Alle appels met Delan, maar Kanzi ook Score"
 → isGrouped: true, registrations: [
-    { plotIds: "appel1,appel2,appel3", productList: "Delan:0:L", label: "Appels (zonder Kanzi)" },
-    { plotIds: "kanzi1", productList: "Delan:0:L,Score:0:L", label: "Kanzi" }
+    { plotIds: "[appel IDs zonder kanzi]", productList: "Delan:0:L", label: "Appels (zonder Kanzi)" },
+    { plotIds: "[kanzi IDs]", productList: "Delan:0:L,Score:0:L", label: "Kanzi" }
   ]
 
 **Voorbeeld: Halve dosering voor subset**
 "Peren met 1 kg Captan, Lucas halve dosering"
 → isGrouped: true, registrations: [
-    { plotIds: "peer1,peer2", productList: "Captan:1:kg", label: "Peren (zonder Lucas)" },
-    { plotIds: "lucas1", productList: "Captan:0.5:kg", label: "Lucas" }
+    { plotIds: "[peer IDs zonder lucas]", productList: "Captan:1:kg", label: "Peren (zonder Lucas)" },
+    { plotIds: "[lucas IDs]", productList: "Captan:0.5:kg", label: "Lucas" }
   ]
-
-**Voorbeeld: Simpele registratie**
-"Alle peren met Surround"
-→ isGrouped: false, plots: "peer1,peer2", products: "Surround:0:L"
 
 **⚠️ FOUT VOORBEELD - DOE DIT NOOIT:**
 Input: "Alle conference met Surround"

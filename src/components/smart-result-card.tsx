@@ -241,6 +241,11 @@ export function SmartResultCard({ entry, allParcels, productNames = [], onDelete
                                     )}
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-black tracking-tight text-white/90 uppercase">{p.product}</span>
+                                        {p.source === 'fertilizer' && (
+                                            <span className="inline-flex items-center px-1 py-0 rounded text-[8px] font-semibold uppercase tracking-wider bg-teal-500/15 text-teal-400 border border-teal-500/25">
+                                                meststof
+                                            </span>
+                                        )}
                                         {isEditing ? (
                                             <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-md px-1.5 overflow-hidden">
                                                 <input

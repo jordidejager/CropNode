@@ -18,6 +18,7 @@ import {
     getAllCtgbProducts,
     getParcelHistoryEntries,
     getLastUsedDosages,
+    getAllFertilizers,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import type {
@@ -28,8 +29,9 @@ import type {
     SmartInputUserContext,
     CtgbProductSlim,
 } from '@/lib/types-v2';
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, CtgbProduct } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, CtgbProduct, FertilizerProduct, RegistrationType, ProductSource } from '@/lib/types';
 import { validateDraft, formatValidationResult, type DraftValidationResult, type DraftValidationIssue } from '@/lib/draft-validator';
+import { detectRegistrationType, resolveProductSources } from '@/lib/fertilizer-lookup';
 
 // ============================================================================
 // AUTH HELPER
@@ -119,6 +121,247 @@ function getDefaultUnitForProduct(
 
     console.log(`[getDefaultUnitForProduct] "${productName}" → L/ha (default fallback)`);
     return 'L/ha'; // Default for unknown
+}
+
+/**
+ * Normalizes dosage units to standard format matching existing DB convention.
+ * DB convention: "kg" or "L" (without "/ha" suffix, display adds "/ha").
+ * Converts g→kg (÷1000), ml→L (÷1000), gram→kg, etc.
+ */
+function normalizeDosageUnit(dosage: number, unit: string, defaultUnit: string): { dosage: number; unit: string } {
+    const unitLower = unit.toLowerCase().replace('/ha', '').trim();
+
+    if (unitLower === 'g' || unitLower === 'gram' || unitLower === 'gr') {
+        return { dosage: dosage / 1000, unit: 'kg' };
+    }
+    if (unitLower === 'ml') {
+        return { dosage: dosage / 1000, unit: 'L' };
+    }
+    // Already standard units
+    if (unitLower === 'kg') return { dosage, unit: 'kg' };
+    if (unitLower === 'l' || unitLower === 'liter') return { dosage, unit: 'L' };
+
+    // If unit matches default format, keep it
+    if (unit === defaultUnit) return { dosage, unit };
+
+    // Fallback: use default unit for the product (strip /ha for consistency)
+    return { dosage, unit: defaultUnit.replace('/ha', '') };
+}
+
+// ============================================================================
+// PRE-PROCESSING: Deterministic Crop & Exception Detection
+// ============================================================================
+
+interface PreProcessResult {
+    /** Pre-resolved parcel IDs based on crop/variety keywords. null = no match found */
+    preResolvedPlots: string[] | null;
+    /** Parcel IDs that were excluded by "maar...niet", "behalve", "zonder" patterns */
+    excludedPlots: string[];
+    /** The variety/name that was excluded (for labels) */
+    excludedTarget: string | null;
+    /** Whether the user's input contained an exclusion pattern */
+    hasExclusion: boolean;
+}
+
+/**
+ * Deterministic pre-processing of crop selection and exception patterns.
+ * This runs BEFORE the AI call and provides reliable plot resolution as a fallback.
+ *
+ * Handles:
+ * - "alle appels" / "alle peren" / "overal" / "het hele bedrijf"
+ * - "maar X niet" / "behalve X" / "zonder X" exclusions
+ * - Variety-based selection: "alle conference" / "de elstar"
+ */
+function preprocessCropSelection(
+    message: string,
+    allParcels: SprayableParcel[]
+): PreProcessResult {
+    const lower = message.toLowerCase().trim();
+
+    // Step 1: Detect and extract exclusion patterns
+    let excludeTarget: string | null = null;
+    let baseMessage = lower;
+
+    // Order matters: most specific patterns first
+    const exclusionPatterns = [
+        /\bmaar\s+(?:de\s+)?(\w[\w\s]*?)\s+niet\b/i,
+        /\bbehalve\s+(?:de\s+)?(\w[\w\s]*?)(?:\s+(?:met|op|voor)\b|$)/i,
+        /\bzonder\s+(?:de\s+)?(\w[\w\s]*?)(?:\s+(?:met|op|voor)\b|$)/i,
+        /\b(?:de\s+)?(\w[\w\s]*?)\s+niet\s+mee\b/i,
+    ];
+
+    for (const pattern of exclusionPatterns) {
+        const match = lower.match(pattern);
+        if (match) {
+            excludeTarget = match[1].trim();
+            // Remove the exclusion clause from base message for crop detection
+            baseMessage = lower.replace(match[0], ' ').replace(/\s+/g, ' ').trim();
+            console.log(`[preprocessCropSelection] Found exclusion: "${excludeTarget}" (pattern: ${pattern.source})`);
+            break;
+        }
+    }
+
+    // Step 2: Detect crop-based or variety-based selection
+    let preResolvedPlots: string[] | null = null;
+    let selectionType = 'none';
+
+    // "alle appels" / "de appels" / "mijn appels" / "appelpercelen" / "appelbomen"
+    if (/\b(?:alle?|de|mijn)\s+appels?\b/.test(baseMessage) ||
+        /\bappelpercelen\b/.test(baseMessage) ||
+        /\bappelbomen\b/.test(baseMessage)) {
+        preResolvedPlots = allParcels.filter(p => p.crop?.toLowerCase() === 'appel').map(p => p.id);
+        selectionType = 'crop:appel';
+    }
+    // "alle peren" / "de peren" / "perenpercelen" / "perenbomen"
+    else if (/\b(?:alle?|de|mijn)\s+peren?\b/.test(baseMessage) ||
+             /\bperenpercelen\b/.test(baseMessage) ||
+             /\bperenbomen\b/.test(baseMessage)) {
+        preResolvedPlots = allParcels.filter(p => p.crop?.toLowerCase() === 'peer').map(p => p.id);
+        selectionType = 'crop:peer';
+    }
+    // "overal" / "alles" / "alle bomen" / "het hele bedrijf" / "alle percelen"
+    else if (/\b(?:overal|alles)\b/.test(baseMessage) ||
+             /\b(?:alle?|het\s+hele?)\s+(?:bomen|bedrijf|percelen)\b/.test(baseMessage)) {
+        preResolvedPlots = allParcels.map(p => p.id);
+        selectionType = 'all';
+    }
+    // Variety-based: "alle conference" / "de conference" / "alle elstar"
+    else {
+        const varietyMatch = baseMessage.match(/\b(?:alle?|de|mijn)\s+(\w+)\b/);
+        if (varietyMatch) {
+            const varietySearch = varietyMatch[1].toLowerCase();
+            const varietyMatches = allParcels.filter(p =>
+                p.variety?.toLowerCase() === varietySearch ||
+                p.variety?.toLowerCase().includes(varietySearch)
+            );
+            if (varietyMatches.length > 0) {
+                preResolvedPlots = varietyMatches.map(p => p.id);
+                selectionType = `variety:${varietySearch}`;
+            }
+        }
+    }
+
+    // Step 3: Resolve exclusions and apply them
+    const excludedPlots: string[] = [];
+
+    if (excludeTarget && preResolvedPlots) {
+        const excludeNormalized = excludeTarget.toLowerCase().trim();
+
+        // Try matching against variety first
+        const excludedByVariety = allParcels.filter(p => {
+            if (!p.variety) return false;
+            const variety = p.variety.toLowerCase();
+            return variety === excludeNormalized ||
+                   variety.includes(excludeNormalized) ||
+                   excludeNormalized.includes(variety);
+        });
+
+        if (excludedByVariety.length > 0) {
+            excludedPlots.push(...excludedByVariety.map(p => p.id));
+        } else {
+            // Try matching against parcel name
+            const excludedByName = allParcels.filter(p => {
+                const name = p.name.toLowerCase();
+                return name === excludeNormalized ||
+                       name.includes(excludeNormalized) ||
+                       excludeNormalized.includes(name);
+            });
+            if (excludedByName.length > 0) {
+                excludedPlots.push(...excludedByName.map(p => p.id));
+            } else {
+                // Try crop matching for exclusion
+                const excludeCrop = excludeNormalized.replace(/s$/, '').replace(/en$/, '');
+                const cropSearch = excludeCrop === 'per' ? 'peer' : excludeCrop;
+                const excludedByCrop = allParcels.filter(p =>
+                    p.crop?.toLowerCase() === cropSearch
+                );
+                if (excludedByCrop.length > 0) {
+                    excludedPlots.push(...excludedByCrop.map(p => p.id));
+                }
+            }
+        }
+
+        // Apply exclusions to pre-resolved plots
+        if (excludedPlots.length > 0) {
+            const excludeSet = new Set(excludedPlots);
+            preResolvedPlots = preResolvedPlots.filter(id => !excludeSet.has(id));
+            console.log(`[preprocessCropSelection] Applied exclusion: removed ${excludedPlots.length} parcels, ${preResolvedPlots.length} remaining`);
+        } else {
+            console.log(`[preprocessCropSelection] Exclusion target "${excludeTarget}" matched 0 parcels - could not resolve`);
+        }
+    }
+
+    console.log(`[preprocessCropSelection] Result: selection=${selectionType}, plots=${preResolvedPlots?.length ?? 'null'}, excluded=${excludedPlots.length}${excludeTarget ? `, excludeTarget="${excludeTarget}"` : ''}`);
+
+    return {
+        preResolvedPlots,
+        excludedPlots,
+        excludedTarget: excludeTarget,
+        hasExclusion: excludeTarget !== null,
+    };
+}
+
+// ============================================================================
+// PRODUCT PRE-PROCESSING: Deterministic Product Extraction (fallback)
+// ============================================================================
+
+interface PreProcessedProduct {
+    product: string;
+    dosage: number;
+    unit: string;
+}
+
+/**
+ * Deterministic extraction of products from raw input text.
+ * Used as FALLBACK when AI fails to parse products.
+ *
+ * Handles:
+ * - "met [product] [dosage] [unit]"
+ * - Tankmix: "met [product1] [dosage1] [unit1] en [product2] [dosage2] [unit2]"
+ * - Tankmix with +: "[product1] [dosage1] + [product2] [dosage2]"
+ * - Tankmix with comma: "[product1] [dosage1], [product2] [dosage2] en [product3] [dosage3]"
+ */
+function preprocessProductExtraction(message: string): PreProcessedProduct[] {
+    const lower = message.toLowerCase().trim();
+    const products: PreProcessedProduct[] = [];
+
+    // Extract everything after "met " (Dutch for "with")
+    const metMatch = lower.match(/\bmet\s+(.+)/);
+    if (!metMatch) return products;
+
+    const productsPart = metMatch[1];
+
+    // Split on separators first: " en ", " + ", ", " → then extract per segment
+    const segments = productsPart
+        .split(/\s+en\s+|\s*\+\s*|\s*,\s*(?=[a-z])/i)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+    for (const segment of segments) {
+        // Pattern: product_name dosage unit
+        const match = segment.match(/^([a-zà-ü][a-zà-ü\s]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
+        if (!match) continue;
+
+        const rawName = match[1].trim();
+        const rawDosage = parseFloat(match[2].replace(',', '.'));
+        const rawUnit = match[3].toLowerCase();
+
+        // Skip if name is too short or looks like a crop name
+        if (rawName.length < 3) continue;
+        if (/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) continue;
+
+        products.push({
+            product: rawName,
+            dosage: rawDosage,
+            unit: rawUnit,
+        });
+    }
+
+    if (products.length > 0) {
+        console.log(`[preprocessProductExtraction] Extracted ${products.length} products: ${products.map(p => `${p.product} ${p.dosage} ${p.unit}`).join(', ')}`);
+    }
+
+    return products;
 }
 
 // ============================================================================
@@ -440,9 +683,14 @@ async function handleFirstMessage(
 ): Promise<void> {
     const startTime = Date.now();
 
+    // Step 0: Detect registration type (spraying vs spreading)
+    const registrationType = detectRegistrationType(message);
+    console.log(`[${context}] Registration type: ${registrationType}`);
+
     // Step 1: Use client-provided context OR fetch from database (fallback)
     let allParcels: SprayableParcel[];
     let allProducts: CtgbProduct[];
+    let allFertilizers: FertilizerProduct[];
     let parcelHistory: Array<{ parcelId: string; parcelName: string; product: string; dosage: number; unit: string; date: Date }>;
 
     if (userContext?.parcels?.length && userContext?.products?.length) {
@@ -484,20 +732,25 @@ async function handleFirstMessage(
             date: new Date(h.date),
         }));
 
-        console.log(`[${context}] Client context: ${allParcels.length} parcels, ${allProducts.length} products, ${parcelHistory.length} history`);
+        // Fetch fertilizers from DB (always needed for dual-database lookup)
+        allFertilizers = await getAllFertilizers();
+
+        console.log(`[${context}] Client context: ${allParcels.length} parcels, ${allProducts.length} products, ${allFertilizers.length} fertilizers, ${parcelHistory.length} history`);
     } else {
         // Fallback: Fetch from database
         console.log(`[${context}] No client context, fetching from database...`);
         send({ type: 'processing', phase: 'Percelen ophalen...' });
 
-        const [fetchedParcels, fetchedProducts, fetchedHistory] = await Promise.all([
+        const [fetchedParcels, fetchedProducts, fetchedHistory, fetchedFertilizers] = await Promise.all([
             getSprayableParcels(),
             getAllCtgbProducts(),
             getParcelHistoryEntries(),
+            getAllFertilizers(),
         ]);
 
         allParcels = fetchedParcels;
         allProducts = fetchedProducts;
+        allFertilizers = fetchedFertilizers;
         parcelHistory = fetchedHistory.map(h => ({
             parcelId: h.parcelId,
             parcelName: h.parcelName || '',
@@ -507,8 +760,12 @@ async function handleFirstMessage(
             date: h.date instanceof Date ? h.date : new Date(h.date),
         }));
 
-        console.log(`[${context}] Database context: ${allParcels.length} parcels, ${allProducts.length} products`);
+        console.log(`[${context}] Database context: ${allParcels.length} parcels, ${allProducts.length} products, ${allFertilizers.length} fertilizers`);
     }
+
+    // Step 1b: Pre-process crop selection and exceptions (deterministic, no AI needed)
+    const preProcessed = preprocessCropSelection(message, allParcels);
+    console.log(`[${context}] Pre-processing: preResolved=${preProcessed.preResolvedPlots?.length ?? 'none'}, excluded=${preProcessed.excludedPlots.length}, hasExclusion=${preProcessed.hasExclusion}`);
 
     send({ type: 'processing', phase: 'Invoer analyseren...' });
 
@@ -526,6 +783,12 @@ async function handleFirstMessage(
         userInput: message,
         hasDraft: false,
         plots: parcelContext,
+        regexHints: {
+            possibleGroup: preProcessed.preResolvedPlots
+                ? (preProcessed.preResolvedPlots.length === allParcels.length ? 'hele bedrijf' : `${preProcessed.preResolvedPlots.length} percelen`)
+                : undefined,
+            possibleException: preProcessed.excludedTarget || undefined,
+        },
     });
 
     console.log(`[${context}] Combined result: intent=${combinedResult.intent}, confidence=${combinedResult.confidence}`);
@@ -586,7 +849,13 @@ async function handleFirstMessage(
         for (const reg of sprayData.registrations) {
             // Resolve plots for this unit
             const rawPlots = reg.plots || [];
-            const resolvedPlots = resolveParcelNamesToIds(rawPlots, allParcels);
+            let resolvedPlots = resolveParcelNamesToIds(rawPlots, allParcels);
+
+            // If AI resolution failed for this unit, try pre-processing as fallback
+            if (resolvedPlots.length === 0 && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
+                resolvedPlots = preProcessed.preResolvedPlots;
+                console.log(`[${context}] Grouped unit AI resolution failed → using pre-processed: ${resolvedPlots.length} parcels`);
+            }
 
             // Resolve products for this unit
             const resolvedUnitProducts: ProductEntry[] = reg.products.map((prod: { product: string; dosage?: number; unit?: string }) => {
@@ -594,10 +863,13 @@ async function handleFirstMessage(
                 const resolvedName = resolved?.resolvedName || prod.product;
                 // Use smart unit detection based on product type (solid vs liquid)
                 const defaultUnit = getDefaultUnitForProduct(resolvedName, allProducts);
+                const rawUnit = prod.unit || defaultUnit;
+                // Normalize units: g→kg, ml→L
+                const normalized = normalizeDosageUnit(prod.dosage || 0, rawUnit, defaultUnit);
                 return {
                     product: resolvedName,
-                    dosage: prod.dosage || 0,
-                    unit: prod.unit || defaultUnit,
+                    dosage: normalized.dosage,
+                    unit: normalized.unit,
                 };
             });
 
@@ -627,26 +899,167 @@ async function handleFirstMessage(
                 const resolvedName = resolved?.resolvedName || prod.product;
                 // Use smart unit detection based on product type (solid vs liquid)
                 const defaultUnit = getDefaultUnitForProduct(resolvedName, allProducts);
+                const rawUnit = prod.unit || defaultUnit;
+                // Normalize units: g→kg, ml→L
+                const normalized = normalizeDosageUnit(prod.dosage || 0, rawUnit, defaultUnit);
                 products.push({
                     product: resolvedName,
-                    dosage: prod.dosage || 0,
-                    unit: prod.unit || defaultUnit,
+                    dosage: normalized.dosage,
+                    unit: normalized.unit,
                 });
             }
         }
 
-        // Resolve plots
+        // FALLBACK: If AI failed to parse products, try deterministic extraction from raw input
+        if (products.length === 0) {
+            console.log(`[${context}] AI product parsing failed → trying deterministic extraction`);
+            const preProcessedProducts = preprocessProductExtraction(message);
+            if (preProcessedProducts.length > 0) {
+                // Resolve aliases for pre-processed products
+                const ppNames = preProcessedProducts.map(p => p.product);
+                const ppResolved = await resolveProductAliases(ppNames);
+
+                for (const pp of preProcessedProducts) {
+                    const resolved = ppResolved.get(pp.product);
+                    const resolvedName = resolved?.resolvedName || pp.product;
+                    const defaultUnit = getDefaultUnitForProduct(resolvedName, allProducts);
+                    const normalized = normalizeDosageUnit(pp.dosage, pp.unit, defaultUnit);
+                    products.push({
+                        product: resolvedName,
+                        dosage: normalized.dosage,
+                        unit: normalized.unit,
+                    });
+                }
+                console.log(`[${context}] Fallback extracted ${products.length} products: ${products.map(p => `${p.product} ${p.dosage} ${p.unit}`).join(', ')}`);
+            }
+        }
+
+        // Resolve plots: try AI resolution first, then fall back to pre-processing
         const rawPlots: string[] = sprayData.plots || [];
-        const plots: string[] = resolveParcelNamesToIds(rawPlots, allParcels);
+        let plots: string[] = resolveParcelNamesToIds(rawPlots, allParcels);
+
+        // If AI resolution failed but pre-processing found plots, use pre-processing
+        if (plots.length === 0 && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
+            plots = preProcessed.preResolvedPlots;
+            console.log(`[${context}] AI plot resolution failed → using pre-processed: ${plots.length} parcels`);
+        }
+        // If pre-processing found exclusions, use the pre-processed result (already has exclusions applied)
+        else if (preProcessed.hasExclusion && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
+            plots = preProcessed.preResolvedPlots;
+            console.log(`[${context}] Using pre-processed plots with exclusions: ${plots.length} parcels (excluded: ${preProcessed.excludedPlots.length})`);
+        }
 
         console.log(`[${context}] Plot resolution: ${rawPlots.length} raw → ${plots.length} resolved`);
+
+        // Build label for exclusion cases
+        let unitLabel: string | undefined;
+        if (preProcessed.hasExclusion && preProcessed.excludedTarget) {
+            const cropName = /appel/i.test(message) ? 'Appels' : /peer|peren/i.test(message) ? 'Peren' : 'Percelen';
+            unitLabel = `${cropName} (zonder ${preProcessed.excludedTarget})`;
+        }
 
         units.push({
             id: crypto.randomUUID(),
             plots,
             products,
+            label: unitLabel,
             status: 'pending',
         });
+    }
+
+    // Post-processing: If pre-processing found a simple exclusion but AI created a grouped
+    // registration, collapse into a single unit with pre-processed plots and all available products.
+    // This fixes "maar X niet" / "behalve X" patterns where the AI incorrectly splits units.
+    if (preProcessed.hasExclusion && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
+        const collectedProducts = units.flatMap(u => u.products);
+        const hasUnitsWithNoProducts = units.some(u => u.products.length === 0);
+        const hasUnitsWithNoPlots = units.some(u => u.plots.length === 0);
+
+        if (hasUnitsWithNoProducts || hasUnitsWithNoPlots || units.length > 1) {
+            console.log(`[${context}] Post-processing: collapsing ${units.length} units into 1 (exclusion pattern detected, fixing product distribution)`);
+
+            // Collect all unique products from all units
+            const productMap = new Map<string, ProductEntry>();
+            for (const prod of collectedProducts) {
+                if (prod.product && !productMap.has(prod.product.toLowerCase())) {
+                    productMap.set(prod.product.toLowerCase(), prod);
+                }
+            }
+            const mergedProducts = Array.from(productMap.values());
+
+            // If still no products after merge, try extracting from the original message
+            if (mergedProducts.length === 0) {
+                console.log(`[${context}] Post-processing: No products found in AI output, attempting regex extraction from message`);
+                // Try to extract product names from the input message
+                const productPatterns = [
+                    /\bmet\s+(\w[\w\s]*?)\s+(\d+[.,]?\d*)\s*(L|l|kg|KG|liter)\b/gi,
+                    /\bmet\s+(\w[\w\s]*?)\s+(\d+[.,]?\d*)\b/gi,
+                ];
+                for (const pattern of productPatterns) {
+                    let match;
+                    while ((match = pattern.exec(message)) !== null) {
+                        const rawName = match[1].trim();
+                        const dosage = parseFloat(match[2].replace(',', '.'));
+                        const unit = match[3] || 'L';
+                        // Try to resolve the product name
+                        const resolved = await resolveProductAliases([rawName]);
+                        const resolvedName = resolved.get(rawName)?.resolvedName || rawName;
+                        const defaultUnit = getDefaultUnitForProduct(resolvedName, allProducts);
+                        mergedProducts.push({
+                            product: resolvedName,
+                            dosage: dosage || 0,
+                            unit: unit || defaultUnit,
+                        });
+                    }
+                    if (mergedProducts.length > 0) break;
+                }
+            }
+
+            const cropName = /appel/i.test(message) ? 'Appels' : /peer|peren/i.test(message) ? 'Peren' : 'Percelen';
+            const unitLabel = `${cropName} (zonder ${preProcessed.excludedTarget})`;
+
+            // Replace all units with a single collapsed unit
+            units.length = 0;
+            units.push({
+                id: crypto.randomUUID(),
+                plots: preProcessed.preResolvedPlots,
+                products: mergedProducts,
+                label: unitLabel,
+                status: 'pending',
+            });
+
+            console.log(`[${context}] Post-processing result: 1 unit, ${preProcessed.preResolvedPlots.length} plots, ${mergedProducts.length} products`);
+        }
+    }
+
+    // Step 5b: Dual-database product source resolution (CTGB vs meststoffen)
+    // Build set of products that were resolved from CTGB (confidence > 0 in alias resolution)
+    const ctgbResolvedNames = new Set<string>();
+    for (const prod of allProducts) {
+      ctgbResolvedNames.add(prod.naam.toLowerCase());
+    }
+
+    // Apply source resolution to each unit's products
+    for (const unit of units) {
+      const resolvedWithSources = resolveProductSources(
+        unit.products,
+        registrationType,
+        ctgbResolvedNames,
+        allFertilizers,
+      );
+      unit.products = resolvedWithSources.map(p => ({
+        product: p.product,
+        dosage: p.dosage,
+        unit: p.unit,
+        source: p.source,
+      }));
+
+      // Log warnings for type mismatches (e.g., strooimeststof in spuitmengsel)
+      for (const p of resolvedWithSources) {
+        if (p.warning) {
+          console.log(`[${context}] Product warning: ${p.warning}`);
+        }
+      }
     }
 
     // Create the registration group
@@ -655,6 +1068,7 @@ async function handleFirstMessage(
         date: registrationDate,
         rawInput: message,
         units,
+        registrationType,
     };
 
     // For validation and summary, use all plots and products from all units
@@ -673,19 +1087,23 @@ async function handleFirstMessage(
 
     console.log(`[${context}] Last used dosages found for ${lastUsedDosages.size}/${productsNeedingDosage.length} products`);
 
-    // Step 7: Validate
-    const validationResult = await validateParsedSprayData(
-        { plots, products, date: registrationDate.toISOString() },
-        allParcels.map(p => ({
-            id: p.id,
-            name: p.name,
-            area: p.area || 0,
-            crop: p.crop,
-            variety: p.variety,
-        })) as any,
-        allProducts,
-        parcelHistory as any
-    );
+    // Step 7: Validate (only CTGB products, not fertilizers)
+    // Filter out fertilizer products from CTGB validation
+    const ctgbProducts = products.filter(p => !p.source || p.source === 'ctgb');
+    const validationResult = ctgbProducts.length > 0
+        ? await validateParsedSprayData(
+            { plots, products: ctgbProducts, date: registrationDate.toISOString() },
+            allParcels.map(p => ({
+                id: p.id,
+                name: p.name,
+                area: p.area || 0,
+                crop: p.crop,
+                variety: p.variety,
+            })) as any,
+            allProducts,
+            parcelHistory as any
+        )
+        : { isValid: true, validationMessage: '', errorCount: 0, warningCount: 0 };
 
     // Build validation flags from CTGB validation result
     const validationFlags: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }> = [];
@@ -738,7 +1156,34 @@ async function handleFirstMessage(
         });
     }
 
-    // Step 8: Generate human summary
+    // Step 8: Check for unknown products (BUG-004 fix)
+    // Products with source='fertilizer' are already resolved - skip those
+    const unknownProducts: string[] = [];
+    for (const prod of products) {
+        // Skip if already identified as fertilizer
+        if (prod.source === 'fertilizer') continue;
+
+        const ctgbMatch = allProducts.find(cp =>
+            cp.naam.toLowerCase() === prod.product.toLowerCase() ||
+            cp.naam.toLowerCase().includes(prod.product.toLowerCase()) ||
+            prod.product.toLowerCase().includes(cp.naam.toLowerCase())
+        );
+        if (!ctgbMatch) {
+            unknownProducts.push(prod.product);
+        }
+    }
+
+    if (unknownProducts.length > 0) {
+        const names = unknownProducts.join(', ');
+        console.log(`[${context}] Unknown products detected: ${names}`);
+        validationFlags.push({
+            type: 'error',
+            message: `Onbekend middel: "${names}". Dit product is niet gevonden in de CTGB of meststoffen database. Controleer de naam en probeer opnieuw.`,
+            field: 'products',
+        });
+    }
+
+    // Step 9: Generate human summary
     const parcelNames = plots
         .map(id => allParcels.find(p => p.id === id)?.name || id)
         .slice(0, 3);
@@ -752,20 +1197,45 @@ async function handleFirstMessage(
 
     let humanSummary = '';
     const needsDosage = products.some(p => p.dosage === 0);
+    // Track whether user intended to specify plots (for BUG-005 fix)
+    const userSpecifiedPlots = preProcessed.preResolvedPlots !== null || (sprayData.plots && sprayData.plots.length > 0);
+    const hasUnknownProducts = unknownProducts.length > 0;
 
-    if (plots.length === 0) {
+    if (hasUnknownProducts && products.length === unknownProducts.length) {
+        // ALL products are unknown - ask for correct product name
+        humanSummary = `Onbekend middel "${unknownProducts[0]}". Welk middel bedoel je?`;
+    } else if (plots.length === 0 && products.length > 0 && needsDosage && userSpecifiedPlots) {
+        // User specified plots AND products but plots failed to resolve AND dosage is missing
+        // BUG-005 fix: prioritize the most helpful question
+        humanSummary = `Kon de percelen niet herkennen. Welke percelen bedoel je?`;
+    } else if (plots.length === 0 && products.length > 0 && !needsDosage && userSpecifiedPlots) {
+        // User specified plots + products with dosage, but plots failed
+        humanSummary = `Kon de percelen niet herkennen. Welke percelen bedoel je?`;
+    } else if (plots.length === 0) {
         humanSummary = 'Welke percelen?';
     } else if (products.length === 0) {
         humanSummary = `${parcelSummary}. Welk middel?`;
     } else if (needsDosage) {
-        humanSummary = `${parcelSummary} met ${productSummary}. Welke dosering?`;
+        const actionVerb = registrationType === 'spreading' ? 'Gestrooid op' : 'Gespoten op';
+        humanSummary = `${actionVerb} ${parcelSummary} met ${productSummary}. Welke dosering?`;
     } else {
-        humanSummary = `${parcelSummary} met ${productSummary}.`;
+        const actionVerb = registrationType === 'spreading' ? 'Gestrooid op' : 'Gespoten op';
+        humanSummary = `${actionVerb} ${parcelSummary} met ${productSummary}.`;
     }
 
-    // Step 9: Build response
+    // Determine response action
+    let responseAction: SmartInputV2Response['action'] = 'new_draft';
+    if (hasUnknownProducts && products.length === unknownProducts.length) {
+        responseAction = 'clarification_needed'; // Block: all products unknown
+    } else if (needsDosage) {
+        responseAction = 'clarification_needed';
+    } else if (plots.length === 0) {
+        responseAction = 'clarification_needed';
+    }
+
+    // Step 10: Build response
     const response: SmartInputV2Response = {
-        action: needsDosage ? 'clarification_needed' : 'new_draft',
+        action: responseAction,
         humanSummary,
         registration: registrationGroup,
         validationFlags: validationFlags.length > 0 ? validationFlags : undefined,

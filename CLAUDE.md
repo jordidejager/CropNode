@@ -46,6 +46,7 @@
 | Gemini API | AI parsing & embeddings | Via Genkit |
 | PDOK Gewaspercelen | RVO parcel data | `api.pdok.nl/rvo/gewaspercelen/` |
 | PDOK Locatieserver | Adres zoeken | `api.pdok.nl/bzk/locatieserver/` |
+| Open-Meteo | Weerdata (forecast + historisch) | `api.open-meteo.com` (gratis, geen key) |
 
 ---
 
@@ -258,6 +259,61 @@ tags TEXT[]
 embedding VECTOR(768)
 ```
 
+### Weather Hub
+
+#### `weather_stations` - Weerstations gekoppeld aan perceellocaties
+```sql
+id UUID PRIMARY KEY
+user_id UUID → auth.users(id)
+name TEXT
+latitude DECIMAL(8,5) NOT NULL       -- Afgerond op 2 decimalen (~1km)
+longitude DECIMAL(8,5) NOT NULL
+elevation_m INTEGER                  -- Auto-filled door Open-Meteo
+timezone TEXT DEFAULT 'Europe/Amsterdam'
+knmi_station_id TEXT                 -- Voor toekomstige KNMI integratie
+```
+
+#### `weather_data_hourly` - Uurlijkse weerdata (kern van alles)
+```sql
+id BIGSERIAL PRIMARY KEY
+station_id UUID → weather_stations(id)
+timestamp TIMESTAMPTZ NOT NULL
+model_name TEXT DEFAULT 'best_match'  -- 'best_match', 'ecmwf_ifs', 'icon_eu', 'gfs', 'meteofrance_arpege', 'ecmwf_aifs'
+temperature_c, humidity_pct, precipitation_mm, wind_speed_ms,
+wind_direction, wind_gusts_ms, leaf_wetness_pct, soil_temp_6cm,
+solar_radiation, et0_mm, cloud_cover_pct, dew_point_c
+is_forecast BOOLEAN DEFAULT false
+data_source TEXT DEFAULT 'open-meteo'
+-- UNIQUE (station_id, timestamp, model_name, is_forecast)
+```
+
+#### `weather_ensemble_hourly` - Ensemble/pluim data per member
+```sql
+id BIGSERIAL PRIMARY KEY
+station_id UUID → weather_stations(id)
+timestamp TIMESTAMPTZ NOT NULL
+model_name TEXT NOT NULL              -- 'ecmwf_ifs' of 'gfs'
+member INTEGER NOT NULL               -- 0-50 (ECMWF) of 0-30 (GFS)
+temperature_c, precipitation_mm, wind_speed_ms, humidity_pct
+-- UNIQUE (station_id, timestamp, model_name, member)
+```
+
+#### `weather_data_daily` - Dagaggregaties uit hourly data
+```sql
+id BIGSERIAL PRIMARY KEY
+station_id UUID → weather_stations(id)
+date DATE NOT NULL
+temp_min_c, temp_max_c, temp_avg_c, precipitation_sum,
+humidity_avg_pct, wind_speed_max_ms, wind_speed_avg_ms,
+leaf_wetness_hrs, et0_sum_mm, solar_radiation_sum,
+gdd_base5, gdd_base10, frost_hours
+is_forecast BOOLEAN DEFAULT false
+-- UNIQUE (station_id, date, is_forecast)
+```
+
+#### `weather_fetch_log` - Fetch tracking (voorkomt onnodige API calls)
+#### `parcel_weather_stations` - Koppelt parcels aan weather_stations (PK: parcel_id TEXT)
+
 ### Views
 
 - `v_sprayable_parcels` - Flat view van sub_parcels met leesbare namen
@@ -359,24 +415,58 @@ src/
 │   │   ├── parcels/             # Perceel beheer (list/map)
 │   │   ├── research/            # Knowledge hub + pests
 │   │   ├── team-tasks/          # Urenregistratie
+│   │   ├── weather/             # Weather Hub UI
+│   │   │   ├── dashboard/       # Live Dashboard (spuitvenster, forecast)
+│   │   │   ├── disease-pressure/# Ziektedruk (placeholder)
+│   │   │   ├── season/          # Seizoensanalyse (placeholder)
+│   │   │   └── expert/          # Expert Forecast (multi-model + ensemble)
 │   │   └── profile/             # Gebruikersprofiel
 │   ├── api/                     # API routes
 │   │   ├── analyze-input/       # AI parsing endpoint (V1)
 │   │   ├── smart-input-v2/      # Slimme Invoer V2 endpoint + context
 │   │   ├── validate/            # CTGB validatie
 │   │   ├── ctgb/search/         # Product zoeken
+│   │   ├── weather/             # Weather Hub API (current, forecast, daily, hourly, at-time, initialize, refresh, multimodel, ensemble)
+│   │   ├── cron/weather-refresh/# Cron: 3-uurlijkse forecast refresh
 │   │   └── chat/                # Streaming chat
 │   └── login/                   # Auth pages
 │
 ├── components/
 │   ├── ui/                      # shadcn/ui primitives (40+)
 │   ├── layout/                  # Sidebar, navigation
+│   ├── weather/                 # Weather Hub UI componenten
+│   │   ├── WeatherDashboard.tsx # Hoofd-orchestrator
+│   │   ├── SprayWindowIndicator.tsx # Groen/oranje/rood spuitvenster
+│   │   ├── TodaySummary.tsx     # Dagcijfers compact
+│   │   ├── HourlyForecastStrip.tsx  # 48u horizontaal scrollbaar
+│   │   ├── RainForecast.tsx     # Buienradar 2u neerslag
+│   │   ├── WeeklyForecast.tsx   # 7-daagse forecast
+│   │   ├── UpcomingSprayWindows.tsx  # Beste spuitvensters
+│   │   ├── WeatherIcon.tsx      # Icon afleiding uit data
+│   │   ├── StationSelector.tsx  # Station dropdown
+│   │   ├── LastUpdated.tsx      # Timestamp + refresh
+│   │   └── expert/              # Expert Forecast componenten
+│   │       ├── ExpertForecast.tsx      # Orchestrator (station + multi-model + ensemble)
+│   │       ├── VariableSelector.tsx    # Temp/Precip/Wind/Humidity pills
+│   │       ├── ModelSelector.tsx       # ECMWF/GFS ensemble toggle
+│   │       ├── MultiModelChart.tsx     # 5-model Recharts vergelijking
+│   │       ├── ModelAgreementBar.tsx   # SD-gebaseerde consensus indicator
+│   │       ├── EnsemblePlumeChart.tsx  # Fan chart (min-max, P10-P90, P25-P75, mediaan)
+│   │       └── SprayWindowForecastBand.tsx # 7-dag spuitvenster prognose (AM/PM)
 │   └── domain/                  # Feature-specifieke componenten
 │
 ├── hooks/                       # Custom React hooks
-│   └── use-data.ts             # Data fetching hooks
+│   ├── use-data.ts             # Data fetching hooks
+│   └── use-weather.ts          # Weather Hub hooks (stations, current, forecast, rain, multimodel, ensemble)
 │
 ├── lib/                         # Utility libraries
+│   ├── weather/                # Weather Hub service layer
+│   │   ├── weather-service.ts  # Hoofdservice: fetch, store, aggregate
+│   │   ├── open-meteo-client.ts# Open-Meteo API wrapper
+│   │   ├── weather-calculations.ts # GDD, bladnat, Delta-T, spuitvenster
+│   │   ├── weather-types.ts    # TypeScript types
+│   │   ├── weather-constants.ts# Constanten, API endpoints
+│   │   └── ensure-weather-station.ts # Auto station-perceel koppeling
 │   ├── supabase/               # Supabase client & middleware
 │   ├── validation/             # CTGB validatie engine
 │   ├── supabase-store.ts       # Database operaties (59.6KB)
@@ -432,6 +522,9 @@ GOOGLE_API_KEY=AIza...
 # Firebase (legacy, optioneel)
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 NEXT_PUBLIC_FIREBASE_API_KEY=...
+
+# Weather Hub (cron job authenticatie)
+CRON_SECRET=<random string>
 ```
 
 ---
@@ -446,6 +539,7 @@ npm run typecheck     # TypeScript check
 npm run test:e2e      # Playwright E2E tests
 npm run test:e2e:ui   # Playwright interactive UI
 npm run test:e2e:headed  # Playwright met zichtbare browser
+npm run test:weather  # Weather Hub unit tests (32 tests)
 
 # Regression tests Slimme Invoer V2
 npx tsx scripts/run-regression-tests.ts           # Alle 53 tests

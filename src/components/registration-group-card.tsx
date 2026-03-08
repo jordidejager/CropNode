@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ConfidenceBreakdown } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ConfidenceBreakdown, ProductSource } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DoelorganismeSelector } from '@/components/doelorganisme-selector';
@@ -374,7 +374,14 @@ function UnitPanel({
                                         <div key={`product-${i}`} className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm text-white font-medium truncate">{product.product}</p>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="text-sm text-white font-medium truncate">{product.product}</p>
+                                                        {product.source === 'fertilizer' && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-teal-500/15 text-teal-400 border border-teal-500/25 flex-shrink-0">
+                                                                meststof
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {product.targetReason && (
                                                         <p className="text-xs text-white/40 mt-0.5">{product.targetReason}</p>
                                                     )}
@@ -392,10 +399,10 @@ function UnitPanel({
                                                 </div>
                                                 <div className="text-right flex-shrink-0 ml-3">
                                                     <span className="text-sm font-medium text-emerald-400">
-                                                        {product.dosage} {product.unit}/ha
+                                                        {product.dosage} {product.unit?.includes('/ha') ? product.unit : `${product.unit}/ha`}
                                                     </span>
                                                     <p className="text-[10px] text-white/30 mt-0.5">
-                                                        Totaal: {product.total} {product.unit}
+                                                        Totaal: {product.total} {product.unit?.replace('/ha', '') || product.unit}
                                                     </p>
                                                 </div>
                                             </div>
@@ -596,6 +603,11 @@ export function RegistrationGroupCard({
                     <div className="flex items-center gap-2">
                         {/* Punt 4: Confidence Indicator */}
                         <ConfidenceIndicator confidence={group.confidence} />
+                        {group.registrationType === 'spreading' && (
+                            <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30 border text-xs">
+                                Strooien
+                            </Badge>
+                        )}
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
                             {group.units.length} registratie{group.units.length !== 1 ? 's' : ''}
                         </Badge>

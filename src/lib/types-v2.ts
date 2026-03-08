@@ -6,7 +6,7 @@
  * - Bericht 2+: AI Agent met tools
  */
 
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry } from './types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, RegistrationType, ProductSource } from './types';
 import type { ValidationFlag } from './validation-service';
 
 // ============================================
@@ -209,4 +209,4 @@ export interface SaveResult {
 // Re-exports for convenience
 // ============================================
 
-export type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ValidationFlag };
+export type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ValidationFlag, RegistrationType, ProductSource };

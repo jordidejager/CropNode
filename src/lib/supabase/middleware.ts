@@ -58,7 +58,11 @@ export async function updateSession(request: NextRequest) {
             request,
           })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              // Sessie cookies 30 dagen geldig houden
+              maxAge: options?.maxAge ?? 60 * 60 * 24 * 30, // 30 dagen
+            })
           )
         },
       },
@@ -85,7 +89,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Routes die beschermd moeten worden
-  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|command-center|parcels|crop-care|research|perceelhistorie|bedrijf-dashboard|team-tasks|profile)/)
+  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|command-center|parcels|crop-care|harvest-hub|research|perceelhistorie|bedrijf-dashboard|team-tasks|profile)/)
   const isAuthPage = request.nextUrl.pathname === '/login'
     || request.nextUrl.pathname === '/forgot-password'
     || request.nextUrl.pathname === '/reset-password'

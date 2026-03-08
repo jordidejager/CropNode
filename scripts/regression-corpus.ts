@@ -12,7 +12,7 @@
 export interface RegressionTest {
     id: string;
     beschrijving: string;
-    categorie: 'simpel' | 'exception' | 'tankmenging' | 'multi-turn' | 'informeel' | 'datum' | 'variatie' | 'correctie' | 'groep';
+    categorie: 'simpel' | 'exception' | 'tankmenging' | 'multi-turn' | 'informeel' | 'datum' | 'variatie' | 'correctie' | 'groep' | 'meststof';
     berichten: string[];
     verwacht: {
         aantalUnits: number;
@@ -29,6 +29,8 @@ export interface RegressionTest {
         units?: Record<string, string>;         // Product → unit (L/ha of kg/ha)
         datumRelatief?: 'vandaag' | 'gisteren' | 'eergisteren' | 'morgen';
         datumAbsoluut?: string;                 // ISO date string
+        registrationType?: 'spraying' | 'spreading'; // Verwachte registration type
+        productSources?: Record<string, 'ctgb' | 'fertilizer'>; // Product → verwachte source
     };
     opmerkingen?: string;
 }
@@ -779,6 +781,137 @@ const edgeCaseTests: RegressionTest[] = [
 ];
 
 // ============================================================================
+// MESTSTOF TESTS
+// ============================================================================
+
+const meststofTests: RegressionTest[] = [
+    {
+        id: 'meststof-001',
+        beschrijving: 'Gemengde registratie: GWB + meststof in één spuitmengsel',
+        categorie: 'meststof',
+        berichten: ['vandaag alle peren met merpan 2kg en chelal omnical 3L'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Peer', minAantal: 1 },
+            producten: ['Merpan', 'Chelal Omnical'],
+            doseringen: { 'Merpan': 2, 'Chelal Omnical': 3 },
+            units: { 'Merpan': 'kg/ha', 'Chelal Omnical': 'L/ha' },
+            registrationType: 'spraying',
+            productSources: { 'Merpan': 'ctgb', 'Chelal Omnical': 'fertilizer' },
+        },
+        opmerkingen: 'Merpan = CTGB, Chelal Omnical = meststof. Beide in één bespuiting. CTGB-validatie alleen op Merpan.',
+    },
+    {
+        id: 'meststof-002',
+        beschrijving: 'Strooiregistratie: alleen meststof',
+        categorie: 'meststof',
+        berichten: ['gisteren kalkammonsalpeter gestrooid op alle appels 300kg/ha'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Appel', minAantal: 1 },
+            producten: ['Kalkammonsalpeter'],
+            doseringen: { 'Kalkammonsalpeter': 300 },
+            units: { 'Kalkammonsalpeter': 'kg/ha' },
+            registrationType: 'spreading',
+            productSources: { 'Kalkammonsalpeter': 'fertilizer' },
+            datumRelatief: 'gisteren',
+        },
+        opmerkingen: 'Keyword "gestrooid" → spreading. Geen CTGB-validatie nodig.',
+    },
+    {
+        id: 'meststof-003',
+        beschrijving: 'Cache hit: veelvoorkomende meststof direct uit cache',
+        categorie: 'meststof',
+        berichten: ['alle peren met bittersalz 5kg'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Peer', minAantal: 1 },
+            producten: ['Bittersalz'],
+            doseringen: { 'Bittersalz': 5 },
+            units: { 'Bittersalz': 'kg/ha' },
+            registrationType: 'spraying',
+            productSources: { 'Bittersalz': 'fertilizer' },
+        },
+        opmerkingen: 'Bittersalz zit in COMMON_FERTILIZERS_CACHE, moet direct matchen zonder DB lookup.',
+    },
+    {
+        id: 'meststof-004',
+        beschrijving: 'Alleen CTGB producten: geen meststof interferentie',
+        categorie: 'meststof',
+        berichten: ['vandaag alle appels met captan 1.5L en delan 0.5kg'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Appel', minAantal: 1 },
+            producten: ['Captan', 'Delan'],
+            doseringen: { 'Captan': 1.5, 'Delan': 0.5 },
+            registrationType: 'spraying',
+            productSources: { 'Captan': 'ctgb', 'Delan': 'ctgb' },
+        },
+        opmerkingen: 'Pure GWB-bespuiting. Meststof-lookup mag geen false positives geven.',
+    },
+    {
+        id: 'meststof-005',
+        beschrijving: 'Meststof alias resolutie: bijnaam naar officieel product',
+        categorie: 'meststof',
+        berichten: ['alle peren met bitterzout 5kg'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Peer', minAantal: 1 },
+            producten: ['Bittersalz'],
+            doseringen: { 'Bittersalz': 5 },
+            registrationType: 'spraying',
+            productSources: { 'Bittersalz': 'fertilizer' },
+        },
+        opmerkingen: 'Alias "bitterzout" → "Bittersalz" via cache alias of fertilizer_aliases tabel.',
+    },
+    {
+        id: 'meststof-006',
+        beschrijving: 'Strooien keywords herkenning: bemesting',
+        categorie: 'meststof',
+        berichten: ['patentkali bemesting alle appels 250kg/ha'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Appel', minAantal: 1 },
+            producten: ['Patentkali'],
+            doseringen: { 'Patentkali': 250 },
+            registrationType: 'spreading',
+            productSources: { 'Patentkali': 'fertilizer' },
+        },
+        opmerkingen: 'Keyword "bemesting" → spreading registration type.',
+    },
+    {
+        id: 'meststof-007',
+        beschrijving: 'Cross-database preventie: CTGB product mag niet als meststof resolved worden',
+        categorie: 'meststof',
+        berichten: ['vandaag alle peren met merpan 2kg en ureum 3L'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Peer', minAantal: 1 },
+            producten: ['Merpan', 'Ureum'],
+            doseringen: { 'Merpan': 2, 'Ureum': 3 },
+            registrationType: 'spraying',
+            productSources: { 'Merpan': 'ctgb', 'Ureum': 'fertilizer' },
+        },
+        opmerkingen: 'Merpan is CTGB, Ureum is meststof. Geen cross-database verwarring.',
+    },
+    {
+        id: 'meststof-008',
+        beschrijving: 'Gemengd met validatie: CTGB product gevalideerd, meststof overgeslagen',
+        categorie: 'meststof',
+        berichten: ['alle peren met captan 1.5L en chelal az 2L en chelal b 1L'],
+        verwacht: {
+            aantalUnits: 1,
+            perceelCriteria: { crop: 'Peer', minAantal: 1 },
+            producten: ['Captan', 'Chelal AZ', 'Chelal B'],
+            doseringen: { 'Captan': 1.5, 'Chelal AZ': 2, 'Chelal B': 1 },
+            registrationType: 'spraying',
+            productSources: { 'Captan': 'ctgb', 'Chelal AZ': 'fertilizer', 'Chelal B': 'fertilizer' },
+        },
+        opmerkingen: 'Captan krijgt CTGB-validatie (dosering, toelating). Chelal AZ en Chelal B worden overgeslagen bij validatie.',
+    },
+];
+
+// ============================================================================
 // ALLE TESTS COMBINEREN
 // ============================================================================
 
@@ -793,6 +926,7 @@ export const alleTests: RegressionTest[] = [
     ...correctieTests,
     ...groeperingTests,
     ...edgeCaseTests,
+    ...meststofTests,
 ];
 
 // Categorieën voor filtering
@@ -807,6 +941,7 @@ export const testCategorieen = {
     correctie: correctieTests,
     groep: groeperingTests,
     edge: edgeCaseTests,
+    meststof: meststofTests,
 };
 
 console.log(`Regression corpus geladen: ${alleTests.length} tests`);

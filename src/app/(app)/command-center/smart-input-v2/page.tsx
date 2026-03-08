@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useInvalidateQueries } from '@/hooks/use-data';
 import {
     MessageSquare,
     ClipboardList,
@@ -78,6 +79,7 @@ export default function SmartInputV2Page() {
     const [contextError, setContextError] = React.useState<string | null>(null);
 
     const { toast } = useToast();
+    const { invalidateSpuitschrift, invalidateInventory, invalidateLogbook } = useInvalidateQueries();
 
     // Refs
     const abortControllerRef = React.useRef<AbortController | null>(null);
@@ -222,7 +224,7 @@ export default function SmartInputV2Page() {
                 phase: 'error',
             }));
         }
-    }, [state.messages, state.draft, state.phase, userContext]);
+    }, [state.messages, state.draft, state.phase, userContext, invalidateSpuitschrift, invalidateInventory, invalidateLogbook]);
 
     // Handle stream messages
     const handleStreamMessage = React.useCallback((message: StreamMessageV2) => {
@@ -295,7 +297,7 @@ export default function SmartInputV2Page() {
             // Handle different actions
             switch (response.action) {
                 case 'confirm_and_save':
-                    // Draft is saved, could clear it or mark as confirmed
+                    // Agent has saved via save_registration tool - mark as confirmed
                     if (newState.draft) {
                         newState.draft = {
                             ...newState.draft,
@@ -305,6 +307,10 @@ export default function SmartInputV2Page() {
                             })),
                         };
                     }
+                    // Invalidate spuitschrift cache so /crop-care/logs shows the new entries
+                    invalidateSpuitschrift();
+                    invalidateInventory();
+                    invalidateLogbook();
                     break;
 
                 case 'cancel':
@@ -392,6 +398,10 @@ export default function SmartInputV2Page() {
                     } : null,
                 }));
                 toast({ title: 'Opgeslagen', description: 'Registratie bevestigd.' });
+                // Invalidate spuitschrift cache so /crop-care/logs shows the new entry
+                invalidateSpuitschrift();
+                invalidateInventory();
+                invalidateLogbook();
             } else {
                 throw new Error(result.message || 'Failed to save');
             }
@@ -401,7 +411,7 @@ export default function SmartInputV2Page() {
         } finally {
             setSavingUnitId(null);
         }
-    }, [state.draft, toast]);
+    }, [state.draft, toast, invalidateSpuitschrift, invalidateInventory, invalidateLogbook]);
 
     // Handle confirm all units
     const handleConfirmAll = React.useCallback(async () => {
@@ -427,6 +437,10 @@ export default function SmartInputV2Page() {
                     } : null,
                 }));
                 toast({ title: 'Opgeslagen', description: `${unconfirmedUnits.length} registratie(s) bevestigd.` });
+                // Invalidate spuitschrift cache so /crop-care/logs shows the new entries
+                invalidateSpuitschrift();
+                invalidateInventory();
+                invalidateLogbook();
             } else {
                 throw new Error(result.message || 'Failed to save');
             }
@@ -436,7 +450,7 @@ export default function SmartInputV2Page() {
         } finally {
             setSavingUnitId(null);
         }
-    }, [state.draft, toast]);
+    }, [state.draft, toast, invalidateSpuitschrift, invalidateInventory, invalidateLogbook]);
 
     // Handle cancel/clear draft
     const handleCancelDraft = React.useCallback(() => {
@@ -680,8 +694,17 @@ export default function SmartInputV2Page() {
                                     disabled={savingUnitId !== null}
                                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                                 >
-                                    <Check className="h-4 w-4 mr-1" />
-                                    Alles Bevestigen
+                                    {savingUnitId !== null ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                            Opslaan...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="h-4 w-4 mr-1" />
+                                            Alles Bevestigen
+                                        </>
+                                    )}
                                 </Button>
                             </div>
                         </div>

@@ -596,6 +596,7 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             date: entry.date,
             plots: entry.parsedData.plots,
             products: entry.parsedData.products,
+            registrationType: entry.registrationType || 'spraying',
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
             createdAt: entry.createdAt || new Date(),
             ...(validationMessage && { validationMessage: validationMessage }),
@@ -649,6 +650,7 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
     rawInput?: string;
     validationMessage?: string | null;
     sessionId?: string | null; // Optional: ID of the conversation session to mark as completed
+    registrationType?: 'spraying' | 'spreading';
 }): Promise<{ success: boolean; message?: string; spuitschriftId?: string }> {
     try {
         if (!draftData.plots || draftData.plots.length === 0) {
@@ -682,15 +684,35 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
         }
         console.log('[confirmDraftDirectToSpuitschrift] Using date:', entryDate.toISOString());
 
-        // Valideer de spray data
+        // Valideer de spray data (alleen CTGB producten, niet meststoffen)
+        const ctgbOnlyProducts = draftData.products.filter(p => !p.source || p.source === 'ctgb');
         const parsedData: ParsedSprayData = {
             plots: draftData.plots,
-            products: draftData.products,
+            products: ctgbOnlyProducts,
         };
-        const { isValid, validationMessage, updatedProducts, errorCount, warningCount } = await validateSprayData(parsedData, allParcels, entryDate);
+
+        let validationMessage: string | null = null;
+        let updatedProducts: ProductEntry[] | undefined;
+        let errorCount = 0;
+        let warningCount = 0;
+
+        if (ctgbOnlyProducts.length > 0) {
+            const result = await validateSprayData(parsedData, allParcels, entryDate);
+            validationMessage = result.validationMessage;
+            updatedProducts = result.updatedProducts;
+            errorCount = result.errorCount;
+            warningCount = result.warningCount;
+        }
 
         // Update products met genormaliseerde namen indien nodig
-        const finalProducts = updatedProducts || draftData.products;
+        // Merge back: replace CTGB products with validated versions, keep fertilizer products as-is
+        const finalProducts = updatedProducts
+            ? draftData.products.map(p => {
+                if (p.source === 'fertilizer') return p;
+                const updated = updatedProducts!.find(u => u.product === p.product);
+                return updated || p;
+            })
+            : draftData.products;
 
         // Bij errors: niet bevestigen
         if (errorCount > 0) {
@@ -707,6 +729,7 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
             date: entryDate,
             plots: draftData.plots,
             products: finalProducts,
+            registrationType: draftData.registrationType || 'spraying',
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
             createdAt: new Date(),
             ...(validationMessage && { validationMessage }),
@@ -725,7 +748,8 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
                 plots: draftData.plots,
                 products: finalProducts,
             },
-            validationMessage: validationMessage || null,
+            registrationType: draftData.registrationType || 'spraying',
+            validationMessage: validationMessage || undefined,
         };
 
         // Verwerk parcel history en inventory movements
@@ -789,13 +813,15 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
 export async function confirmSingleUnit(
     unit: SprayRegistrationUnit,
     date: Date,
-    rawInput: string
+    rawInput: string,
+    registrationType?: 'spraying' | 'spreading'
 ): Promise<{ success: boolean; message?: string; spuitschriftId?: string }> {
     return confirmDraftDirectToSpuitschrift({
         plots: unit.plots,
         products: unit.products,
         date,
         rawInput: `${rawInput} [${unit.label || 'Unit'}]`,
+        registrationType,
         // Don't pass sessionId here - it will be updated once after all units are confirmed
     });
 }
@@ -829,7 +855,7 @@ export async function confirmAllUnits(
     // Confirm each unit (use unit-specific date if available for date-split scenarios)
     for (const unit of pendingUnits) {
         const unitDate = unit.date || group.date;
-        const result = await confirmSingleUnit(unit, unitDate, group.rawInput);
+        const result = await confirmSingleUnit(unit, unitDate, group.rawInput, group.registrationType);
         results.push({
             unitId: unit.id,
             success: result.success,
@@ -1789,6 +1815,7 @@ export async function addManualSprayEntry(
             date: date,
             plots: plots,
             products: finalProducts,
+            registrationType: 'spraying',
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
             createdAt: new Date(),
             ...(validationMessage && { validationMessage }),

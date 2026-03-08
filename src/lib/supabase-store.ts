@@ -138,10 +138,16 @@ export async function getSpuitschriftEntry(id: string): Promise<SpuitschriftEntr
 export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
   // Use retry for network resilience
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const userId = await getCurrentUserId();
+    let query = supabase
       .from('spuitschrift')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('*');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.order('date', { ascending: false });
 
     if (error) {
       console.error("Supabase Error (getSpuitschriftEntries):", error.message || error);
@@ -190,6 +196,7 @@ export async function addSpuitschriftEntry(
     created_at: parseDate(entry.createdAt),
     plots: entry.plots,
     products: entry.products,
+    registration_type: entry.registrationType || 'spraying',
     validation_message: entry.validationMessage,
     status: entry.status,
   };
@@ -401,10 +408,16 @@ export async function updateSpuitschriftEntry(
 
 export async function getInventoryMovements(): Promise<InventoryMovement[]> {
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const userId = await getCurrentUserId();
+    let query = supabase
       .from('inventory_movements')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('*');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.order('date', { ascending: false });
 
     if (error) {
       // Throw to trigger retry for network errors
@@ -521,13 +534,22 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
   const isServer = typeof window === 'undefined';
   const client = isServer ? getSupabaseAdmin() : supabase;
 
+  // Get current user ID for explicit filtering (defense-in-depth alongside RLS)
+  const userId = await getCurrentUserId();
+
   // Use retry for transient network errors
   return withRetry(async () => {
     // First try the view
-    const { data, error } = await client
+    let query = client
       .from('v_sprayable_parcels')
-      .select('*')
-      .order('name');
+      .select('*');
+
+    // Explicitly filter by user_id for data isolation
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.order('name');
 
     if (error) {
       // Throw on fetch errors so withRetry can handle them
@@ -547,10 +569,15 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
     // This happens when parcels table is empty (JOIN returns 0 rows)
     console.warn('[getSprayableParcels] View returned 0 rows, trying direct sub_parcels query...');
 
-    const { data: subData, error: subError } = await client
+    let subQuery = client
       .from('sub_parcels')
-      .select('*')
-      .order('crop');
+      .select('*');
+
+    if (userId) {
+      subQuery = subQuery.eq('user_id', userId);
+    }
+
+    const { data: subData, error: subError } = await subQuery.order('crop');
 
     if (subError) {
       console.error('[getSprayableParcels] sub_parcels fallback error:', subError.message);
@@ -645,12 +672,21 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
   const isServer = typeof window === 'undefined';
   const client = isServer ? getSupabaseAdmin() : supabase;
 
+  // Get current user ID for explicit filtering (defense-in-depth alongside RLS)
+  const userId = await getCurrentUserId();
+
   return withRetry(async () => {
     // First try the view
-    const { data, error } = await client
+    let query = client
       .from('v_sprayable_parcels')
       .select('*')
       .in('id', ids);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       if (error.message?.includes('fetch failed') || error.message?.includes('ECONNRESET')) {
@@ -668,10 +704,16 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
     // FALLBACK: View is empty, try sub_parcels directly
     console.warn('[getSprayableParcelsById] View returned 0 rows, trying sub_parcels fallback...');
 
-    const { data: subData, error: subError } = await client
+    let subQuery = client
       .from('sub_parcels')
       .select('*')
       .in('id', ids);
+
+    if (userId) {
+      subQuery = subQuery.eq('user_id', userId);
+    }
+
+    const { data: subData, error: subError } = await subQuery;
 
     if (subError) {
       console.error('[getSprayableParcelsById] sub_parcels fallback error:', subError.message);
@@ -714,12 +756,20 @@ export async function getParcels(): Promise<Parcel[]> {
   return withRetry(async () => {
     console.log('[getParcels] Fetching parcels from Supabase...');
 
+    // Get current user ID for explicit filtering (defense-in-depth alongside RLS)
+    const userId = await getCurrentUserId();
+
     // Step 1: Fetch parcels with nested sub_parcels
     // NOTE: Only select columns that exist in sub_parcels table
-    const { data: parcelsData, error: parcelsError } = await supabase
+    let parcelsQuery = supabase
       .from('parcels')
-      .select('*, sub_parcels(id, parcel_id, crop, variety, area)')
-      .order('name');
+      .select('*, sub_parcels(id, parcel_id, crop, variety, area)');
+
+    if (userId) {
+      parcelsQuery = parcelsQuery.eq('user_id', userId);
+    }
+
+    const { data: parcelsData, error: parcelsError } = await parcelsQuery.order('name');
 
     if (parcelsError) {
       // Throw to trigger retry for network errors
@@ -744,9 +794,15 @@ export async function getParcels(): Promise<Parcel[]> {
   if (parcelsMissingSubs.length > 0) {
     console.log(`[getParcels] ${parcelsMissingSubs.length} parcels missing sub_parcels, fetching separately...`);
 
-    const { data: allSubParcels, error: subError } = await supabase
+    let subQuery = supabase
       .from('sub_parcels')
       .select('*');
+
+    if (userId) {
+      subQuery = subQuery.eq('user_id', userId);
+    }
+
+    const { data: allSubParcels, error: subError } = await subQuery;
 
     if (subError) {
       console.error('[getParcels] Error fetching sub_parcels:', subError.message);
@@ -1131,10 +1187,16 @@ export async function getLogbookEntry(id: string): Promise<LogbookEntry | null> 
 export async function getLogbookEntries(): Promise<LogbookEntry[]> {
   // Use retry for network resilience
   return withRetry(async () => {
-    const { data, error } = await supabase
+    const userId = await getCurrentUserId();
+    let query = supabase
       .from('logbook')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('*');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.order('date', { ascending: false });
 
     if (error) throw new Error(error.message);
     if (!data) return [];
@@ -1366,17 +1428,19 @@ export async function addParcelHistoryEntries({
   parcels,
   sprayableParcels,
   isConfirmation = false,
-  spuitschriftId
+  spuitschriftId,
+  providedUserId
 }: {
   logbookEntry: LogbookEntry,
   parcels?: Parcel[],
   sprayableParcels?: SprayableParcel[],
   isConfirmation?: boolean,
-  spuitschriftId?: string
+  spuitschriftId?: string,
+  providedUserId?: string | null
 }) {
   if (!logbookEntry.parsedData) return;
 
-  const userId = await getCurrentUserId();
+  const userId = providedUserId ?? await getCurrentUserId();
   const { id: logId, parsedData } = logbookEntry;
   const { plots, products } = parsedData;
 
@@ -1421,6 +1485,7 @@ export async function addParcelHistoryEntries({
             dosage: productEntry.dosage,
             unit: productEntry.unit,
             date: new Date(logbookEntry.date).toISOString(),
+            registration_type: logbookEntry.registrationType || 'spraying',
           });
         }
 
@@ -1461,6 +1526,7 @@ export async function addParcelHistoryEntries({
               dosage: productEntry.dosage,
               unit: productEntry.unit,
               date: new Date(logbookEntry.date).toISOString(),
+              registration_type: logbookEntry.registrationType || 'spraying',
             });
           }
 
@@ -1492,14 +1558,17 @@ export async function addParcelHistoryEntries({
     }
   });
 
-  // Insert in batches
+  // Insert in batches - use admin client on server to bypass RLS
+  const isServer = typeof window === 'undefined';
+  const dbClient = isServer ? (getSupabaseAdmin() || supabase) : supabase;
+
   if (historyEntries.length > 0) {
-    const { error } = await supabase.from('parcel_history').insert(historyEntries);
+    const { error } = await dbClient.from('parcel_history').insert(historyEntries);
     if (error) console.error('Error inserting parcel history:', error);
   }
 
   if (inventoryEntries.length > 0) {
-    const { error } = await supabase.from('inventory_movements').insert(inventoryEntries);
+    const { error } = await dbClient.from('inventory_movements').insert(inventoryEntries);
     if (error) console.error('Error inserting inventory movements:', error);
   }
 }
@@ -1944,6 +2013,28 @@ export async function getCtgbSyncStats(): Promise<CtgbSyncStats> {
 
 export async function getFertilizers(): Promise<FertilizerProduct[]> {
   const { data, error } = await supabase
+    .from('fertilizers')
+    .select('*')
+    .order('name');
+
+  if (error || !data) return [];
+
+  return data.map(item => ({
+    id: item.id,
+    name: item.name,
+    manufacturer: item.manufacturer,
+    category: item.category,
+    unit: item.unit,
+    composition: item.composition,
+    searchKeywords: item.search_keywords,
+  }));
+}
+
+export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
+  const isServer = typeof window === 'undefined';
+  const dbClient = isServer ? (getSupabaseAdmin() || supabase) : supabase;
+
+  const { data, error } = await dbClient
     .from('fertilizers')
     .select('*')
     .order('name');

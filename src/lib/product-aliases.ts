@@ -25,6 +25,7 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'captan': 'Merpan Spuitkorrel',
     'captaan': 'Merpan Spuitkorrel',
     'merpan': 'Merpan Spuitkorrel',
+    'captosan': 'Captosan 500 SC',
     'delan': 'Delan DF',
     'delan pro': 'Delan Pro',
     'dithianon': 'Delan DF',
@@ -32,27 +33,23 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'pyrimethanil': 'Scala',
     'bellis': 'Bellis',
     'boscalid': 'Bellis',
-    'flint': 'Flint',
-    'trifloxystrobin': 'Flint',
-    'chorus': 'Chorus',
-    'cyprodinil': 'Chorus',
-    'topsin': 'Topsin M',
-    'thiophanate-methyl': 'Topsin M',
+    'flint': 'FLINT',
+    'trifloxystrobin': 'FLINT',
+    'chorus': 'CHORUS 50 WG',
+    'cyprodinil': 'CHORUS 50 WG',
     'teldor': 'Teldor',
     'fenhexamid': 'Teldor',
     'switch': 'Switch',
     'cyprodinil + fludioxonil': 'Switch',
-    'luna': 'Luna Sensation',
-    'fluopyram': 'Luna Sensation',
+    'luna experience': 'LUNA EXPERIENCE',
+    // NB: 'luna' zonder suffix is ambig (Experience, Privilege, Care) - verwijderd
+    // NB: 'fluopyram' zit in meerdere Luna-producten - verwijderd
     'score': 'Score 250 EC',
     'difenoconazool': 'Score 250 EC',
-    'syllit': 'Syllit Flow',
-    'dodine': 'Syllit Flow',
+    'syllit': 'Syllit Flow 400 SC',
+    'dodine': 'Syllit Flow 400 SC',
     'folicur': 'Folicur',
     'tebuconazool': 'Folicur',
-    'fontelis': 'Fontelis',
-    'penthiopyrad': 'Fontelis',
-    'pristine': 'Pristine',
     'geoxe': 'Geoxe',
     'fludioxonil': 'Geoxe',
     'sercadis': 'Sercadis',
@@ -63,51 +60,38 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     // ============================================
     // Insecticiden / Bladluis / Trips
     // ============================================
-    'calypso': 'Calypso',
-    'thiacloprid': 'Calypso',
-    'movento': 'Movento 150 OD',
-    'spirotetramat': 'Movento 150 OD',
     'pirimor': 'Pirimor',
     'pirimicarb': 'Pirimor',
-    'karate': 'Karate Zeon',
-    'lambda-cyhalothrin': 'Karate Zeon',
-    'decis': 'Decis EC',
-    'deltamethrin': 'Decis EC',
-    'tracer': 'Tracer',
-    'spinosad': 'Tracer',
-    'steward': 'Steward',
-    'indoxacarb': 'Steward',
-    'runner': 'Runner',
-    'methoxyfenozide': 'Runner',
+    'karate next': 'Karate Next',
+    // NB: 'karate' en 'karate zeon' verwijderd - Karate Zeon (lambda-cyhalothrin) ≠ Karate Next (tau-fluvalinaat)
+    // NB: 'lambda-cyhalothrin' verwijderd - dat is Karate Zeon, niet Karate Next
+    'decis': 'Decis Protech',
+    'decis protech': 'Decis Protech',
+    'deltamethrin': 'Decis Protech',
+    'tracer': 'TRACER',
+    'spinosad': 'TRACER',
     'coragen': 'CORAGEN',
     'chlorantraniliprole': 'CORAGEN',
-    'madex': 'Madex Top',
-    'carpovirusine': 'Carpovirusine Evo 2',
-    'batavia': 'Batavia',
-    'teppeki': 'Teppeki',
-    'flonicamid': 'Teppeki',
+    'madex': 'Madex Top SC',
+    'carpovirusine': 'CARPOVIRUSINE EVO 2',
+    'teppeki': 'TEPPEKI',
+    'flonicamid': 'TEPPEKI',
     'sivanto': 'Sivanto Prime',
     'flupyradifurone': 'Sivanto Prime',
     'exirel': 'Exirel',
     'cyantraniliprole': 'Exirel',
+    'milbeknock': 'Milbeknock',
+    'milbemectin': 'Milbeknock',
 
     // ============================================
     // Mijten / Acariciden
     // ============================================
-    'envidor': 'Envidor',
-    'spirodiclofen': 'Envidor',
-    'nissorun': 'Nissorun',
-    'hexythiazox': 'Nissorun',
-    'apollo': 'Apollo 50 SC',
-    'clofentezine': 'Apollo 50 SC',
-    'floramite': 'Floramite 240 SC',
-    'bifenazaat': 'Floramite 240 SC',
-    'masai': 'Masai',
-    'tebufenpyrad': 'Masai',
-    'milbeknock': 'Milbeknock',
-    'milbemectin': 'Milbeknock',
-    'vertimec': 'Vertimec',
-    'abamectin': 'Vertimec',
+    'nissorun': 'Nissorun vloeibaar',
+    'hexythiazox': 'Nissorun vloeibaar',
+    'floramite': 'FLORAMITE 240 SC',
+    'bifenazaat': 'FLORAMITE 240 SC',
+    'vertimec': 'Vertimec Gold',
+    'abamectin': 'Vertimec Gold',
 
     // ============================================
     // Dunning / Groeiregulatie
@@ -123,39 +107,25 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'prohexadion-calcium': 'Regalis Plus',
     'brevis': 'Brevis',
     'metamitron': 'Brevis',
-    'exilis': 'Exilis',
+    'exilis': 'Exilis 100 SC',
     'maxcel': 'MaxCel',
     'benzyladenine': 'MaxCel',
-    'rhodofix': 'Rhodofix',
-    'aba': 'Rhodofix',
 
     // ============================================
     // Herbiciden / Onkruidbestrijding
     // ============================================
-    'roundup': 'Roundup',
-    'glyfosaat': 'Roundup',
-    'glyphosate': 'Roundup',
-    'basta': 'Basta',
-    'glufosinaat': 'Basta',
     'kerb': 'Kerb Flo',
     'propyzamide': 'Kerb Flo',
     'spotlight': 'Spotlight Plus',
     'carfentrazone': 'Spotlight Plus',
 
     // ============================================
-    // Bladluis specifiek
-    // ============================================
-    'wopro': 'WOPRO Luisweg',
-    'wopro luisweg': 'WOPRO Luisweg',
-    'luisweg': 'WOPRO Luisweg',
-
-    // ============================================
     // Diverse / Overige
     // ============================================
     'aliette': 'Aliette',
     'fosetyl': 'Aliette',
-    'ridomil': 'Ridomil Gold',
-    'metalaxyl': 'Ridomil Gold',
+    'ridomil': 'Ridomil Gold SL',
+    'metalaxyl': 'Ridomil Gold SL',
     'previcur': 'Previcur Energy',
     'propamocarb': 'Previcur Energy',
     'ranman': 'Ranman Top',
@@ -163,12 +133,12 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'revus': 'Revus',
     'mandipropamid': 'Revus',
     'amistar': 'Amistar',
+    'amistar top': 'Amistar Top',
     'azoxystrobin': 'Amistar',
-    'kumulus': 'Kumulus WG',
-    'zwavel': 'Kumulus WG',
-    'spuitzwavel': 'Kumulus WG',
-    'solubor': 'Solubor DF',
-    'borium': 'Solubor DF',
+    // NB: Amistar (solo azoxystrobin) en Amistar Top (+difenoconazool) zijn VERSCHILLENDE producten
+    'kumulus': 'KUMULUS',
+    'zwavel': 'KUMULUS',
+    'spuitzwavel': 'KUMULUS',
 
     // ============================================
     // Common Typos / Fuzzy Matching
@@ -198,13 +168,9 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     // Bellis typos
     'belis': 'Bellis',
     'belliss': 'Bellis',
-    // Calypso typos
-    'kalypso': 'Calypso',
-    'calyps': 'Calypso',
     // Other common typos
-    'movneto': 'Movento 150 OD',
     'pirimoor': 'Pirimor',
-    'karaet': 'Karate Zeon',
+    // NB: 'karaet' typo verwijderd - was foutief gekoppeld aan Karate Next
     'regallus': 'Regalis Plus',
 };
 

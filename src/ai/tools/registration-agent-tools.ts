@@ -18,10 +18,12 @@ import {
     getParcels,
     getSpuitschriftEntries,
     addSpuitschriftEntry,
+    addParcelHistoryEntries,
     getAllCtgbProducts,
     getParcelHistoryEntries,
     getUserPreferences,
     getSprayableParcels,
+    getSprayableParcelsById,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import { resolveProductAlias, type ResolvedProduct } from '@/lib/product-aliases';
@@ -31,7 +33,7 @@ import {
     type ValidationResult,
     type ValidationFlag,
 } from '@/lib/validation-service';
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, SpuitschriftEntry, Parcel } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, SpuitschriftEntry, LogbookEntry, Parcel } from '@/lib/types';
 
 // ============================================================================
 // TOOL: Get Parcels
@@ -450,6 +452,7 @@ export const saveRegistrationTool = ai.defineTool(
                 groupId: z.string(),
                 date: z.string().describe('Spuitdatum in YYYY-MM-DD formaat'),
                 rawInput: z.string().describe('Originele invoer van gebruiker'),
+                registrationType: z.enum(['spraying', 'spreading']).optional().describe('Type registratie: spraying (bespuiting) of spreading (strooien)'),
                 units: z.array(z.object({
                     id: z.string(),
                     plots: z.array(z.string()),
@@ -475,9 +478,23 @@ export const saveRegistrationTool = ai.defineTool(
         const savedIds: string[] = [];
 
         try {
+            // Fetch parcels once for all units (needed for parcel_history + inventory)
+            const allPlotIds = input.registration.units.flatMap(u => u.plots);
+            const [allParcels, sprayableParcels] = await Promise.all([
+                getParcels(),
+                getSprayableParcelsById(allPlotIds),
+            ]);
+
             for (const unit of input.registration.units) {
                 const unitDate = unit.date || input.registration.date;
+                const unitProducts = unit.products.map(p => ({
+                    product: p.product,
+                    dosage: p.dosage,
+                    unit: p.unit,
+                    targetReason: p.targetReason,
+                }));
 
+                // 1. Write to spuitschrift (same as before)
                 const entry = await addSpuitschriftEntry(
                     {
                         originalLogbookId: null,
@@ -485,18 +502,38 @@ export const saveRegistrationTool = ai.defineTool(
                         date: new Date(unitDate),
                         createdAt: new Date(),
                         plots: unit.plots,
-                        products: unit.products.map(p => ({
-                            product: p.product,
-                            dosage: p.dosage,
-                            unit: p.unit,
-                            targetReason: p.targetReason,
-                        })),
+                        products: unitProducts,
+                        registrationType: input.registration.registrationType || 'spraying',
                         status: 'Akkoord',
                     },
                     input.userId
                 );
 
                 savedIds.push(entry.id);
+
+                // 2. Write to parcel_history + inventory_movements (FIX: same as "Bevestigen" knop)
+                const dummyLogbookEntry: LogbookEntry = {
+                    id: `agent-${Date.now()}-${savedIds.length}`,
+                    rawInput: input.registration.rawInput,
+                    status: 'Akkoord',
+                    date: new Date(unitDate),
+                    createdAt: new Date(),
+                    parsedData: {
+                        plots: unit.plots,
+                        products: unitProducts,
+                    },
+                };
+
+                const unitSprayableParcels = sprayableParcels.filter(p => unit.plots.includes(p.id));
+
+                await addParcelHistoryEntries({
+                    logbookEntry: dummyLogbookEntry,
+                    parcels: allParcels,
+                    sprayableParcels: unitSprayableParcels,
+                    isConfirmation: true,
+                    spuitschriftId: entry.id,
+                    providedUserId: input.userId,
+                });
             }
 
             return {

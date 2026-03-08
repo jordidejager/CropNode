@@ -15,6 +15,7 @@ import {
     Database,
     Sprout,
     BookOpen,
+    Library,
     ChevronDown,
     ChevronRight,
     PanelLeftClose,
@@ -32,7 +33,8 @@ import {
     Thermometer,
     BarChart3,
     SlidersHorizontal,
-    Truck
+    Truck,
+    CloudSun
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -131,6 +133,7 @@ const menuStructure: NavItem[] = [
         items: [
             { label: 'Spuitschrift', href: '/crop-care/logs', icon: ClipboardList },
             { label: 'Voorraad', href: '/crop-care/inventory', icon: Package },
+            { label: 'Mijn Producten', href: '/crop-care/my-products', icon: FlaskConical },
             { label: 'Database Gewasbescherming', href: '/crop-care/db-protection', icon: Database },
             { label: 'Database Meststoffen', href: '/crop-care/db-fertilizer', icon: Sprout },
         ]
@@ -159,7 +162,18 @@ const menuStructure: NavItem[] = [
         items: [
             { label: 'Field Signals', href: '/research?tab=signals', icon: BookOpen },
             { label: 'Papers & Onderzoek', href: '/research?tab=papers', icon: FlaskConical },
+            { label: 'Kennisbank', href: '/research/kennisbank', icon: Library },
             { label: 'Ziekten & Plagen', href: '/research/pests', icon: Bug },
+        ]
+    },
+    {
+        label: 'Weather Hub',
+        icon: CloudSun,
+        items: [
+            { label: 'Dashboard', href: '/weather/dashboard', icon: CloudSun },
+            { label: 'Ziektedruk', href: '/weather/disease-pressure', icon: Bug },
+            { label: 'Seizoensanalyse', href: '/weather/season', icon: BarChart3 },
+            { label: 'Expert Forecast', href: '/weather/expert', icon: SlidersHorizontal },
         ]
     },
 ];

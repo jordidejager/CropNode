@@ -125,10 +125,15 @@ export type DoelorganismeOption = {
   gewas: string;                   // The crop this applies to
 };
 
+export type ProductSource = 'ctgb' | 'fertilizer';
+
+export type RegistrationType = 'spraying' | 'spreading';
+
 export type ProductEntry = {
   product: string;
   dosage: number;
   unit: string;
+  source?: ProductSource; // 'ctgb' (gewasbeschermingsmiddel) of 'fertilizer' (meststof). Default: 'ctgb' voor backward compatibility
   targetReason?: string; // Doelorganisme uit gebruikersinvoer (bijv. "luis", "schurft")
   doelorganisme?: string; // Geselecteerd doelorganisme uit CTGB voorschriften
   availableDoelorganismen?: DoelorganismeOption[]; // Beschikbare opties uit CTGB (voor UI)
@@ -179,6 +184,7 @@ export type SprayRegistrationGroup = {
   date: Date;
   rawInput: string;          // Originele invoer van gebruiker
   units: SprayRegistrationUnit[];
+  registrationType?: RegistrationType; // 'spraying' (default) of 'spreading'
   // Punt 4: Confidence informatie
   confidence?: ConfidenceBreakdown;
 };
@@ -203,6 +209,7 @@ export type LogbookEntry = {
   date: Date; // Spraying date
   createdAt: Date; // Creation date
   parsedData?: ParsedSprayData;
+  registrationType?: RegistrationType; // 'spraying' (default) of 'spreading'
   validationMessage?: string;
   originalLogbookId?: string; // Used when moving back from spuitschrift
 };
@@ -216,6 +223,7 @@ export type SpuitschriftEntry = {
   createdAt: Date; // Creation date
   plots: string[];
   products: ProductEntry[];
+  registrationType: RegistrationType; // 'spraying' (bespuiting) of 'spreading' (strooien)
   validationMessage?: string;
   status: 'Akkoord' | 'Waarschuwing';
 }
@@ -232,6 +240,8 @@ export type ParcelHistoryEntry = {
   dosage: number;
   unit: string;
   date: Date;
+  registrationType?: RegistrationType; // 'spraying' (default) of 'spreading'
+  productSource?: ProductSource; // 'ctgb' of 'fertilizer'
 };
 
 export type UserPreference = {

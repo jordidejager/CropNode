@@ -9,6 +9,7 @@
  */
 
 import type { Parcel, ParcelHistoryEntry, CtgbProduct, CtgbGebruiksvoorschrift } from './types';
+import { resolveAlias } from './validation/product-matcher';
 
 // ============================================
 // Types
@@ -631,10 +632,29 @@ function checkDosage(ctx: ValidationContext): ValidationFlag[] {
 
   if (!anyOk) {
     // Geen enkel voorschrift staat deze dosering toe
-    const absoluteMax = Math.max(...results.map(r => parseDosering(r.voorschrift.dosering || '')?.value || 0));
+    // Show per-target maximums for clarity
+    const targetMaxes = results
+      .map(r => {
+        const max = parseDosering(r.voorschrift.dosering || '');
+        return { target: r.voorschrift.doelorganisme || 'Onbekend doel', max: max?.value || 0, unit: inputUnit };
+      })
+      .filter(t => t.max > 0)
+      .sort((a, b) => b.max - a.max);
+    const absoluteMax = targetMaxes.length > 0 ? targetMaxes[0].max : 0;
+    const highestTarget = targetMaxes.length > 0 ? targetMaxes[0].target : '';
+
+    let dosageMessage: string;
+    if (targetMaxes.length === 1) {
+      dosageMessage = `Dosering ${ctx.dosage} ${ctx.unit} overschrijdt het maximum van ${absoluteMax} ${inputUnit} voor '${highestTarget}' in ${ctx.crop}.`;
+    } else if (targetMaxes.length > 1) {
+      // Show the highest allowed target for context
+      dosageMessage = `Dosering ${ctx.dosage} ${ctx.unit} overschrijdt het maximum voor alle toegelaten doelen in ${ctx.crop}. Hoogste maximum: ${absoluteMax} ${inputUnit} (${highestTarget}).`;
+    } else {
+      dosageMessage = `Dosering ${ctx.dosage} ${ctx.unit} is te hoog voor ${ctx.crop}. Controleer de voorschriften.`;
+    }
     flags.push({
       type: 'error',
-      message: `Dosering ${ctx.dosage} ${ctx.unit} is te hoog voor alle toegelaten doelen in '${ctx.crop}'. Het absolute maximum is ${absoluteMax} ${inputUnit}.`,
+      message: dosageMessage,
       field: 'dosage'
     });
   } else if (exactMatch && !exactMatch.isOk) {
@@ -924,10 +944,62 @@ export async function validateParsedSprayData(
   let infoCount = 0;
 
   for (const productEntry of parsedData.products) {
-    const matchingProduct = allCtgbProducts.find(m =>
-      m.naam?.toLowerCase() === productEntry.product.toLowerCase() ||
+    const searchName = productEntry.product.toLowerCase().trim();
+    const aliasResolved = resolveAlias(searchName);
+
+    // Try: exact match, then alias match, then prefix/contains match
+    let matchingProduct = allCtgbProducts.find(m =>
+      m.naam?.toLowerCase() === searchName ||
       m.toelatingsnummer === productEntry.product
     );
+
+    if (!matchingProduct && aliasResolved) {
+      matchingProduct = allCtgbProducts.find(m =>
+        m.naam?.toLowerCase() === aliasResolved.toLowerCase()
+      );
+    }
+
+    if (!matchingProduct) {
+      // Fuzzy: prefix match - prefer shortest name (closest match)
+      const prefixMatches = allCtgbProducts.filter(m =>
+        m.naam?.toLowerCase().startsWith(searchName) || searchName.startsWith(m.naam?.toLowerCase() || '')
+      );
+      if (prefixMatches.length === 1) {
+        matchingProduct = prefixMatches[0];
+      } else if (prefixMatches.length > 1) {
+        // Prefer exact first-word match, then shortest name
+        matchingProduct = prefixMatches.sort((a, b) => {
+          const aFirstWord = a.naam?.toLowerCase().split(/[\s-]/)[0] || '';
+          const bFirstWord = b.naam?.toLowerCase().split(/[\s-]/)[0] || '';
+          const aExact = aFirstWord === searchName ? 0 : 1;
+          const bExact = bFirstWord === searchName ? 0 : 1;
+          if (aExact !== bExact) return aExact - bExact;
+          return (a.naam?.length || 999) - (b.naam?.length || 999);
+        })[0];
+      }
+    }
+
+    if (!matchingProduct && searchName.length >= 5) {
+      // Fuzzy: contains match - only for search terms of 5+ characters to prevent false positives
+      // (short terms like "top", "pro", "gold" would match too many products)
+      const containsMatches = allCtgbProducts.filter(m =>
+        m.naam?.toLowerCase().includes(searchName) || searchName.includes(m.naam?.toLowerCase() || '')
+      );
+      if (containsMatches.length === 1) {
+        matchingProduct = containsMatches[0];
+      } else if (containsMatches.length > 1) {
+        // Prefer the product where search term matches the start of a word
+        matchingProduct = containsMatches.sort((a, b) => {
+          const aName = a.naam?.toLowerCase() || '';
+          const bName = b.naam?.toLowerCase() || '';
+          // Prefer word-start matches (e.g., "score" at start of "Score 250 EC")
+          const aWordStart = aName.split(/[\s-]/).some(w => w.startsWith(searchName)) ? 0 : 1;
+          const bWordStart = bName.split(/[\s-]/).some(w => w.startsWith(searchName)) ? 0 : 1;
+          if (aWordStart !== bWordStart) return aWordStart - bWordStart;
+          return (a.naam?.length || 999) - (b.naam?.length || 999);
+        })[0];
+      }
+    }
 
     if (!matchingProduct) {
       otherMessages.push(`⚠️ Product "${productEntry.product}" niet gevonden in CTGB database.`);
