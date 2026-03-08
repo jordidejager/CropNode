@@ -2,6 +2,7 @@ import {
   Navbar,
   Hero,
   WhyCropNode,
+  FeatureBento,
   PlatformOverview,
   TrustBlock,
   Pricing,
@@ -15,6 +16,7 @@ export default function LandingPage() {
       <Navbar />
       <Hero />
       <WhyCropNode />
+      <FeatureBento />
       <PlatformOverview />
       <TrustBlock />
       <Pricing />

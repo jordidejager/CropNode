@@ -2,10 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/ui/logo';
 import { Menu, X } from 'lucide-react';
+
+const navLinks = [
+  { label: 'Features', href: '#features' },
+  { label: 'Modules', href: '#platform-overview' },
+  { label: 'Pricing', href: '#pricing' },
+];
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -20,6 +26,14 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleNavClick = (href: string) => {
+    setIsMobileMenuOpen(false);
+    if (href.startsWith('#')) {
+      const el = document.getElementById(href.slice(1));
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <motion.header
       initial={{ y: -100 }}
@@ -27,7 +41,7 @@ export function Navbar() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? 'bg-[#020617]/95 backdrop-blur-md border-b border-white/5'
+          ? 'bg-[#020617]/90 backdrop-blur-xl border-b border-white/[0.04]'
           : 'bg-transparent'
       }`}
     >
@@ -39,25 +53,42 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden sm:flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium"
-            >
-              Inloggen
-            </Link>
-            <Button
-              asChild
-              className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"
-            >
-              <Link href="/login">Gratis starten</Link>
-            </Button>
+          <div className="hidden md:flex items-center gap-8">
+            {/* Section Links */}
+            <div className="flex items-center gap-6">
+              {navLinks.map((link) => (
+                <button
+                  key={link.href}
+                  onClick={() => handleNavClick(link.href)}
+                  className="text-slate-400 hover:text-white transition-colors text-sm font-medium"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Auth */}
+            <div className="flex items-center gap-3 pl-6 border-l border-white/[0.06]">
+              <Link
+                href="/login"
+                className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium"
+              >
+                Inloggen
+              </Link>
+              <Button
+                asChild
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 h-9"
+              >
+                <Link href="/login">Gratis starten</Link>
+              </Button>
+            </div>
           </div>
 
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="sm:hidden p-2 text-slate-300 hover:text-white"
+            className="md:hidden p-2 text-slate-300 hover:text-white"
             aria-label="Menu"
           >
             {isMobileMenuOpen ? (
@@ -69,32 +100,45 @@ export function Navbar() {
         </div>
 
         {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="sm:hidden pb-4 border-t border-white/5 mt-2 pt-4"
-          >
-            <div className="flex flex-col gap-3">
-              <Link
-                href="/login"
-                className="text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium py-2"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Inloggen
-              </Link>
-              <Button
-                asChild
-                className="bg-emerald-600 hover:bg-emerald-500 text-white w-full"
-              >
-                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                  Gratis starten
-                </Link>
-              </Button>
-            </div>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden overflow-hidden"
+            >
+              <div className="pb-5 pt-3 border-t border-white/[0.06] space-y-1">
+                {navLinks.map((link) => (
+                  <button
+                    key={link.href}
+                    onClick={() => handleNavClick(link.href)}
+                    className="block w-full text-left text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium py-2.5 px-2 rounded-lg hover:bg-white/[0.02]"
+                  >
+                    {link.label}
+                  </button>
+                ))}
+                <div className="pt-3 mt-2 border-t border-white/[0.06] space-y-2">
+                  <Link
+                    href="/login"
+                    className="block text-slate-300 hover:text-emerald-400 transition-colors text-sm font-medium py-2.5 px-2"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Inloggen
+                  </Link>
+                  <Button
+                    asChild
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white w-full"
+                  >
+                    <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                      Gratis starten
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
     </motion.header>
   );

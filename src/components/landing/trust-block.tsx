@@ -2,23 +2,38 @@
 
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Sprout, ShieldCheck, MapPin } from 'lucide-react';
+import { Sprout, ShieldCheck, MapPin, Leaf, Database, Lock } from 'lucide-react';
 
 const trustItems = [
   {
     icon: ShieldCheck,
-    label: 'Gevalideerd tegen de',
-    sublabel: 'officiële CTGB-database',
+    title: 'CTGB Gevalideerd',
+    description: 'Elke registratie wordt getoetst aan de officiële database',
   },
   {
     icon: MapPin,
-    label: 'Ontworpen voor',
-    sublabel: 'Nederlandse teeltbedrijven',
+    title: 'Nederlands',
+    description: 'Ontworpen voor Nederlandse teeltbedrijven en regelgeving',
   },
   {
     icon: Sprout,
-    label: 'Gebouwd door',
-    sublabel: 'een fruitteler',
+    title: 'Door een teler',
+    description: 'Gebouwd door iemand die weet hoe het veld werkt',
+  },
+  {
+    icon: Database,
+    title: 'RVO Integratie',
+    description: 'Importeer percelen rechtstreeks vanuit het RVO-register',
+  },
+  {
+    icon: Leaf,
+    title: 'Specialisatie',
+    description: 'Specifiek ontwikkeld voor appel- en perenteelt',
+  },
+  {
+    icon: Lock,
+    title: 'Veilig & privé',
+    description: 'Je data blijft van jou. Beveiligd en beschermd.',
   },
 ];
 
@@ -27,25 +42,28 @@ export function TrustBlock() {
   const isInView = useInView(ref, { once: true, margin: '-50px' });
 
   return (
-    <section className="relative py-16 sm:py-24 px-4 overflow-hidden">
+    <section className="relative py-20 sm:py-28 px-4 overflow-hidden">
       {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/10 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/[0.06] to-transparent" />
 
-      <div className="relative z-10 max-w-5xl mx-auto">
+      <div className="relative z-10 max-w-6xl mx-auto">
         <motion.div
           ref={ref}
           initial={{ opacity: 0, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-12"
+          className="text-center mb-14"
         >
-          <h2 className="font-display text-2xl sm:text-3xl text-slate-100 mb-3">
+          <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl text-white mb-3">
             Gebouwd voor de Nederlandse fruitteelt
           </h2>
+          <p className="text-slate-400 text-base max-w-xl mx-auto">
+            Niet nog een generiek farm management systeem — CropNode is specifiek voor jou.
+          </p>
         </motion.div>
 
-        {/* Trust Items */}
-        <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
+        {/* Trust Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
           {trustItems.map((item, index) => {
             const Icon = item.icon;
 
@@ -54,14 +72,18 @@ export function TrustBlock() {
                 key={index}
                 initial={{ opacity: 0, y: 20 }}
                 animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="flex flex-col items-center text-center group"
+                transition={{ duration: 0.4, delay: index * 0.06 }}
+                className="group flex flex-col items-center text-center p-5 rounded-2xl bg-slate-900/30 border border-white/[0.04] hover:border-emerald-500/15 transition-all duration-400"
               >
-                <div className="w-14 h-14 rounded-2xl bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center mb-4 group-hover:bg-emerald-600/20 transition-colors">
-                  <Icon className="w-7 h-7 text-emerald-400" />
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center mb-4 group-hover:bg-emerald-500/15 transition-colors">
+                  <Icon className="w-5 h-5 text-emerald-400" />
                 </div>
-                <p className="text-slate-200 font-medium">{item.label}</p>
-                <p className="text-emerald-400 text-sm">{item.sublabel}</p>
+                <h3 className="text-sm font-semibold text-slate-100 mb-1">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {item.description}
+                </p>
               </motion.div>
             );
           })}

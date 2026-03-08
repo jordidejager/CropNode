@@ -16,9 +16,11 @@ import {
 } from 'lucide-react';
 
 const DEMO_TEXTS = [
-  'Vandaag captan 2kg elstar en conference',
-  'Gister delan 0.5kg golden delicious',
-  'Luna sensation 0.8L op jonagold blok 3',
+  'Vandaag merpan spuitkorrel 0,71 kg/ha alle elstar',
+  'Alle conference zonder Rivierzicht 0,71 merpan en 1 kg ureum en 2 kg bitterzout',
+  'Delan Pro 2,5 L/ha alle peren behalve de Lucas',
+  'Alleen Molenweg jonagold 0,71 merpan spuitkorrel en 0,175 l coragen',
+  '0,71 merpan spuitkorrel op elstar en conference',
 ];
 
 interface DemoState {
@@ -30,19 +32,55 @@ interface DemoState {
 
 const RESULT_DATA = [
   {
-    parcels: ['Elstar', 'Conference'],
-    product: 'Captan',
-    dosage: '2 kg/ha',
+    totalHa: '12,50',
+    parcels: [
+      { name: 'Hoogveld Elstar', ha: '4,20' },
+      { name: 'Boomgaard Zuid Elstar', ha: '3,80' },
+      { name: 'Kerkpad Elstar', ha: '4,50' },
+    ],
+    products: [{ name: 'Merpan Spuitkorrel', dosage: '0,71 kg/ha', total: '8,88 kg' }],
   },
   {
-    parcels: ['Golden Delicious'],
-    product: 'Delan WG',
-    dosage: '0.5 kg/ha',
+    totalHa: '4,80',
+    parcels: [
+      { name: 'Dijk Noord Conference', ha: '4,80' },
+    ],
+    products: [
+      { name: 'Merpan Spuitkorrel', dosage: '0,71 kg/ha', total: '3,41 kg' },
+      { name: 'Ureum', dosage: '1 kg/ha', total: '4,80 kg' },
+      { name: 'Bitterzout', dosage: '2 kg/ha', total: '9,60 kg' },
+    ],
   },
   {
-    parcels: ['Jonagold B3'],
-    product: 'Luna Sensation',
-    dosage: '0.8 L/ha',
+    totalHa: '12,60',
+    parcels: [
+      { name: 'Rivierzicht Conference', ha: '3,50' },
+      { name: 'Dijk Noord Conference', ha: '4,80' },
+      { name: 'Weiland Gieser Wildeman', ha: '2,10' },
+      { name: 'Bosrand Doyenné', ha: '2,20' },
+    ],
+    products: [{ name: 'Delan Pro', dosage: '2,5 L/ha', total: '31,50 L' }],
+  },
+  {
+    totalHa: '3,40',
+    parcels: [
+      { name: 'Molenweg Jonagold', ha: '3,40' },
+    ],
+    products: [
+      { name: 'Merpan Spuitkorrel', dosage: '0,71 kg/ha', total: '2,41 kg' },
+      { name: 'Coragen', dosage: '0,175 L/ha', total: '0,60 L' },
+    ],
+  },
+  {
+    totalHa: '20,80',
+    parcels: [
+      { name: 'Hoogveld Elstar', ha: '4,20' },
+      { name: 'Boomgaard Zuid Elstar', ha: '3,80' },
+      { name: 'Kerkpad Elstar', ha: '4,50' },
+      { name: 'Rivierzicht Conference', ha: '3,50' },
+      { name: 'Dijk Noord Conference', ha: '4,80' },
+    ],
+    products: [{ name: 'Merpan Spuitkorrel', dosage: '0,71 kg/ha', total: '14,77 kg' }],
   },
 ];
 
@@ -219,36 +257,70 @@ function SmartInputDemo() {
                 className="px-4 pb-4"
               >
                 <div className="rounded-xl bg-slate-800/30 border border-emerald-500/20 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-500/[0.08] border-b border-emerald-500/10">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3.5 py-2 bg-emerald-500/[0.08] border-b border-emerald-500/10">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span className="text-emerald-400 text-sm font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 text-xs font-medium">
                         CTGB Gevalideerd
                       </span>
                     </div>
-                    <span className="text-slate-500 text-xs">{today}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500 text-[10px]">{today}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px] font-medium">
+                        Concept
+                      </span>
+                    </div>
                   </div>
-                  <div className="p-4 space-y-2.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Percelen</span>
-                      <div className="flex gap-1.5">
-                        {currentResult.parcels.map((p) => (
-                          <span
-                            key={p}
-                            className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 text-xs font-medium"
-                          >
-                            {p}
-                          </span>
-                        ))}
-                      </div>
+
+                  {/* Registratie summary */}
+                  <div className="px-3.5 py-2 border-b border-white/[0.04]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-200 text-xs font-medium">Registratie</span>
+                      <span className="text-slate-500 text-[10px]">
+                        {currentResult.totalHa} ha &middot; {currentResult.products.length} {currentResult.products.length === 1 ? 'middel' : 'middelen'}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Product</span>
-                      <span className="text-slate-200">{currentResult.product}</span>
+                  </div>
+
+                  {/* Middelen */}
+                  <div className="px-3.5 py-2 border-b border-white/[0.04]">
+                    <span className="text-slate-500 text-[10px] uppercase tracking-wider font-medium">
+                      Middelen ({currentResult.products.length})
+                    </span>
+                    <div className="mt-1.5 space-y-1">
+                      {currentResult.products.map((prod) => (
+                        <div key={prod.name} className="flex items-center justify-between">
+                          <span className="text-slate-200 text-xs">{prod.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400 text-[11px] font-medium">{prod.dosage}</span>
+                            <span className="text-slate-500 text-[10px]">Totaal: {prod.total}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Dosering</span>
-                      <span className="text-slate-200">{currentResult.dosage}</span>
+                  </div>
+
+                  {/* Percelen */}
+                  <div className="px-3.5 py-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-medium">
+                        Percelen ({currentResult.parcels.length})
+                      </span>
+                      <span className="text-slate-500 text-[10px]">{currentResult.totalHa} ha</span>
+                    </div>
+                    <div className="space-y-0.5 max-h-[72px] overflow-hidden">
+                      {currentResult.parcels.slice(0, 3).map((p) => (
+                        <div key={p.name} className="flex items-center justify-between">
+                          <span className="text-slate-300 text-[11px]">{p.name}</span>
+                          <span className="text-emerald-400/70 text-[10px]">{p.ha} ha</span>
+                        </div>
+                      ))}
+                      {currentResult.parcels.length > 3 && (
+                        <span className="text-slate-600 text-[10px]">
+                          +{currentResult.parcels.length - 3} meer
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

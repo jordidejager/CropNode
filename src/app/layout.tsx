@@ -19,8 +19,8 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'CropNode — Het platform voor moderne fruitteelt',
-  description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer — typ het zoals je het zegt.',
+  title: 'CropNode — Agriculture Intelligence Platform',
+  description: 'CropNode is het Agriculture Intelligence Platform voor de moderne fruitteelt. AI-gestuurde registraties, 5-model weerensemble, CTGB-validatie, perceelbeheer en meer — alles in één platform.',
   icons: {
     icon: [
       { url: '/logo/cropnode-icon.svg', type: 'image/svg+xml' },
@@ -28,15 +28,15 @@ export const metadata: Metadata = {
     apple: '/logo/cropnode-icon.svg',
   },
   openGraph: {
-    title: 'CropNode — Het platform voor moderne fruitteelt',
-    description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer.',
+    title: 'CropNode — Agriculture Intelligence Platform',
+    description: 'Het complete Agriculture Intelligence Platform voor fruitteelt. AI-registraties, weermodellen, CTGB-validatie, perceelbeheer en meer.',
     type: 'website',
     locale: 'nl_NL',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CropNode — Het platform voor moderne fruitteelt',
-    description: 'CropNode brengt je hele fruitteeltbedrijf samen in één slim platform. Van gewasbescherming tot perceelbeheer.',
+    title: 'CropNode — Agriculture Intelligence Platform',
+    description: 'Het complete Agriculture Intelligence Platform voor fruitteelt. AI-registraties, weermodellen, CTGB-validatie, perceelbeheer en meer.',
   },
 };
 
