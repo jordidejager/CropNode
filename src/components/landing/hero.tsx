@@ -4,70 +4,105 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Sparkles, ChevronDown } from 'lucide-react';
+import {
+  CheckCircle2,
+  Sparkles,
+  ChevronDown,
+  ArrowRight,
+  Shield,
+  Cloud,
+  Cpu,
+  Zap,
+} from 'lucide-react';
 
-const DEMO_TEXT = 'Vandaag captan 2kg elstar en conference';
+const DEMO_TEXTS = [
+  'Vandaag captan 2kg elstar en conference',
+  'Gister delan 0.5kg golden delicious',
+  'Luna sensation 0.8L op jonagold blok 3',
+];
 
 interface DemoState {
   phase: 'typing' | 'processing' | 'result' | 'pause';
   typedText: string;
   charIndex: number;
+  textIndex: number;
 }
+
+const RESULT_DATA = [
+  {
+    parcels: ['Elstar', 'Conference'],
+    product: 'Captan',
+    dosage: '2 kg/ha',
+  },
+  {
+    parcels: ['Golden Delicious'],
+    product: 'Delan WG',
+    dosage: '0.5 kg/ha',
+  },
+  {
+    parcels: ['Jonagold B3'],
+    product: 'Luna Sensation',
+    dosage: '0.8 L/ha',
+  },
+];
 
 function SmartInputDemo() {
   const [state, setState] = useState<DemoState>({
     phase: 'typing',
     typedText: '',
     charIndex: 0,
+    textIndex: 0,
   });
   const inputRef = useRef<HTMLDivElement>(null);
+  const currentText = DEMO_TEXTS[state.textIndex];
+  const currentResult = RESULT_DATA[state.textIndex];
 
-  // Typewriter effect
   useEffect(() => {
-    if (state.phase === 'typing' && state.charIndex < DEMO_TEXT.length) {
+    if (state.phase === 'typing' && state.charIndex < currentText.length) {
       const timeout = setTimeout(() => {
         setState((prev) => ({
           ...prev,
-          typedText: DEMO_TEXT.slice(0, prev.charIndex + 1),
+          typedText: currentText.slice(0, prev.charIndex + 1),
           charIndex: prev.charIndex + 1,
         }));
-      }, 50 + Math.random() * 30);
+      }, 40 + Math.random() * 25);
       return () => clearTimeout(timeout);
-    } else if (state.phase === 'typing' && state.charIndex >= DEMO_TEXT.length) {
-      // Typing complete, start processing
+    } else if (state.phase === 'typing' && state.charIndex >= currentText.length) {
       const timeout = setTimeout(() => {
         setState((prev) => ({ ...prev, phase: 'processing' }));
-      }, 500);
+      }, 400);
       return () => clearTimeout(timeout);
     }
-  }, [state.phase, state.charIndex]);
+  }, [state.phase, state.charIndex, currentText]);
 
-  // Processing phase
   useEffect(() => {
     if (state.phase === 'processing') {
       const timeout = setTimeout(() => {
         setState((prev) => ({ ...prev, phase: 'result' }));
-      }, 1500);
+      }, 1200);
       return () => clearTimeout(timeout);
     }
   }, [state.phase]);
 
-  // Result phase - pause then restart
   useEffect(() => {
     if (state.phase === 'result') {
       const timeout = setTimeout(() => {
         setState((prev) => ({ ...prev, phase: 'pause' }));
-      }, 4000);
+      }, 3500);
       return () => clearTimeout(timeout);
     }
   }, [state.phase]);
 
-  // Pause phase - restart the demo
   useEffect(() => {
     if (state.phase === 'pause') {
       const timeout = setTimeout(() => {
-        setState({ phase: 'typing', typedText: '', charIndex: 0 });
-      }, 1000);
+        setState((prev) => ({
+          phase: 'typing',
+          typedText: '',
+          charIndex: 0,
+          textIndex: (prev.textIndex + 1) % DEMO_TEXTS.length,
+        }));
+      }, 800);
       return () => clearTimeout(timeout);
     }
   }, [state.phase]);
@@ -79,189 +114,283 @@ function SmartInputDemo() {
   });
 
   return (
-    <div className="w-full max-w-lg mx-auto">
-      {/* Demo Container */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.3 }}
-        className="relative rounded-2xl bg-slate-900/60 border border-white/10 backdrop-blur-xl overflow-hidden shadow-2xl shadow-emerald-900/10"
-      >
-        {/* Header bar */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-slate-900/50">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/60" />
-            <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-            <div className="w-3 h-3 rounded-full bg-green-500/60" />
-          </div>
-          <span className="text-xs text-slate-500 ml-2 font-medium">Slimme Invoer</span>
-        </div>
+    <motion.div
+      initial={{ opacity: 0, y: 30, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.8, delay: 0.4 }}
+      className="w-full max-w-lg mx-auto"
+    >
+      <div className="relative">
+        {/* Outer glow */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-emerald-400/10 to-teal-500/20 rounded-3xl blur-xl" />
 
-        {/* Input Area */}
-        <div className="p-4">
-          <div
-            ref={inputRef}
-            className="min-h-[52px] px-4 py-3 rounded-xl bg-slate-800/50 border border-white/10 text-slate-100 text-sm flex items-center"
-          >
-            <span className="text-slate-300">{state.typedText}</span>
-            {(state.phase === 'typing' || state.phase === 'processing') && (
-              <motion.span
-                animate={{ opacity: [1, 0] }}
-                transition={{ duration: 0.5, repeat: Infinity }}
-                className="inline-block w-0.5 h-5 bg-emerald-400 ml-0.5"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Processing / Result */}
-        <AnimatePresence mode="wait">
-          {state.phase === 'processing' && (
-            <motion.div
-              key="processing"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="px-4 pb-4"
-            >
-              <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                >
-                  <Sparkles className="w-4 h-4" />
-                </motion.div>
-                <span>Analyseren...</span>
+        {/* Demo Container */}
+        <div className="relative rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-2xl overflow-hidden shadow-2xl shadow-emerald-950/30">
+          {/* Header bar */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-slate-900/60">
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800/50">
+                <Sparkles className="w-3 h-3 text-emerald-400" />
+                <span className="text-[11px] text-slate-400 font-medium tracking-wide">
+                  SLIMME INVOER
+                </span>
               </div>
-            </motion.div>
-          )}
+            </div>
+            <div className="w-[52px]" />
+          </div>
 
-          {(state.phase === 'result' || state.phase === 'pause') && (
-            <motion.div
-              key="result"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-              className="px-4 pb-4"
+          {/* Input Area */}
+          <div className="p-4 pb-2">
+            <div
+              ref={inputRef}
+              className="min-h-[52px] px-4 py-3 rounded-xl bg-slate-800/40 border border-white/[0.06] text-slate-100 text-sm flex items-center"
             >
-              {/* Result Card */}
-              <div className="rounded-xl bg-slate-800/30 border border-emerald-500/20 overflow-hidden">
-                {/* Status Header */}
-                <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 text-sm font-medium">CTGB Goedgekeurd</span>
-                  </div>
-                </div>
+              {state.typedText ? (
+                <span className="text-slate-200">{state.typedText}</span>
+              ) : (
+                <span className="text-slate-500">Typ wat je gedaan hebt...</span>
+              )}
+              {(state.phase === 'typing' || state.phase === 'processing') && (
+                <motion.span
+                  animate={{ opacity: [1, 0] }}
+                  transition={{ duration: 0.5, repeat: Infinity }}
+                  className="inline-block w-0.5 h-5 bg-emerald-400 ml-0.5"
+                />
+              )}
+            </div>
+          </div>
 
-                {/* Content */}
-                <div className="p-4 space-y-3">
-                  {/* Date */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Datum</span>
-                    <span className="text-slate-200">{today}</span>
+          {/* Processing / Result */}
+          <AnimatePresence mode="wait">
+            {state.phase === 'processing' && (
+              <motion.div
+                key="processing"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="px-4 pb-4"
+              >
+                <div className="flex items-center gap-3 py-3">
+                  <div className="relative">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"
+                    >
+                      <Cpu className="w-4 h-4 text-emerald-400" />
+                    </motion.div>
                   </div>
-
-                  {/* Parcels */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Percelen</span>
-                    <div className="flex gap-1.5">
-                      <span className="px-2 py-0.5 rounded bg-slate-700/50 text-slate-200 text-xs">
-                        Elstar
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-slate-700/50 text-slate-200 text-xs">
-                        Conference
-                      </span>
+                  <div>
+                    <p className="text-emerald-400 text-sm font-medium">AI analyseert...</p>
+                    <div className="flex gap-4 mt-1">
+                      {['Percelen', 'Product', 'CTGB'].map((step, i) => (
+                        <motion.span
+                          key={step}
+                          initial={{ opacity: 0.3 }}
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{
+                            duration: 1,
+                            repeat: Infinity,
+                            delay: i * 0.3,
+                          }}
+                          className="text-slate-500 text-xs"
+                        >
+                          {step}
+                        </motion.span>
+                      ))}
                     </div>
                   </div>
+                </div>
+              </motion.div>
+            )}
 
-                  {/* Product */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Product</span>
-                    <span className="text-slate-200">Captan | 2 kg/ha</span>
+            {(state.phase === 'result' || state.phase === 'pause') && (
+              <motion.div
+                key="result"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className="px-4 pb-4"
+              >
+                <div className="rounded-xl bg-slate-800/30 border border-emerald-500/20 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-500/[0.08] border-b border-emerald-500/10">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 text-sm font-medium">
+                        CTGB Gevalideerd
+                      </span>
+                    </div>
+                    <span className="text-slate-500 text-xs">{today}</span>
+                  </div>
+                  <div className="p-4 space-y-2.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Percelen</span>
+                      <div className="flex gap-1.5">
+                        {currentResult.parcels.map((p) => (
+                          <span
+                            key={p}
+                            className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 text-xs font-medium"
+                          >
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Product</span>
+                      <span className="text-slate-200">{currentResult.product}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Dosering</span>
+                      <span className="text-slate-200">{currentResult.dosage}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      {/* Glow effect */}
-      <div className="absolute -inset-4 bg-emerald-500/5 blur-3xl rounded-full -z-10" />
-    </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
+const stats = [
+  { icon: Shield, value: '1.000+', label: 'CTGB producten' },
+  { icon: Cloud, value: '5', label: 'Weermodellen' },
+  { icon: Zap, value: '<3s', label: 'AI response' },
+  { icon: Cpu, value: '6-staps', label: 'Validatie' },
+];
+
 export function Hero() {
-  const scrollToDemo = () => {
-    const demoSection = document.getElementById('platform-overview');
-    if (demoSection) {
-      demoSection.scrollIntoView({ behavior: 'smooth' });
-    }
+  const scrollToFeatures = () => {
+    const el = document.getElementById('features');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center pt-20 pb-16 px-4 overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/20 via-transparent to-transparent" />
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl" />
-
-      {/* Grain overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.015]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-        }}
-      />
+    <section className="relative min-h-screen flex flex-col items-center justify-center pt-24 pb-16 px-4 overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0">
+        {/* Grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+            backgroundSize: '64px 64px',
+          }}
+        />
+        {/* Radial glow center */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px] bg-emerald-500/[0.07] rounded-full blur-[128px]" />
+        {/* Top-right glow */}
+        <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-emerald-400/[0.04] rounded-full blur-[100px]" />
+        {/* Bottom-left glow */}
+        <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-teal-500/[0.04] rounded-full blur-[100px]" />
+        {/* Grain texture */}
+        <div
+          className="absolute inset-0 opacity-[0.012]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          }}
+        />
+      </div>
 
       <div className="relative z-10 max-w-7xl mx-auto w-full">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column - Copy */}
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left Column */}
           <div className="text-center lg:text-left">
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="font-display text-4xl sm:text-5xl lg:text-6xl text-slate-100 leading-tight"
-            >
-              Eén platform voor je hele{' '}
-              <span className="text-emerald-400">fruitteeltbedrijf</span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="mt-6 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0"
-            >
-              Percelen, gewasbescherming, uren en bedrijfsdata — alles op één plek.
-              Typ wat je gedaan hebt, CropNode regelt de rest.
-            </motion.p>
-
+            {/* Badge */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-8"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              </span>
+              <span className="text-emerald-400 text-sm font-medium">
+                Nu beschikbaar voor fruitteelt
+              </span>
+            </motion.div>
+
+            {/* Title */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
+              <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl text-white leading-[1.1] tracking-tight">
+                Crop
+                <span className="text-emerald-400">Node</span>
+              </h1>
+              <p className="mt-2 text-sm sm:text-base font-medium tracking-[0.2em] uppercase text-slate-400">
+                Agriculture Intelligence Platform
+              </p>
+            </motion.div>
+
+            {/* Subtitle */}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="mt-8 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+              className="mt-8 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0 leading-relaxed"
+            >
+              Van spraakgestuurde registraties tot real-time weermodellen.
+              Het complete platform voor de moderne{' '}
+              <span className="text-slate-200">fruitteelt</span>.
+            </motion.p>
+
+            {/* CTA Buttons */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="mt-10 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
             >
               <Button
                 asChild
                 size="lg"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-base h-12 px-8 shadow-lg shadow-emerald-900/30"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-base h-13 px-8 shadow-lg shadow-emerald-900/40 group transition-all duration-300 hover:shadow-emerald-800/50 hover:shadow-xl"
               >
-                <Link href="/login">Gratis beginnen</Link>
+                <Link href="/login" className="flex items-center gap-2">
+                  Gratis beginnen
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </Link>
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                onClick={scrollToDemo}
-                className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-white text-base h-12 px-8"
+                onClick={scrollToFeatures}
+                className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-white hover:border-white/20 text-base h-13 px-8 transition-all duration-300"
               >
                 Ontdek de mogelijkheden
               </Button>
+            </motion.div>
+
+            {/* Stats */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6"
+            >
+              {stats.map((stat, i) => (
+                <div key={i} className="text-center lg:text-left">
+                  <div className="flex items-center gap-2 justify-center lg:justify-start mb-1">
+                    <stat.icon className="w-4 h-4 text-emerald-500/70" />
+                    <span className="text-xl font-bold text-white">{stat.value}</span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">{stat.label}</span>
+                </div>
+              ))}
             </motion.div>
           </div>
 
@@ -270,25 +399,25 @@ export function Hero() {
             <SmartInputDemo />
           </div>
         </div>
-
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 hidden lg:block"
-        >
-          <motion.button
-            onClick={scrollToDemo}
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="text-slate-500 hover:text-emerald-400 transition-colors"
-            aria-label="Scroll naar beneden"
-          >
-            <ChevronDown className="w-6 h-6" />
-          </motion.button>
-        </motion.div>
       </div>
+
+      {/* Scroll indicator */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 2 }}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2"
+      >
+        <motion.button
+          onClick={scrollToFeatures}
+          animate={{ y: [0, 8, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="text-slate-500 hover:text-emerald-400 transition-colors"
+          aria-label="Scroll naar beneden"
+        >
+          <ChevronDown className="w-6 h-6" />
+        </motion.button>
+      </motion.div>
     </section>
   );
 }
