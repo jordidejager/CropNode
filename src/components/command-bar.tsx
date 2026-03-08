@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Send, Sparkles, Zap, Clock, RotateCcw, Timer, FlaskConical, Microscope, Tractor } from 'lucide-react';
+import { Send, Sparkles, Zap, Clock, RotateCcw, Timer, FlaskConical, Microscope, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ModeSelector, getModeConfig, type InputMode } from '@/components/mode-selector';
@@ -130,8 +131,19 @@ export function CommandBar({
         }
     };
 
+    // Get mode accent color for gradient border
+    const getModeAccentRgb = () => {
+        switch (currentMode) {
+            case 'registration': return '16,185,129';
+            case 'product_info': return '59,130,246';
+            case 'workforce': return '245,158,11';
+            case 'research': return '168,85,247';
+            default: return '16,185,129';
+        }
+    };
+
     return (
-        <div className="w-full max-w-4xl mx-auto px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4 space-y-2 md:space-y-4">
+        <div className="w-full max-w-4xl mx-auto px-2 md:px-4 pb-4 md:pb-8 pt-2 md:pt-4 space-y-2 md:space-y-3">
             {/* Mode Selector */}
             <div className="flex justify-center">
                 <ModeSelector
@@ -142,72 +154,93 @@ export function CommandBar({
             </div>
 
             {/* Quick Action Chips - hidden on mobile */}
-            <div className="hidden md:flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar px-1">
+            <div className="hidden md:flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar px-1">
                 {quickActions.map((action, i) => (
-                    <button
+                    <motion.button
                         key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05, duration: 0.3 }}
                         onClick={() => handleQuickAction(action.label)}
                         disabled={isProcessing}
                         className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-muted-foreground transition-all whitespace-nowrap",
-                            "hover:bg-white/10 hover:border-white/20 hover:text-white",
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-[11px] font-medium text-white/40 transition-all whitespace-nowrap",
+                            "hover:bg-white/[0.08] hover:border-white/[0.15] hover:text-white/80 hover:shadow-lg",
                             "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
                     >
-                        <action.icon className="h-3 w-3" />
+                        <action.icon className="h-3 w-3 opacity-60" />
                         {action.label}
-                    </button>
+                    </motion.button>
                 ))}
             </div>
 
-            {/* Input Bar */}
-            <div className={cn(
-                "relative group flex items-end gap-2 bg-black/40 backdrop-blur-xl border-2 transition-all duration-300 p-1.5 md:p-2 rounded-xl md:rounded-2xl",
-                getBorderStyle(),
-                isFocused ? `${getGlowStyle()} bg-black/60` : 'shadow-xl'
-            )}>
-                <div className="flex-grow pl-2 md:pl-3 py-1 md:py-2">
-                    <textarea
-                        ref={textareaRef}
-                        rows={1}
-                        value={input}
-                        onChange={(e) => {
-                            setInput(e.target.value);
-                            e.target.style.height = 'auto';
-                            e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        onFocus={() => setIsFocused(true)}
-                        onBlur={() => setIsFocused(false)}
-                        onKeyDown={handleKeyDown}
-                        placeholder={currentPlaceholder}
-                        data-testid="chat-input"
-                        className="w-full bg-transparent border-none text-white focus:ring-0 resize-none text-sm font-medium py-1 placeholder:text-muted-foreground/50 max-h-48 scrollbar-thin outline-none"
-                    />
-                </div>
+            {/* Input Bar - Premium glass */}
+            <div className="relative">
+                {/* Animated glow behind input when focused */}
+                <AnimatePresence>
+                    {isFocused && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ duration: 0.3 }}
+                            className="absolute -inset-[1px] rounded-xl md:rounded-2xl"
+                            style={{
+                                background: `linear-gradient(135deg, rgba(${getModeAccentRgb()},0.3), rgba(${getModeAccentRgb()},0.05), rgba(${getModeAccentRgb()},0.2))`,
+                                filter: 'blur(1px)',
+                            }}
+                        />
+                    )}
+                </AnimatePresence>
 
-                <div className="pb-0.5 md:pb-1 pr-0.5 md:pr-1">
-                    <Button
-                        onClick={handleSend}
-                        disabled={!input.trim() || isProcessing}
-                        size="icon"
-                        data-testid="send-button"
-                        className={cn(
-                            "h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl transition-all duration-300",
-                            getButtonStyle()
-                        )}
-                    >
-                        {isProcessing ? (
-                            <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                            <Send className="h-4 w-4" />
-                        )}
-                    </Button>
+                <div className={cn(
+                    "relative group flex items-end gap-2 bg-black/50 backdrop-blur-xl border transition-all duration-300 p-1.5 md:p-2.5 rounded-xl md:rounded-2xl",
+                    isFocused ? 'border-white/[0.15] bg-black/60' : 'border-white/[0.08] shadow-xl hover:border-white/[0.12]'
+                )}>
+                    <div className="flex-grow pl-2 md:pl-3 py-1 md:py-1.5">
+                        <textarea
+                            ref={textareaRef}
+                            rows={1}
+                            value={input}
+                            onChange={(e) => {
+                                setInput(e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = `${e.target.scrollHeight}px`;
+                            }}
+                            onFocus={() => setIsFocused(true)}
+                            onBlur={() => setIsFocused(false)}
+                            onKeyDown={handleKeyDown}
+                            placeholder={currentPlaceholder}
+                            data-testid="chat-input"
+                            className="w-full bg-transparent border-none text-white focus:ring-0 resize-none text-sm font-medium py-1 placeholder:text-white/25 max-h-48 scrollbar-thin outline-none"
+                        />
+                    </div>
+
+                    <div className="pb-0.5 md:pb-1 pr-0.5 md:pr-1">
+                        <Button
+                            onClick={handleSend}
+                            disabled={!input.trim() || isProcessing}
+                            size="icon"
+                            data-testid="send-button"
+                            className={cn(
+                                "h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl transition-all duration-300",
+                                getButtonStyle()
+                            )}
+                        >
+                            {isProcessing ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <ArrowRight className="h-4 w-4" />
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </div>
 
             {/* Footer - hidden on mobile */}
-            <p className="hidden md:block text-[10px] text-center text-muted-foreground/50 font-medium uppercase tracking-[0.2em]">
-                AgriBot Multi-Modal Command Center
+            <p className="hidden md:block text-[10px] text-center text-white/15 font-medium tracking-[0.15em]">
+                Enter om te versturen · Shift+Enter voor nieuwe regel
             </p>
         </div>
     );

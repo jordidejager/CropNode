@@ -14,7 +14,7 @@ from collections import Counter
 
 # --- Config ---
 SUPABASE_URL = "https://djcsihpnidopxxuxumvj.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqY3NpaHBuaWRvcHh4dXh1bXZqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODM1OTcxNCwiZXhwIjoyMDgzOTM1NzE0fQ.VqnQH187m6qTD76gfJM9i0NxMq_n6EjD3Pnyhz02ocg"
+SUPABASE_KEY = "***REMOVED***"
 
 STATION_ID = "31b105f8-2975-4e18-9eaa-1fc3e8eeb927"
 LAT = 51.47

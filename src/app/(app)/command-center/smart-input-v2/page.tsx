@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { motion } from 'framer-motion';
 import { CommandBar } from '@/components/command-bar';
 import { SmartInvoerFeedV2 } from '@/components/v2/smart-invoer-feed-v2';
 import { ClarificationOptions } from '@/components/v2/clarification-options';
@@ -23,13 +24,15 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useInvalidateQueries } from '@/hooks/use-data';
 import {
-    MessageSquare,
     ClipboardList,
-    Bot,
     Check,
     X,
     Undo2,
     Loader2,
+    Sparkles,
+    Zap,
+    Shield,
+    Brain,
 } from 'lucide-react';
 
 // ============================================================================
@@ -38,14 +41,40 @@ import {
 
 function EmptyStatusPanel() {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 min-h-[300px]">
-            <div className="h-12 w-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
-                <ClipboardList className="h-6 w-6 text-emerald-400" />
+        <div className="flex flex-col items-center justify-center h-full text-center p-8 min-h-[300px]">
+            {/* Animated rings */}
+            <div className="relative mb-6">
+                <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.1, 0.2] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                    className="absolute -inset-6 rounded-full border border-emerald-500/10"
+                />
+                <motion.div
+                    animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.05, 0.15] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                    className="absolute -inset-12 rounded-full border border-emerald-500/5"
+                />
+                <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center shadow-lg shadow-emerald-500/5">
+                    <ClipboardList className="h-7 w-7 text-emerald-400" />
+                </div>
             </div>
-            <p className="text-sm text-white/40 mb-1">Geen actieve registratie</p>
-            <p className="text-xs text-white/20 max-w-[200px]">
-                Typ je registratie in de chat om te beginnen
+            <p className="text-sm font-medium text-white/50 mb-1.5">Geen actieve registratie</p>
+            <p className="text-xs text-white/25 max-w-[220px] leading-relaxed">
+                Typ je registratie in de chat en de AI verwerkt het automatisch
             </p>
+            {/* Feature pills */}
+            <div className="flex flex-wrap justify-center gap-2 mt-6">
+                {[
+                    { icon: Shield, label: 'CTGB Check' },
+                    { icon: Zap, label: 'Real-time' },
+                    { icon: Brain, label: 'AI Parsing' },
+                ].map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] text-white/30 text-[10px]">
+                        <Icon className="h-3 w-3" />
+                        {label}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -550,9 +579,21 @@ export default function SmartInputV2Page() {
     // Show loading state while context is loading
     if (contextLoading) {
         return (
-            <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center gap-4 -m-4 md:-m-6">
-                <Loader2 className="h-8 w-8 text-emerald-400 animate-spin" />
-                <p className="text-sm text-white/60">Context laden...</p>
+            <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center gap-4 -m-4 md:-m-6 relative">
+                <div className="relative">
+                    <motion.div
+                        animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.1, 0.3] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                        className="absolute -inset-4 rounded-full bg-emerald-500/10 blur-lg"
+                    />
+                    <div className="relative h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 text-emerald-400 animate-spin" />
+                    </div>
+                </div>
+                <div className="text-center mt-2">
+                    <p className="text-sm font-medium text-white/60">Context laden...</p>
+                    <p className="text-xs text-white/30 mt-1">Percelen, producten & historie</p>
+                </div>
             </div>
         );
     }
@@ -561,14 +602,15 @@ export default function SmartInputV2Page() {
     if (contextError) {
         return (
             <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center gap-4 -m-4 md:-m-6">
-                <div className="h-12 w-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                    <X className="h-6 w-6 text-red-400" />
+                <div className="h-16 w-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shadow-lg shadow-red-500/5">
+                    <X className="h-8 w-8 text-red-400" />
                 </div>
-                <p className="text-sm text-white/60">Kon context niet laden</p>
+                <p className="text-sm font-medium text-white/60">Kon context niet laden</p>
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={() => window.location.reload()}
+                    className="border-white/10 hover:bg-white/5"
                 >
                     Pagina herladen
                 </Button>
@@ -577,24 +619,35 @@ export default function SmartInputV2Page() {
     }
 
     return (
-        <div className="h-[calc(100vh-64px)] flex flex-col md:grid md:grid-cols-12 gap-0 overflow-hidden -m-4 md:-m-6">
-            {/* MOBILE START SCREEN - Clean layout with input at top */}
+        <div className="h-[calc(100vh-64px)] flex flex-col md:grid md:grid-cols-12 gap-0 overflow-hidden -m-4 md:-m-6 relative">
+            {/* Ambient background */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.015]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+                <div className="absolute top-1/4 -left-32 w-64 h-64 bg-emerald-500/[0.03] rounded-full blur-[100px]" />
+                <div className="absolute bottom-1/3 -right-32 w-72 h-72 bg-teal-500/[0.02] rounded-full blur-[120px]" />
+            </div>
+
+            {/* MOBILE START SCREEN */}
             {isMobileStartScreen && (
-                <div className="md:hidden flex flex-col h-full bg-black/20">
-                    {/* Greeting + Input Section */}
+                <div className="md:hidden flex flex-col h-full relative z-10">
                     <div className="flex-1 flex flex-col justify-center px-4 pb-8">
-                        {/* AgriBot Greeting */}
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                                <Bot className="h-6 w-6 text-emerald-400" />
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-3 mb-6"
+                        >
+                            <div className="relative">
+                                <div className="absolute -inset-1 bg-emerald-500/20 rounded-2xl blur-md" />
+                                <div className="relative h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                                    <Sparkles className="h-6 w-6 text-emerald-400" />
+                                </div>
                             </div>
                             <div>
                                 <h1 className="text-xl font-bold text-white">Hallo!</h1>
-                                <p className="text-sm text-white/50">Slimme Invoer 2.0 - Wat kan ik vandaag voor u doen?</p>
+                                <p className="text-sm text-white/50">Slimme Invoer 2.0</p>
                             </div>
-                        </div>
+                        </motion.div>
 
-                        {/* Input Bar */}
                         <CommandBar
                             value={commandInput}
                             onValueChange={setCommandInput}
@@ -604,16 +657,18 @@ export default function SmartInputV2Page() {
                             onModeChange={setActiveMode}
                         />
 
-                        {/* Shortcut Buttons */}
                         <div className="mt-4 space-y-2">
                             {mobileStartSuggestions.map((suggestion, i) => (
-                                <button
+                                <motion.button
                                     key={i}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.3 + i * 0.1 }}
                                     onClick={() => setCommandInput(suggestion)}
-                                    className="w-full text-left px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 active:bg-emerald-500/20 active:border-emerald-500/40 transition-colors"
+                                    className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-white/60 active:bg-emerald-500/20 active:border-emerald-500/40 transition-colors backdrop-blur-sm"
                                 >
                                     {suggestion}
-                                </button>
+                                </motion.button>
                             ))}
                         </div>
                     </div>
@@ -735,21 +790,37 @@ export default function SmartInputV2Page() {
             )}
 
             {/* DESKTOP: Left column (7 cols) - Chat */}
-            <div className="hidden md:flex md:col-span-7 h-full md:border-r border-white/[0.06] bg-black/20 overflow-hidden flex-col">
-                {/* Chat Header */}
-                <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-emerald-500" />
-                        <span className="text-sm font-medium text-white/80">Chat</span>
-                        <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
-                            2.0 beta
-                        </span>
+            <div className="hidden md:flex md:col-span-7 h-full md:border-r border-white/[0.06] relative z-10 overflow-hidden flex-col">
+                {/* Chat Header - Premium glass */}
+                <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-black/30 backdrop-blur-xl">
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <div className="absolute -inset-0.5 bg-emerald-500/20 rounded-lg blur-sm" />
+                            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/25 flex items-center justify-center">
+                                <Sparkles className="h-4 w-4 text-emerald-400" />
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-white/90">Slimme Invoer</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium border border-emerald-500/20">
+                                    2.0
+                                </span>
+                            </div>
+                            <span className="text-[11px] text-white/30">AI-gestuurde registratie</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         {state.isAgentMode && (
-                            <span className="text-xs text-white/30">Agent actief</span>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20">
+                                <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                                </span>
+                                <span className="text-[10px] text-emerald-400 font-medium">Agent actief</span>
+                            </div>
                         )}
-                        <span className="text-xs text-white/30">{state.messages.length} berichten</span>
+                        <span className="text-[11px] text-white/25">{state.messages.length} berichten</span>
                     </div>
                 </div>
 
@@ -779,26 +850,31 @@ export default function SmartInputV2Page() {
                     </div>
                 )}
 
-                {/* Input Area */}
-                <div className="p-4 border-t border-white/[0.06] bg-black/40">
-                    <CommandBar
-                        value={commandInput}
-                        onValueChange={setCommandInput}
-                        onSend={handleSend}
-                        isProcessing={state.phase === 'processing'}
-                        activeMode={activeMode}
-                        onModeChange={setActiveMode}
-                    />
+                {/* Input Area - Premium bottom bar */}
+                <div className="relative border-t border-white/[0.06]">
+                    <div className="absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-[#0A0A0A]/80 to-transparent pointer-events-none" />
+                    <div className="relative bg-black/50 backdrop-blur-xl">
+                        <CommandBar
+                            value={commandInput}
+                            onValueChange={setCommandInput}
+                            onSend={handleSend}
+                            isProcessing={state.phase === 'processing'}
+                            activeMode={activeMode}
+                            onModeChange={setActiveMode}
+                        />
+                    </div>
                 </div>
             </div>
 
             {/* DESKTOP: Right column (5 cols) - Status Panel */}
-            <div className="hidden md:block md:col-span-5 h-full bg-white/[0.02] overflow-y-auto">
-                {/* Status Header */}
-                <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0A0A0A] z-10 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-emerald-500" />
-                        <span className="text-sm font-medium text-white/80">Actieve Registratie</span>
+            <div className="hidden md:flex md:flex-col md:col-span-5 h-full relative z-10 overflow-hidden">
+                {/* Status Header - Premium glass */}
+                <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-black/30 backdrop-blur-xl">
+                    <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                            <ClipboardList className="h-4 w-4 text-emerald-400" />
+                        </div>
+                        <span className="text-sm font-semibold text-white/80">Actieve Registratie</span>
                     </div>
                     <div className="flex items-center gap-2">
                         {state.draftHistory.length > 0 && (
@@ -806,7 +882,7 @@ export default function SmartInputV2Page() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleUndo}
-                                className="h-7 px-2 text-white/50 hover:text-white hover:bg-white/5"
+                                className="h-7 px-2 text-white/40 hover:text-white hover:bg-white/5"
                             >
                                 <Undo2 className="h-3.5 w-3.5 mr-1" />
                                 <span className="text-xs">Undo</span>
@@ -814,10 +890,10 @@ export default function SmartInputV2Page() {
                         )}
                         {state.draft && (
                             <Badge className={cn(
-                                "text-[10px]",
+                                "text-[10px] font-medium",
                                 state.draft.units.every(u => u.status === 'confirmed')
-                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                                    : 'bg-blue-500/15 text-blue-400 border-blue-500/25'
                             )}>
                                 {state.draft.units.every(u => u.status === 'confirmed') ? 'Bevestigd' : 'Te bevestigen'}
                             </Badge>
@@ -826,7 +902,7 @@ export default function SmartInputV2Page() {
                 </div>
 
                 {/* Status Content */}
-                <div>
+                <div className="flex-1 overflow-y-auto bg-white/[0.01]">
                     {statusPanelContent}
                 </div>
             </div>
