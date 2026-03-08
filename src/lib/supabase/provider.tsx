@@ -1,14 +1,17 @@
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useMemo, ReactNode } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { getSupabase } from '../supabase';
 
 const SupabaseContext = createContext<SupabaseClient | null>(null);
 
 export function SupabaseProvider({ children }: { children: ReactNode }) {
+  // Use getSupabase() to ensure we always get the singleton instance
+  const client = useMemo(() => getSupabase(), []);
+
   return (
-    <SupabaseContext.Provider value={supabase}>
+    <SupabaseContext.Provider value={client}>
       {children}
     </SupabaseContext.Provider>
   );

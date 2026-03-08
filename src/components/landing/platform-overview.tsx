@@ -63,7 +63,7 @@ const modules = [
     title: 'Gewasbescherming',
     color: 'green',
     description: '6-staps CTGB validatie & spuitschrift',
-    detail: 'Automatische controle op toelating, dosering, interval, seizoensmax, stofcumulatie en veiligheidstermijn. Export als spuitschrift.',
+    detail: 'Automatische controle op toelating, dosering, spuitinterval, maximale seizoenstoepassingen, werkzame stof som en veiligheidstermijn. Export als spuitschrift.',
     metrics: [
       { label: 'CTGB producten', value: '1.000+' },
       { label: 'Validatie stappen', value: '6 checks' },
@@ -99,7 +99,7 @@ const modules = [
   {
     id: 'team',
     icon: Users,
-    title: 'Team & Uren',
+    title: 'Team & Tasks',
     color: 'blue',
     description: 'Live timer met kostenberekening',
     detail: 'Registreer uren per taak, per perceel, per persoon. Met automatische pauze-aftrek en werkdag-weging.',

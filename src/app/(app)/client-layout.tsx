@@ -22,7 +22,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-screen bg-[#020617] text-slate-100">
           <Sidebar />
           <div className="flex-1 flex flex-col min-h-0 bg-transparent">
-            <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-white/5 bg-[#020617]/80 px-4 md:px-6 backdrop-blur-md">
+            <header className="sticky top-0 z-20 md:z-30 flex h-16 items-center gap-4 border-b border-white/5 bg-[#020617]/80 px-4 md:px-6 backdrop-blur-md">
               {/* Mobile: hamburger + logo */}
               <div className="flex items-center gap-3 md:hidden">
                 <MobileMenuButton />

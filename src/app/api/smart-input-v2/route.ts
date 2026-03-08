@@ -357,6 +357,20 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
         });
     }
 
+    // Fallback: extract product+dosage directly from start of message (without "met" keyword)
+    // Handles inputs like "merpna 0.7 kg op alle peren"
+    if (products.length === 0) {
+        const directMatch = lower.match(/^([a-zà-ü][a-zà-ü]*)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?/i);
+        if (directMatch) {
+            const rawName = directMatch[1].trim();
+            const rawDosage = parseFloat(directMatch[2].replace(',', '.'));
+            const rawUnit = directMatch[3].toLowerCase();
+            if (rawName.length >= 3 && !/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) {
+                products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
+            }
+        }
+    }
+
     if (products.length > 0) {
         console.log(`[preprocessProductExtraction] Extracted ${products.length} products: ${products.map(p => `${p.product} ${p.dosage} ${p.unit}`).join(', ')}`);
     }

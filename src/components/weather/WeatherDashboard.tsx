@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   useWeatherStations,
   useWeatherCurrent,
@@ -66,6 +66,40 @@ export function WeatherDashboard() {
       refreshMutation.mutate(activeStationId);
     }
   };
+
+  // Auto-refresh: once per browser session, check if data is stale and refresh
+  const hasAutoRefreshed = useRef(false);
+  useEffect(() => {
+    if (!activeStationId || hasAutoRefreshed.current) return;
+    if (!currentData || currentData.length === 0) return;
+    if (refreshMutation.isPending) return;
+
+    // Prevent re-triggering within same browser session
+    const sessionKey = `weather_refreshed_${activeStationId}`;
+    if (typeof window !== 'undefined' && sessionStorage.getItem(sessionKey)) {
+      hasAutoRefreshed.current = true;
+      return;
+    }
+
+    // Check the createdAt of the first data point
+    const firstRow = currentData[0];
+    const createdAt = firstRow?.createdAt as string | undefined;
+    if (!createdAt) return;
+
+    const ageMs = Date.now() - new Date(createdAt).getTime();
+    const threeHoursMs = 3 * 60 * 60 * 1000;
+
+    if (ageMs > threeHoursMs) {
+      console.log(
+        `[WeatherDashboard] Data is ${Math.round(ageMs / 3600000)}h old — auto-refreshing...`
+      );
+      hasAutoRefreshed.current = true;
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(sessionKey, Date.now().toString());
+      }
+      refreshMutation.mutate(activeStationId);
+    }
+  }, [activeStationId, currentData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Merge current + hourly data for components that need the full range
   const allHourlyData = useMemo(() => {

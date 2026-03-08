@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserClient, type SupabaseClient } from '@supabase/ssr';
+import { supabaseFetch } from './supabase/fetch';
 
 // Re-export withRetry from server-compatible module for backwards compatibility
 export { withRetry } from './retry-utils';
@@ -13,41 +14,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Custom fetch with timeout and retry for unstable networks (5G hotspot, etc.)
- */
-const customFetch = async (url: RequestInfo | URL, options?: RequestInit): Promise<Response> => {
-  const maxRetries = 3;
-  const timeout = 30000;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        keepalive: true,
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-
-      if (attempt === maxRetries) {
-        throw error;
-      }
-
-      // Wait before retry (exponential backoff)
-      const delay = Math.min(100 * Math.pow(2, attempt), 2000);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw new Error('Max retries exceeded');
-};
-
-/**
  * Singleton Supabase client - lazy initialized
  * Ensures only ONE client instance exists for both auth and data
  */
@@ -57,7 +23,7 @@ export function getSupabase(): SupabaseClient {
   if (!supabaseInstance) {
     supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
       global: {
-        fetch: customFetch,
+        fetch: supabaseFetch,
       },
       auth: {
         persistSession: true,

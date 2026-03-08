@@ -34,7 +34,8 @@ import {
     BarChart3,
     SlidersHorizontal,
     Truck,
-    CloudSun
+    CloudSun,
+    Compass
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -520,6 +521,54 @@ function SidebarContent() {
                             </div>
                         );
                     })}
+
+                    {/* Separator + Wegwijzer link */}
+                    <div className={cn("pt-3 mt-3 border-t border-white/5", isCollapsed ? "mx-1" : "mx-1")}>
+                        {isCollapsed ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link
+                                        href="/wegwijzer"
+                                        className={cn(
+                                            "flex items-center justify-center w-full px-3 py-3 rounded-xl transition-all duration-200",
+                                            isLinkActive('/wegwijzer')
+                                                ? "bg-emerald-500/10 text-emerald-400"
+                                                : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                        )}
+                                    >
+                                        <Compass className={cn(
+                                            "size-5 shrink-0",
+                                            isLinkActive('/wegwijzer') ? "text-emerald-500" : ""
+                                        )} />
+                                    </Link>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
+                                    Wegwijzer
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <Link
+                                href="/wegwijzer"
+                                className={cn(
+                                    "flex items-center w-full gap-3 px-3 py-3 rounded-xl transition-all duration-200 group",
+                                    isLinkActive('/wegwijzer')
+                                        ? "bg-emerald-500/10 backdrop-blur-md border-l-4 border-emerald-500 text-emerald-400"
+                                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                )}
+                            >
+                                <Compass className={cn(
+                                    "size-5 shrink-0 transition-colors",
+                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : "text-slate-400 group-hover:text-slate-200"
+                                )} />
+                                <span className={cn(
+                                    "text-sm font-bold tracking-wide truncate",
+                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : ""
+                                )}>
+                                    Wegwijzer
+                                </span>
+                            </Link>
+                        )}
+                    </div>
                 </nav>
 
                 {/* Footer / Toggle */}

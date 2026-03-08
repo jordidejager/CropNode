@@ -61,15 +61,15 @@ function WeatherVisual({ isInView }: { isInView: boolean }) {
         </div>
 
         {/* Chart */}
-        <svg viewBox="0 0 400 130" className="w-full h-24" preserveAspectRatio="none">
+        <svg viewBox="0 0 400 130" className="w-full h-24">
           {/* Grid */}
           {[30, 60, 90, 120].map((y) => (
-            <line key={y} x1="0" y1={y} x2="400" y2={y} stroke="rgba(255,255,255,0.03)" />
+            <line key={y} x1="24" y1={y} x2="400" y2={y} stroke="rgba(255,255,255,0.03)" />
           ))}
           {/* Y labels */}
-          <text x="4" y="34" fill="rgba(148,163,184,0.3)" fontSize="8">20°</text>
-          <text x="4" y="64" fill="rgba(148,163,184,0.3)" fontSize="8">15°</text>
-          <text x="4" y="94" fill="rgba(148,163,184,0.3)" fontSize="8">10°</text>
+          <text x="20" y="34" fill="rgba(148,163,184,0.5)" fontSize="9" textAnchor="end" fontFamily="monospace">20°</text>
+          <text x="20" y="64" fill="rgba(148,163,184,0.5)" fontSize="9" textAnchor="end" fontFamily="monospace">15°</text>
+          <text x="20" y="94" fill="rgba(148,163,184,0.5)" fontSize="9" textAnchor="end" fontFamily="monospace">10°</text>
 
           {/* Gradient fill under ensemble */}
           <motion.path
@@ -103,11 +103,11 @@ function WeatherVisual({ isInView }: { isInView: boolean }) {
           ))}
 
           {/* X labels */}
-          <text x="0" y="128" fill="rgba(148,163,184,0.3)" fontSize="8">00:00</text>
-          <text x="95" y="128" fill="rgba(148,163,184,0.3)" fontSize="8">12:00</text>
-          <text x="195" y="128" fill="rgba(148,163,184,0.3)" fontSize="8">24:00</text>
-          <text x="295" y="128" fill="rgba(148,163,184,0.3)" fontSize="8">36:00</text>
-          <text x="380" y="128" fill="rgba(148,163,184,0.3)" fontSize="8">48h</text>
+          <text x="30" y="128" fill="rgba(148,163,184,0.4)" fontSize="9" textAnchor="middle">0h</text>
+          <text x="120" y="128" fill="rgba(148,163,184,0.4)" fontSize="9" textAnchor="middle">12h</text>
+          <text x="210" y="128" fill="rgba(148,163,184,0.4)" fontSize="9" textAnchor="middle">24h</text>
+          <text x="300" y="128" fill="rgba(148,163,184,0.4)" fontSize="9" textAnchor="middle">36h</text>
+          <text x="390" y="128" fill="rgba(148,163,184,0.4)" fontSize="9" textAnchor="middle">48h</text>
         </svg>
       </div>
 
@@ -293,77 +293,142 @@ function ResearchVisual({ isInView }: { isInView: boolean }) {
 
 /* ─── Perceelbeheer Map Visual ─── */
 function ParcelMapVisual({ isInView }: { isInView: boolean }) {
+  // Parcels matching real CropNode app layout — scattered at various angles across landscape
+  // Based on actual Dutch orchard map with angled fields following property/ditch lines
   const parcels = [
-    { d: 'M30,55 L60,20 L130,25 L150,50 L120,70 L50,68 Z', fill: 'rgba(52,211,153,0.2)', stroke: 'rgba(52,211,153,0.5)', label: 'Elstar', lx: 85, ly: 45 },
-    { d: 'M155,30 L220,15 L260,35 L240,65 L170,60 Z', fill: 'rgba(56,189,248,0.2)', stroke: 'rgba(56,189,248,0.5)', label: 'Conference', lx: 205, ly: 42 },
-    { d: 'M50,72 L120,74 L145,55 L170,64 L165,95 L90,100 L40,90 Z', fill: 'rgba(251,191,36,0.2)', stroke: 'rgba(251,191,36,0.5)', label: 'Jonagold', lx: 105, ly: 84 },
-    { d: 'M245,40 L310,22 L340,45 L330,75 L270,70 Z', fill: 'rgba(52,211,153,0.15)', stroke: 'rgba(52,211,153,0.4)', label: 'Elstar', lx: 290, ly: 48 },
+    // Top-right: large angled parcel (NW-SE orientation)
+    { d: 'M245,4 L340,18 L332,52 L237,38 Z', label: 'Elstar Noord', ha: '5,20', cx: 289, cy: 28 },
+    // Right: wide angled parcel
+    { d: 'M300,55 L370,42 L375,78 L305,90 Z', label: 'Kerkpad', ha: '4,50', cx: 340, cy: 66 },
+    // Center: medium angled parcel
+    { d: 'M155,30 L232,22 L238,58 L161,66 Z', label: 'Conference', ha: '4,80', cx: 196, cy: 44 },
+    // Center-left: diagonal parcel
+    { d: 'M80,42 L148,32 L156,68 L88,78 Z', label: 'Boomgaard Z.', ha: '3,80', cx: 118, cy: 55 },
+    // Bottom-center: large field
+    { d: 'M130,74 L228,65 L234,98 L136,106 Z', label: 'Jonagold', ha: '3,40', cx: 182, cy: 86 },
+    // Bottom-left: smaller triangular field
+    { d: 'M18,68 L72,58 L80,92 L26,100 Z', label: 'Rivierzicht', ha: '3,50', cx: 49, cy: 80 },
+    // Top-left: small parcel
+    { d: 'M30,14 L78,8 L82,36 L34,42 Z', label: 'Hoogveld', ha: '2,10', cx: 56, cy: 25 },
+    // Far right bottom
+    { d: 'M320,82 L368,76 L372,102 L324,108 Z', label: 'Elstar Zuid', ha: '3,35', cx: 346, cy: 92 },
   ];
 
   return (
     <div className="mt-4">
-      <div className="relative rounded-xl bg-slate-800/30 border border-amber-500/10 overflow-hidden h-[140px]">
-        {/* Background map grid */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: `linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)`,
-            backgroundSize: '20px 20px',
-          }}
-        />
+      <div className="relative rounded-xl border border-amber-500/10 overflow-hidden h-[170px]">
+        {/* Composite PDOK Aerial — 2×2 tile grid for wider landscape view */}
+        <div className="absolute inset-0 grid grid-cols-2 grid-rows-2" style={{ filter: 'brightness(0.45) saturate(1.3) contrast(1.1)' }}>
+          <div className="bg-cover bg-center" style={{ backgroundImage: `url(https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/14/8439/5425.jpeg)` }} />
+          <div className="bg-cover bg-center" style={{ backgroundImage: `url(https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/14/8440/5425.jpeg)` }} />
+          <div className="bg-cover bg-center" style={{ backgroundImage: `url(https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/14/8439/5426.jpeg)` }} />
+          <div className="bg-cover bg-center" style={{ backgroundImage: `url(https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/14/8440/5426.jpeg)` }} />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-slate-900/10" />
 
-        <svg viewBox="0 0 370 110" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 390 115" className="relative w-full h-full" preserveAspectRatio="xMidYMid meet">
           {parcels.map((p, i) => (
             <g key={i}>
+              {/* Glow */}
               <motion.path
                 d={p.d}
-                fill={p.fill}
-                stroke={p.stroke}
-                strokeWidth="1.5"
-                initial={{ opacity: 0, pathLength: 0 }}
-                animate={isInView ? { opacity: 1, pathLength: 1 } : {}}
-                transition={{ duration: 0.8, delay: 0.3 + i * 0.15 }}
-              />
-              <motion.text
-                x={p.lx}
-                y={p.ly}
-                textAnchor="middle"
-                fontSize="8"
-                fill="rgba(255,255,255,0.6)"
-                fontWeight="500"
+                fill="rgba(249,115,22,0.06)"
+                stroke="rgba(249,115,22,0.2)"
+                strokeWidth="5"
+                strokeLinejoin="round"
                 initial={{ opacity: 0 }}
                 animate={isInView ? { opacity: 1 } : {}}
-                transition={{ delay: 0.8 + i * 0.15 }}
+                transition={{ duration: 0.4, delay: 0.4 + i * 0.08 }}
+              />
+              {/* Fill + outline */}
+              <motion.path
+                d={p.d}
+                fill="rgba(249,115,22,0.18)"
+                stroke="rgba(249,115,22,0.9)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                initial={{ opacity: 0, pathLength: 0 }}
+                animate={isInView ? { opacity: 1, pathLength: 1 } : {}}
+                transition={{ duration: 0.6, delay: 0.3 + i * 0.08 }}
+              />
+              {/* Label */}
+              <motion.text
+                x={p.cx} y={p.cy - 1}
+                textAnchor="middle" fontSize="6.5" fill="rgba(255,255,255,0.95)" fontWeight="600"
+                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}
+                initial={{ opacity: 0 }}
+                animate={isInView ? { opacity: 1 } : {}}
+                transition={{ delay: 0.6 + i * 0.08 }}
               >
                 {p.label}
+              </motion.text>
+              <motion.text
+                x={p.cx} y={p.cy + 8}
+                textAnchor="middle" fontSize="5" fill="rgba(249,115,22,0.85)" fontWeight="500"
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
+                initial={{ opacity: 0 }}
+                animate={isInView ? { opacity: 1 } : {}}
+                transition={{ delay: 0.7 + i * 0.08 }}
+              >
+                {p.ha} ha
               </motion.text>
             </g>
           ))}
         </svg>
 
-        {/* Legend */}
-        <div className="absolute bottom-2 left-2 flex gap-2">
-          {[
-            { color: 'bg-emerald-400/60', label: 'Elstar', ha: '8,70' },
-            { color: 'bg-sky-400/60', label: 'Conference', ha: '8,30' },
-            { color: 'bg-amber-400/60', label: 'Jonagold', ha: '3,40' },
-          ].map((l) => (
-            <div key={l.label} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900/70 backdrop-blur-sm">
-              <div className={`w-1.5 h-1.5 rounded-full ${l.color}`} />
-              <span className="text-[8px] text-slate-400">{l.label}</span>
-              <span className="text-[8px] text-slate-600">{l.ha}ha</span>
-            </div>
-          ))}
-        </div>
+        {/* Search bar mock */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1.2 }}
+          className="absolute top-2 left-2 flex items-center gap-1.5"
+        >
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-900/70 backdrop-blur-sm border border-white/10">
+            <MapPin className="w-2.5 h-2.5 text-slate-500" />
+            <span className="text-[8px] text-slate-500">Zoek adres of plaats...</span>
+          </div>
+        </motion.div>
 
-        {/* Total badge */}
+        {/* Zoom controls */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1.3 }}
+          className="absolute top-2 left-[155px] flex gap-0.5"
+        >
+          <div className="w-4 h-4 rounded bg-slate-900/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-[8px] text-white/40">+</div>
+          <div className="w-4 h-4 rounded bg-slate-900/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-[8px] text-white/40">−</div>
+        </motion.div>
+
+        {/* Total area badge */}
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={isInView ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: 1.2 }}
-          className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-amber-500/15"
+          transition={{ delay: 1.1 }}
+          className="absolute top-2 right-2 px-2 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-orange-500/20"
         >
-          <span className="text-[10px] text-amber-400 font-semibold">20,40 ha</span>
+          <div className="text-[7px] text-slate-500 uppercase tracking-wider">Totaal</div>
+          <span className="text-[11px] text-orange-400 font-bold">30,65 ha</span>
+        </motion.div>
+
+        {/* Bottom bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 1.4 }}
+          className="absolute bottom-0 inset-x-0 flex items-center justify-between px-3 py-1.5 bg-slate-900/70 backdrop-blur-sm border-t border-white/[0.06]"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-sm border border-orange-400/60 bg-orange-500/20" />
+              <span className="text-[8px] text-slate-400">Mijn percelen</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-sm border border-blue-400/60 bg-blue-500/20" />
+              <span className="text-[8px] text-slate-400">RVO</span>
+            </div>
+          </div>
+          <span className="text-[7px] text-white/20">Luchtfoto © PDOK</span>
         </motion.div>
       </div>
     </div>
@@ -375,10 +440,10 @@ function ValidationVisual({ isInView }: { isInView: boolean }) {
   const steps = [
     { label: 'Toelating', icon: '✓' },
     { label: 'Dosering', icon: '✓' },
-    { label: 'Interval', icon: '✓' },
-    { label: 'Seizoen', icon: '✓' },
-    { label: 'Stofgroep', icon: '✓' },
-    { label: 'VT', icon: '✓' },
+    { label: 'Spuitinterval', icon: '✓' },
+    { label: 'Max. seizoenstoepassingen', icon: '✓' },
+    { label: 'Werkzame stof som', icon: '✓' },
+    { label: 'Veiligheidstermijn', icon: '✓' },
   ];
 
   return (
@@ -461,105 +526,175 @@ function ValidationVisual({ isInView }: { isInView: boolean }) {
 
 /* ─── Harvest Hub Visual ─── */
 function HarvestVisual({ isInView }: { isInView: boolean }) {
-  // Koelcel grid - 4 cols x 3 rows
-  const grid = [
-    ['elstar', 'elstar', 'conf', 'empty'],
-    ['elstar', 'jona', 'conf', 'conf'],
-    ['jona', 'jona', 'empty', 'conf'],
+  const cells = [
+    { name: 'CEL 5', status: 'active', fill: 269, max: 269, variety: 'Elstar', pct: 100 },
+    { name: 'CEL 4', status: 'active', fill: 380, max: 380, variety: 'Conference', pct: 100 },
+    { name: 'CEL 3', status: 'cooling', fill: 214, max: 380, variety: 'Jonagold', pct: 56 },
+    { name: 'CEL 2', status: 'active', fill: 380, max: 380, variety: 'Conference', pct: 100 },
+    { name: 'CEL 1', status: 'active', fill: 269, max: 269, variety: 'Elstar', pct: 100 },
   ];
-  const colorMap: Record<string, string> = {
-    elstar: 'bg-emerald-500/30 border-emerald-500/20',
-    conf: 'bg-sky-500/30 border-sky-500/20',
-    jona: 'bg-amber-500/30 border-amber-500/20',
-    empty: 'bg-slate-800/20 border-slate-700/10',
+
+  const statusCfg: Record<string, { color: string; bg: string; border: string; badge: string; text: string }> = {
+    active: { color: 'text-emerald-400', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.3)', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25', text: 'Actief' },
+    cooling: { color: 'text-amber-400', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.3)', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/25', text: 'Inkoelen' },
   };
+
+  const totalFill = cells.reduce((a, c) => a + c.fill, 0);
+  const totalMax = cells.reduce((a, c) => a + c.max, 0);
 
   return (
     <div className="mt-4">
       <div className="rounded-xl bg-slate-800/30 border border-orange-500/10 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Koelcel A1</span>
+        {/* Header with stats */}
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Hoofdlocatie</span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] text-slate-300 font-medium">{cells.length} cellen</span>
+              <span className="text-[8px] text-slate-600">•</span>
+              <span className="text-[10px] text-emerald-400/80 font-medium">{totalFill}/{totalMax} posities</span>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={isInView ? { opacity: 1, scale: 1 } : {}}
+            transition={{ delay: 1.2, type: 'spring' }}
+            className="text-right"
+          >
+            <div className="text-[8px] text-slate-600">Capaciteit</div>
+            <span className="text-[11px] text-white font-bold">{Math.round(totalFill / totalMax * 100)}%</span>
+          </motion.div>
+        </div>
+
+        {/* Stacked cell layout — like real app */}
+        <div className="space-y-1">
+          {cells.map((cell, i) => {
+            const cfg = statusCfg[cell.status];
+            return (
+              <motion.div
+                key={cell.name}
+                initial={{ opacity: 0, x: -10 }}
+                animate={isInView ? { opacity: 1, x: 0 } : {}}
+                transition={{ delay: 0.3 + i * 0.1, type: 'spring', stiffness: 120 }}
+                className="relative rounded-lg border overflow-hidden"
+                style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}
+              >
+                {/* Fill progress background */}
+                <motion.div
+                  className="absolute inset-y-0 left-0"
+                  style={{ backgroundColor: cell.status === 'cooling' ? 'rgba(251,191,36,0.06)' : 'rgba(16,185,129,0.06)' }}
+                  initial={{ width: 0 }}
+                  animate={isInView ? { width: `${cell.pct}%` } : {}}
+                  transition={{ duration: 0.8, delay: 0.5 + i * 0.1 }}
+                />
+                <div className="relative flex items-center justify-between px-2.5 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-white font-bold">{cell.name}</span>
+                    <span className={`text-[7px] font-medium px-1 py-0.5 rounded border ${cfg.badge}`}>{cfg.text}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[8px] text-slate-500">{cell.variety}</span>
+                    <span className={`text-[10px] font-semibold font-mono ${cfg.color}`}>{cell.fill}/{cell.max}</span>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1.5 }}
+          className="flex items-center gap-3 mt-2.5 pt-2 border-t border-white/[0.04]"
+        >
           <div className="flex items-center gap-1">
-            <Thermometer className="w-2.5 h-2.5 text-sky-400/60" />
-            <span className="text-[10px] text-sky-400/80 font-medium">2.1°C</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-[8px] text-slate-500">Actief</span>
           </div>
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-4 gap-1 mb-2">
-          {grid.flat().map((cell, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={isInView ? { opacity: 1, scale: 1 } : {}}
-              transition={{ delay: 0.4 + i * 0.04, type: 'spring' }}
-              className={`aspect-square rounded-md border ${colorMap[cell]} flex items-center justify-center`}
-            >
-              {cell !== 'empty' && (
-                <span className="text-[7px] text-white/40 font-medium">
-                  {cell === 'elstar' ? 'E' : cell === 'conf' ? 'C' : 'J'}
-                </span>
-              )}
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Capacity bar */}
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-slate-500">Capaciteit</span>
-          <div className="flex-1 h-1.5 rounded-full bg-slate-800/60 overflow-hidden">
-            <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-orange-500/60 to-amber-400/60"
-              initial={{ width: 0 }}
-              animate={isInView ? { width: '75%' } : {}}
-              transition={{ duration: 0.8, delay: 0.8 }}
-            />
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span className="text-[8px] text-slate-500">Inkoelen</span>
           </div>
-          <span className="text-[10px] text-orange-400 font-medium">75%</span>
-        </div>
+          <div className="flex items-center gap-1 ml-auto">
+            <span className="text-[8px] text-slate-600">Vulgraad:</span>
+            <div className="flex gap-0.5">
+              <div className="w-2 h-2 rounded-sm bg-emerald-500/60" />
+              <div className="w-2 h-2 rounded-sm bg-emerald-500/35" />
+              <div className="w-2 h-2 rounded-sm bg-emerald-500/15" />
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
 }
 
-/* ─── Team Timer Visual ─── */
+/* ─── Team & Tasks Visual ─── */
 function TeamVisual({ isInView }: { isInView: boolean }) {
+  const tasks = [
+    { task: 'Snoeien', hours: '32,5', parcels: 4, cost: '€1.625', color: 'bg-blue-400' },
+    { task: 'Spuiten', hours: '8,0', parcels: 6, cost: '€400', color: 'bg-sky-400' },
+    { task: 'Dunnen', hours: '18,5', parcels: 3, cost: '€925', color: 'bg-indigo-400' },
+  ];
+
   return (
     <div className="mt-4">
       <div className="rounded-xl bg-slate-800/30 border border-blue-500/10 p-3">
-        {/* Active timer */}
-        <div className="flex items-center gap-2 mb-2.5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Takenoverzicht</span>
+          <motion.span
+            initial={{ opacity: 0 }}
+            animate={isInView ? { opacity: 1 } : {}}
+            transition={{ delay: 1.2 }}
+            className="text-[10px] text-blue-400/80 font-medium"
+          >
+            59,0 uur totaal
+          </motion.span>
+        </div>
+
+        {/* Task rows */}
+        <div className="space-y-2">
+          {tasks.map((t, i) => (
+            <motion.div
+              key={t.task}
+              initial={{ opacity: 0, x: -8 }}
+              animate={isInView ? { opacity: 1, x: 0 } : {}}
+              transition={{ delay: 0.4 + i * 0.15 }}
+              className="flex items-center gap-2.5"
+            >
+              <div className={`w-1.5 h-6 rounded-full ${t.color}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-200 font-medium">{t.task}</span>
+                  <span className="text-[11px] text-white font-semibold font-mono">{t.hours} uur</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[9px] text-slate-500">{t.parcels} percelen</span>
+                  <span className="text-[9px] text-slate-500">{t.cost}</span>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Active timer indicator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1 }}
+          className="mt-2.5 pt-2 border-t border-white/[0.04] flex items-center gap-2"
+        >
           <motion.div
             animate={isInView ? { scale: [1, 1.15, 1] } : {}}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="w-2 h-2 rounded-full bg-blue-400"
+            className="w-1.5 h-1.5 rounded-full bg-blue-400"
           />
-          <span className="text-[10px] text-blue-400 font-medium">Timer actief</span>
-          <span className="text-xs text-slate-200 font-mono ml-auto">02:34:17</span>
-        </div>
-
-        {/* Team members */}
-        {[
-          { name: 'Jan V.', task: 'Spuiten - Elstar', hours: '6:12' },
-          { name: 'Pieter K.', task: 'Snoeien - Conf.', hours: '4:45' },
-        ].map((m, i) => (
-          <motion.div
-            key={m.name}
-            initial={{ opacity: 0, x: -5 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ delay: 0.5 + i * 0.15 }}
-            className="flex items-center gap-2 py-1.5 border-t border-white/[0.03]"
-          >
-            <div className="w-5 h-5 rounded-full bg-blue-500/15 border border-blue-500/20 flex items-center justify-center">
-              <span className="text-[8px] text-blue-400 font-medium">{m.name[0]}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] text-slate-300 truncate">{m.name}</div>
-              <div className="text-[8px] text-slate-600 truncate">{m.task}</div>
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono">{m.hours}</span>
-          </motion.div>
-        ))}
+          <span className="text-[9px] text-blue-400/70">Live timer actief</span>
+          <span className="text-[10px] text-slate-300 font-mono ml-auto">02:34:17</span>
+        </motion.div>
       </div>
     </div>
   );
@@ -568,34 +703,37 @@ function TeamVisual({ isInView }: { isInView: boolean }) {
 /* ─── Inventory Visual ─── */
 function InventoryVisual({ isInView }: { isInView: boolean }) {
   const items = [
-    { name: 'Merpan', level: 85, color: 'bg-emerald-500/50' },
-    { name: 'Delan Pro', level: 32, color: 'bg-amber-500/50' },
-    { name: 'Coragen', level: 12, color: 'bg-red-500/50' },
+    { name: 'Merpan Spuitkorrel', amount: '12.500', unit: 'kg', packaging: '20 × 25 kg', level: 85, color: 'bg-emerald-500/50' },
+    { name: 'Delan Pro', amount: '8.750', unit: 'L', packaging: '35 × 5 L', level: 58, color: 'bg-emerald-500/50' },
+    { name: 'Coragen', amount: '0,450', unit: 'L', packaging: '3 × 0,15 L', level: 12, color: 'bg-red-500/50' },
   ];
 
   return (
     <div className="mt-4">
-      <div className="rounded-xl bg-slate-800/30 border border-teal-500/10 p-3 space-y-2">
+      <div className="rounded-xl bg-slate-800/30 border border-teal-500/10 p-3 space-y-2.5">
         {items.map((item, i) => (
           <motion.div
             key={item.name}
-            initial={{ opacity: 0 }}
-            animate={isInView ? { opacity: 1 } : {}}
+            initial={{ opacity: 0, x: -5 }}
+            animate={isInView ? { opacity: 1, x: 0 } : {}}
             transition={{ delay: 0.4 + i * 0.15 }}
           >
             <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[10px] text-slate-400">{item.name}</span>
-              <span className={`text-[9px] font-medium ${item.level < 20 ? 'text-red-400' : item.level < 40 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {item.level}%
+              <span className="text-[10px] text-slate-300 font-medium">{item.name}</span>
+              <span className={`text-[11px] font-bold ${item.level < 20 ? 'text-red-400' : 'text-teal-400'}`}>
+                {item.amount} {item.unit}
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-slate-800/60 overflow-hidden">
-              <motion.div
-                className={`h-full rounded-full ${item.color}`}
-                initial={{ width: 0 }}
-                animate={isInView ? { width: `${item.level}%` } : {}}
-                transition={{ duration: 0.8, delay: 0.5 + i * 0.15 }}
-              />
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] text-slate-600">{item.packaging}</span>
+              <div className="h-1 w-16 rounded-full bg-slate-800/60 overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${item.color}`}
+                  initial={{ width: 0 }}
+                  animate={isInView ? { width: `${item.level}%` } : {}}
+                  transition={{ duration: 0.8, delay: 0.5 + i * 0.15 }}
+                />
+              </div>
             </div>
           </motion.div>
         ))}
@@ -603,10 +741,10 @@ function InventoryVisual({ isInView }: { isInView: boolean }) {
           initial={{ opacity: 0 }}
           animate={isInView ? { opacity: 1 } : {}}
           transition={{ delay: 1.2 }}
-          className="flex items-center gap-1 pt-1"
+          className="flex items-center gap-1 pt-1 border-t border-white/[0.04]"
         >
           <TrendingDown className="w-2.5 h-2.5 text-red-400/60" />
-          <span className="text-[8px] text-red-400/60">Coragen bijbestellen</span>
+          <span className="text-[8px] text-red-400/60">Coragen bijbestellen — voorraad laag</span>
         </motion.div>
       </div>
     </div>
@@ -637,7 +775,7 @@ const features = [
     id: 'ctgb',
     icon: Shield,
     title: 'CTGB Validatie',
-    description: '6-staps validatie: toelating, dosering, interval, seizoensmax, stofcumulatie en veiligheidstermijn.',
+    description: '6-staps validatie: toelating, dosering, spuitinterval, maximale seizoenstoepassingen, werkzame stof som en veiligheidstermijn.',
     size: 'medium' as const,
     color: 'emerald',
     Visual: ValidationVisual,
@@ -663,8 +801,8 @@ const features = [
   {
     id: 'team',
     icon: Users,
-    title: 'Uren & Teams',
-    description: 'Live timer, urenregistratie per taak, per perceel, per persoon met kostenberekening.',
+    title: 'Team & Tasks',
+    description: 'Taakbeheer met urenregistratie per activiteit, per perceel en per medewerker met live timer en kostenberekening.',
     size: 'small' as const,
     color: 'blue',
     Visual: TeamVisual,

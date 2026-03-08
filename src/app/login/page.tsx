@@ -89,6 +89,28 @@ export default function LoginPage() {
           return
         }
 
+        // Fallback: maak profiel aan als trigger niet heeft gewerkt
+        if (data.user) {
+          try {
+            const { data: existingProfile } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('user_id', data.user.id)
+              .maybeSingle()
+
+            if (!existingProfile) {
+              await supabase.from('profiles').insert({
+                user_id: data.user.id,
+                name: name.trim(),
+                company_name: companyName.trim(),
+              })
+            }
+          } catch (profileErr) {
+            // Niet fataal - profiel kan later alsnog aangemaakt worden
+            console.warn('[Auth] Profile creation fallback failed:', profileErr)
+          }
+        }
+
         // Bij akkerbouw of anders: toon wachtlijst melding
         if (data.user && (cultivationType === 'arable' || cultivationType === 'other')) {
           setLoading(false)

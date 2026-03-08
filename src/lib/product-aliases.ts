@@ -175,6 +175,89 @@ export const PRODUCT_ALIASES: Record<string, string> = {
 };
 
 // ============================================
+// Levenshtein Distance (Typo Tolerance)
+// ============================================
+
+/**
+ * Berekent de Levenshtein-afstand tussen twee strings.
+ * Gebruikt voor typo-tolerante productnaam matching.
+ */
+function levenshteinDistance(a: string, b: string): number {
+    const m = a.length, n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => {
+        const row = new Array(n + 1).fill(0);
+        row[0] = i;
+        return row;
+    });
+    for (let j = 1; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (a[i - 1] === b[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1];
+            } else {
+                dp[i][j] = 1 + Math.min(dp[i - 1][j - 1], dp[i][j - 1], dp[i - 1][j]);
+            }
+        }
+    }
+    return dp[m][n];
+}
+
+/**
+ * Fuzzy match een input tegen PRODUCT_ALIASES keys.
+ * Threshold: max 1 edit voor namen <= 5 tekens, max 2 voor langere namen.
+ * Retourneert de alias-target (officiële productnaam) of null.
+ */
+function fuzzyMatchProductAlias(input: string): string | null {
+    if (input.length < 4) return null;
+
+    const maxDist = input.length <= 5 ? 1 : 2;
+    let bestMatch: string | null = null;
+    let bestDist = Infinity;
+
+    for (const [alias, target] of Object.entries(PRODUCT_ALIASES)) {
+        if (alias.length < 4) continue;
+        // Skip als lengteverschil al te groot is (optimalisatie)
+        if (Math.abs(input.length - alias.length) > maxDist) continue;
+
+        const dist = levenshteinDistance(input, alias);
+        if (dist <= maxDist && dist < bestDist) {
+            bestDist = dist;
+            bestMatch = target;
+        }
+    }
+
+    return bestMatch;
+}
+
+/**
+ * Fuzzy match een input tegen CTGB productnamen (eerste woord).
+ * Retourneert de volledige productnaam of null.
+ */
+function fuzzyMatchCtgbName(input: string, ctgbProducts: Array<{ naam: string }>): string | null {
+    if (input.length < 4) return null;
+
+    const maxDist = input.length <= 5 ? 1 : 2;
+    let bestMatch: string | null = null;
+    let bestDist = Infinity;
+
+    for (const product of ctgbProducts) {
+        const naam = product.naam?.toLowerCase() || '';
+        const firstWord = naam.split(/[\s-]/)[0];
+        if (firstWord.length < 4) continue;
+        if (Math.abs(input.length - firstWord.length) > maxDist) continue;
+
+        const dist = levenshteinDistance(input, firstWord);
+        if (dist <= maxDist && dist < bestDist) {
+            bestDist = dist;
+            bestMatch = product.naam;
+        }
+    }
+
+    return bestMatch;
+}
+
+// ============================================
 // Dynamic Alias Resolution
 // ============================================
 
@@ -233,9 +316,8 @@ export async function resolveProductAlias(
         // Try exact match first, then stripped version
         let aliasTarget = PRODUCT_ALIASES[normalizedInput] || PRODUCT_ALIASES[strippedInput];
 
-        // If no exact match, try fuzzy match by iterating through all aliases
+        // If no exact match, try normalized match by iterating through all aliases
         if (!aliasTarget) {
-            // Normalize both input and alias keys for comparison
             const normalizeForMatch = (s: string) => s.toLowerCase().replace(/[®™*©\s]+/g, ' ').replace(/\s+/g, ' ').trim();
             const inputNorm = normalizeForMatch(normalizedInput);
 
@@ -245,6 +327,11 @@ export async function resolveProductAlias(
                     break;
                 }
             }
+        }
+
+        // If still no match, try Levenshtein fuzzy match (typo tolerance)
+        if (!aliasTarget) {
+            aliasTarget = fuzzyMatchProductAlias(normalizedInput) ?? undefined;
         }
 
         if (aliasTarget) {
@@ -364,7 +451,18 @@ export async function resolveProductAlias(
         };
     }
 
-    // Niveau 5: Partial match in CTGB database (fuzzy)
+    // Niveau 4b: Levenshtein fuzzy match tegen CTGB productnamen
+    const fuzzyCtgbResult = fuzzyMatchCtgbName(normalizedInput, ctgbProducts);
+    if (fuzzyCtgbResult) {
+        return {
+            originalInput: inputName,
+            resolvedName: fuzzyCtgbResult,
+            source: 'ctgb_match',
+            confidence: 75
+        };
+    }
+
+    // Niveau 5: Partial match in CTGB database (prefix)
     const partialMatch = ctgbProducts.find(p => {
         const naam = p.naam?.toLowerCase() || '';
         const firstWord = naam.split(/[\s-]/)[0];

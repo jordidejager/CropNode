@@ -1,6 +1,6 @@
 // Use server-compatible supabase client (no 'use client' directive)
 // supabaseAdmin bypasses RLS for server-side operations
-import { supabase, getSupabaseAdmin, testDatabaseConnection } from './supabase-client';
+import { supabase, getSupabaseAdmin } from './supabase-client';
 import { withRetry } from './retry-utils';
 import type {
   LogbookEntry,

@@ -630,6 +630,30 @@ function checkDosage(ctx: ValidationContext): ValidationFlag[] {
   const exactMatch = ctx.matchedTarget ? results.find(r => r.voorschrift === ctx.matchedTarget?.voorschrift) : null;
   const anyOk = results.some(r => r.isOk);
 
+  // Check of dosering alleen past via bredere toelating (transparantie)
+  if (anyOk && results.length > 1) {
+    const specificResults = results.filter(r => {
+      const gewas = r.voorschrift.gewas || '';
+      return gewas.length < 80 && !gewas.includes('Overige');
+    });
+    const specificOk = specificResults.some(r => r.isOk);
+    const broadOk = results.filter(r => !specificResults.includes(r)).some(r => r.isOk);
+
+    if (!specificOk && broadOk && specificResults.length > 0) {
+      const specificMax = specificResults
+        .map(r => parseDosering(r.voorschrift.dosering || ''))
+        .filter((v): v is { value: number; unit: string } => v !== null)
+        .sort((a, b) => b.value - a.value)[0];
+      if (specificMax) {
+        flags.push({
+          type: 'info',
+          message: `Dosering ${ctx.dosage} ${ctx.unit} overschrijdt de specifieke toelating voor ${ctx.crop} (max ${specificMax.value} ${specificMax.unit}), maar past binnen de bredere toelating.`,
+          field: 'dosage'
+        });
+      }
+    }
+  }
+
   if (!anyOk) {
     // Geen enkel voorschrift staat deze dosering toe
     // Show per-target maximums for clarity
@@ -715,6 +739,12 @@ function checkInterval(ctx: ValidationContext): ValidationFlag[] {
         field: 'date'
       });
     }
+  } else if (minIntervalDays) {
+    flags.push({
+      type: 'info',
+      message: `Eerste toepassing van ${ctx.product.naam} op dit perceel. Minimaal ${minIntervalDays} dagen interval bij volgende toepassing.`,
+      field: 'date'
+    });
   }
 
   return flags;

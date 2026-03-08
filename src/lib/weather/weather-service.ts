@@ -267,8 +267,13 @@ async function upsertHourlyData(
   const BATCH_SIZE = 500;
   let totalInserted = 0;
 
+  const nowIso = new Date().toISOString();
+
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
+    const batch = rows.slice(i, i + BATCH_SIZE).map(row => ({
+      ...row,
+      created_at: nowIso, // Update timestamp on each refresh so staleness check works
+    }));
     const { error, count } = await supabase
       .from('weather_data_hourly')
       .upsert(batch, {
