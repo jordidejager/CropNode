@@ -44,3 +44,23 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log
 service-account.json
+
+# data dumps
+fertilizers-dump.json
+
+# test output
+*.log
+test-results/
+playwright-report/
+playwright-api-report/
+screenshots-e2e/
+screenshots-bugfix/
+
+# IDE / platform specific
+.idx/
+.modified
+.vercel-rebuild
+
+# debug artifacts
+debug-*.png
+test-fix1-result.png

@@ -1,7 +1,7 @@
 -- ============================================
 -- ALLE TABELLEN VOOR FIRESTORE MIGRATIE
 -- Voer dit uit in Supabase Dashboard > SQL Editor
--- https://supabase.com/dashboard/project/djcsihpnidopxxuxumvj/sql/new
+-- https://supabase.com/dashboard/project/<your-project-ref>/sql/new
 -- ============================================
 
 -- 1. LOGBOOK

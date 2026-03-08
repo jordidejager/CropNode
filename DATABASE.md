@@ -1,7 +1,7 @@
 # Database Overzicht — CropNode
 
 > Supabase PostgreSQL database met pgvector voor embeddings.
-> **Project URL:** `djcsihpnidopxxuxumvj.supabase.co`
+> **Project URL:** `<your-project>.supabase.co`
 
 ---
 
@@ -12,7 +12,7 @@
 supabase --version  # 2.75.0
 
 # Direct PostgreSQL
-postgresql://postgres:[PASSWORD]@db.djcsihpnidopxxuxumvj.supabase.co:5432/postgres
+postgresql://postgres:[PASSWORD]@db.<your-project>.supabase.co:5432/postgres
 
 # JavaScript Client
 import { createClient } from '@supabase/supabase-js'
