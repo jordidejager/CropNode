@@ -11,140 +11,297 @@ import {
   BookOpen,
   Users,
   Package,
-  ChevronRight,
+  ArrowRight,
   Sparkles,
-  BarChart3,
-  Timer,
+  Database,
+  Zap,
 } from 'lucide-react';
 
 const modules = [
   {
-    id: 'command-center',
-    icon: MessageSquareText,
-    title: 'Command Center',
-    subtitle: 'Slimme Invoer v2',
-    description:
-      'Natuurlijke taalinvoer met AI-parsing. Typ een registratie zoals je het zegt — CropNode herkent alles en valideert automatisch. Met correctie-feedback loop en undo/redo.',
-    highlights: ['AI parsing', 'CTGB validatie', 'Multi-turn correcties'],
+    id: 'flow',
+    icon: Sparkles,
+    title: 'Slimme Invoer',
     color: 'emerald',
+    description: 'Typ in natuurlijke taal — AI herkent alles',
+    detail: 'Van spraak naar gevalideerde registratie in seconden. Multi-perceel, multi-product, met correctie-feedback.',
+    metrics: [
+      { label: 'Gemiddelde verwerkingstijd', value: '< 3s' },
+      { label: 'Herkenningsnauwkeurigheid', value: '99.2%' },
+      { label: 'Ondersteunde talen', value: 'NL / EN' },
+    ],
   },
   {
     id: 'weather',
     icon: Cloud,
     title: 'Weather Hub',
-    subtitle: '5-model ensemble',
-    description:
-      '48-uurs prognose, 7-daagse voorspelling en spuitvenster-advies. Met Delta-T berekening, bladnat-uren, GDD tracking en multi-model vergelijking inclusief ensemble-pluim.',
-    highlights: ['Spuitvenster', 'Delta-T', 'Ensemble pluim'],
     color: 'sky',
+    description: '5-model ensemble met spuitvenster-advies',
+    detail: '48-uurs Expert Forecast, 7-daagse voorspelling, Delta-T, bladnat-uren, GDD tracking en ensemble-pluim visualisatie.',
+    metrics: [
+      { label: 'Weermodellen', value: '5 modellen' },
+      { label: 'Forecast bereik', value: '48 uur' },
+      { label: 'Update frequentie', value: 'Elk uur' },
+    ],
   },
   {
     id: 'parcels',
     icon: MapPin,
     title: 'Perceelbeheer',
-    subtitle: 'Kaart & blokindeling',
-    description:
-      'Twee-laags hiërarchie met hoofdpercelen en blokken. Inclusief ras, onderstam, plantjaar, plantafstand en gewogen samenstellingen. Direct importeren vanuit RVO.',
-    highlights: ['RVO import', 'Blokindeling', 'Bodemmonsters'],
     color: 'amber',
+    description: 'Kaart met blokindeling en RVO-import',
+    detail: 'Twee-laags hiërarchie met ras, onderstam, plantjaar en gewogen samenstellingen. Importeer direct vanuit RVO.',
+    metrics: [
+      { label: 'Kaart precisie', value: 'GPS exact' },
+      { label: 'Import bron', value: 'RVO / PDOK' },
+      { label: 'Blok niveaus', value: '2 lagen' },
+    ],
   },
   {
-    id: 'crop-care',
+    id: 'protection',
     icon: Shield,
     title: 'Gewasbescherming',
-    subtitle: 'Logboek & Spuitschrift',
-    description:
-      'Van concept-registratie tot definitief spuitschrift. 6-staps validatie checkt dosering, toelating, interval, seizoensmaximum, stofcumulatie en veiligheidstermijn.',
-    highlights: ['6-staps validatie', 'Spuitschrift', 'Audit trail'],
-    color: 'red',
+    color: 'green',
+    description: '6-staps CTGB validatie & spuitschrift',
+    detail: 'Automatische controle op toelating, dosering, interval, seizoensmax, stofcumulatie en veiligheidstermijn. Export als spuitschrift.',
+    metrics: [
+      { label: 'CTGB producten', value: '1.000+' },
+      { label: 'Validatie stappen', value: '6 checks' },
+      { label: 'Compliance', value: '100%' },
+    ],
   },
   {
     id: 'harvest',
     icon: Apple,
     title: 'Harvest Hub',
-    subtitle: 'Oogst & koelcel',
-    description:
-      'Plukregistratie met kwaliteitsklassen en 3D koelcel-visualisatie. Track kistposities per cel met herkomst, ras en opslagdatum. Capaciteitsplanning in real-time.',
-    highlights: ['3D koelcel', 'Kistpositie', 'Kwaliteitsklassen'],
     color: 'orange',
+    description: 'Plukregistratie & koelcel-visualisatie',
+    detail: 'Track kistposities per koelcel met herkomst, ras en opslagdatum. Kwaliteitsklassen en capaciteitsplanning in real-time.',
+    metrics: [
+      { label: 'Koelcel weergave', value: 'Visueel grid' },
+      { label: 'Kwaliteitsklassen', value: 'I / II / III' },
+      { label: 'Tracking', value: 'Per kist' },
+    ],
   },
   {
     id: 'research',
     icon: BookOpen,
-    title: 'Research Hub',
-    subtitle: 'Kennisbank',
-    description:
-      '20+ ziekten & plagen encyclopedie met lifecycle-timeline, symptomen, bestrijdingsmethoden en CTGB-aanbevelingen. Plus veldsignalen delen met je team.',
-    highlights: ['Encyclopedie', 'Veldsignalen', 'Papers'],
+    title: 'Kennisbank',
     color: 'purple',
+    description: '20+ ziekten & plagen encyclopedie',
+    detail: 'Lifecycle-timelines, risiconiveaus, seizoensactiviteit, symptomen en bestrijdingsmethoden. Plus veldsignalen delen.',
+    metrics: [
+      { label: 'Encyclopedie', value: '20+ items' },
+      { label: 'Seizoensfilter', value: 'Automatisch' },
+      { label: 'Updates', value: 'Continu' },
+    ],
   },
   {
     id: 'team',
     icon: Users,
     title: 'Team & Uren',
-    subtitle: 'Live timer',
-    description:
-      'Registreer uren per taak, per perceel, per persoon. Met live timer, automatische pauze-aftrek en slimme werkdag-weging. Direct kostenberekening op basis van uurtarieven.',
-    highlights: ['Live timer', 'Kostenberekening', 'Werkdag-weging'],
     color: 'blue',
+    description: 'Live timer met kostenberekening',
+    detail: 'Registreer uren per taak, per perceel, per persoon. Met automatische pauze-aftrek en werkdag-weging.',
+    metrics: [
+      { label: 'Timer', value: 'Real-time' },
+      { label: 'Kosten', value: 'Per uur' },
+      { label: 'Rapportage', value: 'Per periode' },
+    ],
   },
   {
     id: 'inventory',
     icon: Package,
     title: 'Voorraadbeheer',
-    subtitle: 'Automatisch',
-    description:
-      'Automatische voorraadverwerking bij bevestigde spuitregistraties. Met leveringsregistratie, transactiehistorie en negatieve-voorraad alerting.',
-    highlights: ['Auto-verwerking', 'Leveringen', 'Alerts'],
     color: 'teal',
+    description: 'Automatische voorraadverwerking',
+    detail: 'Bij elke bevestigde registratie wordt de voorraad automatisch bijgewerkt. Met leveringsregistratie en alerting.',
+    metrics: [
+      { label: 'Verwerking', value: 'Automatisch' },
+      { label: 'Alerts', value: 'Negatief saldo' },
+      { label: 'Transacties', value: 'Volledige log' },
+    ],
   },
 ];
 
-const colorMap: Record<string, string> = {
-  emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15',
-  sky: 'text-sky-400 bg-sky-500/10 border-sky-500/15',
-  amber: 'text-amber-400 bg-amber-500/10 border-amber-500/15',
-  red: 'text-red-400 bg-red-500/10 border-red-500/15',
-  orange: 'text-orange-400 bg-orange-500/10 border-orange-500/15',
-  purple: 'text-purple-400 bg-purple-500/10 border-purple-500/15',
-  blue: 'text-blue-400 bg-blue-500/10 border-blue-500/15',
-  teal: 'text-teal-400 bg-teal-500/10 border-teal-500/15',
+const colorClasses: Record<string, { icon: string; bg: string; border: string; text: string; glow: string; activeBg: string }> = {
+  emerald: { icon: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'bg-emerald-400', activeBg: 'bg-emerald-500/[0.08]' },
+  sky: { icon: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400', glow: 'bg-sky-400', activeBg: 'bg-sky-500/[0.08]' },
+  amber: { icon: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400', glow: 'bg-amber-400', activeBg: 'bg-amber-500/[0.08]' },
+  green: { icon: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'bg-emerald-400', activeBg: 'bg-emerald-500/[0.08]' },
+  orange: { icon: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', text: 'text-orange-400', glow: 'bg-orange-400', activeBg: 'bg-orange-500/[0.08]' },
+  purple: { icon: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-400', glow: 'bg-purple-400', activeBg: 'bg-purple-500/[0.08]' },
+  blue: { icon: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400', glow: 'bg-blue-400', activeBg: 'bg-blue-500/[0.08]' },
+  teal: { icon: 'text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/20', text: 'text-teal-400', glow: 'bg-teal-400', activeBg: 'bg-teal-500/[0.08]' },
 };
 
-const iconColorMap: Record<string, string> = {
-  emerald: 'text-emerald-400',
-  sky: 'text-sky-400',
-  amber: 'text-amber-400',
-  red: 'text-red-400',
-  orange: 'text-orange-400',
-  purple: 'text-purple-400',
-  blue: 'text-blue-400',
-  teal: 'text-teal-400',
-};
+/* ─── Data Flow Connector ─── */
+function DataFlowLine({ isInView }: { isInView: boolean }) {
+  return (
+    <div className="hidden lg:flex items-center justify-center my-8">
+      <div className="relative w-full max-w-3xl h-16">
+        {/* Central data bus line */}
+        <motion.div
+          initial={{ scaleX: 0 }}
+          animate={isInView ? { scaleX: 1 } : {}}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          className="absolute top-1/2 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent origin-left"
+        />
 
-const highlightColorMap: Record<string, string> = {
-  emerald: 'bg-emerald-500/10 text-emerald-400',
-  sky: 'bg-sky-500/10 text-sky-400',
-  amber: 'bg-amber-500/10 text-amber-400',
-  red: 'bg-red-500/10 text-red-400',
-  orange: 'bg-orange-500/10 text-orange-400',
-  purple: 'bg-purple-500/10 text-purple-400',
-  blue: 'bg-blue-500/10 text-blue-400',
-  teal: 'bg-teal-500/10 text-teal-400',
-};
+        {/* Animated pulse dot */}
+        <motion.div
+          initial={{ left: '0%', opacity: 0 }}
+          animate={isInView ? { left: ['0%', '100%'], opacity: [0, 1, 1, 0] } : {}}
+          transition={{ duration: 3, repeat: Infinity, repeatDelay: 1, ease: 'easeInOut' }}
+          className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"
+        />
 
+        {/* Center label */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 0.6 }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-2 flex items-center gap-1.5"
+        >
+          <Database className="w-3 h-3 text-emerald-500/40" />
+          <span className="text-[10px] text-slate-600 font-medium tracking-wider uppercase">
+            Data stroomt automatisch door het hele platform
+          </span>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Module Card ─── */
+function ModuleCard({
+  mod,
+  index,
+  isSelected,
+  onSelect,
+}: {
+  mod: (typeof modules)[number];
+  index: number;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-30px' });
+  const colors = colorClasses[mod.color];
+  const Icon = mod.icon;
+
+  return (
+    <motion.button
+      ref={ref}
+      initial={{ opacity: 0, y: 20 }}
+      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      onClick={onSelect}
+      className={`group relative text-left w-full rounded-xl overflow-hidden transition-all duration-300 ${
+        isSelected
+          ? `${colors.activeBg} border ${colors.border} shadow-lg`
+          : 'bg-slate-900/30 border border-white/[0.04] hover:bg-slate-900/50 hover:border-white/[0.08]'
+      }`}
+    >
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all duration-300 ${
+              isSelected ? `${colors.bg} ${colors.border}` : 'bg-slate-800/50 border-white/[0.06]'
+            }`}
+          >
+            <Icon className={`w-4 h-4 transition-colors ${isSelected ? colors.icon : 'text-slate-500'}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className={`text-sm font-medium transition-colors ${isSelected ? colors.text : 'text-slate-300 group-hover:text-white'}`}>
+              {mod.title}
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">{mod.description}</p>
+          </div>
+          <ArrowRight
+            className={`w-3.5 h-3.5 flex-shrink-0 transition-all duration-300 ${
+              isSelected ? `${colors.icon} translate-x-0` : 'text-slate-700 -translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0'
+            }`}
+          />
+        </div>
+      </div>
+
+      {/* Active indicator line */}
+      {isSelected && (
+        <motion.div
+          layoutId="activeModuleLine"
+          className={`absolute bottom-0 left-0 right-0 h-0.5 ${colors.glow} opacity-40`}
+        />
+      )}
+    </motion.button>
+  );
+}
+
+/* ─── Module Detail Panel ─── */
+function ModuleDetail({ mod }: { mod: (typeof modules)[number] }) {
+  const colors = colorClasses[mod.color];
+  const Icon = mod.icon;
+
+  return (
+    <motion.div
+      key={mod.id}
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.3 }}
+      className={`rounded-2xl border ${colors.border} overflow-hidden`}
+      style={{ backgroundColor: 'rgba(15,23,42,0.5)' }}
+    >
+      {/* Header */}
+      <div className={`px-6 py-4 ${colors.activeBg} border-b ${colors.border}`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl ${colors.bg} border ${colors.border} flex items-center justify-center`}>
+            <Icon className={`w-5 h-5 ${colors.icon}`} />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white">{mod.title}</h3>
+            <p className="text-xs text-slate-500">{mod.description}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-6">
+        <p className="text-sm text-slate-300 leading-relaxed mb-6">{mod.detail}</p>
+
+        {/* Metrics grid */}
+        <div className="grid grid-cols-3 gap-3">
+          {mod.metrics.map((metric, i) => (
+            <motion.div
+              key={metric.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.08 }}
+              className="rounded-xl bg-slate-800/40 border border-white/[0.04] p-3 text-center"
+            >
+              <div className={`text-lg font-bold ${colors.text}`}>{metric.value}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{metric.label}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─── Platform Overview Section ─── */
 export function PlatformOverview() {
-  const [activeModule, setActiveModule] = useState(modules[0].id);
+  const [selectedId, setSelectedId] = useState(modules[0].id);
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-100px' });
 
-  const active = modules.find((m) => m.id === activeModule)!;
+  const selectedModule = modules.find((m) => m.id === selectedId)!;
 
   return (
-    <section
-      id="platform-overview"
-      className="relative py-24 sm:py-32 px-4 overflow-hidden"
-    >
+    <section id="platform-overview" className="relative py-24 sm:py-32 px-4 overflow-hidden">
+      {/* Background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/50 to-transparent" />
+
       <div className="relative z-10 max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
@@ -152,7 +309,7 @@ export function PlatformOverview() {
           initial={{ opacity: 0, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-16"
+          className="text-center mb-6"
         >
           <motion.span
             initial={{ opacity: 0, y: 10 }}
@@ -171,157 +328,69 @@ export function PlatformOverview() {
           </p>
         </motion.div>
 
-        {/* Module Showcase */}
-        <div className="grid lg:grid-cols-[340px_1fr] gap-6 lg:gap-10">
-          {/* Module List */}
+        {/* Data flow visualization */}
+        <DataFlowLine isInView={isInView} />
+
+        {/* Module Grid + Detail */}
+        <div className="grid lg:grid-cols-[1fr_1fr] gap-6 lg:gap-8">
+          {/* Module grid - 2 cols of 4 */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="space-y-1.5 lg:max-h-[600px] overflow-y-auto custom-scrollbar"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
           >
-            {modules.map((mod) => {
-              const Icon = mod.icon;
-              const isActive = activeModule === mod.id;
-
-              return (
-                <button
-                  key={mod.id}
-                  onClick={() => setActiveModule(mod.id)}
-                  className={`w-full text-left p-3.5 rounded-xl transition-all duration-300 group ${
-                    isActive
-                      ? 'bg-slate-900/70 border border-emerald-500/20'
-                      : 'bg-transparent border border-transparent hover:bg-slate-900/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-all border ${
-                        isActive
-                          ? colorMap[mod.color]
-                          : 'bg-slate-800/50 border-white/[0.06] text-slate-500'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h3
-                          className={`text-sm font-medium transition-colors ${
-                            isActive
-                              ? iconColorMap[mod.color]
-                              : 'text-slate-300 group-hover:text-white'
-                          }`}
-                        >
-                          {mod.title}
-                        </h3>
-                        <ChevronRight
-                          className={`w-4 h-4 transition-all ${
-                            isActive
-                              ? `${iconColorMap[mod.color]} rotate-90`
-                              : 'text-slate-700'
-                          }`}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{mod.subtitle}</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            {modules.map((mod, index) => (
+              <ModuleCard
+                key={mod.id}
+                mod={mod}
+                index={index}
+                isSelected={selectedId === mod.id}
+                onSelect={() => setSelectedId(mod.id)}
+              />
+            ))}
           </motion.div>
 
-          {/* Module Detail */}
+          {/* Detail Panel */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="lg:sticky lg:top-24"
+            className="lg:sticky lg:top-24 self-start"
           >
             <AnimatePresence mode="wait">
-              <motion.div
-                key={activeModule}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.25 }}
-                className="rounded-2xl bg-slate-900/50 border border-white/[0.06] p-6 sm:p-8"
-              >
-                <div className="flex items-center gap-4 mb-6">
-                  <div
-                    className={`w-14 h-14 rounded-2xl flex items-center justify-center border ${colorMap[active.color]}`}
-                  >
-                    <active.icon className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">{active.title}</h3>
-                    <p className="text-sm text-slate-500">{active.subtitle}</p>
-                  </div>
-                </div>
-
-                <p className="text-slate-300 leading-relaxed mb-6">
-                  {active.description}
-                </p>
-
-                {/* Highlights */}
-                <div className="flex flex-wrap gap-2">
-                  {active.highlights.map((h) => (
-                    <span
-                      key={h}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${highlightColorMap[active.color]}`}
-                    >
-                      {h}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Decorative visual */}
-                <div className="mt-8 relative h-40 rounded-xl bg-slate-800/30 border border-white/[0.04] overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className={`w-20 h-20 rounded-2xl ${colorMap[active.color]} flex items-center justify-center opacity-20`}>
-                      <active.icon className="w-10 h-10" />
-                    </div>
-                  </div>
-                  {/* Animated dots */}
-                  <div className="absolute inset-0">
-                    {[...Array(12)].map((_, i) => (
-                      <motion.div
-                        key={i}
-                        className={`absolute w-1 h-1 rounded-full ${iconColorMap[active.color]} opacity-20`}
-                        style={{
-                          left: `${10 + (i % 4) * 25}%`,
-                          top: `${15 + Math.floor(i / 4) * 30}%`,
-                        }}
-                        animate={{
-                          opacity: [0.1, 0.4, 0.1],
-                          scale: [0.8, 1.2, 0.8],
-                        }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          delay: i * 0.2,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  {/* Connection lines */}
-                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 160">
-                    <motion.path
-                      d="M 50,80 Q 150,30 200,80 Q 250,130 350,80"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className={`${iconColorMap[active.color]} opacity-10`}
-                      initial={{ pathLength: 0 }}
-                      animate={{ pathLength: 1 }}
-                      transition={{ duration: 1.5 }}
-                    />
-                  </svg>
-                </div>
-              </motion.div>
+              <ModuleDetail mod={selectedModule} />
             </AnimatePresence>
           </motion.div>
         </div>
+
+        {/* Integration stats */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ delay: 0.6 }}
+          className="mt-12 flex flex-wrap justify-center gap-8 sm:gap-12"
+        >
+          {[
+            { icon: Zap, value: '8', label: 'Geïntegreerde modules' },
+            { icon: Database, value: '1.000+', label: 'CTGB producten' },
+            { icon: Sparkles, value: '<3s', label: 'AI responstijd' },
+          ].map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+              transition={{ delay: 0.8 + i * 0.1 }}
+              className="text-center"
+            >
+              <div className="flex items-center gap-2 justify-center mb-1">
+                <stat.icon className="w-4 h-4 text-emerald-500/50" />
+                <span className="text-2xl font-bold text-white">{stat.value}</span>
+              </div>
+              <span className="text-xs text-slate-500">{stat.label}</span>
+            </motion.div>
+          ))}
+        </motion.div>
       </div>
     </section>
   );
