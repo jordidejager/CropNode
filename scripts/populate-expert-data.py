@@ -8,13 +8,14 @@ Usage: python3 scripts/populate-expert-data.py
 """
 
 import json
+import os
 import subprocess
 import re
 from collections import Counter
 
 # --- Config ---
-SUPABASE_URL = "https://djcsihpnidopxxuxumvj.supabase.co"
-SUPABASE_KEY = "***REMOVED***"
+SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 STATION_ID = "31b105f8-2975-4e18-9eaa-1fc3e8eeb927"
 LAT = 51.47
