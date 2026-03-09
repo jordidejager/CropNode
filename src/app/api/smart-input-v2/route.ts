@@ -327,34 +327,34 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
 
     // Extract everything after "met " (Dutch for "with")
     const metMatch = lower.match(/\bmet\s+(.+)/);
-    if (!metMatch) return products;
+    if (metMatch) {
+        const productsPart = metMatch[1];
 
-    const productsPart = metMatch[1];
+        // Split on separators first: " en ", " + ", ", " → then extract per segment
+        const segments = productsPart
+            .split(/\s+en\s+|\s*\+\s*|\s*,\s*(?=[a-z])/i)
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
 
-    // Split on separators first: " en ", " + ", ", " → then extract per segment
-    const segments = productsPart
-        .split(/\s+en\s+|\s*\+\s*|\s*,\s*(?=[a-z])/i)
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+        for (const segment of segments) {
+            // Pattern: product_name dosage unit
+            const match = segment.match(/^([a-zà-ü][a-zà-ü\s]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
+            if (!match) continue;
 
-    for (const segment of segments) {
-        // Pattern: product_name dosage unit
-        const match = segment.match(/^([a-zà-ü][a-zà-ü\s]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
-        if (!match) continue;
+            const rawName = match[1].trim();
+            const rawDosage = parseFloat(match[2].replace(',', '.'));
+            const rawUnit = match[3].toLowerCase();
 
-        const rawName = match[1].trim();
-        const rawDosage = parseFloat(match[2].replace(',', '.'));
-        const rawUnit = match[3].toLowerCase();
+            // Skip if name is too short or looks like a crop name
+            if (rawName.length < 3) continue;
+            if (/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) continue;
 
-        // Skip if name is too short or looks like a crop name
-        if (rawName.length < 3) continue;
-        if (/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) continue;
-
-        products.push({
-            product: rawName,
-            dosage: rawDosage,
-            unit: rawUnit,
-        });
+            products.push({
+                product: rawName,
+                dosage: rawDosage,
+                unit: rawUnit,
+            });
+        }
     }
 
     // Fallback: extract product+dosage directly from start of message (without "met" keyword)
