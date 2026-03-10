@@ -80,6 +80,31 @@ function EmptyStatusPanel() {
 }
 
 // ============================================================================
+// CONTEXT SLIMMING — Reduce userContext from ~5MB to ~1.5MB for Vercel body limit
+// Filters to fruit-relevant products only and strips heavy fields (geometry)
+// ============================================================================
+const FRUIT_REGEX = /appel|peer|pit.?fruit|kern.?fruit|fruit/i;
+
+function slimContext(ctx: SmartInputUserContext | null): SmartInputUserContext | undefined {
+    if (!ctx) return undefined;
+    return {
+        ...ctx,
+        // Strip any extra fields from parcels (like geometry from API)
+        parcels: (ctx.parcels || []).map(p => ({
+            id: p.id, name: p.name, crop: p.crop, variety: p.variety, area: p.area,
+        })),
+        // Filter products to fruit-relevant only and trim gebruiksvoorschriften
+        products: (ctx.products || [])
+            .filter(p => (p.gebruiksvoorschriften || []).some(g => FRUIT_REGEX.test(g.gewas || '')))
+            .map(p => ({
+                ...p,
+                gebruiksvoorschriften: (p.gebruiksvoorschriften || [])
+                    .filter(g => FRUIT_REGEX.test(g.gewas || '')),
+            })),
+    };
+}
+
+// ============================================================================
 // PAGE COMPONENT
 // ============================================================================
 
@@ -198,7 +223,7 @@ export default function SmartInputV2Page() {
                     message: text,
                     conversationHistory: state.messages,
                     currentDraft: state.draft ? serializeDraft(state.draft) : null,
-                    userContext: userContext || undefined, // Send client-loaded context
+                    userContext: slimContext(userContext), // Send slimmed context to stay under Vercel 4.5MB limit
                 }),
                 signal: abortControllerRef.current.signal,
             });
