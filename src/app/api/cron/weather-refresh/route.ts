@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { refreshAllStations, createServiceRoleClient } from '@/lib/weather/weather-service';
+import { refreshKnmiStations } from '@/lib/weather/knmi-service';
 
 /**
  * GET /api/cron/weather-refresh
@@ -23,9 +24,18 @@ export async function GET(request: Request) {
 
     const stationsRefreshed = await refreshAllStations(serviceClient);
 
+    // Also refresh KNMI observed data (last 3 days for imported stations)
+    let knmiRefreshed = 0;
+    try {
+      knmiRefreshed = await refreshKnmiStations(serviceClient);
+    } catch (err) {
+      console.error('[Cron] KNMI refresh error:', err);
+    }
+
     return NextResponse.json({
       success: true,
       stationsRefreshed,
+      knmiRefreshed,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

@@ -35,7 +35,8 @@ import {
     SlidersHorizontal,
     Truck,
     CloudSun,
-    Compass
+    Compass,
+    History,
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -172,8 +173,8 @@ const menuStructure: NavItem[] = [
         icon: CloudSun,
         items: [
             { label: 'Dashboard', href: '/weather/dashboard', icon: CloudSun },
+            { label: 'Historie (KNMI)', href: '/weather/historie', icon: History },
             { label: 'Ziektedruk', href: '/weather/disease-pressure', icon: Bug },
-            { label: 'Seizoensanalyse', href: '/weather/season', icon: BarChart3 },
             { label: 'Expert Forecast', href: '/weather/expert', icon: SlidersHorizontal },
         ]
     },

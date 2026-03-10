@@ -18,6 +18,16 @@ export const weatherKeys = {
   multimodel: (id: string) => ['weather', 'multimodel', id] as const,
   ensemble: (id: string, model: string, variable: string) =>
     ['weather', 'ensemble', id, model, variable] as const,
+  // KNMI observed data
+  knmiStations: ['weather', 'knmi', 'stations'] as const,
+  knmiDaily: (code: number, start: string, end: string) =>
+    ['weather', 'knmi', 'daily', code, start, end] as const,
+  knmiComparison: (code: number, years: string) =>
+    ['weather', 'knmi', 'comparison', code, years] as const,
+  knmiCumulatives: (code: number, year: number) =>
+    ['weather', 'knmi', 'cumulatives', code, year] as const,
+  knmiImportStatus: (code: number) =>
+    ['weather', 'knmi', 'import-status', code] as const,
 };
 
 // ============================================
@@ -29,6 +39,7 @@ export type WeatherStationBasic = {
   name: string | null;
   latitude: number;
   longitude: number;
+  knmiStationId: number | null;
 };
 
 export type RainDataPoint = {
@@ -56,7 +67,7 @@ export function useWeatherStations() {
 
       const { data } = await supabase
         .from('weather_stations')
-        .select('id, name, latitude, longitude')
+        .select('id, name, latitude, longitude, knmi_station_id')
         .eq('user_id', user.id);
 
       return (data ?? []).map((s: Record<string, unknown>) => ({
@@ -64,6 +75,7 @@ export function useWeatherStations() {
         name: s.name as string | null,
         latitude: parseFloat(s.latitude as string),
         longitude: parseFloat(s.longitude as string),
+        knmiStationId: s.knmi_station_id ? parseInt(s.knmi_station_id as string, 10) : null,
       }));
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
@@ -306,6 +318,142 @@ export function useWeatherEnsemble(
     },
     enabled: !!stationId,
     staleTime: 60 * 60 * 1000, // 60 minutes (ensemble updates slowly)
+  });
+}
+
+// ============================================
+// KNMI Observed Data Hooks
+// ============================================
+
+import type {
+  KnmiStation,
+  KnmiDailyData,
+  KnmiCumulativeData,
+} from '@/lib/weather/knmi-service';
+
+export function useKnmiStations(fruitOnly: boolean = false) {
+  return useQuery({
+    queryKey: weatherKeys.knmiStations,
+    queryFn: async (): Promise<KnmiStation[]> => {
+      const res = await fetch(`/api/weather/knmi/stations?fruitOnly=${fruitOnly}`);
+      if (!res.ok) throw new Error('KNMI stations ophalen mislukt');
+      const json = await res.json();
+      return json.data as KnmiStation[];
+    },
+    staleTime: 24 * 60 * 60 * 1000, // 24 hours — stations don't change
+  });
+}
+
+export function useKnmiDaily(
+  stationCode: number | null,
+  startDate: string,
+  endDate: string
+) {
+  return useQuery({
+    queryKey: weatherKeys.knmiDaily(stationCode ?? 0, startDate, endDate),
+    queryFn: async (): Promise<KnmiDailyData[]> => {
+      const res = await fetch(
+        `/api/weather/knmi/daily?stationCode=${stationCode}&start=${startDate}&end=${endDate}`
+      );
+      if (!res.ok) throw new Error('KNMI dagdata ophalen mislukt');
+      const json = await res.json();
+      return json.data as KnmiDailyData[];
+    },
+    enabled: stationCode !== null && !!startDate && !!endDate,
+    staleTime: endDate < new Date().toISOString().split('T')[0]
+      ? Infinity // Past data never changes
+      : 6 * 60 * 60 * 1000, // Current year: 6 hours
+  });
+}
+
+export function useKnmiSeasonComparison(
+  stationCode: number | null,
+  years: number[]
+) {
+  const yearsKey = years.sort().join(',');
+  return useQuery({
+    queryKey: weatherKeys.knmiComparison(stationCode ?? 0, yearsKey),
+    queryFn: async (): Promise<Record<number, KnmiDailyData[]>> => {
+      const res = await fetch(
+        `/api/weather/knmi/season-comparison?stationCode=${stationCode}&years=${yearsKey}`
+      );
+      if (!res.ok) throw new Error('Seizoensvergelijking ophalen mislukt');
+      const json = await res.json();
+      return json.data as Record<number, KnmiDailyData[]>;
+    },
+    enabled: stationCode !== null && years.length > 0,
+    staleTime: 6 * 60 * 60 * 1000,
+  });
+}
+
+export function useKnmiCumulatives(
+  stationCode: number | null,
+  year: number
+) {
+  return useQuery({
+    queryKey: weatherKeys.knmiCumulatives(stationCode ?? 0, year),
+    queryFn: async (): Promise<KnmiCumulativeData[]> => {
+      const res = await fetch(
+        `/api/weather/knmi/cumulatives?stationCode=${stationCode}&year=${year}`
+      );
+      if (!res.ok) throw new Error('Cumulatieve data ophalen mislukt');
+      const json = await res.json();
+      return json.data as KnmiCumulativeData[];
+    },
+    enabled: stationCode !== null && year > 0,
+    staleTime: year < new Date().getFullYear() ? Infinity : 6 * 60 * 60 * 1000,
+  });
+}
+
+export function useKnmiImport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { stationCode: number; yearsBack?: number }) => {
+      const res = await fetch('/api/weather/knmi/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) throw new Error('KNMI import mislukt');
+      return res.json();
+    },
+    onSuccess: (_data, params) => {
+      queryClient.invalidateQueries({ queryKey: ['weather', 'knmi'] });
+    },
+  });
+}
+
+export function useKnmiImportStatus(stationCode: number | null) {
+  return useQuery({
+    queryKey: weatherKeys.knmiImportStatus(stationCode ?? 0),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/weather/knmi/import?stationCode=${stationCode}`
+      );
+      if (!res.ok) throw new Error('Import status ophalen mislukt');
+      const json = await res.json();
+      return json.data as { lastImport: string | null; hasData: boolean; rowCount: number };
+    },
+    enabled: stationCode !== null,
+    staleTime: 30 * 1000, // 30 seconds — check frequently during import
+  });
+}
+
+export function useKnmiLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (stationId: string) => {
+      const res = await fetch('/api/weather/knmi/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stationId }),
+      });
+      if (!res.ok) throw new Error('KNMI koppeling mislukt');
+      return res.json() as Promise<{ success: boolean; knmiCode: number | null }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: weatherKeys.stations });
+    },
   });
 }
 

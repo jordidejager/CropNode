@@ -7,6 +7,7 @@ import {
   getOrCreateWeatherStation,
   fetchAndStoreForecast,
 } from '@/lib/weather/weather-service';
+import { linkWeatherStationToKnmi } from '@/lib/weather/knmi-service';
 
 /**
  * POST /api/weather/initialize
@@ -96,6 +97,11 @@ export async function POST(request: Request) {
         );
     }
 
+    // Link nearest KNMI station (non-blocking)
+    const knmiPromise = linkWeatherStationToKnmi(stationId).catch((err) => {
+      console.error('[Weather API] KNMI linking error:', err);
+    });
+
     // Fetch multi-model and ensemble data (these are needed for Expert Forecast)
     const multiModelPromise = fetchAndStoreMultiModel(stationId).catch((err) => {
       console.error('[Weather API] Multi-model fetch error:', err);
@@ -105,8 +111,8 @@ export async function POST(request: Request) {
       console.error('[Weather API] Ensemble fetch error:', err);
     });
 
-    // Wait for both to complete
-    await Promise.all([multiModelPromise, ensemblePromise]);
+    // Wait for all to complete
+    await Promise.all([knmiPromise, multiModelPromise, ensemblePromise]);
 
     return NextResponse.json({ success: true, stationId });
   } catch (error) {
