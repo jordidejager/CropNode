@@ -591,8 +591,8 @@ function SidebarContent() {
                                         isCollapsed ? "justify-center" : ""
                                     )}
                                 >
-                                    <div className="size-9 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-emerald-500/30 group-hover:border-emerald-500/50 transition-all">
-                                        <span className="text-[10px] font-black text-emerald-400">{userInitials || '?'}</span>
+                                    <div className="size-9 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-red-500/30 group-hover:border-red-500/50 transition-all">
+                                        <span className="text-[10px] font-black text-red-400">{userInitials || '?'}</span>
                                     </div>
                                     {!isCollapsed && (
                                         <motion.div
