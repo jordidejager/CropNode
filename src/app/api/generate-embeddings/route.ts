@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { supabase } from '@/lib/supabase';
 import { ai } from '@/ai/genkit';
 import { safeParseInt } from '@/lib/api-utils';
@@ -72,6 +73,13 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export async function POST(request: NextRequest) {
+  // Auth check: prevent unauthenticated access to embedding generation
+  const supabaseAuth = await createServerClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const limit = safeParseInt(searchParams.get('limit'), 10);
   const clear = searchParams.get('clear') === 'true';
@@ -214,6 +222,13 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  // Auth check
+  const supabaseAuthGet = await createServerClient();
+  const { data: { user: getUser } } = await supabaseAuthGet.auth.getUser();
+  if (!getUser) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   console.log(`[${context}] GET stats request`);
 
   try {

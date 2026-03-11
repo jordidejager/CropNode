@@ -603,14 +603,22 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         };
         const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
 
-        // Verwerk de voorraadmutaties - try sprayableParcels first, fallback to parcels
-        await addParcelHistoryEntries({
-            logbookEntry: entry,
-            parcels: allParcels,
-            sprayableParcels,
-            isConfirmation: true,
-            spuitschriftId: newSpuitschriftEntry.id,
-        });
+        // Verwerk de voorraadmutaties - with compensating rollback on failure
+        try {
+            await addParcelHistoryEntries({
+                logbookEntry: entry,
+                parcels: allParcels,
+                sprayableParcels,
+                isConfirmation: true,
+                spuitschriftId: newSpuitschriftEntry.id,
+            });
+        } catch (historyError) {
+            console.error('[confirmLogbookEntry] Parcel history failed, rolling back spuitschrift:', historyError);
+            await dbDeleteSpuitschriftEntry(newSpuitschriftEntry.id).catch(rollbackErr => {
+                console.error('[confirmLogbookEntry] CRITICAL: Rollback also failed:', rollbackErr);
+            });
+            throw historyError;
+        }
 
         // Verwijder de logboekregel
         await dbDeleteLogbookEntry(entryId);
@@ -752,14 +760,22 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
             validationMessage: validationMessage || undefined,
         };
 
-        // Verwerk parcel history en inventory movements
-        await addParcelHistoryEntries({
-            logbookEntry: dummyLogbookEntry,
-            parcels: allParcels,
-            sprayableParcels,
-            isConfirmation: true,
-            spuitschriftId: newSpuitschriftEntry.id,
-        });
+        // Verwerk parcel history en inventory movements — with compensating rollback on failure
+        try {
+            await addParcelHistoryEntries({
+                logbookEntry: dummyLogbookEntry,
+                parcels: allParcels,
+                sprayableParcels,
+                isConfirmation: true,
+                spuitschriftId: newSpuitschriftEntry.id,
+            });
+        } catch (historyError) {
+            console.error('[confirmDraftDirectToSpuitschrift] Parcel history failed, rolling back spuitschrift:', historyError);
+            await dbDeleteSpuitschriftEntry(newSpuitschriftEntry.id).catch(rollbackErr => {
+                console.error('[confirmDraftDirectToSpuitschrift] CRITICAL: Rollback also failed:', rollbackErr);
+            });
+            throw historyError;
+        }
 
         // Update conversation status to 'completed' if sessionId was provided
         if (draftData.sessionId) {

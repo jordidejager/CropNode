@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { z as zod } from 'zod';
@@ -75,7 +76,7 @@ type InputMode = zod.infer<typeof InputModeSchema>;
 
 // Input validation schema
 const AnalyzeInputRequestSchema = zod.object({
-    rawInput: zod.string().min(1, 'Input is required'),
+    rawInput: zod.string().min(1, 'Input is required').max(5000, 'Input te lang (max 5000 tekens)'),
     previousDraft: zod.object({
         plots: zod.array(zod.string()).default([]),
         products: zod.array(zod.object({
@@ -1681,6 +1682,13 @@ export async function POST(req: Request) {
     const context = 'Analyze Input API';
 
     try {
+        // Auth check: prevent unauthenticated access to AI endpoint
+        const supabaseAuth = await createServerClient();
+        const { data: { user } } = await supabaseAuth.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // Step 1: Parse JSON body safely
         let body: unknown;
         try {
@@ -3700,10 +3708,8 @@ ${hasDraft && isDateSplitPattern(rawInput) ? `⚠️ DATE-SPLIT PATROON GEDETECT
         // Outer catch - this should rarely be hit if streaming is working
         console.error(`[${context}] API Error:`, error);
 
-        const errorMessage = error instanceof Error ? error.message : 'Failed to analyze input';
-
         return NextResponse.json(
-            { error: errorMessage },
+            { error: 'Er ging iets mis bij het analyseren. Probeer het opnieuw.' },
             { status: 500 }
         );
     }

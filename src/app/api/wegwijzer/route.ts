@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { wegwijzerSections, searchWegwijzerSections, getWegwijzerSection } from '@/lib/wegwijzer-content';
 
 export async function GET(request: Request) {
+  // Auth check: require authentication
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const sectionId = searchParams.get('section');
   const query = searchParams.get('q');

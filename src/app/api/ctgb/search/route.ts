@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { getCachedCtgbSearch } from '@/lib/server-cache';
 import type { CtgbSearchResponse } from '@/lib/ctgb-types';
 import type { CtgbProduct } from '@/lib/types';
@@ -28,6 +29,16 @@ function transformToLegacySearchResult(product: CtgbProduct) {
  */
 export async function GET(request: Request): Promise<NextResponse<CtgbSearchResponse>> {
     try {
+        // Auth check: require authentication for product search
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({
+                success: false, query: '', total: 0, results: [],
+                error: 'Unauthorized',
+            }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const query = searchParams.get('query');
 
@@ -62,7 +73,7 @@ export async function GET(request: Request): Promise<NextResponse<CtgbSearchResp
             query: '',
             total: 0,
             results: [],
-            error: `Onverwachte fout: ${error instanceof Error ? error.message : 'Onbekende fout'}`,
+            error: 'Er ging iets mis bij het zoeken. Probeer het opnieuw.',
         }, { status: 500 });
     }
 }

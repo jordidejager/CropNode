@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server';
 import { z as zod } from 'zod';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { requestContext } from '@/lib/request-context';
 import { classifyAndParseSpray } from '@/ai/flows/classify-and-parse-spray';
 import { registrationAgent, registrationAgentStream, type AgentOutput } from '@/ai/flows/registration-agent';
 import { validateParsedSprayData } from '@/lib/validation-service';
@@ -48,13 +49,6 @@ async function getServerUserId(): Promise<string | null> {
     }
 }
 
-// Fallback: get user ID from client-side Supabase (for API routes)
-async function getUserIdFallback(): Promise<string> {
-    // In development/testing, return a placeholder
-    // In production, the middleware ensures the user is authenticated
-    const userId = await getServerUserId();
-    return userId || 'anonymous';
-}
 
 // ============================================================================
 // PRODUCT UNIT DETECTION
@@ -580,8 +574,8 @@ const UserContextSchema = zod.object({
 }).optional();
 
 const RequestSchema = zod.object({
-    message: zod.string().min(1, 'Message is required'),
-    conversationHistory: zod.array(ConversationMessageSchema),
+    message: zod.string().min(1, 'Message is required').max(5000, 'Bericht te lang (max 5000 tekens)'),
+    conversationHistory: zod.array(ConversationMessageSchema).max(50),
     currentDraft: SprayRegistrationGroupSchema.nullable(),
     userContext: UserContextSchema,
 });
@@ -615,8 +609,11 @@ export async function POST(req: Request) {
         const hasClientContext = !!userContext?.parcels?.length;
         console.log(`[${context}] Processing: "${message.substring(0, 50)}..." draft: ${currentDraft ? 'yes' : 'no'}, clientContext: ${hasClientContext}`);
 
-        // Step 2: Get user ID (middleware handles auth for protected routes)
-        const userId = await getUserIdFallback();
+        // Step 2: Authenticate user (hard requirement, no anonymous fallback)
+        const userId = await getServerUserId();
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
         // Step 3: Create streaming response
         const stream = new ReadableStream({
@@ -660,7 +657,7 @@ export async function POST(req: Request) {
                     console.error(`[${context}] Handler error:`, error);
                     send({
                         type: 'error',
-                        message: error instanceof Error ? error.message : 'Onbekende fout',
+                        message: 'Er ging iets mis bij het verwerken. Probeer het opnieuw.',
                     });
                 } finally {
                     controller.close();
@@ -678,7 +675,7 @@ export async function POST(req: Request) {
     } catch (error) {
         console.error(`[${context}] Top-level error:`, error);
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Internal server error' },
+            { error: 'Er ging iets mis. Probeer het opnieuw.' },
             { status: 500 }
         );
     }
@@ -1339,88 +1336,90 @@ async function handleAgentMessage(
         })),
     };
 
-    // Use streaming agent
-    const agentStream = registrationAgentStream({
-        userMessage: message,
-        currentDraft: draftForAgent,
-        conversationHistory: conversationHistory.map(m => ({
-            role: m.role,
-            content: m.content,
-        })),
-        userId,
-        parcelContext,
-    });
-
-    let finalOutput: AgentOutput | null = null;
-
-    for await (const event of agentStream) {
-        switch (event.type) {
-            case 'thinking':
-                send({ type: 'processing', phase: 'Agent analyseert...' });
-                break;
-
-            case 'tool_call':
-                send({ type: 'tool_call', tool: event.tool, input: event.input });
-                break;
-
-            case 'tool_result':
-                send({ type: 'tool_result', tool: event.tool, success: true });
-                break;
-
-            case 'complete':
-                finalOutput = event.output;
-                break;
-
-            case 'error':
-                send({ type: 'error', message: event.message });
-                return;
-        }
-    }
-
-    if (!finalOutput) {
-        send({ type: 'error', message: 'Agent produceerde geen output' });
-        return;
-    }
-
-    // Convert agent output to API response
-    const response: SmartInputV2Response = {
-        action: finalOutput.action === 'update_draft' ? 'update_draft'
-            : finalOutput.action === 'clarification_needed' ? 'clarification_needed'
-            : finalOutput.action === 'confirm_and_save' ? 'confirm_and_save'
-            : finalOutput.action === 'cancel' ? 'cancel'
-            : 'answer_query',
-        humanSummary: finalOutput.humanSummary,
-        processingTimeMs: Date.now() - startTime,
-        toolsCalled: finalOutput.toolsCalled,
-    };
-
-    // Add registration if available (with parcel name-to-ID resolution)
-    if (finalOutput.updatedDraft) {
-        response.registration = {
-            groupId: finalOutput.updatedDraft.groupId,
-            date: new Date(finalOutput.updatedDraft.date),
-            rawInput: finalOutput.updatedDraft.rawInput,
-            units: finalOutput.updatedDraft.units.map(u => ({
-                id: u.id,
-                // Resolve any parcel names to IDs (agent might return names)
-                plots: resolveParcelNamesToIds(u.plots, allParcels),
-                products: u.products,
-                label: u.label,
-                status: u.status,
-                date: u.date ? new Date(u.date) : undefined,
+    // Wrap entire agent stream in requestContext so AI tools get verified userId
+    await requestContext.run({ userId }, async () => {
+        const agentStream = registrationAgentStream({
+            userMessage: message,
+            currentDraft: draftForAgent,
+            conversationHistory: conversationHistory.map(m => ({
+                role: m.role,
+                content: m.content,
             })),
+            userId,
+            parcelContext,
+        });
+
+        let finalOutput: AgentOutput | null = null;
+
+        for await (const event of agentStream) {
+            switch (event.type) {
+                case 'thinking':
+                    send({ type: 'processing', phase: 'Agent analyseert...' });
+                    break;
+
+                case 'tool_call':
+                    send({ type: 'tool_call', tool: event.tool, input: event.input });
+                    break;
+
+                case 'tool_result':
+                    send({ type: 'tool_result', tool: event.tool, success: true });
+                    break;
+
+                case 'complete':
+                    finalOutput = event.output;
+                    break;
+
+                case 'error':
+                    send({ type: 'error', message: event.message });
+                    return;
+            }
+        }
+
+        if (!finalOutput) {
+            send({ type: 'error', message: 'Agent produceerde geen output' });
+            return;
+        }
+
+        // Convert agent output to API response
+        const response: SmartInputV2Response = {
+            action: finalOutput.action === 'update_draft' ? 'update_draft'
+                : finalOutput.action === 'clarification_needed' ? 'clarification_needed'
+                : finalOutput.action === 'confirm_and_save' ? 'confirm_and_save'
+                : finalOutput.action === 'cancel' ? 'cancel'
+                : 'answer_query',
+            humanSummary: finalOutput.humanSummary,
+            processingTimeMs: Date.now() - startTime,
+            toolsCalled: finalOutput.toolsCalled,
         };
-    }
 
-    // Add clarification if needed
-    if (finalOutput.clarification) {
-        response.clarification = finalOutput.clarification;
-    }
+        // Add registration if available (with parcel name-to-ID resolution)
+        if (finalOutput.updatedDraft) {
+            response.registration = {
+                groupId: finalOutput.updatedDraft.groupId,
+                date: new Date(finalOutput.updatedDraft.date),
+                rawInput: finalOutput.updatedDraft.rawInput,
+                units: finalOutput.updatedDraft.units.map(u => ({
+                    id: u.id,
+                    // Resolve any parcel names to IDs (agent might return names)
+                    plots: resolveParcelNamesToIds(u.plots, allParcels),
+                    products: u.products,
+                    label: u.label,
+                    status: u.status,
+                    date: u.date ? new Date(u.date) : undefined,
+                })),
+            };
+        }
 
-    // Add query answer if this was a question
-    if (finalOutput.queryAnswer) {
-        response.queryAnswer = finalOutput.queryAnswer;
-    }
+        // Add clarification if needed
+        if (finalOutput.clarification) {
+            response.clarification = finalOutput.clarification;
+        }
 
-    send({ type: 'complete', response });
+        // Add query answer if this was a question
+        if (finalOutput.queryAnswer) {
+            response.queryAnswer = finalOutput.queryAnswer;
+        }
+
+        send({ type: 'complete', response });
+    });
 }

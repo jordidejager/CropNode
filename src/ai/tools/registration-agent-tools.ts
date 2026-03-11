@@ -19,6 +19,7 @@ import {
     getSpuitschriftEntries,
     addSpuitschriftEntry,
     addParcelHistoryEntries,
+    deleteSpuitschriftEntry,
     getAllCtgbProducts,
     getParcelHistoryEntries,
     getUserPreferences,
@@ -27,6 +28,7 @@ import {
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import { resolveProductAlias, type ResolvedProduct } from '@/lib/product-aliases';
+import { getVerifiedUserId } from '@/lib/request-context';
 import {
     validateSprayApplication,
     validateParsedSprayData,
@@ -465,7 +467,7 @@ export const saveRegistrationTool = ai.defineTool(
                     date: z.string().optional().describe('Override datum voor deze unit'),
                 })),
             }),
-            userId: z.string().describe('User ID voor authenticatie'),
+            // userId removed from AI-controlled input — now sourced from server-verified request context
         }),
         outputSchema: z.object({
             success: z.boolean(),
@@ -478,6 +480,9 @@ export const saveRegistrationTool = ai.defineTool(
         const savedIds: string[] = [];
 
         try {
+            // Get verified userId from server request context (NOT from AI input)
+            const userId = getVerifiedUserId();
+
             // Fetch parcels once for all units (needed for parcel_history + inventory)
             const allPlotIds = input.registration.units.flatMap(u => u.plots);
             const [allParcels, sprayableParcels] = await Promise.all([
@@ -494,7 +499,7 @@ export const saveRegistrationTool = ai.defineTool(
                     targetReason: p.targetReason,
                 }));
 
-                // 1. Write to spuitschrift (same as before)
+                // 1. Write to spuitschrift
                 const entry = await addSpuitschriftEntry(
                     {
                         originalLogbookId: null,
@@ -506,12 +511,12 @@ export const saveRegistrationTool = ai.defineTool(
                         registrationType: input.registration.registrationType || 'spraying',
                         status: 'Akkoord',
                     },
-                    input.userId
+                    userId
                 );
 
                 savedIds.push(entry.id);
 
-                // 2. Write to parcel_history + inventory_movements (FIX: same as "Bevestigen" knop)
+                // 2. Write to parcel_history + inventory_movements
                 const dummyLogbookEntry: LogbookEntry = {
                     id: `agent-${Date.now()}-${savedIds.length}`,
                     rawInput: input.registration.rawInput,
@@ -526,14 +531,24 @@ export const saveRegistrationTool = ai.defineTool(
 
                 const unitSprayableParcels = sprayableParcels.filter(p => unit.plots.includes(p.id));
 
-                await addParcelHistoryEntries({
-                    logbookEntry: dummyLogbookEntry,
-                    parcels: allParcels,
-                    sprayableParcels: unitSprayableParcels,
-                    isConfirmation: true,
-                    spuitschriftId: entry.id,
-                    providedUserId: input.userId,
-                });
+                try {
+                    await addParcelHistoryEntries({
+                        logbookEntry: dummyLogbookEntry,
+                        parcels: allParcels,
+                        sprayableParcels: unitSprayableParcels,
+                        isConfirmation: true,
+                        spuitschriftId: entry.id,
+                        providedUserId: userId,
+                    });
+                } catch (historyError) {
+                    // Compensating delete: rollback the orphaned spuitschrift entry
+                    console.error(`[saveRegistrationTool] Parcel history failed for ${entry.id}, rolling back:`, historyError);
+                    await deleteSpuitschriftEntry(entry.id).catch(rollbackErr => {
+                        console.error('[saveRegistrationTool] CRITICAL: Rollback also failed:', rollbackErr);
+                    });
+                    savedIds.pop();
+                    throw historyError;
+                }
             }
 
             return {

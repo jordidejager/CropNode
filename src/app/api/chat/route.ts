@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
@@ -81,12 +82,29 @@ interface ChatResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth check: prevent unauthenticated access to AI endpoint
+    const supabaseAuth = await createServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { type: 'error', message: 'Niet ingelogd.' } as ChatResponse,
+        { status: 401 }
+      );
+    }
+
     const body: ChatRequest = await request.json();
     const { message, conversationHistory, context } = body;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
         { type: 'error', message: 'Geen bericht ontvangen' } as ChatResponse,
+        { status: 400 }
+      );
+    }
+
+    if (message.length > 5000) {
+      return NextResponse.json(
+        { type: 'error', message: 'Bericht te lang (max 5000 tekens)' } as ChatResponse,
         { status: 400 }
       );
     }
