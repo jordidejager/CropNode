@@ -27,11 +27,17 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
     // Primary year data
     for (const d of data) {
       const mmdd = d.date.substring(5); // MM-DD
+      const tMin = d.tempMinC;
+      const tMax = d.tempMaxC;
+      // For the range area: base = tempMin, range = tempMax - tempMin
+      const tempRange = tMin !== null && tMax !== null ? tMax - tMin : null;
+
       map.set(mmdd, {
         date: mmdd,
         label: formatDate(d.date),
-        tempMin: d.tempMinC,
-        tempMax: d.tempMaxC,
+        tempMin: tMin,
+        tempMax: tMax,
+        tempRange,
         tempAvg: d.tempAvgC,
       });
     }
@@ -43,8 +49,6 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
         const existing = map.get(mmdd) || { date: mmdd, label: formatDate(d.date) };
         map.set(mmdd, {
           ...existing,
-          cTempMin: d.tempMinC,
-          cTempMax: d.tempMaxC,
           cTempAvg: d.tempAvgC,
         });
       }
@@ -75,6 +79,7 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
           <YAxis
             tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
             tickFormatter={(v) => `${v}°`}
+            domain={['auto', 'auto']}
           />
           <Tooltip
             contentStyle={{
@@ -85,34 +90,45 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
             }}
             labelFormatter={(v) => v}
             formatter={(value: number, name: string) => {
+              if (name === 'tempMin' || name === 'tempRange') return [null, null]; // hide from tooltip
               const label = TEMP_LABELS[name] ?? name;
               return [value !== null ? `${value}°C` : '—', label];
             }}
+            itemSorter={() => -1}
           />
           <Legend
             wrapperStyle={{ fontSize: 11 }}
             formatter={(value: string) => TEMP_LABELS[value] ?? value}
+            payload={[
+              { value: 'tempAvg', type: 'line', color: '#f59e0b' },
+              { value: 'tempMax', type: 'square', color: 'rgba(239,68,68,0.2)' },
+              ...(compareYear ? [{ value: 'cTempAvg', type: 'line' as const, color: '#60a5fa' }] : []),
+            ]}
           />
 
-          {/* Primary year: area between min and max */}
-          <Area
-            type="monotone"
-            dataKey="tempMax"
-            stroke="none"
-            fill="#ef4444"
-            fillOpacity={0.1}
-            stackId="range"
-            name="tempMax"
-          />
+          {/* Range band: tempMin (invisible base) + tempRange (colored) */}
           <Area
             type="monotone"
             dataKey="tempMin"
             stroke="none"
-            fill="#ffffff"
+            fill="transparent"
             fillOpacity={0}
-            stackId="range"
+            stackId="tempRange"
             name="tempMin"
+            legendType="none"
           />
+          <Area
+            type="monotone"
+            dataKey="tempRange"
+            stroke="none"
+            fill="#ef4444"
+            fillOpacity={0.15}
+            stackId="tempRange"
+            name="tempRange"
+            legendType="none"
+          />
+
+          {/* Average temperature line */}
           <Line
             type="monotone"
             dataKey="tempAvg"
@@ -144,7 +160,7 @@ const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', '
 
 const TEMP_LABELS: Record<string, string> = {
   tempMin: 'Minimum',
-  tempMax: 'Maximum',
+  tempMax: 'Max/Min band',
   tempAvg: 'Gemiddeld',
   cTempAvg: 'Gemiddeld (vergelijk)',
 };

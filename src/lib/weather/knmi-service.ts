@@ -60,6 +60,7 @@ export type KnmiCumulativeData = {
 // ---- Helpers ----
 
 async function getDefaultClient(): Promise<SupabaseClient> {
+  // KNMI tables have no RLS — anon key works fine for read queries
   return createClient() as Promise<SupabaseClient>;
 }
 

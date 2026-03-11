@@ -1,13 +1,20 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { MapPin, Download, Loader2, CheckCircle2 } from 'lucide-react';
+import {
+  MapPin,
+  Loader2,
+  Thermometer,
+  Droplets,
+  TrendingUp,
+  Sun,
+  CalendarDays,
+} from 'lucide-react';
 import {
   useWeatherStations,
+  useKnmiStations,
   useKnmiDaily,
   useKnmiCumulatives,
-  useKnmiImport,
-  useKnmiImportStatus,
   useKnmiLink,
 } from '@/hooks/use-weather';
 import { TemperatureHistoryChart } from './TemperatureHistoryChart';
@@ -18,12 +25,12 @@ import { SeasonSummaryTable } from './SeasonSummaryTable';
 
 type Tab = 'temperature' | 'precipitation' | 'gdd' | 'water' | 'summary';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'temperature', label: 'Temperatuur' },
-  { key: 'precipitation', label: 'Neerslag' },
-  { key: 'gdd', label: 'Graaddagen' },
-  { key: 'water', label: 'Waterbalans' },
-  { key: 'summary', label: 'Samenvatting' },
+const TABS: { key: Tab; label: string; icon: typeof Thermometer }[] = [
+  { key: 'temperature', label: 'Temperatuur', icon: Thermometer },
+  { key: 'precipitation', label: 'Neerslag', icon: Droplets },
+  { key: 'gdd', label: 'Graaddagen', icon: TrendingUp },
+  { key: 'water', label: 'Waterbalans', icon: Sun },
+  { key: 'summary', label: 'Samenvatting', icon: CalendarDays },
 ];
 
 const currentYear = new Date().getFullYear();
@@ -31,49 +38,46 @@ const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
 export function HistorieOverview() {
   const { data: stations, isLoading: loadingStations } = useWeatherStations();
+  const { data: knmiStations, isLoading: loadingKnmi } = useKnmiStations(true);
+
+  const [selectedStation, setSelectedStation] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('temperature');
 
-  // Get the user's station and its linked KNMI station
-  const station = stations?.[0];
-  const knmiCode = station?.knmiStationId ?? null;
-
-  // Auto-link KNMI station if not yet linked
+  // Auto-link KNMI station if user has a weather station without KNMI link
+  const userStation = stations?.[0];
+  const userKnmiCode = userStation?.knmiStationId ?? null;
   const linkMutation = useKnmiLink();
+
   useEffect(() => {
-    if (!station) return;
-    if (knmiCode) return; // Already linked
+    if (!userStation) return;
+    if (userKnmiCode) return;
     if (linkMutation.isPending || linkMutation.isSuccess) return;
+    linkMutation.mutate(userStation.id);
+  }, [userStation, userKnmiCode, linkMutation.isPending, linkMutation.isSuccess]);
 
-    linkMutation.mutate(station.id);
-  }, [station, knmiCode, linkMutation.isPending, linkMutation.isSuccess]);
-
-  // Import status check
-  const { data: importStatus, refetch: refetchStatus } = useKnmiImportStatus(knmiCode);
-  const importMutation = useKnmiImport();
-
-  // Auto-trigger import if needed
+  // Auto-select station: user's linked KNMI station or first fruit-region station
   useEffect(() => {
-    if (!knmiCode) return;
-    if (importStatus === undefined) return; // Still loading
-    if (importStatus?.hasData) return; // Already imported
-    if (importMutation.isPending || importMutation.isSuccess) return;
-
-    importMutation.mutate(
-      { stationCode: knmiCode, yearsBack: 3 },
-      { onSuccess: () => refetchStatus() }
-    );
-  }, [knmiCode, importStatus, importMutation.isPending, importMutation.isSuccess]);
+    if (selectedStation) return;
+    if (userKnmiCode) {
+      setSelectedStation(userKnmiCode);
+    } else if (knmiStations && knmiStations.length > 0) {
+      // Default to Herwijnen (356) if available, otherwise first station
+      const herwijnen = knmiStations.find(s => s.code === 356);
+      setSelectedStation(herwijnen?.code ?? knmiStations[0].code);
+    }
+  }, [userKnmiCode, knmiStations, selectedStation]);
 
   // Fetch daily data for selected year
   const startDate = `${selectedYear}-01-01`;
-  const endDate = selectedYear === currentYear
-    ? new Date().toISOString().split('T')[0]
-    : `${selectedYear}-12-31`;
+  const endDate =
+    selectedYear === currentYear
+      ? new Date().toISOString().split('T')[0]
+      : `${selectedYear}-12-31`;
 
   const { data: dailyData, isLoading: loadingDaily } = useKnmiDaily(
-    importStatus?.hasData ? knmiCode : null,
+    selectedStation,
     startDate,
     endDate
   );
@@ -81,29 +85,50 @@ export function HistorieOverview() {
   // Fetch comparison year if selected
   const compareStart = compareYear ? `${compareYear}-01-01` : '';
   const compareEnd = compareYear
-    ? (compareYear === currentYear
+    ? compareYear === currentYear
       ? new Date().toISOString().split('T')[0]
-      : `${compareYear}-12-31`)
+      : `${compareYear}-12-31`
     : '';
 
   const { data: compareData } = useKnmiDaily(
-    compareYear && importStatus?.hasData ? knmiCode : null,
+    compareYear ? selectedStation : null,
     compareStart,
     compareEnd
   );
 
   // Cumulatives
-  const { data: cumulatives } = useKnmiCumulatives(
-    importStatus?.hasData ? knmiCode : null,
-    selectedYear
-  );
+  const { data: cumulatives } = useKnmiCumulatives(selectedStation, selectedYear);
   const { data: compareCumulatives } = useKnmiCumulatives(
-    compareYear && importStatus?.hasData ? knmiCode : null,
+    compareYear ? selectedStation : null,
     compareYear ?? 0
   );
 
+  // Quick stats from daily data
+  const quickStats = useMemo(() => {
+    if (!dailyData || dailyData.length === 0) return null;
+
+    const temps = dailyData.map(d => d.tempAvgC).filter((t): t is number => t !== null);
+    const precips = dailyData.map(d => d.precipitationSum).filter((p): p is number => p !== null);
+    const sunshine = dailyData.map(d => d.sunshineHours).filter((s): s is number => s !== null);
+    const gdds = dailyData.map(d => d.gddBase5).filter((g): g is number => g !== null);
+    const frosts = dailyData.map(d => d.frostHours).filter((f): f is number => f !== null);
+    const rainDays = dailyData.filter(d => d.precipitationSum !== null && d.precipitationSum > 0.1).length;
+
+    return {
+      avgTemp: temps.length > 0 ? Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10 : null,
+      totalPrecip: precips.length > 0 ? Math.round(precips.reduce((a, b) => a + b, 0) * 10) / 10 : null,
+      rainDays,
+      totalSunshine: sunshine.length > 0 ? Math.round(sunshine.reduce((a, b) => a + b, 0)) : null,
+      totalGdd: gdds.length > 0 ? Math.round(gdds.reduce((a, b) => a + b, 0)) : null,
+      totalFrost: frosts.length > 0 ? frosts.reduce((a, b) => a + b, 0) : null,
+    };
+  }, [dailyData]);
+
+  // Selected station name
+  const selectedStationInfo = knmiStations?.find(s => s.code === selectedStation);
+
   // Loading states
-  if (loadingStations) {
+  if (loadingStations || loadingKnmi) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-white/40" />
@@ -111,52 +136,33 @@ export function HistorieOverview() {
     );
   }
 
-  if (!station) {
+  if (!knmiStations || knmiStations.length === 0) {
     return (
       <div className="text-center py-24">
-        <p className="text-white/40">Geen weerstation gevonden. Ga eerst naar het Dashboard.</p>
-      </div>
-    );
-  }
-
-  if (!knmiCode) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-        <p className="text-white/60 text-sm">
-          {linkMutation.isPending ? 'KNMI meetstation wordt gekoppeld...' : 'KNMI meetstation koppelen...'}
-        </p>
-        {linkMutation.isError && (
-          <p className="text-red-400 text-sm">Koppeling mislukt. Probeer de pagina te herladen.</p>
-        )}
-      </div>
-    );
-  }
-
-  // Import in progress
-  if (!importStatus?.hasData) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-emerald-400" />
-        <p className="text-white/60 text-sm">
-          KNMI meetdata wordt geïmporteerd...
-        </p>
-        <p className="text-white/30 text-xs">
-          Dit kan enkele minuten duren (3 jaar aan uurdata)
-        </p>
+        <p className="text-white/40">Geen KNMI meetstations gevonden.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* Station info + controls */}
+      {/* Station picker + controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-white/60 text-sm">
-          <MapPin className="h-4 w-4" />
-          <span>KNMI meetstation: <strong className="text-white">{knmiCode}</strong></span>
-          {importStatus?.rowCount && (
-            <span className="text-white/30">({importStatus.rowCount} dagen)</span>
+          <MapPin className="h-4 w-4 text-emerald-400" />
+          <select
+            value={selectedStation ?? ''}
+            onChange={(e) => setSelectedStation(parseInt(e.target.value, 10))}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white"
+          >
+            {knmiStations.map((s) => (
+              <option key={s.code} value={s.code} className="bg-zinc-900">
+                {s.name} ({s.code})
+              </option>
+            ))}
+          </select>
+          {selectedStationInfo?.region && (
+            <span className="text-white/30 text-xs">{selectedStationInfo.region}</span>
           )}
         </div>
 
@@ -167,40 +173,74 @@ export function HistorieOverview() {
             onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
             className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white"
           >
-            {YEARS.map(y => (
-              <option key={y} value={y} className="bg-zinc-900">{y}</option>
+            {YEARS.map((y) => (
+              <option key={y} value={y} className="bg-zinc-900">
+                {y}
+              </option>
             ))}
           </select>
 
           {/* Compare selector */}
           <select
             value={compareYear ?? ''}
-            onChange={(e) => setCompareYear(e.target.value ? parseInt(e.target.value, 10) : null)}
+            onChange={(e) =>
+              setCompareYear(e.target.value ? parseInt(e.target.value, 10) : null)
+            }
             className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white"
           >
-            <option value="" className="bg-zinc-900">Vergelijk met...</option>
-            {YEARS.filter(y => y !== selectedYear).map(y => (
-              <option key={y} value={y} className="bg-zinc-900">{y}</option>
+            <option value="" className="bg-zinc-900">
+              Vergelijk met...
+            </option>
+            {YEARS.filter((y) => y !== selectedYear).map((y) => (
+              <option key={y} value={y} className="bg-zinc-900">
+                {y}
+              </option>
             ))}
           </select>
         </div>
       </div>
 
+      {/* Quick stats bar */}
+      {quickStats && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {[
+            { label: 'Gem. temp', value: quickStats.avgTemp !== null ? `${quickStats.avgTemp}\u00B0C` : '-', color: 'text-orange-400' },
+            { label: 'Neerslag', value: quickStats.totalPrecip !== null ? `${quickStats.totalPrecip} mm` : '-', color: 'text-blue-400' },
+            { label: 'Regendagen', value: String(quickStats.rainDays), color: 'text-blue-300' },
+            { label: 'Zon', value: quickStats.totalSunshine !== null ? `${quickStats.totalSunshine} u` : '-', color: 'text-yellow-400' },
+            { label: 'GDD\u2085', value: quickStats.totalGdd !== null ? String(quickStats.totalGdd) : '-', color: 'text-emerald-400' },
+            { label: 'Vorsturen', value: quickStats.totalFrost !== null ? String(quickStats.totalFrost) : '-', color: 'text-cyan-400' },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="bg-white/5 rounded-lg px-3 py-2 text-center"
+            >
+              <div className={`text-lg font-semibold ${stat.color}`}>{stat.value}</div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Tab navigation */}
       <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'bg-emerald-500/20 text-emerald-400'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.key
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'text-white/40 hover:text-white/60'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Chart content */}
@@ -209,8 +249,13 @@ export function HistorieOverview() {
           <Loader2 className="h-6 w-6 animate-spin text-white/40" />
         </div>
       ) : !dailyData || dailyData.length === 0 ? (
-        <div className="text-center py-16 text-white/40 text-sm">
-          Geen data beschikbaar voor {selectedYear}
+        <div className="text-center py-16 space-y-2">
+          <p className="text-white/40 text-sm">
+            Geen data beschikbaar voor {selectedStationInfo?.name ?? selectedStation} in {selectedYear}.
+          </p>
+          <p className="text-white/20 text-xs">
+            Data wordt dagelijks bijgewerkt via het KNMI.
+          </p>
         </div>
       ) : (
         <>

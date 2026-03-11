@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getKnmiCumulatives } from '@/lib/weather/knmi-service';
 
+// KNMI cumulative data is derived from public observations — no auth required
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const stationCode = searchParams.get('stationCode');
     const year = searchParams.get('year');

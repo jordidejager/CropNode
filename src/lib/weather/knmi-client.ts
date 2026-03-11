@@ -25,15 +25,11 @@ export type KnmiHourlyRow = {
 };
 
 /**
- * KNMI CDN URL for hourly data.
- * Format: uurgeg_{CODE}_{STARTYYYYMMDD}_{ENDYYYYMMDD}.zip
- * For "up to now", use end date = today or a future date like 9999.
+ * KNMI daggegevens API for hourly data.
+ * POST to https://www.daggegevens.knmi.nl/klimatologie/uurgegevens
+ * with form-encoded start, end, vars, stns parameters.
  */
-function buildKnmiUrl(stationCode: number, startDate: string, endDate: string): string {
-  const start = startDate.replace(/-/g, '');
-  const end = endDate.replace(/-/g, '');
-  return `https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/uurgegevens/uurgeg_${stationCode}_${start}_${end}.zip`;
-}
+const KNMI_HOURLY_API = 'https://www.daggegevens.knmi.nl/klimatologie/uurgegevens';
 
 /**
  * Extract text content from a ZIP buffer (single-file ZIP).
@@ -148,36 +144,30 @@ function parseKnmiLine(line: string): KnmiHourlyRow | null {
 
 /**
  * Fetch and parse KNMI hourly data for a station and date range.
- * Downloads from KNMI CDN (ZIP file containing CSV).
+ * Uses the daggegevens.knmi.nl POST API (returns plain CSV).
  */
 export async function fetchKnmiBulkHourly(
   stationCode: number,
   startDate: string,
   endDate: string
 ): Promise<KnmiHourlyRow[]> {
-  const url = buildKnmiUrl(stationCode, startDate, endDate);
-  console.log(`[KNMI] Downloading: ${url}`);
+  const start = startDate.replace(/-/g, '');
+  const end = endDate.replace(/-/g, '');
+  const body = `start=${start}&end=${end}&vars=ALL&stns=${stationCode}`;
 
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/zip, text/plain, */*',
-    },
+  console.log(`[KNMI] POST ${KNMI_HOURLY_API} (station ${stationCode}, ${startDate} → ${endDate})`);
+
+  const response = await fetch(KNMI_HOURLY_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
   });
 
   if (!response.ok) {
     throw new Error(`KNMI download failed: ${response.status} ${response.statusText} for station ${stationCode}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  let csvText: string;
-  try {
-    csvText = extractFromZip(buffer);
-  } catch {
-    // Fallback: try treating as plain text
-    csvText = buffer.toString('utf-8');
-  }
+  const csvText = await response.text();
 
   const lines = csvText.split('\n');
   const rows: KnmiHourlyRow[] = [];
@@ -199,7 +189,7 @@ export async function fetchKnmiBulkHourly(
 
 /**
  * Fetch recent KNMI data (last N days) for keeping observations current.
- * Uses the same bulk endpoint but with a narrow date range.
+ * Uses the same daggegevens API but with a narrow date range.
  */
 export async function fetchKnmiRecent(
   stationCode: number,
@@ -212,3 +202,6 @@ export async function fetchKnmiRecent(
   const fmt = (d: Date) => d.toISOString().split('T')[0];
   return fetchKnmiBulkHourly(stationCode, fmt(start), fmt(end));
 }
+
+// The extractFromZip and parseKnmiLine functions are kept for potential future use
+// with the KNMI CDN decade ZIP files (uurgeg_XXX_YYYY-YYYY.zip)
