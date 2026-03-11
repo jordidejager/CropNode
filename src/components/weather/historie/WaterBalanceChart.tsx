@@ -78,6 +78,7 @@ export function WaterBalanceChart({ data, compareData, year, compareYear }: Prop
             strokeWidth={1.5}
             dot={false}
             name="precip"
+            isAnimationActive={false}
           />
 
           {/* ET0 cumulative */}
@@ -88,6 +89,7 @@ export function WaterBalanceChart({ data, compareData, year, compareYear }: Prop
             strokeWidth={1.5}
             dot={false}
             name="et0"
+            isAnimationActive={false}
           />
 
           {/* Water balance area */}
@@ -99,6 +101,7 @@ export function WaterBalanceChart({ data, compareData, year, compareYear }: Prop
             fill="#10b981"
             fillOpacity={0.15}
             name="balance"
+            isAnimationActive={false}
           />
 
           {/* Compare balance */}
@@ -111,6 +114,7 @@ export function WaterBalanceChart({ data, compareData, year, compareYear }: Prop
               strokeDasharray="4 4"
               dot={false}
               name="cBalance"
+              isAnimationActive={false}
             />
           )}
         </ComposedChart>

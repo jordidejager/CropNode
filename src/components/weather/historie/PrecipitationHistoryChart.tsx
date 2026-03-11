@@ -108,6 +108,7 @@ export function PrecipitationHistoryChart({ data, compareData, year, compareYear
             fillOpacity={0.6}
             name="precip"
             maxBarSize={4}
+            isAnimationActive={false}
           />
 
           {/* Cumulative line */}
@@ -119,6 +120,7 @@ export function PrecipitationHistoryChart({ data, compareData, year, compareYear
             strokeWidth={2}
             dot={false}
             name="cumPrecip"
+            isAnimationActive={false}
           />
 
           {/* Compare cumulative */}
@@ -132,6 +134,7 @@ export function PrecipitationHistoryChart({ data, compareData, year, compareYear
               strokeDasharray="4 4"
               dot={false}
               name="cCumPrecip"
+              isAnimationActive={false}
             />
           )}
         </ComposedChart>

@@ -98,6 +98,7 @@ export function GddAccumulationChart({ data, compareData, year, compareYear }: P
             strokeWidth={2}
             dot={false}
             name="gdd"
+            isAnimationActive={false}
           />
           {compareYear && (
             <Line
@@ -108,6 +109,7 @@ export function GddAccumulationChart({ data, compareData, year, compareYear }: P
               strokeDasharray="4 4"
               dot={false}
               name="cGdd"
+              isAnimationActive={false}
             />
           )}
         </LineChart>

@@ -116,6 +116,7 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
             stackId="tempRange"
             name="tempMin"
             legendType="none"
+            isAnimationActive={false}
           />
           <Area
             type="monotone"
@@ -126,6 +127,7 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
             stackId="tempRange"
             name="tempRange"
             legendType="none"
+            isAnimationActive={false}
           />
 
           {/* Average temperature line */}
@@ -136,6 +138,7 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
             strokeWidth={2}
             dot={false}
             name="tempAvg"
+            isAnimationActive={false}
           />
 
           {/* Compare year */}
@@ -148,6 +151,7 @@ export function TemperatureHistoryChart({ data, compareData, year, compareYear }
               strokeDasharray="4 4"
               dot={false}
               name="cTempAvg"
+              isAnimationActive={false}
             />
           )}
         </ComposedChart>

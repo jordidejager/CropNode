@@ -331,16 +331,72 @@ import type {
   KnmiCumulativeData,
 } from '@/lib/weather/knmi-service';
 
+// ---- Direct Supabase client queries for KNMI data ----
+// KNMI tables have no RLS, so we query directly from the browser client.
+// This avoids Node.js 25 TLS issues with server-side Supabase connections.
+
+function mapKnmiStation(s: Record<string, unknown>): KnmiStation {
+  return {
+    code: s.code as number,
+    name: s.name as string,
+    latitude: Number(s.latitude),
+    longitude: Number(s.longitude),
+    elevationM: s.elevation_m ? Number(s.elevation_m) : null,
+    region: s.region as string | null,
+    isFruitRegion: s.is_fruit_region as boolean,
+    active: s.active as boolean,
+  };
+}
+
+function mapKnmiDaily(r: Record<string, unknown>): KnmiDailyData {
+  return {
+    stationCode: r.station_code as number,
+    date: r.date as string,
+    tempMinC: r.temp_min_c !== null ? Number(r.temp_min_c) : null,
+    tempMaxC: r.temp_max_c !== null ? Number(r.temp_max_c) : null,
+    tempAvgC: r.temp_avg_c !== null ? Number(r.temp_avg_c) : null,
+    precipitationSum: r.precipitation_sum !== null ? Number(r.precipitation_sum) : null,
+    humidityAvgPct: r.humidity_avg_pct !== null ? Number(r.humidity_avg_pct) : null,
+    windSpeedMaxMs: r.wind_speed_max_ms !== null ? Number(r.wind_speed_max_ms) : null,
+    windSpeedAvgMs: r.wind_speed_avg_ms !== null ? Number(r.wind_speed_avg_ms) : null,
+    sunshineHours: r.sunshine_hours !== null ? Number(r.sunshine_hours) : null,
+    solarRadiationSum: r.solar_radiation_sum !== null ? Number(r.solar_radiation_sum) : null,
+    et0EstimateMm: r.et0_estimate_mm !== null ? Number(r.et0_estimate_mm) : null,
+    pressureAvgHpa: r.pressure_avg_hpa !== null ? Number(r.pressure_avg_hpa) : null,
+    gddBase5: r.gdd_base5 !== null ? Number(r.gdd_base5) : null,
+    gddBase10: r.gdd_base10 !== null ? Number(r.gdd_base10) : null,
+    frostHours: r.frost_hours !== null ? Number(r.frost_hours) : null,
+    leafWetnessHrs: r.leaf_wetness_hrs !== null ? Number(r.leaf_wetness_hrs) : null,
+  };
+}
+
+function dayOfYear(dateStr: string): number {
+  const d = new Date(dateStr);
+  const start = new Date(d.getFullYear(), 0, 0);
+  const diff = d.getTime() - start.getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
 export function useKnmiStations(fruitOnly: boolean = false) {
   return useQuery({
     queryKey: weatherKeys.knmiStations,
     queryFn: async (): Promise<KnmiStation[]> => {
-      const res = await fetch(`/api/weather/knmi/stations?fruitOnly=${fruitOnly}`);
-      if (!res.ok) throw new Error('KNMI stations ophalen mislukt');
-      const json = await res.json();
-      return json.data as KnmiStation[];
+      const supabase = createClient();
+      let query = supabase
+        .from('knmi_stations')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+
+      if (fruitOnly) {
+        query = query.eq('is_fruit_region', true);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(mapKnmiStation);
     },
-    staleTime: 24 * 60 * 60 * 1000, // 24 hours — stations don't change
+    staleTime: 24 * 60 * 60 * 1000,
   });
 }
 
@@ -352,17 +408,22 @@ export function useKnmiDaily(
   return useQuery({
     queryKey: weatherKeys.knmiDaily(stationCode ?? 0, startDate, endDate),
     queryFn: async (): Promise<KnmiDailyData[]> => {
-      const res = await fetch(
-        `/api/weather/knmi/daily?stationCode=${stationCode}&start=${startDate}&end=${endDate}`
-      );
-      if (!res.ok) throw new Error('KNMI dagdata ophalen mislukt');
-      const json = await res.json();
-      return json.data as KnmiDailyData[];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('knmi_observations_daily')
+        .select('*')
+        .eq('station_code', stationCode!)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date');
+
+      if (error) throw error;
+      return (data || []).map(mapKnmiDaily);
     },
     enabled: stationCode !== null && !!startDate && !!endDate,
     staleTime: endDate < new Date().toISOString().split('T')[0]
-      ? Infinity // Past data never changes
-      : 6 * 60 * 60 * 1000, // Current year: 6 hours
+      ? Infinity
+      : 6 * 60 * 60 * 1000,
   });
 }
 
@@ -374,12 +435,28 @@ export function useKnmiSeasonComparison(
   return useQuery({
     queryKey: weatherKeys.knmiComparison(stationCode ?? 0, yearsKey),
     queryFn: async (): Promise<Record<number, KnmiDailyData[]>> => {
-      const res = await fetch(
-        `/api/weather/knmi/season-comparison?stationCode=${stationCode}&years=${yearsKey}`
-      );
-      if (!res.ok) throw new Error('Seizoensvergelijking ophalen mislukt');
-      const json = await res.json();
-      return json.data as Record<number, KnmiDailyData[]>;
+      const result: Record<number, KnmiDailyData[]> = {};
+      const supabase = createClient();
+
+      for (const year of years) {
+        const start = `${year}-01-01`;
+        const end = year === new Date().getFullYear()
+          ? new Date().toISOString().split('T')[0]
+          : `${year}-12-31`;
+
+        const { data, error } = await supabase
+          .from('knmi_observations_daily')
+          .select('*')
+          .eq('station_code', stationCode!)
+          .gte('date', start)
+          .lte('date', end)
+          .order('date');
+
+        if (error) throw error;
+        result[year] = (data || []).map(mapKnmiDaily);
+      }
+
+      return result;
     },
     enabled: stationCode !== null && years.length > 0,
     staleTime: 6 * 60 * 60 * 1000,
@@ -393,12 +470,44 @@ export function useKnmiCumulatives(
   return useQuery({
     queryKey: weatherKeys.knmiCumulatives(stationCode ?? 0, year),
     queryFn: async (): Promise<KnmiCumulativeData[]> => {
-      const res = await fetch(
-        `/api/weather/knmi/cumulatives?stationCode=${stationCode}&year=${year}`
-      );
-      if (!res.ok) throw new Error('Cumulatieve data ophalen mislukt');
-      const json = await res.json();
-      return json.data as KnmiCumulativeData[];
+      const supabase = createClient();
+      const startDate = `${year}-01-01`;
+      const endDate = year === new Date().getFullYear()
+        ? new Date().toISOString().split('T')[0]
+        : `${year}-12-31`;
+
+      const { data, error } = await supabase
+        .from('knmi_observations_daily')
+        .select('*')
+        .eq('station_code', stationCode!)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date');
+
+      if (error) throw error;
+      const dailyData = (data || []).map(mapKnmiDaily);
+
+      // Compute cumulatives client-side
+      let cumGdd5 = 0, cumGdd10 = 0, cumPrecip = 0, cumEt0 = 0, cumSunshine = 0;
+
+      return dailyData.map(d => {
+        if (d.gddBase5 !== null) cumGdd5 += d.gddBase5;
+        if (d.gddBase10 !== null) cumGdd10 += d.gddBase10;
+        if (d.precipitationSum !== null) cumPrecip += d.precipitationSum;
+        if (d.et0EstimateMm !== null) cumEt0 += d.et0EstimateMm;
+        if (d.sunshineHours !== null) cumSunshine += d.sunshineHours;
+
+        return {
+          date: d.date,
+          dayOfYear: dayOfYear(d.date),
+          cumulativeGddBase5: Math.round(cumGdd5 * 10) / 10,
+          cumulativeGddBase10: Math.round(cumGdd10 * 10) / 10,
+          cumulativePrecipitation: Math.round(cumPrecip * 10) / 10,
+          cumulativeEt0: Math.round(cumEt0 * 100) / 100,
+          cumulativeSunshine: Math.round(cumSunshine * 10) / 10,
+          waterBalance: Math.round((cumPrecip - cumEt0) * 10) / 10,
+        };
+      });
     },
     enabled: stationCode !== null && year > 0,
     staleTime: year < new Date().getFullYear() ? Infinity : 6 * 60 * 60 * 1000,
