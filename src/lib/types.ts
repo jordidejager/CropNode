@@ -129,6 +129,12 @@ export type ProductSource = 'ctgb' | 'fertilizer';
 
 export type RegistrationType = 'spraying' | 'spreading';
 
+export type ProductSuggestion = {
+  naam: string;
+  toelatingsnummer?: string;
+  score: number; // 0-100 match score
+};
+
 export type ProductEntry = {
   product: string;
   dosage: number;
@@ -137,6 +143,8 @@ export type ProductEntry = {
   targetReason?: string; // Doelorganisme uit gebruikersinvoer (bijv. "luis", "schurft")
   doelorganisme?: string; // Geselecteerd doelorganisme uit CTGB voorschriften
   availableDoelorganismen?: DoelorganismeOption[]; // Beschikbare opties uit CTGB (voor UI)
+  resolved?: boolean; // false = niet gevonden in CTGB/meststoffen database
+  suggestions?: ProductSuggestion[]; // "Bedoel je...?" alternatieven
 };
 
 export type ParsedSprayData = {

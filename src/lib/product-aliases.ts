@@ -8,7 +8,7 @@
  */
 
 import { getParcelHistoryEntries, getUserPreferences, getAllCtgbProducts } from './supabase-store';
-import type { CtgbProduct, ParcelHistoryEntry, UserPreference } from './types';
+import type { CtgbProduct, ParcelHistoryEntry, UserPreference, ProductSuggestion } from './types';
 
 // ============================================
 // Statische Alias Mapping
@@ -255,6 +255,114 @@ function fuzzyMatchCtgbName(input: string, ctgbProducts: Array<{ naam: string }>
     }
 
     return bestMatch;
+}
+
+// ============================================
+// Product Suggestions (voor onbekende producten)
+// ============================================
+
+const FRUIT_REGEX = /appel|peer|pit.?fruit|kern.?fruit|fruit/i;
+
+/**
+ * Genereer "Bedoel je...?" suggesties voor een onbekend product.
+ * Zoekt via Levenshtein, substring match, en werkzame stof matching.
+ * Retourneert top-3 matches gesorteerd op score.
+ */
+export function getProductSuggestions(
+    input: string,
+    allProducts: Array<{ naam: string; toelatingsnummer: string; werkzameStoffen?: string[]; gebruiksvoorschriften?: Array<{ gewas?: string }> }>
+): ProductSuggestion[] {
+    const normalized = input.toLowerCase().trim();
+    if (normalized.length < 2) return [];
+
+    // Filter op fruit-relevante producten
+    const fruitProducts = allProducts.filter(p =>
+        (p.gebruiksvoorschriften || []).some(g => FRUIT_REGEX.test(g.gewas || ''))
+    );
+
+    const scored: Array<ProductSuggestion & { _sort: number }> = [];
+
+    // Split input into words for multi-word matching
+    const inputWords = normalized.split(/[\s-]+/).filter(w => w.length >= 3);
+
+    for (const product of fruitProducts) {
+        const naam = product.naam.toLowerCase();
+        const naamWords = naam.split(/[\s-]+/);
+        const firstWord = naamWords[0];
+        let score = 0;
+
+        // 1. Levenshtein op eerste woord van product vs input (of input-woorden)
+        const dist = levenshteinDistance(normalized, firstWord);
+        if (dist === 0) {
+            score = 95;
+        } else if (dist === 1 && firstWord.length >= 4) {
+            score = 85;
+        } else if (dist === 2 && firstWord.length >= 5) {
+            score = 70;
+        }
+
+        // 1b. Levenshtein per input-woord tegen elk productwoord
+        if (score === 0) {
+            for (const iw of inputWords) {
+                for (const nw of naamWords) {
+                    if (nw.length < 3) continue;
+                    const d = levenshteinDistance(iw, nw);
+                    if (d === 0 && nw.length >= 4) {
+                        score = Math.max(score, 80);
+                    } else if (d === 1 && nw.length >= 4) {
+                        score = Math.max(score, 70);
+                    }
+                }
+            }
+        }
+
+        // 2. Substring match
+        if (score === 0) {
+            if (naam.includes(normalized) && normalized.length >= 3) {
+                score = 75;
+            } else if (normalized.includes(firstWord) && firstWord.length >= 4) {
+                score = 65;
+            }
+            // Also check individual input words against product name
+            if (score === 0) {
+                for (const iw of inputWords) {
+                    if (naam.includes(iw) && iw.length >= 4) {
+                        score = Math.max(score, 60);
+                    }
+                }
+            }
+        }
+
+        // 3. Werkzame stof match
+        if (score === 0 && product.werkzameStoffen) {
+            for (const stof of product.werkzameStoffen) {
+                const stofLower = stof.toLowerCase();
+                if (stofLower.includes(normalized) || normalized.includes(stofLower)) {
+                    score = 55;
+                    break;
+                }
+                // Check input words against stof
+                for (const iw of inputWords) {
+                    if (stofLower.includes(iw) || iw.includes(stofLower)) {
+                        score = Math.max(score, 50);
+                    }
+                }
+            }
+        }
+
+        if (score > 0) {
+            scored.push({
+                naam: product.naam,
+                toelatingsnummer: product.toelatingsnummer,
+                score,
+                _sort: score,
+            });
+        }
+    }
+
+    // Sorteer op score (hoog → laag), neem top 3
+    scored.sort((a, b) => b._sort - a._sort);
+    return scored.slice(0, 3).map(({ _sort, ...s }) => s);
 }
 
 // ============================================

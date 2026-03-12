@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ConfidenceBreakdown, ProductSource } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, ProductSuggestion, ConfidenceBreakdown, ProductSource } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DoelorganismeSelector } from '@/components/doelorganisme-selector';
@@ -50,6 +50,7 @@ interface RegistrationGroupCardProps {
     onEditUnit: (unit: SprayRegistrationUnit) => void;
     onRemoveUnit: (unitId: string) => void;
     onCancelAll: () => void;
+    onProductUpdate?: (unitId: string, productIndex: number, update: Partial<ProductEntry>) => void;
 }
 
 // Helper function to extract main parcel name from sub-parcel name
@@ -189,6 +190,7 @@ function UnitPanel({
     onConfirm,
     onEdit,
     onRemove,
+    onProductUpdate,
 }: {
     unit: SprayRegistrationUnit;
     allParcels: ParcelLike[];
@@ -200,6 +202,7 @@ function UnitPanel({
     onConfirm: () => void;
     onEdit: () => void;
     onRemove: () => void;
+    onProductUpdate?: (productIndex: number, update: Partial<ProductEntry>) => void;
 }) {
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -371,7 +374,12 @@ function UnitPanel({
                                 </div>
                                 <div className="space-y-2">
                                     {productTotals.map((product, i) => (
-                                        <div key={`product-${i}`} className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]">
+                                        <div key={`product-${i}`} className={cn(
+                                            "rounded-lg p-3 border",
+                                            product.resolved === false
+                                                ? "bg-amber-500/[0.05] border-amber-500/20"
+                                                : "bg-white/[0.03] border-white/[0.06]"
+                                        )}>
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-1.5">
@@ -381,24 +389,61 @@ function UnitPanel({
                                                                 meststof
                                                             </span>
                                                         )}
+                                                        {product.resolved === false && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 flex-shrink-0">
+                                                                onbekend
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     {product.targetReason && (
                                                         <p className="text-xs text-white/40 mt-0.5">{product.targetReason}</p>
                                                     )}
+                                                    {/* Suggestions for unknown products */}
+                                                    {product.resolved === false && product.suggestions && product.suggestions.length > 0 && !isConfirmed && (
+                                                        <div className="mt-2 space-y-1.5">
+                                                            <p className="text-[11px] text-amber-400/70">Bedoel je:</p>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {product.suggestions.map((s) => (
+                                                                    <button
+                                                                        key={s.naam}
+                                                                        onClick={() => onProductUpdate?.(i, {
+                                                                            product: s.naam,
+                                                                            resolved: true,
+                                                                            suggestions: undefined,
+                                                                        })}
+                                                                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 transition-colors"
+                                                                    >
+                                                                        {s.naam}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => onProductUpdate?.(i, { suggestions: undefined })}
+                                                                className="text-[10px] text-white/30 hover:text-white/50 transition-colors"
+                                                            >
+                                                                Later toewijzen
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                     {/* Doelorganisme Display (read-only in group card) */}
-                                                    <div className="mt-1.5">
-                                                        <DoelorganismeSelector
-                                                            productName={product.product}
-                                                            gewas={primaryCrop}
-                                                            selectedDoelorganisme={product.doelorganisme}
-                                                            onSelect={() => {}} // Read-only in group card
-                                                            disabled={isConfirmed}
-                                                            compact
-                                                        />
-                                                    </div>
+                                                    {product.resolved !== false && (
+                                                        <div className="mt-1.5">
+                                                            <DoelorganismeSelector
+                                                                productName={product.product}
+                                                                gewas={primaryCrop}
+                                                                selectedDoelorganisme={product.doelorganisme}
+                                                                onSelect={() => {}} // Read-only in group card
+                                                                disabled={isConfirmed}
+                                                                compact
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="text-right flex-shrink-0 ml-3">
-                                                    <span className="text-sm font-medium text-emerald-400">
+                                                    <span className={cn(
+                                                        "text-sm font-medium",
+                                                        product.resolved === false ? "text-amber-400" : "text-emerald-400"
+                                                    )}>
                                                         {product.dosage} {product.unit?.includes('/ha') ? product.unit : `${product.unit}/ha`}
                                                     </span>
                                                     <p className="text-[10px] text-white/30 mt-0.5">
@@ -565,7 +610,8 @@ export function RegistrationGroupCard({
     onConfirmAll,
     onEditUnit,
     onRemoveUnit,
-    onCancelAll
+    onCancelAll,
+    onProductUpdate
 }: RegistrationGroupCardProps) {
     // Track which units are expanded - default: first one expanded
     const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(() => {
@@ -630,6 +676,7 @@ export function RegistrationGroupCard({
                         onConfirm={() => onConfirmUnit(unit)}
                         onEdit={() => onEditUnit(unit)}
                         onRemove={() => onRemoveUnit(unit.id)}
+                        onProductUpdate={onProductUpdate ? (idx, update) => onProductUpdate(unit.id, idx, update) : undefined}
                     />
                 ))}
             </div>

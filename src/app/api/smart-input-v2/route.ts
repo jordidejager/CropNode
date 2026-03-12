@@ -13,7 +13,7 @@ import { requestContext } from '@/lib/request-context';
 import { classifyAndParseSpray } from '@/ai/flows/classify-and-parse-spray';
 import { registrationAgent, registrationAgentStream, type AgentOutput } from '@/ai/flows/registration-agent';
 import { validateParsedSprayData } from '@/lib/validation-service';
-import { resolveProductAliases } from '@/lib/product-aliases';
+import { resolveProductAliases, getProductSuggestions } from '@/lib/product-aliases';
 import {
     getSprayableParcels,
     getAllCtgbProducts,
@@ -1167,19 +1167,24 @@ async function handleFirstMessage(
         });
     }
 
-    // Step 8: Check for unknown products (BUG-004 fix)
-    // Products with source='fertilizer' are already resolved - skip those
+    // Step 8: Check for unknown products - enrich with resolved flag + suggestions
     const unknownProducts: string[] = [];
     for (const prod of products) {
-        // Skip if already identified as fertilizer
-        if (prod.source === 'fertilizer') continue;
+        if (prod.source === 'fertilizer') {
+            prod.resolved = true;
+            continue;
+        }
 
         const ctgbMatch = allProducts.find(cp =>
             cp.naam.toLowerCase() === prod.product.toLowerCase() ||
             cp.naam.toLowerCase().includes(prod.product.toLowerCase()) ||
             prod.product.toLowerCase().includes(cp.naam.toLowerCase())
         );
-        if (!ctgbMatch) {
+        if (ctgbMatch) {
+            prod.resolved = true;
+        } else {
+            prod.resolved = false;
+            prod.suggestions = getProductSuggestions(prod.product, allProducts);
             unknownProducts.push(prod.product);
         }
     }
@@ -1187,11 +1192,18 @@ async function handleFirstMessage(
     if (unknownProducts.length > 0) {
         const names = unknownProducts.join(', ');
         console.log(`[${context}] Unknown products detected: ${names}`);
-        validationFlags.push({
-            type: 'error',
-            message: `Onbekend middel: "${names}". Dit product is niet gevonden in de CTGB of meststoffen database. Controleer de naam en probeer opnieuw.`,
-            field: 'products',
-        });
+        // Warning ipv error - blokkeer de draft niet
+        for (const name of unknownProducts) {
+            const prod = products.find(p => p.product === name);
+            const suggestionText = prod?.suggestions?.length
+                ? ` Bedoel je: ${prod.suggestions.map(s => s.naam).join(', ')}?`
+                : '';
+            validationFlags.push({
+                type: 'warning',
+                message: `"${name}" is niet gevonden in de CTGB database.${suggestionText} Je kunt het product later toewijzen.`,
+                field: 'products',
+            });
+        }
     }
 
     // Step 9: Generate human summary
@@ -1210,12 +1222,8 @@ async function handleFirstMessage(
     const needsDosage = products.some(p => p.dosage === 0);
     // Track whether user intended to specify plots (for BUG-005 fix)
     const userSpecifiedPlots = preProcessed.preResolvedPlots !== null || (sprayData.plots && sprayData.plots.length > 0);
-    const hasUnknownProducts = unknownProducts.length > 0;
 
-    if (hasUnknownProducts && products.length === unknownProducts.length) {
-        // ALL products are unknown - ask for correct product name
-        humanSummary = `Onbekend middel "${unknownProducts[0]}". Welk middel bedoel je?`;
-    } else if (plots.length === 0 && products.length > 0 && needsDosage && userSpecifiedPlots) {
+    if (plots.length === 0 && products.length > 0 && needsDosage && userSpecifiedPlots) {
         // User specified plots AND products but plots failed to resolve AND dosage is missing
         // BUG-005 fix: prioritize the most helpful question
         humanSummary = `Kon de percelen niet herkennen. Welke percelen bedoel je?`;
@@ -1235,10 +1243,9 @@ async function handleFirstMessage(
     }
 
     // Determine response action
+    // Unknown products no longer block draft creation - they get warning flags + suggestions
     let responseAction: SmartInputV2Response['action'] = 'new_draft';
-    if (hasUnknownProducts && products.length === unknownProducts.length) {
-        responseAction = 'clarification_needed'; // Block: all products unknown
-    } else if (needsDosage) {
+    if (needsDosage) {
         responseAction = 'clarification_needed';
     } else if (plots.length === 0) {
         responseAction = 'clarification_needed';

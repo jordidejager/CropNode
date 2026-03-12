@@ -17,7 +17,7 @@ import type {
     ClarificationRequest,
     SmartInputUserContext,
 } from '@/lib/types-v2';
-import type { SprayRegistrationGroup, SprayRegistrationUnit } from '@/lib/types';
+import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -564,6 +564,22 @@ export default function SmartInputV2Page() {
         toast({ title: 'Verwijderd' });
     }, [toast]);
 
+    // Handle product update (e.g. selecting a suggestion for unknown product)
+    const handleProductUpdate = React.useCallback((unitId: string, productIndex: number, update: Partial<ProductEntry>) => {
+        setState(prev => {
+            if (!prev.draft) return prev;
+            const newUnits = prev.draft.units.map(u => {
+                if (u.id !== unitId) return u;
+                const newProducts = [...u.products];
+                if (productIndex >= 0 && productIndex < newProducts.length) {
+                    newProducts[productIndex] = { ...newProducts[productIndex], ...update };
+                }
+                return { ...u, products: newProducts };
+            });
+            return { ...prev, draft: { ...prev.draft, units: newUnits } };
+        });
+    }, []);
+
     // Status panel content
     const statusPanelContent = state.draft ? (
         <RegistrationGroupCard
@@ -575,6 +591,7 @@ export default function SmartInputV2Page() {
             onEditUnit={handleEditUnit}
             onRemoveUnit={handleRemoveUnit}
             onCancelAll={handleCancelDraft}
+            onProductUpdate={handleProductUpdate}
         />
     ) : (
         <EmptyStatusPanel />
