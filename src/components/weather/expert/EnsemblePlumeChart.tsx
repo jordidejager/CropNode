@@ -21,18 +21,22 @@ const MODEL_COLORS: Record<EnsembleModel, string> = {
   gfs: '#dc2626',
 };
 
+const COMBINED_COLOR = '#8b5cf6'; // purple for combined
+
 interface EnsemblePlumeChartProps {
   data: EnsembleStatsData;
   variable: WeatherVariable;
   model: EnsembleModel;
+  isCombined?: boolean;
 }
 
 export function EnsemblePlumeChart({
   data,
   variable,
   model,
+  isCombined = false,
 }: EnsemblePlumeChartProps) {
-  const color = MODEL_COLORS[model];
+  const color = isCombined ? COMBINED_COLOR : MODEL_COLORS[model];
   const unit = getVariableUnit(variable);
 
   // Transform stats into Recharts-compatible format

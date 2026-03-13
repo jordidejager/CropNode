@@ -16,6 +16,7 @@ import { HourlyForecastStrip } from './HourlyForecastStrip';
 import { RainForecast } from './RainForecast';
 import { WeeklyForecast } from './WeeklyForecast';
 import { UpcomingSprayWindows } from './UpcomingSprayWindows';
+import { CurrentSeasonWidget } from './CurrentSeasonWidget';
 import { LastUpdated } from './LastUpdated';
 import { WeatherDashboardSkeleton } from './WeatherDashboardSkeleton';
 import { WeatherEmptyState } from './WeatherEmptyState';
@@ -198,11 +199,20 @@ export function WeatherDashboard() {
             <HourlyForecastStrip hourlyData={allHourlyData} />
           )}
 
-          {/* Section 4: Buienradar Neerslag (radar + 2-uur grafiek) */}
+          {/* Section: Current Season KNMI Summary */}
+          {activeStation?.knmiStationId && (
+            <CurrentSeasonWidget
+              knmiStationId={activeStation.knmiStationId}
+              stationName={activeStation.name}
+            />
+          )}
+
+          {/* Section 4: Buienradar Neerslag (radar + 2/8/24-uur grafiek) */}
           {activeStation && (
             <RainForecast
               lat={activeStation.latitude}
               lon={activeStation.longitude}
+              hourlyData={allHourlyData}
             />
           )}
 

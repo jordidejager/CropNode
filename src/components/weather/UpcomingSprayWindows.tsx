@@ -137,9 +137,9 @@ export function UpcomingSprayWindows({ hourlyData }: UpcomingSprayWindowsProps) 
   }
   flushWindow();
 
-  // Sort by score (best first), take top 5
+  // Sort chronologically (nearest first), take top 5
   const topWindows = windows
-    .sort((a, b) => b.avgScore - a.avgScore)
+    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     .slice(0, 5);
 
   if (topWindows.length === 0) {

@@ -3,15 +3,17 @@
 import { cn } from '@/lib/utils';
 
 export type EnsembleModel = 'ecmwf_ifs' | 'gfs';
+export type EnsembleViewMode = 'combined' | 'ecmwf_ifs' | 'gfs';
 
-const MODELS: { key: EnsembleModel; label: string; members: number }[] = [
-  { key: 'ecmwf_ifs', label: 'ECMWF', members: 51 },
-  { key: 'gfs', label: 'GFS', members: 31 },
+const MODELS: { key: EnsembleViewMode; label: string; sub?: string }[] = [
+  { key: 'combined', label: 'Gecombineerd', sub: '82' },
+  { key: 'ecmwf_ifs', label: 'ECMWF', sub: '51' },
+  { key: 'gfs', label: 'GFS', sub: '31' },
 ];
 
 interface ModelSelectorProps {
-  selected: EnsembleModel;
-  onChange: (model: EnsembleModel) => void;
+  selected: EnsembleViewMode;
+  onChange: (model: EnsembleViewMode) => void;
 }
 
 export function ModelSelector({ selected, onChange }: ModelSelectorProps) {
@@ -29,7 +31,7 @@ export function ModelSelector({ selected, onChange }: ModelSelectorProps) {
           )}
         >
           {m.label}
-          <span className="ml-1 opacity-50">({m.members})</span>
+          {m.sub && <span className="ml-1 opacity-50">({m.sub})</span>}
         </button>
       ))}
     </div>
