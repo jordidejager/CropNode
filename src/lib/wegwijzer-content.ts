@@ -137,7 +137,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Overzicht per perceel: welk product, welke dosering, welke datum',
       'Exporteerbaar voor co\u00f6peratie of NVWA-controle',
     ],
-    voorbeeld: 'Open Spuitschrift voor perceel "Luisweg" en je ziet een tabel:\n\n| Datum | Product | Dosering | Gewas |\n| 15-03 | Captan 500 SC | 0.5 kg/ha | Peer |\n| 15-03 | Delan WG | 0.5 kg/ha | Peer |\n| 22-03 | Merpan | 0.75 kg/ha | Peer |',
+    voorbeeld: 'Open Spuitschrift voor perceel "Thuis" en je ziet een tabel:\n\n| Datum | Product | Dosering | Gewas |\n| 15-03 | Captan 500 SC | 0.5 kg/ha | Peer |\n| 15-03 | Delan WG | 0.5 kg/ha | Peer |\n| 22-03 | Merpan | 0.75 kg/ha | Peer |',
     tips: [
       'Check regelmatig of alle bespuitingen correct zijn geregistreerd',
       'Het Spuitschrift is je bewijs bij een NVWA-controle',
@@ -261,7 +261,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Later koppelbaar aan resultaten van het vision-systeem op de oogstmachine',
       'Bouw seizoen na seizoen een oogsthistorie op per perceel',
     ],
-    voorbeeld: 'Perceel "Luisweg" \u2014 Oogst 15 september:\n\u2022 Conference Klasse I: 12.000 kg\n\u2022 Conference Klasse II: 3.000 kg\n\u2022 Industrie: 800 kg',
+    voorbeeld: 'Perceel "Thuis" \u2014 Oogst 15 september:\n\u2022 Conference Klasse I: 12.000 kg\n\u2022 Conference Klasse II: 3.000 kg\n\u2022 Industrie: 800 kg',
     tips: [
       'Registreer direct na het plukken voor de meest accurate data',
       'Vergelijk jaarlijks je opbrengsten per perceel',
@@ -287,7 +287,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Visueel overzicht van bezetting en bewaarduur',
       'In- en uitslag registreren',
     ],
-    voorbeeld: 'Cel 1 plattegrond: 4 rijen \u00d7 8 posities\n\u2022 Positie A1-A4: Conference van Luisweg, inslag 20 sept, 80 kisten\n\u2022 Positie B1-B8: Elstar van Blok 3, inslag 25 sept, 160 kisten',
+    voorbeeld: 'Cel 1 plattegrond: 4 rijen \u00d7 8 posities\n\u2022 Positie A1-A4: Conference van Thuis, inslag 20 sept, 80 kisten\n\u2022 Positie B1-B8: Elstar van Blok 3, inslag 25 sept, 160 kisten',
     tips: [
       'Teken je plattegrond \u00e9\u00e9n keer, daarna alleen vullen en legen',
       'Handig om te zien hoeveel ruimte er nog is voor de volgende partij',
@@ -312,7 +312,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Vergelijk percelen onderling: kg/ha, kwaliteitsverdeling, maatsortering',
       'Later: correlaties met Crop Care data (welke behandelingen \u2192 welke opbrengst)',
     ],
-    voorbeeld: 'Grafiek toont: Luisweg levert consistent 15% meer Klasse I dan Het Achterveld, terwijl beide hetzelfde bespuitingsschema krijgen \u2192 misschien ligt het aan de grondsoort of het microklimaat.',
+    voorbeeld: 'Grafiek toont: Thuis levert consistent 15% meer Klasse I dan Het Achterveld, terwijl beide hetzelfde bespuitingsschema krijgen \u2192 misschien ligt het aan de grondsoort of het microklimaat.',
     tips: [
       'Hoe meer seizoenen data, hoe waardevoller de analyses',
       'Dit wordt d\u00e9 plek waar input \u00d7 output samenkomt',
@@ -337,7 +337,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Kwaliteitsklassen: Klasse I, II, industrie',
       'Later: directe koppeling met vision-systeem voor grondkleur, vruchtgrootte en defecten per boom',
     ],
-    voorbeeld: 'Perceel "Luisweg" seizoen 2025:\n\u2022 60-65 mm: 15%\n\u2022 65-70 mm: 35%\n\u2022 70-75 mm: 30%\n\u2022 75-80 mm: 15%\n\u2022 80+ mm: 5%',
+    voorbeeld: 'Perceel "Thuis" seizoen 2025:\n\u2022 60-65 mm: 15%\n\u2022 65-70 mm: 35%\n\u2022 70-75 mm: 30%\n\u2022 75-80 mm: 15%\n\u2022 80+ mm: 5%',
     tips: [
       'Track je maatsortering over de jaren om het effect van dunacties te meten',
       'Vision-data maakt dit op termijn per-boom nauwkeurig',
@@ -388,7 +388,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
       'Registreer uren per persoon, per activiteit, per perceel',
       'Overzicht van wie wat heeft gedaan',
     ],
-    voorbeeld: '\u2022 Jan \u2014 8 uur snoeien \u2014 Blok 1 t/m 3 \u2014 14 maart\n\u2022 Piet \u2014 4 uur plukken \u2014 Luisweg \u2014 15 september',
+    voorbeeld: '\u2022 Jan \u2014 8 uur snoeien \u2014 Blok 1 t/m 3 \u2014 14 maart\n\u2022 Piet \u2014 4 uur plukken \u2014 Thuis \u2014 15 september',
     tips: [
       'Handig voor loonberekeningen en planning',
       'Koppel uren aan percelen voor een compleet kostenoverzicht per perceel',
