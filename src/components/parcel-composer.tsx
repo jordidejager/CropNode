@@ -169,7 +169,7 @@ export function ParcelComposer({
                             return (
                                 <div key={index} className="flex gap-3 items-end bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all">
                                     <div className="w-32 space-y-2">
-                                        <Label className="text-[10px] uppercase font-bold text-white/50">Naam (Blok)</Label>
+                                        <Label className="text-[10px] uppercase font-bold text-white/50">Naam Subperceel (optioneel)</Label>
                                         <Input
                                             value={item.name}
                                             onChange={(e) => updateItem(index, 'name', e.target.value)}
