@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import {
     getParcels,
     getSprayableParcels,  // New: uses v_sprayable_parcels view
+    getParcelGroups,
     getLogbookEntries,
     getSpuitschriftEntries,
     getAllCtgbProducts,
@@ -107,6 +108,7 @@ export const queryKeys = {
     // Parcels
     parcels: ['parcels'] as const,
     parcel: (id: string) => ['parcels', id] as const,
+    parcelGroups: ['parcel-groups'] as const,
 
     // Logbook (Slimme Invoer)
     logbookEntries: ['logbook'] as const,
@@ -190,6 +192,14 @@ export function useParcels() {
         queryKey: queryKeys.parcels,
         queryFn: getSprayableParcels,  // Uses new view
         staleTime: 10 * 60 * 1000, // 10 minutes - parcels don't change often
+    });
+}
+
+export function useParcelGroups() {
+    return useQuery({
+        queryKey: queryKeys.parcelGroups,
+        queryFn: getParcelGroups,
+        staleTime: 10 * 60 * 1000,
     });
 }
 
@@ -459,6 +469,7 @@ export function useInvalidateQueries() {
         invalidateLogbook: () => queryClient.invalidateQueries({ queryKey: queryKeys.logbookEntries }),
         invalidateSpuitschrift: () => queryClient.invalidateQueries({ queryKey: queryKeys.spuitschriftEntries }),
         invalidateParcels: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcels }),
+        invalidateParcelGroups: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcelGroups }),
         invalidateInventory: () => queryClient.invalidateQueries({ queryKey: queryKeys.inventoryMovements }),
         invalidateAll: () => queryClient.invalidateQueries(),
         invalidateDashboard: () => queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),

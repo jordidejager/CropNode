@@ -20,10 +20,19 @@ export type WeightedValue<T> = {
   percentage: number; // 0-100
 };
 
+export type ParcelGroup = {
+  id: string;
+  name: string;
+  memberCount?: number;
+  subParcelIds?: string[];
+  createdAt?: Date;
+};
+
 export type SubParcel = {
   id: string;
   parcelId: string;
   name?: string; // e.g. "V-haag", "Nieuw"
+  synonyms?: string[]; // Alternative names for Smart Input matching
   crop: string;
   variety: string;
   varietyMutant?: string; // Legacy/Fallback

@@ -388,7 +388,8 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
  */
 function resolveParcelNamesToIds(
     rawPlots: string[],
-    allParcels: SprayableParcel[]
+    allParcels: SprayableParcel[],
+    parcelGroups?: Array<{ id: string; name: string; subParcelIds: string[] }>
 ): string[] {
     const resolvedIds = new Set<string>();
 
@@ -407,7 +408,20 @@ function resolveParcelNamesToIds(
             continue;
         }
 
-        // 2. Check for exact name match
+        // 2. Check for parcel group name match
+        if (parcelGroups) {
+            const groupMatch = parcelGroups.find(
+                g => g.name.toLowerCase() === normalized
+            );
+            if (groupMatch && groupMatch.subParcelIds.length > 0) {
+                groupMatch.subParcelIds.forEach(id => resolvedIds.add(id));
+                matchType = 'group';
+                console.log(`[resolveParcelNamesToIds] "${raw}" → group "${groupMatch.name}": ${groupMatch.subParcelIds.length} parcels`);
+                continue;
+            }
+        }
+
+        // 3. Check for exact name match
         const exactNameMatch = allParcels.find(
             p => p.name.toLowerCase() === normalized
         );
@@ -418,7 +432,18 @@ function resolveParcelNamesToIds(
             continue;
         }
 
-        // 3. Check for variety match (e.g., "conference", "elstar")
+        // 4. Check for synonym match
+        const synonymMatches = allParcels.filter(p =>
+            p.synonyms?.some(s => s.toLowerCase() === normalized)
+        );
+        if (synonymMatches.length > 0) {
+            synonymMatches.forEach(p => resolvedIds.add(p.id));
+            matchType = 'synonym';
+            console.log(`[resolveParcelNamesToIds] "${raw}" → synonym match: ${synonymMatches.length} parcels (${synonymMatches.map(p => p.name).join(', ')})`);
+            continue;
+        }
+
+        // 5. Check for variety match (e.g., "conference", "elstar")
         // Only match if variety has content (avoid empty string matching everything)
         const varietyMatches = allParcels.filter(p => {
             const variety = p.variety?.toLowerCase();
@@ -808,6 +833,17 @@ async function handleFirstMessage(
         console.log(`[${context}] Database context: ${allParcels.length} parcels, ${allProducts.length} products, ${allFertilizers.length} fertilizers`);
     }
 
+    // Step 1a: Fetch parcel groups (always from DB, lightweight query)
+    let parcelGroups: Array<{ id: string; name: string; subParcelIds: string[] }> = [];
+    try {
+        parcelGroups = await getParcelGroupsWithMemberIds();
+        if (parcelGroups.length > 0) {
+            console.log(`[${context}] Loaded ${parcelGroups.length} parcel groups: ${parcelGroups.map(g => `"${g.name}" (${g.subParcelIds.length})`).join(', ')}`);
+        }
+    } catch (e) {
+        console.warn(`[${context}] Failed to load parcel groups:`, e);
+    }
+
     // Step 1b: Pre-process crop selection and exceptions (deterministic, no AI needed)
     const preProcessed = preprocessCropSelection(message, allParcels);
     console.log(`[${context}] Pre-processing: preResolved=${preProcessed.preResolvedPlots?.length ?? 'none'}, excluded=${preProcessed.excludedPlots.length}, hasExclusion=${preProcessed.hasExclusion}`);
@@ -821,8 +857,11 @@ async function handleFirstMessage(
             name: p.name,
             crop: p.crop,
             variety: p.variety,
+            ...(p.synonyms?.length ? { synonyms: p.synonyms } : {}),
         }))
-    );
+    ) + (parcelGroups.length > 0
+        ? `\nGroepen: ${parcelGroups.map(g => `"${g.name}" (${g.subParcelIds.length} percelen)`).join(', ')}`
+        : '');
 
     const combinedResult = await classifyAndParseSpray({
         userInput: message,
@@ -894,7 +933,7 @@ async function handleFirstMessage(
         for (const reg of sprayData.registrations) {
             // Resolve plots for this unit
             const rawPlots = reg.plots || [];
-            let resolvedPlots = resolveParcelNamesToIds(rawPlots, allParcels);
+            let resolvedPlots = resolveParcelNamesToIds(rawPlots, allParcels, parcelGroups);
 
             // If AI resolution failed for this unit, try pre-processing as fallback
             if (resolvedPlots.length === 0 && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
@@ -981,7 +1020,7 @@ async function handleFirstMessage(
 
         // Resolve plots: try AI resolution first, then fall back to pre-processing
         const rawPlots: string[] = sprayData.plots || [];
-        let plots: string[] = resolveParcelNamesToIds(rawPlots, allParcels);
+        let plots: string[] = resolveParcelNamesToIds(rawPlots, allParcels, parcelGroups);
 
         // If AI resolution failed but pre-processing found plots, use pre-processing
         if (plots.length === 0 && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
@@ -1356,6 +1395,14 @@ async function handleAgentMessage(
         allParcels = await getSprayableParcels();
     }
 
+    // Fetch parcel groups for name resolution
+    let parcelGroups: Array<{ id: string; name: string; subParcelIds: string[] }> = [];
+    try {
+        parcelGroups = await getParcelGroupsWithMemberIds();
+    } catch (e) {
+        console.warn(`[${context}] Agent: Failed to load parcel groups:`, e);
+    }
+
     const parcelContext = allParcels.map(p => ({
         id: p.id,
         name: p.name,
@@ -1442,7 +1489,7 @@ async function handleAgentMessage(
                 units: finalOutput.updatedDraft.units.map(u => ({
                     id: u.id,
                     // Resolve any parcel names to IDs (agent might return names)
-                    plots: resolveParcelNamesToIds(u.plots, allParcels),
+                    plots: resolveParcelNamesToIds(u.plots, allParcels, parcelGroups),
                     products: u.products,
                     label: u.label,
                     status: u.status,

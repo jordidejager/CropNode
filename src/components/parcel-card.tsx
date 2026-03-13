@@ -81,6 +81,11 @@ export function ParcelCard({ parcel, onClick, index }: ParcelCardProps) {
                             </Badge>
                         )}
                     </div>
+                    {parcel.synonyms?.length > 0 && (
+                        <p className="text-[10px] text-white/20 italic">
+                            aka {parcel.synonyms.join(', ')}
+                        </p>
+                    )}
                 </div>
                 <div className="h-10 w-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <ChevronRight className="h-5 w-5 text-white/20 group-hover:text-primary transition-colors" />

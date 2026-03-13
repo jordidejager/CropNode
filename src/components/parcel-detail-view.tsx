@@ -15,7 +15,7 @@ import {
     SpuitschriftEntry,
     WeightedValue
 } from "@/lib/types"
-import { updateSubParcel } from "@/lib/supabase-store"
+import { updateSubParcel, updateParcelSynonyms } from "@/lib/supabase-store"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -76,6 +76,8 @@ export function ParcelDetailView({
     const [isEditing, setIsEditing] = React.useState(false)
     const [formData, setFormData] = React.useState<SubParcel>(subParcel)
     const [isSaving, setIsSaving] = React.useState(false)
+    const [synonyms, setSynonyms] = React.useState<string[]>(subParcel.synonyms || [])
+    const [synonymInput, setSynonymInput] = React.useState('')
     const { invalidateParcels } = useInvalidateQueries()
     const { toast } = useToast()
 
@@ -94,6 +96,7 @@ export function ParcelDetailView({
             }] : [])
         }
         setFormData(initialized)
+        setSynonyms(subParcel.synonyms || [])
     }, [subParcel])
 
     const treesPerHa = React.useMemo(() => {
@@ -419,6 +422,40 @@ export function ParcelDetailView({
                                         </div>
 
                                         <EditField label="Oppervlakte (ha)" field="area" type="number" />
+
+                                        {/* Synonyms editor */}
+                                        <div className="px-5 py-4 space-y-2">
+                                            <Label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Synoniemen (alternatieve namen voor Slimme Invoer)</Label>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {synonyms.map((s, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-xs text-white/60">
+                                                        {s}
+                                                        <button onClick={() => {
+                                                            const updated = synonyms.filter((_, idx) => idx !== i)
+                                                            setSynonyms(updated)
+                                                            updateParcelSynonyms(subParcel.id, updated).then(() => invalidateParcels())
+                                                        }} className="hover:text-rose-400 transition-colors">
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <Input
+                                                value={synonymInput}
+                                                onChange={(e) => setSynonymInput(e.target.value)}
+                                                placeholder="Typ synoniem en druk Enter..."
+                                                className="h-8 text-sm bg-black/40 border-white/10"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && synonymInput.trim()) {
+                                                        e.preventDefault()
+                                                        const updated = [...synonyms, synonymInput.trim()]
+                                                        setSynonyms(updated)
+                                                        setSynonymInput('')
+                                                        updateParcelSynonyms(subParcel.id, updated).then(() => invalidateParcels())
+                                                    }
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 ) : (
                                     <>
@@ -442,6 +479,12 @@ export function ParcelDetailView({
                                             icon={Thermometer}
                                         />
                                         <DisplayField label="Oppervlakte" value={`${formData.area.toFixed(2)} ha`} icon={MapIcon} />
+                                        {synonyms.length > 0 && (
+                                            <div className="px-5 py-3">
+                                                <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Synoniemen</span>
+                                                <p className="text-xs text-white/40 italic mt-0.5">{synonyms.join(', ')}</p>
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>

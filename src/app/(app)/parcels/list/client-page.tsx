@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useParcels, useInvalidateQueries, useSpuitschriftEntries } from "@/hooks/use-data";
-import { addParcel, updateParcel, deleteParcel, addSubParcel } from "@/lib/supabase-store";
+import { useParcels, useParcelGroups, useInvalidateQueries, useSpuitschriftEntries } from "@/hooks/use-data";
+import { addParcel, updateParcel, deleteParcel, addSubParcel, addParcelGroup, deleteParcelGroup, setParcelGroupMembers } from "@/lib/supabase-store";
 import type { SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2 } from "lucide-react";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton, ErrorState, EmptyState } from "@/components/ui/data-states";
@@ -17,6 +17,7 @@ import { ParcelDetailView } from "@/components/parcel-detail-view";
 import { MainParcelView } from "@/components/main-parcel-view";
 import { CompanyStatsHeader } from "@/components/company-stats-header";
 import { ParcelCard } from "@/components/parcel-card";
+import { ParcelGroupDialog } from "@/components/parcel-group-dialog";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { RvoParcelSheet } from "@/components/rvo-map/rvo-parcel-sheet";
@@ -71,10 +72,16 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [formSource, setFormSource] = useState<"RVO_IMPORT" | "MANUAL">("RVO_IMPORT");
 
+  // Groups
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [activeGroupFilter, setActiveGroupFilter] = useState<string | null>(null);
+  const [groupInitialSelectedIds, setGroupInitialSelectedIds] = useState<Set<string> | undefined>(undefined);
+
   const { toast } = useToast();
   const { data: parcels = [], isLoading, isError, error, refetch } = useParcels();
+  const { data: parcelGroups = [] } = useParcelGroups();
   const { data: spuitschriftEntries = [] } = useSpuitschriftEntries();
-  const { invalidateParcels } = useInvalidateQueries();
+  const { invalidateParcels, invalidateParcelGroups } = useInvalidateQueries();
 
   // Find last spray for selected main parcel
   const lastSprayForParcel = useMemo(() => {
@@ -91,8 +98,20 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     );
   }, [selectedMainParcel, spuitschriftEntries]);
 
+  // Get active group member IDs for filtering
+  const activeGroupMemberIds = useMemo(() => {
+    if (!activeGroupFilter) return null;
+    const group = parcelGroups.find(g => g.id === activeGroupFilter);
+    return group?.subParcelIds ? new Set(group.subParcelIds) : null;
+  }, [activeGroupFilter, parcelGroups]);
+
   const filteredParcels = useMemo(() => {
     let result = parcels;
+
+    // Group filter
+    if (activeGroupMemberIds) {
+      result = result.filter(p => activeGroupMemberIds.has(p.id));
+    }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -100,7 +119,8 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         p.name.toLowerCase().includes(q) ||
         p.crop?.toLowerCase().includes(q) ||
         p.variety?.toLowerCase().includes(q) ||
-        p.parcelName?.toLowerCase().includes(q)
+        p.parcelName?.toLowerCase().includes(q) ||
+        p.synonyms?.some(s => s.toLowerCase().includes(q))
       );
     }
 
@@ -597,6 +617,43 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
             {/* Filter Chips */}
             {!isLoading && parcels.length > 0 && (
               <div className="space-y-3 shrink-0 px-1">
+                {/* Groepen */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest mr-1">Groepen</span>
+                  {parcelGroups.length > 0 && parcelGroups.map(group => (
+                      <button
+                        key={group.id}
+                        onClick={() => setActiveGroupFilter(activeGroupFilter === group.id ? null : group.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all group/chip ${
+                          activeGroupFilter === group.id
+                            ? 'bg-primary/20 text-primary ring-1 ring-primary/50'
+                            : 'bg-white/5 text-white/40 hover:bg-white/10'
+                        }`}
+                      >
+                        {group.name}
+                        <span className="ml-1 text-[10px] opacity-50">({group.memberCount})</span>
+                        <Trash2
+                          className="inline-block ml-1.5 h-3 w-3 opacity-0 group-hover/chip:opacity-50 hover:!opacity-100 hover:!text-rose-400 transition-all cursor-pointer"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await deleteParcelGroup(group.id);
+                              if (activeGroupFilter === group.id) setActiveGroupFilter(null);
+                              invalidateParcelGroups();
+                              toast({ title: 'Groep verwijderd' });
+                            } catch { toast({ variant: 'destructive', title: 'Fout bij verwijderen' }); }
+                          }}
+                        />
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { setGroupInitialSelectedIds(undefined); setIsGroupDialogOpen(true); }}
+                      className="px-2 py-1.5 rounded-full text-xs text-white/30 hover:text-white/60 border border-dashed border-white/10 hover:border-white/20 transition-all"
+                    >
+                      + Groep
+                    </button>
+                  </div>
+
                 {/* Gewas filters */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest mr-1">Gewas</span>
@@ -886,6 +943,13 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                       >
                         wis
                       </button>
+                      <button
+                        onClick={() => { setGroupInitialSelectedIds(new Set(selectedParcelIds)); setIsGroupDialogOpen(true); }}
+                        className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
+                      >
+                        <FolderPlus className="h-3 w-3" />
+                        Opslaan als groep
+                      </button>
                     </span>
                   )}
                   <span className="text-sm text-white/50">
@@ -977,6 +1041,24 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
           onSave={handleComposerSave}
         />
       )}
+
+      <ParcelGroupDialog
+        isOpen={isGroupDialogOpen}
+        onOpenChange={setIsGroupDialogOpen}
+        allParcels={parcels}
+        initialSelectedIds={groupInitialSelectedIds}
+        onSave={async (name, subParcelIds) => {
+          try {
+            const group = await addParcelGroup(name);
+            await setParcelGroupMembers(group.id, subParcelIds);
+            invalidateParcelGroups();
+            setSelectedParcelIds(new Set());
+            toast({ title: 'Groep aangemaakt', description: `"${name}" met ${subParcelIds.length} percelen` });
+          } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Fout', description: e.message?.includes('duplicate') ? 'Er bestaat al een groep met deze naam' : 'Kon groep niet aanmaken' });
+          }
+        }}
+      />
     </div>
   );
 }

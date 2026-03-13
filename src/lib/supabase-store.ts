@@ -519,6 +519,7 @@ export interface SprayableParcel {
   geometry: any;
   source: string | null;
   rvoId: string | null;
+  synonyms: string[];   // Alternative names for Smart Input matching
 }
 
 // Keep ActiveParcel as alias for backward compatibility
@@ -655,6 +656,7 @@ function mapToSprayableParcel(item: any): SprayableParcel {
     geometry,
     source: item.source,
     rvoId: item.rvo_id,
+    synonyms: item.synonyms || [],
   };
 }
 
@@ -3743,4 +3745,131 @@ export async function getHarvestSeasons(): Promise<string[]> {
   // Get unique seasons
   const seasons = [...new Set(data.map(d => d.season))];
   return seasons;
+}
+
+// ============================================================================
+// PARCEL GROUPS
+// ============================================================================
+
+import type { ParcelGroup } from '@/lib/types';
+
+/**
+ * Fetch all parcel groups for the current user
+ */
+export async function getParcelGroups(): Promise<ParcelGroup[]> {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from('parcel_groups')
+    .select('*, parcel_group_members(sub_parcel_id)')
+    .eq('user_id', userId)
+    .order('name');
+
+  if (error) throw new Error(error.message);
+  return (data || []).map((g: any) => {
+    const members = g.parcel_group_members || [];
+    return {
+      id: g.id,
+      name: g.name,
+      memberCount: members.length,
+      subParcelIds: members.map((m: any) => m.sub_parcel_id),
+      createdAt: new Date(g.created_at),
+    };
+  });
+}
+
+/**
+ * Fetch all groups with their member sub_parcel IDs (for Smart Input resolution)
+ */
+export async function getParcelGroupsWithMemberIds(): Promise<
+  Array<{ id: string; name: string; subParcelIds: string[] }>
+> {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from('parcel_groups')
+    .select('id, name, parcel_group_members(sub_parcel_id)')
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return (data || []).map((g: any) => ({
+    id: g.id,
+    name: g.name,
+    subParcelIds: (g.parcel_group_members || []).map((m: any) => m.sub_parcel_id),
+  }));
+}
+
+/**
+ * Create a new parcel group
+ */
+export async function addParcelGroup(name: string): Promise<ParcelGroup> {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from('parcel_groups')
+    .insert({ name, user_id: userId })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return { id: data.id, name: data.name, memberCount: 0, createdAt: new Date(data.created_at) };
+}
+
+/**
+ * Delete a parcel group (members are cascade-deleted)
+ */
+export async function deleteParcelGroup(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('parcel_groups')
+    .delete()
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Set the members (sub_parcel IDs) for a group — replaces all existing members
+ */
+export async function setParcelGroupMembers(groupId: string, subParcelIds: string[]): Promise<void> {
+  const userId = await getCurrentUserId();
+
+  // Delete existing members
+  await supabase
+    .from('parcel_group_members')
+    .delete()
+    .eq('group_id', groupId);
+
+  // Insert new members
+  if (subParcelIds.length > 0) {
+    const { error } = await supabase
+      .from('parcel_group_members')
+      .insert(subParcelIds.map(spId => ({
+        group_id: groupId,
+        sub_parcel_id: spId,
+        user_id: userId,
+      })));
+    if (error) throw new Error(error.message);
+  }
+}
+
+/**
+ * Rename a parcel group
+ */
+export async function updateParcelGroupName(id: string, name: string): Promise<void> {
+  const { error } = await supabase
+    .from('parcel_groups')
+    .update({ name })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ============================================================================
+// PARCEL SYNONYMS
+// ============================================================================
+
+/**
+ * Update synonyms for a sub_parcel
+ */
+export async function updateParcelSynonyms(subParcelId: string, synonyms: string[]): Promise<void> {
+  const { error } = await supabase
+    .from('sub_parcels')
+    .update({ synonyms })
+    .eq('id', subParcelId);
+  if (error) throw new Error(error.message);
 }
