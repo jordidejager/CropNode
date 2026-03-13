@@ -41,6 +41,7 @@ export const COMMON_FERTILIZERS_CACHE: CachedFertilizer[] = [
   { name: "Ureum", aliases: ["ureumbladvoeding"], type: "bladmeststof", element: "N" },
   { name: "Calcimax", aliases: [], type: "bladmeststof", element: "Ca+B" },
   { name: "Calin W", aliases: ["calin"], type: "bladmeststof", element: "Ca" },
+  { name: "ACS-Koper 500", aliases: ["acs koper", "acs-koper", "acs koper 500"], type: "bladmeststof", element: "Cu" },
   { name: "Copfall", aliases: [], type: "bladmeststof", element: "Cu" },
   { name: "Stimuplant Vitaal", aliases: ["stimuplant"], type: "bladmeststof", element: "mix" },
   { name: "Hortispoor Mix", aliases: ["hortispoor"], type: "bladmeststof", element: "mix" },
@@ -210,6 +211,10 @@ export function resolveFertilizerProduct(
 
   // Stap 2: Zoek in meststoffen-database (als beschikbaar)
   if (fertilizers && fertilizers.length > 0) {
+    // Helper: normalize hyphens, dots, underscores → spaces for fuzzy comparison
+    const norm = (s: string) => s.toLowerCase().replace(/[-._]/g, ' ').replace(/\s+/g, ' ').trim();
+    const normalizedFuzzy = norm(productName);
+
     // Exact name match
     const exactMatch = fertilizers.find(f =>
       f.name.toLowerCase() === normalized
@@ -236,10 +241,25 @@ export function resolveFertilizerProduct(
       };
     }
 
-    // Partial name match (contains)
+    // Normalized name match (hyphens/spaces treated as equivalent)
+    // e.g. "acs koper" matches "ACS-Koper 500" because both normalize to "acs koper ..."
+    const normalizedMatch = fertilizers.find(f => {
+      const nameNorm = norm(f.name);
+      return nameNorm === normalizedFuzzy;
+    });
+    if (normalizedMatch) {
+      return {
+        originalInput: productName,
+        resolvedName: normalizedMatch.name,
+        source: 'fertilizer',
+        confidence: 88,
+      };
+    }
+
+    // Partial name match (contains) — with normalized comparison
     const partialMatch = fertilizers.find(f => {
-      const nameLower = f.name.toLowerCase();
-      return nameLower.includes(normalized) || normalized.includes(nameLower);
+      const nameNorm = norm(f.name);
+      return nameNorm.includes(normalizedFuzzy) || normalizedFuzzy.includes(nameNorm);
     });
     if (partialMatch) {
       return {
@@ -250,10 +270,11 @@ export function resolveFertilizerProduct(
       };
     }
 
-    // Starts-with match
-    const startsWithMatch = fertilizers.find(f =>
-      f.name.toLowerCase().startsWith(normalized) || normalized.startsWith(f.name.toLowerCase())
-    );
+    // Starts-with match — with normalized comparison
+    const startsWithMatch = fertilizers.find(f => {
+      const nameNorm = norm(f.name);
+      return nameNorm.startsWith(normalizedFuzzy) || normalizedFuzzy.startsWith(nameNorm);
+    });
     if (startsWithMatch) {
       return {
         originalInput: productName,
