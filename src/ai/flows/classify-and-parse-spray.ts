@@ -379,6 +379,9 @@ export const classifyAndParseSpray = ai.defineFlow(
 
       const duration = Date.now() - startTime;
       console.log(`[CLASSIFY-PARSE] Completed in ${duration}ms: intent=${output.intent}, confidence=${output.confidence.toFixed(2)}${output.sprayData ? ', hasSprayData=true' : ''}`);
+      if (output.sprayData) {
+        console.log(`[CLASSIFY-PARSE] Raw sprayData: plots="${output.sprayData.plots}", products="${output.sprayData.products}", isGrouped=${output.sprayData.isGrouped}, registrations=${output.sprayData.registrations?.length || 0}`);
+      }
 
       // Convert flat AI output to nested structure for rest of pipeline
       return unflattenOutput(output);

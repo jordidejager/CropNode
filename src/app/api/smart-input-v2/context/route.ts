@@ -65,10 +65,27 @@ export interface ProductAlias {
 async function getServerUserId(): Promise<string | null> {
     try {
         const supabase = await createServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        return user?.id || null;
+
+        // Primary: getUser() validates token with Supabase server
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (user?.id) return user.id;
+
+        if (error) {
+            console.warn('[Context API] getUser() failed:', error.message, '— trying getSession() fallback');
+        }
+
+        // Fallback: getSession() reads JWT from cookies without external fetch
+        // Useful when Node.js v25 fetch intermittently fails (ECONNRESET)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            console.log('[Context API] Recovered via getSession() fallback');
+            return session.user.id;
+        }
+
+        console.warn('[Context API] No user found (session expired or not logged in)');
+        return null;
     } catch (error) {
-        console.error('[Context API] Auth error:', error);
+        console.error('[Context API] Auth exception:', error);
         return null;
     }
 }

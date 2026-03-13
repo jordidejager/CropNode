@@ -42,10 +42,27 @@ import { detectRegistrationType, resolveProductSources } from '@/lib/fertilizer-
 async function getServerUserId(): Promise<string | null> {
     try {
         const supabase = await createServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        return user?.id || null;
+
+        // Primary: getUser() validates token with Supabase server
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (user?.id) return user.id;
+
+        if (error) {
+            console.warn('[getServerUserId] getUser() failed:', error.message, '— trying getSession() fallback');
+        }
+
+        // Fallback: getSession() reads JWT from cookies without external fetch
+        // Useful when Node.js v25 fetch intermittently fails (ECONNRESET)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            console.log('[getServerUserId] Recovered via getSession() fallback');
+            return session.user.id;
+        }
+
+        console.warn('[getServerUserId] No user found (session expired or not logged in)');
+        return null;
     } catch (error) {
-        console.error('[getServerUserId] Auth error:', error);
+        console.error('[getServerUserId] Auth exception:', error);
         return null;
     }
 }
@@ -353,14 +370,28 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
     }
 
     // Fallback: extract product+dosage directly from start of message (without "met" keyword)
-    // Handles inputs like "merpna 0.7 kg op alle peren"
+    // Handles inputs like "merpan 0.7 kg op alle peren" or "ACS Koper 2,5 kg op steketee"
     if (products.length === 0) {
-        const directMatch = lower.match(/^([a-zà-ü][a-zà-ü]*)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?/i);
+        // Multi-word product name: capture everything before the first digit+unit pattern
+        const directMatch = lower.match(/^([a-zà-ü][\w\s-]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?/i);
         if (directMatch) {
             const rawName = directMatch[1].trim();
             const rawDosage = parseFloat(directMatch[2].replace(',', '.'));
             const rawUnit = directMatch[3].toLowerCase();
             if (rawName.length >= 3 && !/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) {
+                products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
+            }
+        }
+    }
+
+    // Fallback 2: "product dosage unit op ..." pattern (extract before "op")
+    if (products.length === 0) {
+        const opMatch = lower.match(/^(.+?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?\s+op\s+/i);
+        if (opMatch) {
+            const rawName = opMatch[1].trim();
+            const rawDosage = parseFloat(opMatch[2].replace(',', '.'));
+            const rawUnit = opMatch[3].toLowerCase();
+            if (rawName.length >= 2 && !/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) {
                 products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
             }
         }
@@ -1031,6 +1062,21 @@ async function handleFirstMessage(
         else if (preProcessed.hasExclusion && preProcessed.preResolvedPlots && preProcessed.preResolvedPlots.length > 0) {
             plots = preProcessed.preResolvedPlots;
             console.log(`[${context}] Using pre-processed plots with exclusions: ${plots.length} parcels (excluded: ${preProcessed.excludedPlots.length})`);
+        }
+
+        // Fallback: extract parcel names from raw input (e.g. "op steketee en thuis appels")
+        if (plots.length === 0) {
+            const opMatch = message.toLowerCase().match(/\b(?:op|voor)\s+(.+?)$/);
+            if (opMatch) {
+                const plotPart = opMatch[1].trim();
+                // Split on "en", "+" separators
+                const plotNames = plotPart.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
+                console.log(`[${context}] Fallback plot extraction from "op": ${plotNames.join(', ')}`);
+                plots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
+                if (plots.length > 0) {
+                    console.log(`[${context}] Fallback resolved ${plots.length} parcels from "op" keyword`);
+                }
+            }
         }
 
         console.log(`[${context}] Plot resolution: ${rawPlots.length} raw → ${plots.length} resolved`);
