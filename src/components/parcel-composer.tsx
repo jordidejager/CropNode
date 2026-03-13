@@ -169,15 +169,6 @@ export function ParcelComposer({
                             return (
                                 <div key={index} className="flex gap-3 items-end bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all">
                                     <div className="w-32 space-y-2">
-                                        <Label className="text-[10px] uppercase font-bold text-white/50">Naam Subperceel (optioneel)</Label>
-                                        <Input
-                                            value={item.name}
-                                            onChange={(e) => updateItem(index, 'name', e.target.value)}
-                                            placeholder="bv. V-haag"
-                                            className="h-10 bg-black/20 border-white/10"
-                                        />
-                                    </div>
-                                    <div className="w-32 space-y-2">
                                         <Label className="text-[10px] uppercase font-bold text-white/50">Gewas</Label>
                                         <Select
                                             value={item.crop}
@@ -220,6 +211,15 @@ export function ParcelComposer({
                                                 "h-10 bg-black/20 border-white/10 font-mono text-center",
                                                 (parseFloat(item.area) || 0) <= 0 && "border-amber-500/50"
                                             )}
+                                        />
+                                    </div>
+                                    <div className="w-36 space-y-2">
+                                        <Label className="text-[10px] uppercase font-bold text-white/30">Naam subperceel (optioneel)</Label>
+                                        <Input
+                                            value={item.name}
+                                            onChange={(e) => updateItem(index, 'name', e.target.value)}
+                                            placeholder="bv. V-haag"
+                                            className="h-10 bg-black/20 border-white/10"
                                         />
                                     </div>
                                     <Button
