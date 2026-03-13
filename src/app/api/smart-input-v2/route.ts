@@ -20,6 +20,7 @@ import {
     getParcelHistoryEntries,
     getLastUsedDosages,
     getAllFertilizers,
+    getParcelGroupsWithMemberIds,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import type {
@@ -481,6 +482,39 @@ function resolveParcelNamesToIds(
             pearMatches.forEach(p => resolvedIds.add(p.id));
             matchType = 'keyword_peer';
             console.log(`[resolveParcelNamesToIds] "${raw}" → keyword peer: ${pearMatches.length} parcels`);
+        }
+
+        // 7. Multi-word: try splitting "thuis appels" → parcel group "thuis" + crop filter "appel"
+        if (matchType === 'none') {
+            const words = normalized.split(/\s+/);
+            if (words.length >= 2) {
+                const groupName = words[0];
+                const cropWord = words.slice(1).join(' ').replace(/s$/, '').replace(/en$/, '');
+                const cropSearch = cropWord === 'per' ? 'peer' : cropWord;
+
+                const groupCropMatches = allParcels.filter(p => {
+                    const nameMatch = p.name.toLowerCase().startsWith(groupName);
+                    const cropMatch = p.crop?.toLowerCase() === cropSearch ||
+                                      p.crop?.toLowerCase().startsWith(cropSearch) ||
+                                      p.variety?.toLowerCase() === cropSearch ||
+                                      p.variety?.toLowerCase().includes(cropSearch);
+                    return nameMatch && cropMatch;
+                });
+
+                if (groupCropMatches.length > 0) {
+                    groupCropMatches.forEach(p => resolvedIds.add(p.id));
+                    matchType = 'group_crop';
+                    console.log(`[resolveParcelNamesToIds] "${raw}" → group+crop match (group="${groupName}", crop="${cropSearch}"): ${groupCropMatches.length} parcels`);
+                } else {
+                    // Try just the group name
+                    const groupMatches = allParcels.filter(p => p.name.toLowerCase().startsWith(groupName) && groupName.length >= 3);
+                    if (groupMatches.length > 0) {
+                        groupMatches.forEach(p => resolvedIds.add(p.id));
+                        matchType = 'group_name';
+                        console.log(`[resolveParcelNamesToIds] "${raw}" → group name match ("${groupName}"): ${groupMatches.length} parcels`);
+                    }
+                }
+            }
         }
 
         if (matchType === 'none') {

@@ -205,6 +205,8 @@ Als de intent REGISTER_SPRAY of MODIFY_DRAFT is, parse dan ook de spray data:
 - NOOIT producten verzinnen, toevoegen, of uit voorbeelden kopiëren
 - Als gebruiker "surround" zegt, output ALLEEN "surround" - NIET ook "Merpan" of andere producten
 - De voorbeelden hieronder zijn ter illustratie van het FORMAT, NIET de productnamen!
+- **ALTIJD** de productnaam overnemen die de gebruiker noemt, zelfs als je het product niet kent. Het systeem valideert achteraf.
+- Voorbeelden: "ACS Koper", "Cuprofix", "Luna Sensation" → gewoon overnemen in de output
 
 - Dosering = 0 als niet gespecificeerd (systeem vult aan)
 - Unit = "L" als niet gespecificeerd
@@ -284,11 +286,14 @@ GOED: products: "Surround:0:L" ← ALLEEN het genoemde product
 - "alle elstar" / "de elstar" → alle percelen met variety='Elstar'
 - "alle conference" / "de conference" → alle percelen met variety='Conference'
 - "overal" / "alles" / "alle bomen" → alle perceel IDs
+- **Perceelgroep namen** zoals "steketee", "thuis", "spoor", "pompus" → zoek percelen waarvan de 'name' begint met dat woord en retourneer hun IDs
+- Als gebruiker meerdere groepen noemt ("thuis appels en steketee") → zoek alle percelen van die groepen
 
 ⚠️ **KRITIEK: Gebruik ALTIJD de exacte 'id' waarde uit de percelenlijst hieronder!**
 - NOOIT perceelnamen of rasnamen als ID gebruiken
 - De 'id' velden zijn UUIDs die beginnen met letters/cijfers zoals "8d123f2a-..."
-- Filter percelen op crop/variety en retourneer hun 'id' waarden
+- Filter percelen op crop/variety/name en retourneer hun 'id' waarden
+- Als je een perceelnaam niet kunt matchen, geef WEL de naam terug als plot (het systeem resolvet achteraf)
 
 {{#if previousDraft}}
 ### Actieve Draft (voor MODIFY_DRAFT):
