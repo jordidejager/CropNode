@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Parcel, RvoParcel } from "@/lib/types"
-import { MapPin, Check, X } from "lucide-react"
+import { calculateAreaHectares, calculateCenter } from "@/lib/rvo-api"
+import { MapPin, Check, X, Pencil, MousePointerClick } from "lucide-react"
 import dynamic from "next/dynamic"
 
 const RvoMap = dynamic(
@@ -77,9 +78,12 @@ export function ParcelFormDialog({
   })
 
   const watchedLocation = watch("location")
+  const watchedGeometry = watch("geometry")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [selectedRvoParcel, setSelectedRvoParcel] = useState<RvoParcel | null>(null);
+  const [mapMode, setMapMode] = useState<'select' | 'draw'>('select');
+  const [drawnGeometry, setDrawnGeometry] = useState<any>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -111,6 +115,8 @@ export function ParcelFormDialog({
 
   const handleOpenMap = () => {
     setSelectedRvoParcel(null);
+    setDrawnGeometry(null);
+    setMapMode('select');
     setIsMapOpen(true);
   };
 
@@ -118,27 +124,35 @@ export function ParcelFormDialog({
     setSelectedRvoParcel(parcel);
   }, []);
 
+  const handleDrawnGeometryChange = useCallback((geometry: any) => {
+    setDrawnGeometry(geometry);
+  }, []);
+
   const handleConfirmLocation = () => {
     if (selectedRvoParcel) {
       const geometry = selectedRvoParcel.geometry;
-      // Calculate center from geometry
-      const coords = (geometry.type === 'Polygon' ? geometry.coordinates[0] : geometry.coordinates[0][0]) as any[];
-      const center = {
-        lat: coords.reduce((sum: number, c: number[]) => sum + c[1], 0) / coords.length,
-        lng: coords.reduce((sum: number, c: number[]) => sum + c[0], 0) / coords.length
-      };
+      const center = calculateCenter(geometry);
+      const area = calculateAreaHectares(geometry);
       setValue("geometry", geometry);
       setValue("location", center);
-
-      // Also update area if available from RVO properties or calc (simplified)
-      // For now we keep the user entered area or manual entry
+      setValue("area", parseFloat(area.toFixed(4)));
+    } else if (drawnGeometry) {
+      const center = calculateCenter(drawnGeometry);
+      const area = calculateAreaHectares(drawnGeometry);
+      setValue("geometry", drawnGeometry);
+      setValue("location", center);
+      setValue("area", parseFloat(area.toFixed(4)));
     }
     setSelectedRvoParcel(null);
+    setDrawnGeometry(null);
+    setMapMode('select');
     setIsMapOpen(false);
   };
 
   const handleCancelMap = () => {
     setSelectedRvoParcel(null);
+    setDrawnGeometry(null);
+    setMapMode('select');
     setIsMapOpen(false);
   };
 
@@ -239,23 +253,51 @@ export function ParcelFormDialog({
         </DialogContent>
       </Dialog>
 
+      {/* Map Dialog for RVO parcel selection or drawing */}
       {isMapOpen && (
         <Dialog open={isMapOpen} onOpenChange={(open) => !open && handleCancelMap()}>
           <DialogContent className="w-full max-w-[90vw] h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>RVO Perceel selecteren</DialogTitle>
+              <DialogTitle>
+                {mapMode === 'select' ? 'RVO Perceel selecteren' : 'Perceel intekenen op kaart'}
+              </DialogTitle>
               <DialogDescription>
-                Zoom in op de kaart en klik op een RVO perceel om de grenzen over te nemen.
+                {mapMode === 'select'
+                  ? 'Zoom in op de kaart en klik op een RVO perceel om de grenzen over te nemen.'
+                  : 'Teken de grenzen van het perceel op de kaart. Klik op punten om het perceel te tekenen en sluit af door op het eerste punt te klikken.'}
               </DialogDescription>
             </DialogHeader>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={mapMode === 'select' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setMapMode('select'); setDrawnGeometry(null); }}
+              >
+                <MousePointerClick className="mr-2 h-4 w-4" />
+                RVO Perceel selecteren
+              </Button>
+              <Button
+                type="button"
+                variant={mapMode === 'draw' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setMapMode('draw'); setSelectedRvoParcel(null); }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Perceel intekenen
+              </Button>
+            </div>
             <div className="flex-1 min-h-0 rounded-md overflow-hidden border">
               <RvoMap
                 onParcelSelect={handleRvoParcelSelect}
                 selectedParcel={selectedRvoParcel}
                 userParcels={userParcels}
+                isDrawingEnabled={mapMode === 'draw'}
+                onGeometryChange={handleDrawnGeometryChange}
+                initialGeometry={watchedGeometry}
               />
             </div>
-            {selectedRvoParcel && (
+            {mapMode === 'select' && selectedRvoParcel && (
               <div className="bg-muted rounded-md px-4 py-3 flex items-center gap-3">
                 <Check className="h-5 w-5 text-green-500" />
                 <div className="flex-1">
@@ -266,11 +308,26 @@ export function ParcelFormDialog({
                 </div>
               </div>
             )}
+            {mapMode === 'draw' && drawnGeometry && (
+              <div className="bg-muted rounded-md px-4 py-3 flex items-center gap-3">
+                <Check className="h-5 w-5 text-green-500" />
+                <div className="flex-1">
+                  <p className="font-medium">Perceel ingetekend</p>
+                  <p className="text-sm text-muted-foreground">
+                    Oppervlakte: {calculateAreaHectares(drawnGeometry).toFixed(4)} ha
+                  </p>
+                </div>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleCancelMap}>
                 Annuleren
               </Button>
-              <Button type="button" onClick={handleConfirmLocation} disabled={!selectedRvoParcel}>
+              <Button
+                type="button"
+                onClick={handleConfirmLocation}
+                disabled={mapMode === 'select' ? !selectedRvoParcel : !drawnGeometry}
+              >
                 <Check className="mr-2 h-4 w-4" />
                 Grenzen overnemen
               </Button>

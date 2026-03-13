@@ -83,6 +83,8 @@ export function RvoMap({
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
   const userParcelsLayerRef = useRef<L.GeoJSON | null>(null);
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
+  const drawControlRef = useRef<L.Control.Draw | null>(null);
+  const mapClickHandlerRef = useRef<((e: L.LeafletMouseEvent) => void) | null>(null);
 
   const onParcelSelectRef = useRef(onParcelSelect);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -91,6 +93,7 @@ export function RvoMap({
   const selectedParcelsRef = useRef(selectedParcels);
   const selectionModeRef = useRef(selectionMode);
   const onGeometryChangeRef = useRef(onGeometryChange);
+  const isDrawingEnabledRef = useRef(isDrawingEnabled);
 
   const [parcels, setParcels] = useState<RvoParcel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,6 +113,10 @@ export function RvoMap({
     onGeometryChangeRef.current = onGeometryChange;
   }, [onGeometryChange]);
 
+  useEffect(() => {
+    isDrawingEnabledRef.current = isDrawingEnabled;
+  }, [isDrawingEnabled]);
+
   const getStyle = useCallback(
     (feature?: GeoJSON.Feature): L.PathOptions => {
       const id = feature?.id;
@@ -128,6 +135,7 @@ export function RvoMap({
     []
   );
 
+  // Initialize map ONCE (no isDrawingEnabled in deps)
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current, {
@@ -220,54 +228,10 @@ export function RvoMap({
       userParcelsLayer.addTo(map);
       userParcelsLayerRef.current = userParcelsLayer;
 
-      if (isDrawingEnabled) {
-        const drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
-        drawnItemsRef.current = drawnItems;
-
-        let initialBounds: L.LatLngBounds | null = null;
-        if (initialGeometry) {
-          const featureLayer = L.geoJSON(initialGeometry, {
-            style: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.5 }
-          });
-          drawnItems.addLayer(featureLayer);
-          initialBounds = featureLayer.getBounds();
-        }
-
-        if (initialBounds && initialBounds.isValid()) {
-          map.fitBounds(initialBounds);
-        }
-
-        const drawControl = new L.Control.Draw({
-          edit: { featureGroup: drawnItems, remove: true },
-          draw: {
-            polygon: { allowIntersection: false, shapeOptions: { color: 'hsl(var(--primary))' } },
-            rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false,
-          }
-        });
-        map.addControl(drawControl);
-
-        const handleGeometryChange = (layer: L.Layer) => {
-          if (layer instanceof L.Polygon) {
-            onGeometryChangeRef.current?.(layer.toGeoJSON().geometry);
-          }
-        };
-
-        map.on(L.Draw.Event.CREATED, (event: any) => {
-          drawnItems.clearLayers();
-          drawnItems.addLayer(event.layer);
-          handleGeometryChange(event.layer);
-        });
-
-        map.on(L.Draw.Event.EDITED, (event: any) => {
-          const layers = event.layers.getLayers();
-          if (layers.length > 0) handleGeometryChange(layers[0]);
-        });
-
-        map.on(L.Draw.Event.DELETED, () => {
-          onGeometryChangeRef.current?.(null);
-        });
-      }
+      // Prepare drawn items layer (always present, draw control added/removed dynamically)
+      const drawnItems = new L.FeatureGroup();
+      map.addLayer(drawnItems);
+      drawnItemsRef.current = drawnItems;
 
       const updateBounds = () => {
         setZoomLevel(map.getZoom());
@@ -276,7 +240,11 @@ export function RvoMap({
       map.on("moveend", updateBounds);
       map.on("zoomend", updateBounds);
 
-      map.on('click', async (e: L.LeafletMouseEvent) => {
+      // Map click handler for RVO parcel lookup (will be disabled during drawing)
+      const clickHandler = async (e: L.LeafletMouseEvent) => {
+        // Skip if drawing mode is active
+        if (isDrawingEnabledRef.current) return;
+
         setIsLoading(true);
         setError(null);
         try {
@@ -301,7 +269,10 @@ export function RvoMap({
         } finally {
           setIsLoading(false);
         }
-      });
+      };
+
+      map.on('click', clickHandler);
+      mapClickHandlerRef.current = clickHandler;
 
       updateBounds();
     }
@@ -312,8 +283,90 @@ export function RvoMap({
         mapRef.current = null;
       }
     };
-  }, [isDrawingEnabled, getStyle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getStyle]);
 
+  // Dynamic draw control: add/remove based on isDrawingEnabled
+  useEffect(() => {
+    const map = mapRef.current;
+    const drawnItems = drawnItemsRef.current;
+    if (!map || !drawnItems) return;
+
+    if (isDrawingEnabled) {
+      // Load initial geometry if provided
+      if (initialGeometry) {
+        drawnItems.clearLayers();
+        const featureLayer = L.geoJSON(initialGeometry, {
+          style: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.5 }
+        });
+        drawnItems.addLayer(featureLayer);
+        const bounds = featureLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds);
+        }
+      }
+
+      // Add draw control
+      const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems, remove: true },
+        draw: {
+          polygon: {
+            allowIntersection: false,
+            shapeOptions: { color: 'hsl(var(--primary))', fillColor: 'hsl(var(--primary))', fillOpacity: 0.4 },
+          },
+          rectangle: false,
+          circle: false,
+          circlemarker: false,
+          marker: false,
+          polyline: false,
+        }
+      });
+      map.addControl(drawControl);
+      drawControlRef.current = drawControl;
+
+      const handleGeometryChange = (layer: L.Layer) => {
+        if (layer instanceof L.Polygon) {
+          onGeometryChangeRef.current?.(layer.toGeoJSON().geometry);
+        }
+      };
+
+      const onCreated = (event: any) => {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(event.layer);
+        handleGeometryChange(event.layer);
+      };
+
+      const onEdited = (event: any) => {
+        const layers = event.layers.getLayers();
+        if (layers.length > 0) handleGeometryChange(layers[0]);
+      };
+
+      const onDeleted = () => {
+        onGeometryChangeRef.current?.(null);
+      };
+
+      map.on(L.Draw.Event.CREATED, onCreated);
+      map.on(L.Draw.Event.EDITED, onEdited);
+      map.on(L.Draw.Event.DELETED, onDeleted);
+
+      return () => {
+        map.off(L.Draw.Event.CREATED, onCreated);
+        map.off(L.Draw.Event.EDITED, onEdited);
+        map.off(L.Draw.Event.DELETED, onDeleted);
+        map.removeControl(drawControl);
+        drawControlRef.current = null;
+      };
+    } else {
+      // Clean up drawn items when leaving draw mode
+      drawnItems.clearLayers();
+      if (drawControlRef.current) {
+        map.removeControl(drawControlRef.current);
+        drawControlRef.current = null;
+      }
+    }
+  }, [isDrawingEnabled, initialGeometry]);
+
+  // Update drawn geometry when initialGeometry changes (for editing existing parcels)
   useEffect(() => {
     if (isDrawingEnabled && drawnItemsRef.current && mapRef.current) {
       drawnItemsRef.current.clearLayers();

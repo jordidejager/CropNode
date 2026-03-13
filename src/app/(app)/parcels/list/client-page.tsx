@@ -7,7 +7,7 @@ import type { SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon } from "lucide-react";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton, ErrorState, EmptyState } from "@/components/ui/data-states";
@@ -68,6 +68,8 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [rvoDataForForm, setRvoDataForForm] = useState<RvoData | null>(null);
   const [mergeOnImport, setMergeOnImport] = useState(false);
   const [pendingSubParcels, setPendingSubParcels] = useState<Omit<SubParcel, 'id' | 'parcelId' | 'createdAt' | 'updatedAt'>[]>([]);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [formSource, setFormSource] = useState<"RVO_IMPORT" | "MANUAL">("RVO_IMPORT");
 
   const { toast } = useToast();
   const { data: parcels = [], isLoading, isError, error, refetch } = useParcels();
@@ -276,6 +278,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const handleAdd = () => {
     setRvoDataForForm(null);
     setPendingSubParcels([]);
+    setFormSource("MANUAL");
     setIsFormOpen(true);
   };
 
@@ -283,7 +286,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     try {
       const newParcel = await addParcel({
         ...values,
-        source: "RVO_IMPORT",
+        source: formSource,
       });
 
       // Instead of saving sub-parcels directly, we open the composer 
@@ -400,6 +403,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         location: center,
         geometry: unionGeo,
       });
+      setFormSource("RVO_IMPORT");
       setIsSheetOpen(false);
       setIsFormOpen(true);
     } else {
@@ -418,10 +422,30 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         location: center,
         geometry: p.geometry,
       });
+      setFormSource("RVO_IMPORT");
       setIsSheetOpen(false);
       setIsFormOpen(true);
     }
   }, [selectedRvoParcels]);
+
+  // Handle drawn geometry from drawing mode on map
+  const handleDrawnGeometry = useCallback((geometry: any) => {
+    if (geometry) {
+      const center = calculateCenter(geometry);
+      const area = calculateAreaHectares(geometry);
+
+      setPendingSubParcels([]);
+      setRvoDataForForm({
+        name: "",
+        area: parseFloat(area.toFixed(4)),
+        location: center,
+        geometry: geometry,
+      });
+      setFormSource("MANUAL");
+      setIsDrawingMode(false);
+      setIsFormOpen(true);
+    }
+  }, []);
 
   // --- Render logic ---
 
@@ -880,10 +904,42 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
               selectedParcels={selectedRvoParcels}
               selectionMode="multi"
               userParcels={parcels}
-              // When clicking an existing user parcel on the map, we should open the dashboard
               onUserParcelClick={(p) => setSelectedMainParcel(p)}
+              isDrawingEnabled={isDrawingMode}
+              onGeometryChange={handleDrawnGeometry}
             />
-            {selectedRvoParcels.length === 1 && (
+            {/* Drawing mode toggle button */}
+            <div className="absolute top-4 right-4 z-[1000]">
+              {isDrawingMode ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setIsDrawingMode(false)}
+                  className="shadow-lg rounded-full font-bold"
+                >
+                  <XIcon className="mr-2 h-4 w-4" />
+                  Tekenen annuleren
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => { setIsDrawingMode(true); setIsSheetOpen(false); setSelectedRvoParcels([]); }}
+                  className="shadow-lg rounded-full font-bold bg-primary hover:bg-primary/90"
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Perceel intekenen
+                </Button>
+              )}
+            </div>
+            {/* Drawing mode info banner */}
+            {isDrawingMode && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-primary text-primary-foreground rounded-full px-6 py-2 shadow-lg">
+                <span className="text-sm font-bold">
+                  Klik op de kaart om punten te plaatsen. Sluit af door op het eerste punt te klikken.
+                </span>
+              </div>
+            )}
+            {!isDrawingMode && selectedRvoParcels.length === 1 && (
               <RvoParcelSheet
                 parcel={selectedRvoParcels[0]}
                 isOpen={isSheetOpen}
@@ -891,7 +947,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                 onAddParcel={() => handleAddFromRvo(false)}
               />
             )}
-            {selectedRvoParcels.length > 1 && (
+            {!isDrawingMode && selectedRvoParcels.length > 1 && (
               <RvoMultiSelectBar
                 selectedParcels={selectedRvoParcels}
                 onCancel={() => setSelectedRvoParcels([])}
