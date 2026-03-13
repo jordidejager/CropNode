@@ -59,7 +59,7 @@ function TimelineContent() {
 
     // Handle resume session
     const handleResume = useCallback((id: string) => {
-        router.push(`/command-center/smart-input?session_id=${id}`);
+        router.push(`/command-center/smart-input-v2?session_id=${id}`);
     }, [router]);
 
     // Handle delete
@@ -128,7 +128,7 @@ function TimelineContent() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => router.push('/command-center/smart-input')}
+                    onClick={() => router.push('/command-center/smart-input-v2')}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                     <Plus className="h-4 w-4 mr-2" />
@@ -182,7 +182,7 @@ function TimelineContent() {
                         Start een nieuwe sessie via Slimme Invoer
                     </p>
                     <Button
-                        onClick={() => router.push('/command-center/smart-input')}
+                        onClick={() => router.push('/command-center/smart-input-v2')}
                         variant="outline"
                         className="bg-white/5 border-white/10 text-white hover:bg-white/10"
                     >

@@ -116,8 +116,7 @@ const menuStructure: NavItem[] = [
         label: 'Command Center',
         icon: Home,
         items: [
-            { label: 'Slimme Invoer', href: '/command-center/smart-input', icon: MessageSquare },
-            { label: 'Slimme Invoer 2.0', href: '/command-center/smart-input-v2', icon: MessageSquare },
+            { label: 'Slimme Invoer', href: '/command-center/smart-input-v2', icon: MessageSquare },
             { label: 'Tijdlijn', href: '/command-center/timeline', icon: Clock },
         ]
     },
