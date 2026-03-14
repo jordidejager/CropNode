@@ -806,101 +806,157 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                   </AnimatePresence>
                 </div>
               ) : !groupByMainParcel && sortedParcels.length > 0 ? (
-                <div className="rounded-xl border border-white/10 overflow-hidden">
-                  <table className="w-full">
-                    <thead className="sticky top-0 z-10 bg-[#0A0A0A]/95 backdrop-blur-sm">
-                      <tr className="border-b border-white/10">
-                        <th className="w-10 px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleSelected}
-                            onChange={toggleSelectAll}
-                            className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer accent-emerald-500"
-                          />
-                        </th>
-                        <th
-                          className="text-left px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 select-none"
-                          onClick={() => handleSort('name')}
+                <div className="space-y-1.5">
+                  {/* Sticky Header */}
+                  <div className="sticky top-0 z-10 backdrop-blur-xl bg-[#0A0A0A]/80 rounded-2xl border border-white/[0.06] px-2 py-1 mb-2">
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-9 flex items-center justify-center shrink-0">
+                        <button
+                          onClick={toggleSelectAll}
+                          className={`h-5 w-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
+                            allVisibleSelected
+                              ? 'bg-primary border-primary shadow-lg shadow-primary/30'
+                              : 'border-white/15 hover:border-white/30 bg-white/[0.03]'
+                          }`}
                         >
-                          <span className="flex items-center gap-1">Perceelnaam {getSortIcon('name')}</span>
-                        </th>
-                        <th
-                          className="text-left px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 select-none"
-                          onClick={() => handleSort('crop')}
+                          {allVisibleSelected && (
+                            <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          )}
+                        </button>
+                      </div>
+                      <button onClick={() => handleSort('name')} className="flex-1 min-w-0 flex items-center gap-1.5 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none">
+                        Perceelnaam {getSortIcon('name')}
+                      </button>
+                      <button onClick={() => handleSort('crop')} className="w-24 flex items-center justify-center gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0">
+                        Gewas {getSortIcon('crop')}
+                      </button>
+                      <button onClick={() => handleSort('variety')} className="w-40 flex items-center gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0 hidden lg:flex">
+                        Ras {getSortIcon('variety')}
+                      </button>
+                      <button onClick={() => handleSort('area')} className="w-28 flex items-center justify-end gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0">
+                        Opp. {getSortIcon('area')}
+                      </button>
+                      <div className="w-10 shrink-0" />
+                    </div>
+                  </div>
+
+                  {/* Rows */}
+                  <AnimatePresence mode="popLayout">
+                    {sortedParcels.map((parcel, index) => {
+                      const crop = parcel.crop || 'Onbekend';
+                      const colors = getCropColor(crop);
+                      const isSelected = selectedParcelIds.has(parcel.id);
+                      const maxArea = Math.max(...sortedParcels.map(p => p.area || 0), 1);
+                      const areaPercent = ((parcel.area || 0) / maxArea) * 100;
+
+                      return (
+                        <motion.div
+                          key={parcel.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                          transition={{ delay: index * 0.02, duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          onClick={() => setSelectedMainParcel(parcel)}
+                          className={`group relative flex items-center gap-3 px-2 py-1 rounded-2xl cursor-pointer transition-all duration-300 ${
+                            isSelected
+                              ? 'bg-primary/[0.08] ring-1 ring-primary/20'
+                              : 'hover:bg-white/[0.04]'
+                          }`}
                         >
-                          <span className="flex items-center gap-1">Gewas {getSortIcon('crop')}</span>
-                        </th>
-                        <th
-                          className="text-left px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 select-none"
-                          onClick={() => handleSort('variety')}
-                        >
-                          <span className="flex items-center gap-1">Ras {getSortIcon('variety')}</span>
-                        </th>
-                        <th
-                          className="text-right px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 select-none"
-                          onClick={() => handleSort('area')}
-                        >
-                          <span className="flex items-center justify-end gap-1">Oppervlakte (ha) {getSortIcon('area')}</span>
-                        </th>
-                        <th className="px-4 py-3 text-[10px] font-bold text-white/40 uppercase tracking-widest text-center w-20">
-                          Acties
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedParcels.map((parcel, index) => {
-                        const crop = parcel.crop || 'Onbekend';
-                        const colors = getCropColor(crop);
-                        return (
-                          <tr
-                            key={parcel.id}
-                            className={`border-b border-white/5 hover:bg-white/[0.06] transition-colors cursor-pointer ${
-                              selectedParcelIds.has(parcel.id)
-                                ? 'bg-primary/[0.06]'
-                                : index % 2 === 0 ? 'bg-white/[0.02]' : ''
-                            }`}
-                            onClick={() => setSelectedMainParcel(parcel)}
-                          >
-                            <td className="px-3 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedParcelIds.has(parcel.id)}
-                                onChange={() => toggleParcelSelection(parcel.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50 cursor-pointer accent-emerald-500"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="font-bold text-white hover:text-primary transition-colors">
-                                {parcel.name}
+                          {/* Crop accent line */}
+                          <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-full transition-all duration-300 ${
+                            isSelected ? 'h-8 bg-primary shadow-lg shadow-primary/50' :
+                            crop === 'Appel' ? 'h-5 bg-rose-500/40 group-hover:h-8 group-hover:bg-rose-500/70' :
+                            crop === 'Peer' ? 'h-5 bg-emerald-500/40 group-hover:h-8 group-hover:bg-emerald-500/70' :
+                            'h-5 bg-amber-500/40 group-hover:h-8 group-hover:bg-amber-500/70'
+                          }`} />
+
+                          {/* Checkbox */}
+                          <div className="w-9 flex items-center justify-center shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleParcelSelection(parcel.id); }}
+                              className={`h-5 w-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
+                                isSelected
+                                  ? 'bg-primary border-primary shadow-lg shadow-primary/30'
+                                  : 'border-white/10 hover:border-white/25 bg-white/[0.03] group-hover:border-white/20'
+                              }`}
+                            >
+                              {isSelected && (
+                                <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Name + synonyms */}
+                          <div className="flex-1 min-w-0 py-2.5">
+                            <span className="font-bold text-[15px] text-white group-hover:text-primary transition-colors duration-200 truncate block">
+                              {parcel.name}
+                            </span>
+                            {parcel.synonyms && parcel.synonyms.length > 0 && (
+                              <span className="text-[10px] text-white/15 italic truncate block mt-0.5">
+                                aka {parcel.synonyms.join(', ')}
                               </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${colors.bg} ${colors.text}`}>
-                                {crop === 'Appel' ? <Apple className="h-3 w-3" /> : <Leaf className="h-3 w-3" />}
-                                {crop}
+                            )}
+                          </div>
+
+                          {/* Crop badge */}
+                          <div className="w-24 flex items-center justify-center shrink-0">
+                            <span className={`inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${colors.bg} ${colors.text} group-hover:shadow-lg ${
+                              crop === 'Appel' ? 'group-hover:shadow-rose-500/10' :
+                              crop === 'Peer' ? 'group-hover:shadow-emerald-500/10' :
+                              'group-hover:shadow-amber-500/10'
+                            }`}>
+                              <span className={`flex items-center justify-center h-4 w-4 rounded-full ${
+                                crop === 'Appel' ? 'bg-rose-500/20' :
+                                crop === 'Peer' ? 'bg-emerald-500/20' :
+                                'bg-amber-500/20'
+                              }`}>
+                                {crop === 'Appel' ? <Apple className="h-2.5 w-2.5" /> : <Leaf className="h-2.5 w-2.5" />}
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-white/70">
+                              {crop}
+                            </span>
+                          </div>
+
+                          {/* Variety */}
+                          <div className="w-40 shrink-0 hidden lg:block">
+                            <span className="text-sm text-white/50 group-hover:text-white/70 transition-colors truncate block">
                               {parcel.variety || '—'}
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm font-mono text-white/70">
-                              {(parcel.area || 0).toFixed(2)} ha
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedMainParcel(parcel); }}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 hover:text-primary text-white/30 transition-colors"
-                                title="Bekijk details"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </span>
+                          </div>
+
+                          {/* Area with micro bar */}
+                          <div className="w-28 shrink-0 text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-sm font-mono font-bold text-white/70 tabular-nums group-hover:text-white transition-colors">
+                                {(parcel.area || 0).toFixed(2)} <span className="text-[10px] font-sans text-white/30">ha</span>
+                              </span>
+                              <div className="w-full h-[2px] rounded-full bg-white/[0.06] overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    crop === 'Appel' ? 'bg-rose-500/40' :
+                                    crop === 'Peer' ? 'bg-emerald-500/40' :
+                                    'bg-amber-500/40'
+                                  }`}
+                                  style={{ width: `${areaPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action */}
+                          <div className="w-10 flex items-center justify-center shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedMainParcel(parcel); }}
+                              className="p-2 rounded-xl opacity-0 group-hover:opacity-100 bg-white/[0.04] hover:bg-primary/20 text-white/30 hover:text-primary transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
+                              title="Bekijk details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
                 </div>
               ) : (
                 <div className="bg-card/30 backdrop-blur-md border border-white/5 rounded-3xl p-12">
@@ -924,40 +980,55 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
               )}
             </div>
 
-            {/* Summary footer */}
-            {!isLoading && !groupByMainParcel && filteredParcels.length > 0 && (
-              <div className="shrink-0 px-4 py-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center">
-                <span className="text-sm text-white/50">
-                  Totaal: <span className="font-bold text-white">{filteredParcels.length}</span> percelen
-                </span>
-                <div className="flex items-center gap-4">
-                  {selectedParcelIds.size > 0 && (
-                    <span className="text-sm text-primary/80 flex items-center gap-2">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="font-bold text-primary">{selectedParcelIds.size}</span> geselecteerd
-                      <span className="text-white/20">•</span>
-                      <span className="font-bold text-primary">{selectedParcelsArea.toFixed(2)}</span> ha
-                      <button
-                        onClick={() => setSelectedParcelIds(new Set())}
-                        className="ml-1 text-[10px] text-white/30 hover:text-white/60 underline transition-colors"
-                      >
-                        wis
-                      </button>
-                      <button
-                        onClick={() => { setGroupInitialSelectedIds(new Set(selectedParcelIds)); setIsGroupDialogOpen(true); }}
-                        className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
-                      >
-                        <FolderPlus className="h-3 w-3" />
-                        Opslaan als groep
-                      </button>
+            {/* Floating selection bar */}
+            <AnimatePresence>
+              {!isLoading && !groupByMainParcel && selectedParcelIds.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 rounded-2xl bg-[#111]/90 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50"
+                >
+                  {/* Pulsing indicator */}
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
                     </span>
-                  )}
-                  <span className="text-sm text-white/50">
-                    <span className="font-bold text-white">{totalFilteredArea.toFixed(2)}</span> ha
-                  </span>
-                </div>
-              </div>
-            )}
+                    <span className="text-sm font-bold text-white">{selectedParcelIds.size}</span>
+                    <span className="text-sm text-white/50">geselecteerd</span>
+                  </div>
+
+                  <div className="w-px h-5 bg-white/10" />
+
+                  {/* Area */}
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm font-mono font-bold text-primary">{selectedParcelsArea.toFixed(2)}</span>
+                    <span className="text-[10px] text-white/30">ha</span>
+                  </div>
+
+                  <div className="w-px h-5 bg-white/10" />
+
+                  {/* Actions */}
+                  <button
+                    onClick={() => { setGroupInitialSelectedIds(new Set(selectedParcelIds)); setIsGroupDialogOpen(true); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/15 text-primary text-xs font-bold hover:bg-primary/25 transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Opslaan als groep
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedParcelIds(new Set())}
+                    className="p-1.5 rounded-lg text-white/30 hover:text-white/70 hover:bg-white/10 transition-all duration-200"
+                    title="Deselecteer alles"
+                  >
+                    <XIcon className="h-4 w-4" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ) : (
           <Card className="bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 h-[calc(100vh-24rem)] overflow-hidden relative rounded-3xl">

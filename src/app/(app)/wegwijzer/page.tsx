@@ -18,6 +18,9 @@ import {
 import { cn } from '@/lib/utils';
 import { wegwijzerSections, type WegwijzerSection } from '@/lib/wegwijzer-content';
 import { SamenhangDiagram } from './samenhang-diagram';
+import { WalkthroughStepper } from '@/components/wegwijzer/WalkthroughStepper';
+import { walkthroughsBySection } from '@/components/wegwijzer/walkthrough-data';
+import { Eye } from 'lucide-react';
 
 // Group sections by parentLabel for the TOC
 const sectionGroups = wegwijzerSections.reduce<Record<string, WegwijzerSection[]>>((acc, section) => {
@@ -35,9 +38,17 @@ function SectionCard({ section, isOpen, onToggle }: {
   const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight);
-    }
+    if (!contentRef.current || !isOpen) return;
+    setContentHeight(contentRef.current.scrollHeight);
+
+    // Watch for size changes (e.g. images loading inside walkthrough)
+    const observer = new ResizeObserver(() => {
+      if (contentRef.current) {
+        setContentHeight(contentRef.current.scrollHeight);
+      }
+    });
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
   }, [isOpen]);
 
   const Icon = section.icon;
@@ -113,6 +124,17 @@ function SectionCard({ section, isOpen, onToggle }: {
               ))}
             </ul>
           </div>
+
+          {/* Bekijk het in actie — Walkthrough */}
+          {walkthroughsBySection[section.id] && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Eye className="size-4 text-emerald-400" />
+                <h4 className="text-sm font-bold text-emerald-400">Bekijk het in actie</h4>
+              </div>
+              <WalkthroughStepper {...walkthroughsBySection[section.id]} />
+            </div>
+          )}
 
           {/* Voorbeeld */}
           <div>
