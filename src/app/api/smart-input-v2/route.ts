@@ -1071,43 +1071,55 @@ async function handleFirstMessage(
             console.log(`[${context}] Using pre-processed plots with exclusions: ${plots.length} parcels (excluded: ${preProcessed.excludedPlots.length})`);
         }
 
-        // Fallback: extract parcel names from raw input using keyword patterns
-        if (plots.length === 0) {
+        // ALWAYS try keyword-based parcel extraction and merge with existing results
+        // This catches cases like "steketee en de greenstar" where preprocessCropSelection
+        // only matched "greenstar" (as variety) but missed "steketee" (parcel group name)
+        {
             const lowerMsg = message.toLowerCase();
+            let keywordPlots: string[] = [];
 
             // Pattern 1: "op [parcels]" or "voor [parcels]" (parcels after keyword)
             const afterMatch = lowerMsg.match(/\b(?:op|voor)\s+(.+?)$/);
             if (afterMatch) {
                 const plotPart = afterMatch[1].trim();
                 const plotNames = plotPart.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
-                console.log(`[${context}] Fallback plot extraction from "op/voor": ${plotNames.join(', ')}`);
-                plots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
+                console.log(`[${context}] Keyword plot extraction from "op/voor": ${plotNames.join(', ')}`);
+                keywordPlots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
             }
 
             // Pattern 2: "[parcels] met [product]" (parcels before "met")
-            // Strip time references first, then extract everything before "met"
-            if (plots.length === 0) {
+            if (keywordPlots.length === 0) {
                 const beforeMetMatch = lowerMsg.match(/\bmet\s+\d/);
                 if (beforeMetMatch) {
-                    // Everything between time words and "met"
                     let plotSection = lowerMsg.substring(0, beforeMetMatch.index).trim();
-                    // Remove common time references
                     plotSection = plotSection
                         .replace(/\b(vandaag|gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b/gi, '')
                         .replace(/\b(ochtend|middag|avond|nacht|morgen|vanmorgen|vanavond|vanochtend)\b/gi, '')
-                        .replace(/\b\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?\b/g, '') // dates
+                        .replace(/\b\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?\b/g, '')
                         .replace(/^\s*,?\s*/, '')
                         .trim();
                     if (plotSection.length >= 2) {
                         const plotNames = plotSection.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
-                        console.log(`[${context}] Fallback plot extraction from before "met": ${plotNames.join(', ')}`);
-                        plots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
+                        console.log(`[${context}] Keyword plot extraction from before "met": ${plotNames.join(', ')}`);
+                        keywordPlots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
                     }
                 }
             }
 
-            if (plots.length > 0) {
-                console.log(`[${context}] Fallback resolved ${plots.length} parcels from keyword extraction`);
+            // Merge: use keyword extraction if it found MORE parcels than current
+            if (keywordPlots.length > plots.length) {
+                console.log(`[${context}] Keyword extraction found more parcels (${keywordPlots.length}) than current (${plots.length}) → using keyword result`);
+                plots = keywordPlots;
+            } else if (keywordPlots.length > 0 && plots.length > 0) {
+                // Merge unique IDs from both sources
+                const merged = [...new Set([...plots, ...keywordPlots])];
+                if (merged.length > plots.length) {
+                    console.log(`[${context}] Merging keyword parcels: ${plots.length} + ${keywordPlots.length} → ${merged.length} unique`);
+                    plots = merged;
+                }
+            } else if (keywordPlots.length > 0) {
+                plots = keywordPlots;
+                console.log(`[${context}] Using keyword-extracted parcels: ${plots.length}`);
             }
         }
 
