@@ -33,7 +33,7 @@ import type {
 } from '@/lib/types-v2';
 import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, CtgbProduct, FertilizerProduct, RegistrationType, ProductSource } from '@/lib/types';
 import { validateDraft, formatValidationResult, type DraftValidationResult, type DraftValidationIssue } from '@/lib/draft-validator';
-import { detectRegistrationType, resolveProductSources } from '@/lib/fertilizer-lookup';
+import { detectRegistrationType, resolveProductSources, resolveFertilizerProduct } from '@/lib/fertilizer-lookup';
 
 // ============================================================================
 // AUTH HELPER
@@ -336,6 +336,7 @@ interface PreProcessedProduct {
 function preprocessProductExtraction(message: string): PreProcessedProduct[] {
     const lower = message.toLowerCase().trim();
     const products: PreProcessedProduct[] = [];
+    const CROP_NAMES = /^(alle|de|mijn|het|peren|appels|elstar|conference|beurre|greenstar|thuis|steketee|spoor|pompus)$/i;
 
     // Extract everything after "met " (Dutch for "with")
     const metMatch = lower.match(/\bmet\s+(.+)/);
@@ -349,23 +350,29 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
             .filter(s => s.length > 0);
 
         for (const segment of segments) {
-            // Pattern: product_name dosage unit
-            const match = segment.match(/^([a-zà-ü][a-zà-ü\s]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
-            if (!match) continue;
+            // Pattern A: product_name dosage unit (e.g. "merpan 2 L")
+            const matchA = segment.match(/^([a-zà-ü][\w\s-]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
+            if (matchA) {
+                const rawName = matchA[1].trim();
+                const rawDosage = parseFloat(matchA[2].replace(',', '.'));
+                const rawUnit = matchA[3].toLowerCase();
+                if (rawName.length >= 2 && !CROP_NAMES.test(rawName)) {
+                    products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
+                    continue;
+                }
+            }
 
-            const rawName = match[1].trim();
-            const rawDosage = parseFloat(match[2].replace(',', '.'));
-            const rawUnit = match[3].toLowerCase();
-
-            // Skip if name is too short or looks like a crop name
-            if (rawName.length < 3) continue;
-            if (/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) continue;
-
-            products.push({
-                product: rawName,
-                dosage: rawDosage,
-                unit: rawUnit,
-            });
+            // Pattern B: dosage unit product_name (e.g. "2.5 kg acs koper")
+            const matchB = segment.match(/^(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?\s+([a-zà-ü][\w\s-]+)$/i);
+            if (matchB) {
+                const rawDosage = parseFloat(matchB[1].replace(',', '.'));
+                const rawUnit = matchB[2].toLowerCase();
+                const rawName = matchB[3].trim();
+                if (rawName.length >= 2 && !CROP_NAMES.test(rawName)) {
+                    products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
+                    continue;
+                }
+            }
         }
     }
 
@@ -378,7 +385,7 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
             const rawName = directMatch[1].trim();
             const rawDosage = parseFloat(directMatch[2].replace(',', '.'));
             const rawUnit = directMatch[3].toLowerCase();
-            if (rawName.length >= 3 && !/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) {
+            if (rawName.length >= 3 && !CROP_NAMES.test(rawName)) {
                 products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
             }
         }
@@ -391,7 +398,7 @@ function preprocessProductExtraction(message: string): PreProcessedProduct[] {
             const rawName = opMatch[1].trim();
             const rawDosage = parseFloat(opMatch[2].replace(',', '.'));
             const rawUnit = opMatch[3].toLowerCase();
-            if (rawName.length >= 2 && !/^(alle|de|mijn|het|peren|appels|elstar|conference|beurre)$/i.test(rawName)) {
+            if (rawName.length >= 2 && !CROP_NAMES.test(rawName)) {
                 products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
             }
         }
@@ -1064,18 +1071,43 @@ async function handleFirstMessage(
             console.log(`[${context}] Using pre-processed plots with exclusions: ${plots.length} parcels (excluded: ${preProcessed.excludedPlots.length})`);
         }
 
-        // Fallback: extract parcel names from raw input (e.g. "op steketee en thuis appels")
+        // Fallback: extract parcel names from raw input using keyword patterns
         if (plots.length === 0) {
-            const opMatch = message.toLowerCase().match(/\b(?:op|voor)\s+(.+?)$/);
-            if (opMatch) {
-                const plotPart = opMatch[1].trim();
-                // Split on "en", "+" separators
+            const lowerMsg = message.toLowerCase();
+
+            // Pattern 1: "op [parcels]" or "voor [parcels]" (parcels after keyword)
+            const afterMatch = lowerMsg.match(/\b(?:op|voor)\s+(.+?)$/);
+            if (afterMatch) {
+                const plotPart = afterMatch[1].trim();
                 const plotNames = plotPart.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
-                console.log(`[${context}] Fallback plot extraction from "op": ${plotNames.join(', ')}`);
+                console.log(`[${context}] Fallback plot extraction from "op/voor": ${plotNames.join(', ')}`);
                 plots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
-                if (plots.length > 0) {
-                    console.log(`[${context}] Fallback resolved ${plots.length} parcels from "op" keyword`);
+            }
+
+            // Pattern 2: "[parcels] met [product]" (parcels before "met")
+            // Strip time references first, then extract everything before "met"
+            if (plots.length === 0) {
+                const beforeMetMatch = lowerMsg.match(/\bmet\s+\d/);
+                if (beforeMetMatch) {
+                    // Everything between time words and "met"
+                    let plotSection = lowerMsg.substring(0, beforeMetMatch.index).trim();
+                    // Remove common time references
+                    plotSection = plotSection
+                        .replace(/\b(vandaag|gisteren|eergisteren|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)\b/gi, '')
+                        .replace(/\b(ochtend|middag|avond|nacht|morgen|vanmorgen|vanavond|vanochtend)\b/gi, '')
+                        .replace(/\b\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?\b/g, '') // dates
+                        .replace(/^\s*,?\s*/, '')
+                        .trim();
+                    if (plotSection.length >= 2) {
+                        const plotNames = plotSection.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
+                        console.log(`[${context}] Fallback plot extraction from before "met": ${plotNames.join(', ')}`);
+                        plots = resolveParcelNamesToIds(plotNames, allParcels, parcelGroups);
+                    }
                 }
+            }
+
+            if (plots.length > 0) {
+                console.log(`[${context}] Fallback resolved ${plots.length} parcels from keyword extraction`);
             }
         }
 
@@ -1294,6 +1326,7 @@ async function handleFirstMessage(
             continue;
         }
 
+        // Check CTGB database
         const ctgbMatch = allProducts.find(cp =>
             cp.naam.toLowerCase() === prod.product.toLowerCase() ||
             cp.naam.toLowerCase().includes(prod.product.toLowerCase()) ||
@@ -1301,11 +1334,24 @@ async function handleFirstMessage(
         );
         if (ctgbMatch) {
             prod.resolved = true;
-        } else {
-            prod.resolved = false;
-            prod.suggestions = getProductSuggestions(prod.product, allProducts);
-            unknownProducts.push(prod.product);
+            continue;
         }
+
+        // FALLBACK: Check fertilizer cache + DB before marking as unknown
+        // (catches cases where resolveProductSources missed it)
+        const fertCheck = resolveFertilizerProduct(prod.product, registrationType, false, allFertilizers);
+        if (fertCheck) {
+            prod.product = fertCheck.resolvedName;
+            prod.source = 'fertilizer';
+            prod.resolved = true;
+            console.log(`[${context}] Step 8 fertilizer recovery: "${prod.product}" → "${fertCheck.resolvedName}" (confidence: ${fertCheck.confidence})`);
+            continue;
+        }
+
+        // Not found in any database
+        prod.resolved = false;
+        prod.suggestions = getProductSuggestions(prod.product, allProducts);
+        unknownProducts.push(prod.product);
     }
 
     if (unknownProducts.length > 0) {
