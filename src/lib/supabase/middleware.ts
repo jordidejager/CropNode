@@ -37,15 +37,15 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Probeer user op te halen
+  // Use getSession() (reads JWT from cookies, no external fetch) for fast auth check.
+  // getUser() makes an external fetch to Supabase which fails with Node.js ECONNRESET bug,
+  // causing 120s+ delays (30s timeout × 4 attempts). RLS on the database still protects data.
   let user = null
-  let networkError = false
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data.user
+    const { data: { session } } = await supabase.auth.getSession()
+    user = session?.user ?? null
   } catch (error) {
-    networkError = true
-    console.warn('[Middleware] Network error during auth check:', error instanceof Error ? error.message : 'Unknown')
+    console.warn('[Middleware] Session check failed:', error instanceof Error ? error.message : 'Unknown')
   }
 
   // Routes die beschermd moeten worden
@@ -56,18 +56,6 @@ export async function updateSession(request: NextRequest) {
 
   // Niet ingelogd en probeert beschermde route te bezoeken
   if (!user && isProtectedRoute) {
-    // Bij netwerk error: laat door als session cookie aanwezig (optimistic)
-    // RLS op de database zorgt alsnog voor data-bescherming
-    if (networkError) {
-      const hasSessionCookie = request.cookies.getAll().some(
-        cookie => cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token')
-      )
-      if (hasSessionCookie) {
-        console.warn('[Middleware] Network error but valid session cookie pattern found, allowing through')
-        return supabaseResponse
-      }
-    }
-
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
