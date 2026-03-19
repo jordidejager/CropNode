@@ -2,7 +2,7 @@
  * Meststoffen Lookup Service
  *
  * Dual-database lookup: CTGB (gewasbeschermingsmiddelen) + Meststoffen
- * Met hardcoded cache voor de ~40 meest gebruikte meststoffen in fruitteelt.
+ * Met hardcoded cache voor de ~70 meest gebruikte meststoffen in fruitteelt.
  *
  * KRITIEK: Geen cross-database false positives.
  * - CTGB-producten worden NOOIT als meststof herkend
@@ -39,12 +39,10 @@ export const COMMON_FERTILIZERS_CACHE: CachedFertilizer[] = [
   { name: "Monokalifosfaat", aliases: ["mkp", "mono kali fosfaat"], type: "bladmeststof", element: "K+P" },
   { name: "Zinksulfaat", aliases: ["zink sulfaat"], type: "bladmeststof", element: "Zn" },
   { name: "Ureum", aliases: ["ureumbladvoeding"], type: "bladmeststof", element: "N" },
-  { name: "Calcimax", aliases: [], type: "bladmeststof", element: "Ca+B" },
+  { name: "CalciMax", aliases: ["calcimax"], type: "bladmeststof", element: "Ca+B" },
   { name: "Calin W", aliases: ["calin"], type: "bladmeststof", element: "Ca" },
-  { name: "ACS-Koper 500", aliases: ["acs koper", "acs-koper", "acs koper 500"], type: "bladmeststof", element: "Cu" },
   { name: "Copfall", aliases: [], type: "bladmeststof", element: "Cu" },
   { name: "Stimuplant Vitaal", aliases: ["stimuplant"], type: "bladmeststof", element: "mix" },
-  { name: "Hortispoor Mix", aliases: ["hortispoor"], type: "bladmeststof", element: "mix" },
   { name: "Selectyc X", aliases: ["selectyc"], type: "bladmeststof", element: "mix" },
   { name: "Alsupre S", aliases: ["alsupre"], type: "bladmeststof", element: "mix" },
   { name: "Fosanit Cu", aliases: ["fosanit"], type: "bladmeststof", element: "P+Cu" },
@@ -53,6 +51,34 @@ export const COMMON_FERTILIZERS_CACHE: CachedFertilizer[] = [
   { name: "Mag500", aliases: ["mag 500"], type: "bladmeststof", element: "Mg" },
   { name: "Mangaan 500", aliases: ["mn 500", "mn500"], type: "bladmeststof", element: "Mn" },
   { name: "Fertigofol Ultra", aliases: ["fertigofol"], type: "bladmeststof", element: "NPK+mix" },
+
+  // === BLADMESTSTOFFEN - YaraVita serie ===
+  { name: "YaraVita BORTRAC 150", aliases: ["bortrac", "yaravita bortrac"], type: "bladmeststof", element: "B" },
+  { name: "YaraVita ZINTRAC 700", aliases: ["zintrac", "yaravita zintrac"], type: "bladmeststof", element: "Zn" },
+  { name: "YaraVita MANTRAC PRO", aliases: ["mantrac", "yaravita mantrac"], type: "bladmeststof", element: "Mn" },
+  { name: "YaraVita FRUTREL", aliases: ["frutrel", "yaravita frutrel"], type: "bladmeststof", element: "B+Zn+Mg+P+Ca" },
+  { name: "YaraVita FERRITRAC 54", aliases: ["ferritrac", "yaravita ferritrac"], type: "bladmeststof", element: "Fe" },
+  { name: "YaraTera Calciumchloride Vloeibaar", aliases: ["cacl2", "calciumchloride"], type: "bladmeststof", element: "Ca" },
+
+  // === BLADMESTSTOFFEN - Agroleaf Power serie (ICL) ===
+  { name: "Agroleaf Power Calcium", aliases: ["agroleaf calcium"], type: "bladmeststof", element: "NPK+Ca" },
+  { name: "Agroleaf Power Magnesium", aliases: ["agroleaf magnesium"], type: "bladmeststof", element: "NPK+Mg" },
+  { name: "Agroleaf Power Total", aliases: ["agroleaf total"], type: "bladmeststof", element: "NPK" },
+  { name: "Agroleaf Power High N", aliases: ["agroleaf high n"], type: "bladmeststof", element: "N" },
+
+  // === BLADMESTSTOFFEN - Extra fruitteelt producten ===
+  { name: "Super Sulfo WG 800", aliases: ["super sulfo", "sulfo", "sulfo wg 800"], type: "bladmeststof", element: "S" },
+  { name: "Fructol Bio", aliases: ["fructol", "fructol bio"], type: "bladmeststof", element: "Fe+Mn+Zn" },
+  { name: "Landamine Zn", aliases: ["landamine", "landamine zn"], type: "bladmeststof", element: "Zn" },
+  { name: "Solufert Micro", aliases: ["solufert micro"], type: "bladmeststof", element: "mix" },
+  { name: "Hortispoor Mix Vloeibaar", aliases: ["hortispoor", "hortispoor mix"], type: "bladmeststof", element: "mix" },
+  { name: "Calcium-Forte", aliases: ["calcium forte"], type: "bladmeststof", element: "Ca+Mn+Zn" },
+  { name: "ACS-Koper 500", aliases: ["acs koper", "acs-koper", "acs koper 500"], type: "bladmeststof", element: "Cu" },
+  { name: "Powerleaf Mangaan Plus", aliases: ["powerleaf mangaan"], type: "bladmeststof", element: "Mn" },
+  { name: "Powerleaf Koper Zwavel", aliases: ["powerleaf koper", "koper zwavel"], type: "bladmeststof", element: "Cu+S" },
+  { name: "Hi-Phos", aliases: ["hiphos", "hi-phos"], type: "bladmeststof", element: "P" },
+  { name: "Bladkali TS", aliases: ["bladkali"], type: "bladmeststof", element: "K" },
+  { name: "Wuxal Mangaan+Boor", aliases: ["wuxal"], type: "bladmeststof", element: "Mn+B+Mg" },
 
   // === STROOIMESTSTOFFEN (granulaat/korrel) ===
   { name: "Kalkammonsalpeter", aliases: ["kas", "kas 27"], type: "strooimeststof", element: "N" },
@@ -68,6 +94,30 @@ export const COMMON_FERTILIZERS_CACHE: CachedFertilizer[] = [
   { name: "Mengmest 12-10-18", aliases: ["12-10-18", "npk 12-10-18"], type: "strooimeststof", element: "NPK" },
   { name: "Haifa Multi-K", aliases: ["haifa", "multi-k", "kaliumnitraat"], type: "strooimeststof", element: "K+N" },
   { name: "Kalksalpeter", aliases: ["calciumnitraat"], type: "strooimeststof", element: "N+Ca" },
+
+  // === STROOIMESTSTOFFEN - Extra fruitteelt ===
+  { name: "Top Mix Fruit", aliases: ["top mix fruit", "top mix"], type: "strooimeststof", element: "NPK" },
+  { name: "ECOstyle Fruit-AZ", aliases: ["ecostyle fruit", "fruit-az"], type: "strooimeststof", element: "NPK" },
+  { name: "FerroPlus", aliases: ["ferroplus", "ferro plus"], type: "strooimeststof", element: "Fe" },
+  { name: "Ferrilene", aliases: ["ferrilene"], type: "strooimeststof", element: "Fe" },
+  { name: "UltraFerro", aliases: ["ultraferro", "ultra ferro"], type: "strooimeststof", element: "Fe" },
+  { name: "Dolokal", aliases: ["dolokal"], type: "strooimeststof", element: "Ca+Mg" },
+  { name: "Basaltmeel", aliases: ["basaltmeel"], type: "strooimeststof", element: "mix" },
+  { name: "Champost", aliases: ["champost", "champignonmest"], type: "strooimeststof", element: "organisch" },
+
+  // === BLADMESTSTOFFEN - Batch 3 (dump verrijking) ===
+  { name: "EPSO Combitop®", aliases: ["epso combitop", "combitop"], type: "bladmeststof", element: "Mg+Mn+Zn" },
+  { name: "EPSO Microtop®", aliases: ["epso microtop", "microtop"], type: "bladmeststof", element: "Mg+B+Mn" },
+  { name: "Wuxal® Calcium", aliases: ["wuxal calcium"], type: "bladmeststof", element: "Ca+N" },
+  { name: "Wuxal® Folibor", aliases: ["wuxal folibor", "folibor"], type: "bladmeststof", element: "B" },
+  { name: "Wuxal® Top K", aliases: ["wuxal top k"], type: "bladmeststof", element: "NPK(K)" },
+  { name: "Wuxal® Top N", aliases: ["wuxal top n"], type: "bladmeststof", element: "NPK(N)" },
+  { name: "Wuxal® Suspensie Mangaan", aliases: ["wuxal suspensie mangaan", "wuxal mangaan suspensie"], type: "bladmeststof", element: "Mn" },
+  { name: "YaraVita COPTREL 500", aliases: ["coptrel", "coptrel 500", "yaravita coptrel"], type: "bladmeststof", element: "Cu" },
+  { name: "YaraVita SENIPHOS", aliases: ["seniphos", "yaravita seniphos"], type: "bladmeststof", element: "P+Ca" },
+  { name: "Stimuplant Multimix", aliases: ["stimuplant multimix", "multimix"], type: "bladmeststof", element: "NPK+mix" },
+  { name: "Agroleaf Liquid Calcium+", aliases: ["agroleaf liquid calcium", "agroleaf calcium liquid", "agroleaf calcium+"], type: "bladmeststof", element: "Ca+N" },
+  { name: "Powerleaf Mangaan Magnesium", aliases: ["powerleaf mangaan magnesium", "powerleaf mn mg"], type: "bladmeststof", element: "Mn+Mg" },
 ];
 
 // Pre-build lookup maps for O(1) access
@@ -316,19 +366,7 @@ export function resolveProductSources(
       };
     }
 
-    // Bij spraying: check of CTGB match bestaat
-    const isCtgb = ctgbResolvedNames.has(prod.product) || ctgbResolvedNames.has(prod.product.toLowerCase());
-
-    if (isCtgb) {
-      return {
-        product: prod.product,
-        dosage: prod.dosage,
-        unit: prod.unit,
-        source: 'ctgb' as ProductSource,
-      };
-    }
-
-    // Niet in CTGB: probeer meststoffen
+    // Bij spraying: check meststoffen EERST (meststoffen zijn specifieker gecureerd)
     const fertResult = resolveFertilizerProduct(prod.product, 'spraying', false, fertilizers);
     if (fertResult) {
       return {
@@ -337,6 +375,17 @@ export function resolveProductSources(
         unit: prod.unit,
         source: 'fertilizer' as ProductSource,
         warning: fertResult.warning,
+      };
+    }
+
+    // Niet in meststoffen: check CTGB
+    const isCtgb = ctgbResolvedNames.has(prod.product) || ctgbResolvedNames.has(prod.product.toLowerCase());
+    if (isCtgb) {
+      return {
+        product: prod.product,
+        dosage: prod.dosage,
+        unit: prod.unit,
+        source: 'ctgb' as ProductSource,
       };
     }
 

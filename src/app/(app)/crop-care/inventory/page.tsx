@@ -45,7 +45,7 @@ export default function VoorraadPage() {
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <CardTitle>Voorraadbeheer</CardTitle>
-                        <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen.</CardDescription>
+                        <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen en meststoffen.</CardDescription>
                     </div>
                     <Button disabled>
                         <PlusCircle className="mr-2 h-4 w-4" /> Levering Toevoegen
@@ -67,7 +67,7 @@ export default function VoorraadPage() {
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <CardTitle>Voorraadbeheer</CardTitle>
-                        <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen.</CardDescription>
+                        <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen en meststoffen.</CardDescription>
                     </div>
                 </div>
                 <Card>
@@ -88,7 +88,7 @@ export default function VoorraadPage() {
             <div className="flex justify-between items-center mb-4">
                 <div>
                     <CardTitle>Voorraadbeheer</CardTitle>
-                    <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen.</CardDescription>
+                    <CardDescription>Overzicht van de huidige voorraad gewasbeschermingsmiddelen en meststoffen.</CardDescription>
                 </div>
                 <Button onClick={() => setIsAddStockOpen(true)}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Levering Toevoegen

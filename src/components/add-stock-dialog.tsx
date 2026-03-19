@@ -74,7 +74,7 @@ export function AddStockDialog({ open, onOpenChange, allProducts, onStockAdded }
                 <DialogHeader>
                     <DialogTitle>Levering Toevoegen</DialogTitle>
                     <DialogDescription>
-                        Voeg een nieuwe levering van een middel toe aan de voorraad.
+                        Voeg een nieuwe levering van een middel of meststof toe aan de voorraad.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">

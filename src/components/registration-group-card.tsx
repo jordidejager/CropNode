@@ -179,6 +179,162 @@ interface ParcelGroup {
     totalArea: number;
 }
 
+// ============================================
+// Inline Editable Product Name
+// ============================================
+
+function EditableProductName({
+    name,
+    isConfirmed,
+    onUpdate,
+}: {
+    name: string;
+    isConfirmed: boolean;
+    onUpdate?: (newName: string) => void;
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(name);
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        const trimmed = editValue.trim();
+        if (trimmed && trimmed !== name) {
+            onUpdate?.(trimmed);
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleSave();
+        } else if (e.key === 'Escape') {
+            setEditValue(name);
+            setIsEditing(false);
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <div className="flex items-center gap-1.5 min-w-0">
+                <Input
+                    ref={inputRef}
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={handleKeyDown}
+                    className="h-7 text-sm bg-white/5 border-white/20 text-white px-2 py-0"
+                />
+            </div>
+        );
+    }
+
+    if (isConfirmed || !onUpdate) {
+        return <p className="text-sm text-white font-medium truncate">{name}</p>;
+    }
+
+    return (
+        <button
+            onClick={() => {
+                setEditValue(name);
+                setIsEditing(true);
+            }}
+            className="text-sm text-white font-medium truncate hover:text-emerald-400 transition-colors cursor-pointer text-left"
+            title="Klik om te wijzigen"
+        >
+            {name}
+            <Edit2 className="inline-block ml-1 h-3 w-3 text-white/30" />
+        </button>
+    );
+}
+
+function EditableDosage({
+    dosage,
+    unit,
+    isConfirmed,
+    onUpdate,
+}: {
+    dosage: number;
+    unit: string;
+    isConfirmed: boolean;
+    onUpdate?: (newDosage: number) => void;
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(String(dosage));
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        const parsed = parseFloat(editValue.replace(',', '.'));
+        if (!isNaN(parsed) && parsed > 0 && parsed !== dosage) {
+            onUpdate?.(parsed);
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleSave();
+        } else if (e.key === 'Escape') {
+            setEditValue(String(dosage));
+            setIsEditing(false);
+        }
+    };
+
+    const displayUnit = unit?.includes('/ha') ? unit : `${unit}/ha`;
+
+    if (isEditing) {
+        return (
+            <div className="flex items-center gap-1 justify-end">
+                <Input
+                    ref={inputRef}
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={handleKeyDown}
+                    className="h-7 w-16 text-sm text-right bg-white/5 border-white/20 text-white px-2 py-0"
+                    type="text"
+                    inputMode="decimal"
+                />
+                <span className="text-xs text-white/40">{displayUnit}</span>
+            </div>
+        );
+    }
+
+    if (isConfirmed || !onUpdate) {
+        return (
+            <span className="text-sm font-medium text-emerald-400">
+                {dosage} {displayUnit}
+            </span>
+        );
+    }
+
+    return (
+        <button
+            onClick={() => {
+                setEditValue(String(dosage));
+                setIsEditing(true);
+            }}
+            className="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+            title="Klik om dosering aan te passen"
+        >
+            {dosage} {displayUnit}
+        </button>
+    );
+}
+
 function UnitPanel({
     unit,
     allParcels,
@@ -383,7 +539,11 @@ function UnitPanel({
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-1.5">
-                                                        <p className="text-sm text-white font-medium truncate">{product.product}</p>
+                                                        <EditableProductName
+                                                            name={product.product}
+                                                            isConfirmed={isConfirmed}
+                                                            onUpdate={onProductUpdate ? (newName) => onProductUpdate(i, { product: newName }) : undefined}
+                                                        />
                                                         {product.source === 'fertilizer' && (
                                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-teal-500/15 text-teal-400 border border-teal-500/25 flex-shrink-0">
                                                                 meststof
@@ -440,12 +600,12 @@ function UnitPanel({
                                                     )}
                                                 </div>
                                                 <div className="text-right flex-shrink-0 ml-3">
-                                                    <span className={cn(
-                                                        "text-sm font-medium",
-                                                        product.resolved === false ? "text-amber-400" : "text-emerald-400"
-                                                    )}>
-                                                        {product.dosage} {product.unit?.includes('/ha') ? product.unit : `${product.unit}/ha`}
-                                                    </span>
+                                                    <EditableDosage
+                                                        dosage={product.dosage}
+                                                        unit={product.unit || 'L/ha'}
+                                                        isConfirmed={isConfirmed}
+                                                        onUpdate={onProductUpdate ? (newDosage) => onProductUpdate(i, { dosage: newDosage }) : undefined}
+                                                    />
                                                     <p className="text-[10px] text-white/30 mt-0.5">
                                                         Totaal: {product.total} {product.unit?.replace('/ha', '') || product.unit}
                                                     </p>

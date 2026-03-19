@@ -1,0 +1,599 @@
+[
+  {
+    "id": "A1",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met merpan 0.7 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Merpan",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.7 kg, 0.7 kg, 1,5 KG, 0.7 kg/ha, 14.90 kg"
+    ],
+    "foundProducts": [
+      "Merpan",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.7 kg",
+      "0.7 kg",
+      "1,5 KG",
+      "0.7 kg/ha",
+      "14.90 kg"
+    ]
+  },
+  {
+    "id": "A2",
+    "cat": "Fungicide",
+    "input": "vandaag alle peren met delan 0.5 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Delan",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.5 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Delan",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.5 kg",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "A3",
+    "cat": "Fungicide",
+    "input": "vandaag alle elstar met bellis 0.8 kg",
+    "pass": false,
+    "reason": "AI timeout"
+  },
+  {
+    "id": "A4",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met flint 0.15 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Flint",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.15 kg, 0.15 kg, 1,5 KG, 0.15 kg/ha, 3.19 kg"
+    ],
+    "foundProducts": [
+      "Flint",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.15 kg",
+      "0.15 kg",
+      "1,5 KG",
+      "0.15 kg/ha",
+      "3.19 kg"
+    ]
+  },
+  {
+    "id": "A5",
+    "cat": "Fungicide",
+    "input": "vandaag alle peren met scala 0.75 L",
+    "pass": false,
+    "reason": "AI timeout"
+  },
+  {
+    "id": "A6",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met score 0.2 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Score",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.2 L, 0.2 L, 1,5 KG, 0.2 L/ha, 4.26 L"
+    ],
+    "foundProducts": [
+      "Score",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.2 L",
+      "0.2 L",
+      "1,5 KG",
+      "0.2 L/ha",
+      "4.26 L"
+    ]
+  },
+  {
+    "id": "B1",
+    "cat": "Insecticide",
+    "input": "vandaag alle appels met decis 0.25 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Decis",
+      "Percelen: ✅",
+      "Status: Niet gevonden",
+      "Dosering: 0.25 L, 1,5 KG, 0.25 L/ha, 3.91 L",
+      "⚠️ CTGB: \"niet gevonden\" (mogelijk broken alias)"
+    ],
+    "foundProducts": [
+      "Decis",
+      "Captan"
+    ],
+    "status": "Niet gevonden",
+    "nietGevonden": true,
+    "hasParcels": true,
+    "dosages": [
+      "0.25 L",
+      "1,5 KG",
+      "0.25 L/ha",
+      "3.91 L"
+    ]
+  },
+  {
+    "id": "B2",
+    "cat": "Insecticide",
+    "input": "vandaag alle peren met pirimor 0.5 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Pirimor",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.5 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Pirimor",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.5 kg",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "B3",
+    "cat": "Insecticide",
+    "input": "vandaag alle appels met coragen 0.18 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ CORAGEN",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.18 L, 0.18 L, 1,5 KG, 0.18 L/ha, 5.36 L"
+    ],
+    "foundProducts": [
+      "CORAGEN",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.18 L",
+      "0.18 L",
+      "1,5 KG",
+      "0.18 L/ha",
+      "5.36 L"
+    ]
+  },
+  {
+    "id": "B4",
+    "cat": "Insecticide",
+    "input": "vandaag alle conference met karate zeon 0.15 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Karate",
+      "Percelen: ✅",
+      "Status: Niet gevonden",
+      "Dosering: 0.15 L, 1,5 KG, 0.15 L/ha, 3.19 L",
+      "⚠️ CTGB: \"niet gevonden\" (mogelijk broken alias)"
+    ],
+    "foundProducts": [
+      "Karate",
+      "Captan"
+    ],
+    "status": "Niet gevonden",
+    "nietGevonden": true,
+    "hasParcels": true,
+    "dosages": [
+      "0.15 L",
+      "1,5 KG",
+      "0.15 L/ha",
+      "3.19 L"
+    ]
+  },
+  {
+    "id": "C1",
+    "cat": "Acaricide",
+    "input": "vandaag alle appels met nissorun 0.2 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Nissorun",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.2 L, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Nissorun",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.2 L",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "C2",
+    "cat": "Acaricide",
+    "input": "vandaag alle peren met apollo 0.3 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Apollo",
+      "Percelen: ✅",
+      "Status: Niet gevonden",
+      "Dosering: 0.3 L, 1,5 KG, 0.3 L/ha, 9.32 L",
+      "⚠️ CTGB: \"niet gevonden\" (mogelijk broken alias)"
+    ],
+    "foundProducts": [
+      "Apollo",
+      "Captan"
+    ],
+    "status": "Niet gevonden",
+    "nietGevonden": true,
+    "hasParcels": true,
+    "dosages": [
+      "0.3 L",
+      "1,5 KG",
+      "0.3 L/ha",
+      "9.32 L"
+    ]
+  },
+  {
+    "id": "C3",
+    "cat": "Acaricide",
+    "input": "vandaag alle elstar met floramite 0.4 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Floramite",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.4 L, 0.4 L, 1,5 KG, 0.4 L/ha, 5.05 L"
+    ],
+    "foundProducts": [
+      "Floramite",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.4 L",
+      "0.4 L",
+      "1,5 KG",
+      "0.4 L/ha",
+      "5.05 L"
+    ]
+  },
+  {
+    "id": "D1",
+    "cat": "Groeiregulator",
+    "input": "vandaag alle appels met regalis plus 2.5 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Regalis",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 2.5 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Regalis",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "2.5 kg",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "D2",
+    "cat": "Overig",
+    "input": "vandaag alle conference met teldor 1.5 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Teldor",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 1.5 kg, 1.5 kg, 1,5 KG, 1.5 kg/ha, 36.20 kg"
+    ],
+    "foundProducts": [
+      "Teldor",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "1.5 kg",
+      "1.5 kg",
+      "1,5 KG",
+      "1.5 kg/ha",
+      "36.20 kg"
+    ]
+  },
+  {
+    "id": "D3",
+    "cat": "Overig",
+    "input": "vandaag alle peren met switch 1 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Switch",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 1 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Switch",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "1 kg",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "E1",
+    "cat": "Lastige naam",
+    "input": "vandaag alle conference met chorus 0.6 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Chorus",
+      "Percelen: ✅",
+      "Status: Niet gevonden",
+      "Dosering: 0.6 kg, 0.6 kg, 1,5 KG, 0.6 kg/ha, 12.77 kg",
+      "⚠️ CTGB: \"niet gevonden\" (mogelijk broken alias)"
+    ],
+    "foundProducts": [
+      "Chorus",
+      "Captan"
+    ],
+    "status": "Niet gevonden",
+    "nietGevonden": true,
+    "hasParcels": true,
+    "dosages": [
+      "0.6 kg",
+      "0.6 kg",
+      "1,5 KG",
+      "0.6 kg/ha",
+      "12.77 kg"
+    ]
+  },
+  {
+    "id": "E2",
+    "cat": "Lastige naam",
+    "input": "vandaag alle appels met luna experience 0.75 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Luna",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.75 L, 0.75 L, 1,5 KG, 0.75 L/ha, 20.41 L"
+    ],
+    "foundProducts": [
+      "Luna",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.75 L",
+      "0.75 L",
+      "1,5 KG",
+      "0.75 L/ha",
+      "20.41 L"
+    ]
+  },
+  {
+    "id": "E3",
+    "cat": "Lastige naam",
+    "input": "vandaag alle peren met captosan 1.1 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Captosan",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 1.1 L, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Captosan",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "1.1 L",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "F1",
+    "cat": "Eenheid",
+    "input": "vandaag alle conference met merpan 700 gram",
+    "pass": true,
+    "details": [
+      "Product: ✅ Merpan",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 700 g, 700 g, 700 g, 2.5 g, 700 g"
+    ],
+    "foundProducts": [
+      "Merpan",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "700 g",
+      "700 g",
+      "700 g",
+      "2.5 g",
+      "700 g"
+    ]
+  },
+  {
+    "id": "F2",
+    "cat": "Eenheid",
+    "input": "vandaag alle elstar met scala 750 ml",
+    "pass": true,
+    "details": [
+      "Product: ✅ Scala",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 750 ml, 750 ml, 750 ml, 3.25 l, 750 ml"
+    ],
+    "foundProducts": [
+      "Scala",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "750 ml",
+      "750 ml",
+      "750 ml",
+      "3.25 l",
+      "750 ml"
+    ]
+  },
+  {
+    "id": "F3",
+    "cat": "Eenheid",
+    "input": "vandaag alle peren met score 200 ml",
+    "pass": true,
+    "details": [
+      "Product: ✅ Score",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 200 ml, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Score",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "200 ml",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "G1",
+    "cat": "Tankmix",
+    "input": "vandaag alle conference met merpan 0.7 kg en score 0.2 L",
+    "pass": true,
+    "details": [
+      "Product: ✅ Merpan",
+      "Product 2: ✅ Score",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.7 kg, 0.2 L, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Merpan",
+      "Score",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.7 kg",
+      "0.2 L",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "G2",
+    "cat": "Tankmix",
+    "input": "vandaag alle peren met delan 0.5 kg + flint 0.15 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Delan",
+      "Product 2: ✅ Flint",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.5 kg, 0.15 kg, 0.5 kg, 0.15 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Delan",
+      "Flint",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.5 kg",
+      "0.15 kg",
+      "0.5 kg",
+      "0.15 kg",
+      "1,5 KG"
+    ]
+  },
+  {
+    "id": "G3",
+    "cat": "Tankmix",
+    "input": "vandaag alle conference met merpan 0.7 kg, score 0.2 L en flint 0.15 kg",
+    "pass": true,
+    "details": [
+      "Product: ✅ Merpan",
+      "Product 2: ✅ Score",
+      "Product 3: ✅ Flint",
+      "Percelen: ✅",
+      "Status: Onbekend",
+      "Dosering: 0.7 kg, 0.2 L, 0.15 kg, 1,5 KG"
+    ],
+    "foundProducts": [
+      "Merpan",
+      "Flint",
+      "Score",
+      "Captan"
+    ],
+    "status": "Onbekend",
+    "nietGevonden": false,
+    "hasParcels": true,
+    "dosages": [
+      "0.7 kg",
+      "0.2 L",
+      "0.15 kg",
+      "1,5 KG"
+    ]
+  }
+]

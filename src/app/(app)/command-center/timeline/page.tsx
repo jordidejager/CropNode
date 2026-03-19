@@ -57,9 +57,17 @@ function TimelineContent() {
     // React Query: delete mutation
     const deleteConversationMutation = useDeleteConversation();
 
-    // Handle resume session
-    const handleResume = useCallback((id: string) => {
-        router.push(`/command-center/smart-input-v2?session_id=${id}`);
+    // Handle resume session or view spuitschrift
+    const handleResume = useCallback((conversation: ConversationListItem) => {
+        if (conversation.id.startsWith('sp_')) {
+            // Spuitschrift entry — go to spuitschrift page
+            router.push('/crop-care/logs');
+        } else if (conversation.draft_data?.version === 'v3') {
+            // V3 concept — go to smart-input-v3
+            router.push(`/command-center/smart-input-v3?session_id=${conversation.id}`);
+        } else {
+            router.push(`/command-center/smart-input-v2?session_id=${conversation.id}`);
+        }
     }, [router]);
 
     // Handle delete
@@ -128,7 +136,7 @@ function TimelineContent() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => router.push('/command-center/smart-input-v2')}
+                    onClick={() => router.push('/command-center/smart-input-v3')}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                     <Plus className="h-4 w-4 mr-2" />
@@ -182,7 +190,7 @@ function TimelineContent() {
                         Start een nieuwe sessie via Slimme Invoer
                     </p>
                     <Button
-                        onClick={() => router.push('/command-center/smart-input-v2')}
+                        onClick={() => router.push('/command-center/smart-input-v3')}
                         variant="outline"
                         className="bg-white/5 border-white/10 text-white hover:bg-white/10"
                     >
@@ -196,7 +204,7 @@ function TimelineContent() {
                         <div
                             key={conversation.id}
                             className="group relative bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-emerald-500/30 hover:bg-white/[0.05] transition-all cursor-pointer"
-                            onClick={() => handleResume(conversation.id)}
+                            onClick={() => handleResume(conversation)}
                         >
                             {/* Card Content */}
                             <div className="p-4 space-y-3">
@@ -284,7 +292,7 @@ function TimelineContent() {
                                         className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 h-8"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            handleResume(conversation.id);
+                                            handleResume(conversation);
                                         }}
                                     >
                                         <Play className="h-3.5 w-3.5 mr-1.5" />

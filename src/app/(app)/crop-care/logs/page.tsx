@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useSpuitschriftEntries, useParcels, useInvalidateQueries, useCtgbProducts } from '@/hooks/use-data';
+import { useCropProtectionEntries, useParcels, useInvalidateQueries, useCtgbProducts } from '@/hooks/use-data';
 import { SpuitschriftEntry, ProductEntry } from '@/lib/types';
 import type { SprayableParcel } from '@/lib/supabase-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,7 @@ import { deleteSpuitschriftEntry, updateSpuitschriftEntryAction } from '@/app/ac
 import { useToast } from '@/hooks/use-toast';
 import { SpuitschriftSkeleton, ErrorState, EmptyState } from '@/components/ui/data-states';
 import { cn } from '@/lib/utils';
+import { CropIcon } from '@/components/ui/crop-icon';
 import { NewSprayDialog } from '@/components/spuitschrift';
 
 const formatDate = (date: Date) => {
@@ -381,11 +382,14 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
         <AccordionItem value={entry.id}>
             <AccordionTrigger>
                 <div className="flex justify-between items-center w-full pr-4">
-                    <div className="text-left">
-                        <p className="font-semibold">{formatDate(entry.date)}</p>
-                        <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
-                            {generateProductSummary()}
-                        </p>
+                    <div className="flex items-center gap-2 text-left">
+                        <CropIcon parcels={selectedParcels} />
+                        <div>
+                            <p className="font-semibold">{formatDate(entry.date)}</p>
+                            <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
+                                {generateProductSummary()}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
                         {entry.registrationType === 'spreading' && (
@@ -687,7 +691,7 @@ export default function SpuitschriftPage() {
         isError: isErrorEntries,
         error: errorEntries,
         refetch: refetchEntries
-    } = useSpuitschriftEntries();
+    } = useCropProtectionEntries();
 
     const {
         data: allParcels = [],

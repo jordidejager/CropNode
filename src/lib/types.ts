@@ -20,6 +20,17 @@ export type WeightedValue<T> = {
   percentage: number; // 0-100
 };
 
+export type BrpGewasHistorieEntry = {
+  id: string;
+  parcelId: string;
+  jaar: number;
+  gewascode: number;
+  gewas: string;
+  category: string;
+  cropGroup: string;
+  fetchedAt: Date;
+};
+
 export type ParcelGroup = {
   id: string;
   name: string;
@@ -384,6 +395,11 @@ export interface FertilizerProduct {
     Mo?: number;
   };
   searchKeywords: string[];
+  description?: string;
+  formulation?: string;
+  density?: number;
+  dosageFruit?: string;
+  applicationTiming?: string;
 }
 // ============================================
 // Research Hub Types

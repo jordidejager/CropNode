@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { motion } from 'framer-motion';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { CommandBar } from '@/components/command-bar';
 import { SmartInvoerFeedV2 } from '@/components/v2/smart-invoer-feed-v2';
 import { ClarificationOptions } from '@/components/v2/clarification-options';
@@ -137,6 +138,13 @@ export default function SmartInputV2Page() {
 
     // Refs
     const abortControllerRef = React.useRef<AbortController | null>(null);
+    const hasAutoSubmitted = React.useRef(false);
+
+    // URL param pre-fill from dashboard
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const prefillInput = searchParams.get('input');
+    const prefillMode = searchParams.get('mode') as InputMode | null;
 
     // Load user context on mount (parcels, products, history - all in one call)
     React.useEffect(() => {
@@ -279,6 +287,23 @@ export default function SmartInputV2Page() {
             }));
         }
     }, [state.messages, state.draft, state.phase, userContext, invalidateSpuitschrift, invalidateInventory, invalidateLogbook]);
+
+    // Auto-submit from dashboard URL params (?input=...&mode=...)
+    React.useEffect(() => {
+        if (!contextLoading && prefillInput && !hasAutoSubmitted.current) {
+            hasAutoSubmitted.current = true;
+            const mode = prefillMode || 'registration';
+            setActiveMode(mode);
+            setCommandInput(prefillInput);
+            // Clear URL params first, then submit
+            router.replace('/command-center/smart-input-v2', { scroll: false });
+            // Small delay to allow render before submitting
+            const timer = setTimeout(() => {
+                handleSend(prefillInput, mode);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [contextLoading, prefillInput, prefillMode, handleSend, router]);
 
     // Handle stream messages
     const handleStreamMessage = React.useCallback((message: StreamMessageV2) => {

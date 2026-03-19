@@ -37,6 +37,8 @@ import {
     CloudSun,
     Compass,
     History,
+    LayoutDashboard,
+    Leaf,
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -116,7 +118,9 @@ const menuStructure: NavItem[] = [
         label: 'Command Center',
         icon: Home,
         items: [
-            { label: 'Slimme Invoer', href: '/command-center/smart-input-v2', icon: MessageSquare },
+            { label: 'Dashboard', href: '/command-center', icon: LayoutDashboard },
+            { label: 'Slimme Invoer', href: '/command-center/smart-input-v3', icon: MessageSquare },
+            { label: 'Slimme Invoer V2', href: '/command-center/smart-input-v2', icon: MessageSquare },
             { label: 'Tijdlijn', href: '/command-center/timeline', icon: Clock },
         ]
     },
@@ -133,6 +137,7 @@ const menuStructure: NavItem[] = [
         icon: Sprout,
         items: [
             { label: 'Spuitschrift', href: '/crop-care/logs', icon: ClipboardList },
+            { label: 'Bemestingsregister', href: '/crop-care/fertilization', icon: Leaf },
             { label: 'Voorraad', href: '/crop-care/inventory', icon: Package },
             { label: 'Mijn Producten', href: '/crop-care/my-products', icon: FlaskConical },
             { label: 'Database Gewasbescherming', href: '/crop-care/db-protection', icon: Database },

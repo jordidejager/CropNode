@@ -69,7 +69,8 @@ export function RadarPlayer() {
             frame.dims.width,
             frame.dims.height
           );
-          return { imageData, delay: frame.delay || 500 };
+          // Slow down: double the frame delay for smoother viewing
+          return { imageData, delay: (frame.delay || 500) * 2 };
         });
 
         if (!cancelled) {

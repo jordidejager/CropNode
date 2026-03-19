@@ -11,6 +11,7 @@ import {
     getSprayableParcels,
     getAllCtgbProducts,
     getParcelHistoryEntries,
+    getParcelGroups,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import type { CtgbProduct, ParcelHistoryEntry } from '@/lib/types';
@@ -19,11 +20,18 @@ import type { CtgbProduct, ParcelHistoryEntry } from '@/lib/types';
 // TYPES
 // ============================================================================
 
+export interface ParcelGroupSlim {
+    id: string;
+    name: string;
+    subParcelIds: string[];
+}
+
 export interface SmartInputUserContext {
     parcels: SprayableParcel[];
     products: CtgbProductSlim[];
     recentHistory: ParcelHistorySlim[];
     productAliases: ProductAlias[];
+    parcelGroups: ParcelGroupSlim[];
     loadedAt: string;
 }
 
@@ -172,14 +180,15 @@ export async function GET() {
         console.log(`[${context}] Loading context for user ${userId.substring(0, 8)}...`);
 
         // Step 2: Fetch all data in parallel
-        const [parcels, allProducts, history, aliases] = await Promise.all([
+        const [parcels, allProducts, history, aliases, parcelGroupsRaw] = await Promise.all([
             getSprayableParcels(),
             getAllCtgbProducts(),
             getParcelHistoryEntries(),
             getUserProductAliases(userId),
+            getParcelGroups().catch(() => []),
         ]);
 
-        console.log(`[${context}] Fetched: ${parcels.length} parcels, ${allProducts.length} products, ${history.length} history entries`);
+        console.log(`[${context}] Fetched: ${parcels.length} parcels, ${allProducts.length} products, ${history.length} history entries, ${parcelGroupsRaw.length} parcel groups`);
 
         // Step 3: Convert to slim versions
         const slimProducts = allProducts.map(toSlimProduct);
@@ -191,12 +200,20 @@ export async function GET() {
             .filter(h => new Date(h.date) >= ninetyDaysAgo)
             .map(toSlimHistory);
 
-        // Step 4: Build response
+        // Step 4: Build parcel groups slim
+        const parcelGroups: ParcelGroupSlim[] = parcelGroupsRaw.map(g => ({
+            id: g.id,
+            name: g.name,
+            subParcelIds: g.subParcelIds || [],
+        }));
+
+        // Step 5: Build response
         const userContext: SmartInputUserContext = {
             parcels,
             products: slimProducts,
             recentHistory,
             productAliases: aliases,
+            parcelGroups,
             loadedAt: new Date().toISOString(),
         };
 

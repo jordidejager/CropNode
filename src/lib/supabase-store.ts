@@ -119,14 +119,27 @@ function arrayToCamelCase<T>(arr: Record<string, any>[]): T[] {
 // Spuitschrift Functions
 // ============================================
 
-export async function getSpuitschriftEntry(id: string): Promise<SpuitschriftEntry | null> {
-  const { data, error } = await supabase
+export async function getSpuitschriftEntry(id: string, userId?: string | null): Promise<SpuitschriftEntry | null> {
+  // Use admin client to bypass RLS (server actions don't have cookie access)
+  const adminClient = getSupabaseAdmin();
+  const client = adminClient || supabase;
+
+  let query = client
     .from('spuitschrift')
     .select('*')
-    .eq('id', id)
-    .single();
+    .eq('id', id);
 
-  if (error || !data) return null;
+  // When using admin client, also filter by user_id for multi-user safety
+  if (adminClient && userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query.single();
+
+  if (error || !data) {
+    if (error) console.warn('[getSpuitschriftEntry] Query failed:', error.message);
+    return null;
+  }
 
   return {
     ...objectToCamelCase<SpuitschriftEntry>(data),
@@ -187,7 +200,7 @@ export async function addSpuitschriftEntry(
     return new Date().toISOString();
   };
 
-  const snakeCaseEntry = {
+  const snakeCaseEntry: Record<string, any> = {
     id,
     user_id: userId,
     original_logbook_id: entry.originalLogbookId,
@@ -209,11 +222,27 @@ export async function addSpuitschriftEntry(
   }
 
   return withRetry(async () => {
+    let insertData = snakeCaseEntry;
+
     const { data, error } = await adminClient
       .from('spuitschrift')
-      .insert(snakeCaseEntry)
+      .insert(insertData as any)
       .select()
       .single() as { data: { id: string } | null; error: Error | null };
+
+    // If registration_type column doesn't exist, retry without it
+    if (error && error.message?.includes('registration_type')) {
+      console.warn('[saveToSpuitschrift] registration_type column not found, retrying without it');
+      const { registration_type, ...entryWithoutType } = insertData;
+      const { data: retryData, error: retryError } = await adminClient
+        .from('spuitschrift')
+        .insert(entryWithoutType as any)
+        .select()
+        .single() as { data: { id: string } | null; error: Error | null };
+      if (retryError) throw new Error(retryError.message);
+      if (!retryData) throw new Error('Geen data ontvangen van database');
+      return { id: retryData.id, ...entry } as SpuitschriftEntry;
+    }
 
     if (error) throw new Error(error.message);
     if (!data) throw new Error('Geen data ontvangen van database');
@@ -225,24 +254,34 @@ export async function addSpuitschriftEntry(
   });
 }
 
-export async function deleteSpuitschriftEntry(entryId: string): Promise<void> {
+export async function deleteSpuitschriftEntry(entryId: string, userId?: string | null): Promise<void> {
+  // Use admin client to bypass RLS (server actions don't have cookie access)
+  const adminClient = getSupabaseAdmin();
+  const client = adminClient || supabase;
+
   // Delete related parcel history
-  await supabase
+  await client
     .from('parcel_history')
     .delete()
     .eq('spuitschrift_id', entryId);
 
   // Delete related inventory movements
-  await supabase
+  await client
     .from('inventory_movements')
     .delete()
     .eq('reference_id', entryId);
 
-  // Delete the entry itself
-  const { error } = await supabase
+  // Delete the entry itself — filter by user_id for multi-user safety
+  let query = client
     .from('spuitschrift')
     .delete()
     .eq('id', entryId);
+
+  if (adminClient && userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { error } = await query;
 
   if (error) throw new Error(error.message);
 }
@@ -644,14 +683,29 @@ function mapToSprayableParcel(item: any): SprayableParcel {
     }
   }
 
+  // Fix redundant names from view: "Steketee Tessa (Tessa)" → "Steketee (Tessa)"
+  // This happens when sp.name == sp.variety in the SQL view
+  let name = item.name;
+  if (name && item.variety && item.parcel_name) {
+    const redundant = `${item.parcel_name} ${item.variety} (${item.variety})`;
+    if (name === redundant) {
+      name = `${item.parcel_name} (${item.variety})`;
+    }
+    // Also handle case-insensitive: "Steketee tessa (Tessa)"
+    const redundantLower = redundant.toLowerCase();
+    if (name.toLowerCase() === redundantLower && name !== redundant) {
+      name = `${item.parcel_name} (${item.variety})`;
+    }
+  }
+
   return {
     id: item.id,
-    name: item.name,
+    name,
     area: item.area,
     crop: item.crop || 'Onbekend',
     variety: item.variety,
     parcelId: item.parcel_id || item.id,
-    parcelName: item.parcel_name || item.name,
+    parcelName: item.parcel_name || name,
     location: item.location,
     geometry,
     source: item.source,
@@ -1566,7 +1620,17 @@ export async function addParcelHistoryEntries({
 
   if (historyEntries.length > 0) {
     const { error } = await dbClient.from('parcel_history').insert(historyEntries);
-    if (error) console.error('Error inserting parcel history:', error);
+    if (error) {
+      // If registration_type column doesn't exist, retry without it
+      if (error.message?.includes('registration_type')) {
+        console.warn('[saveRelatedData] registration_type column not found on parcel_history, retrying without it');
+        const cleanedEntries = historyEntries.map(({ registration_type, ...rest }: any) => rest);
+        const { error: retryError } = await dbClient.from('parcel_history').insert(cleanedEntries);
+        if (retryError) console.error('Error inserting parcel history (retry):', retryError);
+      } else {
+        console.error('Error inserting parcel history:', error);
+      }
+    }
   }
 
   if (inventoryEntries.length > 0) {
@@ -2029,6 +2093,11 @@ export async function getFertilizers(): Promise<FertilizerProduct[]> {
     unit: item.unit,
     composition: item.composition,
     searchKeywords: item.search_keywords,
+    description: item.description,
+    formulation: item.formulation,
+    density: item.density ? parseFloat(item.density) : undefined,
+    dosageFruit: item.dosage_fruit,
+    applicationTiming: item.application_timing,
   }));
 }
 
@@ -2051,6 +2120,11 @@ export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
     unit: item.unit,
     composition: item.composition,
     searchKeywords: item.search_keywords,
+    description: item.description,
+    formulation: item.formulation,
+    density: item.density ? parseFloat(item.density) : undefined,
+    dosageFruit: item.dosage_fruit,
+    applicationTiming: item.application_timing,
   }));
 }
 

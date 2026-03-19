@@ -27,6 +27,7 @@ import {
     AlertTriangle,
     CheckCircle2
 } from "lucide-react"
+import { GewasrotatieTimeline } from "@/components/domain/gewas-rotatie-timeline"
 import {
     BarChart,
     Bar,
@@ -339,6 +340,9 @@ export function MainParcelView({
                     </CardContent>
                 </Card>
             </div>
+
+            {/* 4.5 Gewasrotatie Timeline */}
+            <GewasrotatieTimeline parcelId={parcel.id} parcelName={parcel.name} />
 
             {/* 5. Sub-parcels Grid */}
             <div className="space-y-4">

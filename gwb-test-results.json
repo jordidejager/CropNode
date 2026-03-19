@@ -1,0 +1,747 @@
+[
+  {
+    "id": "A1",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met merpan 0.7 kg",
+    "expect": {
+      "products": [
+        "Merpan"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "A2",
+    "cat": "Fungicide",
+    "input": "vandaag alle peren met delan 0.5 kg",
+    "expect": {
+      "products": [
+        "Delan"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "note": "Alias delan→Delan WG (broken: actual=Delan DF)",
+    "pass": true,
+    "details": [
+      "Product: ✅ Delan",
+      "Percelen: ✅",
+      "Dosering: 0.5 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Delan"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.5 kg/ha"
+    }
+  },
+  {
+    "id": "A3",
+    "cat": "Fungicide",
+    "input": "vandaag alle elstar met bellis 0.8 kg",
+    "expect": {
+      "products": [
+        "Bellis"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Bellis",
+      "Percelen: ✅",
+      "Dosering: 0.8 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Bellis"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.8 kg/ha"
+    }
+  },
+  {
+    "id": "A4",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met flint 0.15 kg",
+    "expect": {
+      "products": [
+        "FLINT",
+        "Flint"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ FLINT",
+      "Percelen: ✅",
+      "Dosering: 0.15 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "FLINT"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.15 kg/ha"
+    }
+  },
+  {
+    "id": "A5",
+    "cat": "Fungicide",
+    "input": "vandaag alle peren met scala 0.75 L",
+    "expect": {
+      "products": [
+        "Scala"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Scala",
+      "Percelen: ✅",
+      "Dosering: 0.75 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Scala"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.75 L/ha"
+    }
+  },
+  {
+    "id": "A6",
+    "cat": "Fungicide",
+    "input": "vandaag alle conference met score 0.2 L",
+    "expect": {
+      "products": [
+        "Score"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Score",
+      "Percelen: ✅",
+      "Dosering: 0.2 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Score"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.2 L/ha"
+    }
+  },
+  {
+    "id": "B1",
+    "cat": "Insecticide",
+    "input": "vandaag alle appels met decis 0.25 L",
+    "expect": {
+      "products": [
+        "Decis"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "note": "Alias decis→Decis EC (broken: actual=Decis Protech)",
+    "pass": true,
+    "details": [
+      "Product: ✅ Decis",
+      "Percelen: ✅",
+      "Status: Product niet gevonden ❌",
+      "Dosering: 0.25 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Decis"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": true,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.25 L/ha"
+    }
+  },
+  {
+    "id": "B2",
+    "cat": "Insecticide",
+    "input": "vandaag alle peren met pirimor 0.5 kg",
+    "expect": {
+      "products": [
+        "Pirimor"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Pirimor",
+      "Percelen: ✅",
+      "Dosering: 0.5 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Pirimor"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.5 kg/ha"
+    }
+  },
+  {
+    "id": "B3",
+    "cat": "Insecticide",
+    "input": "vandaag alle appels met coragen 0.18 L",
+    "expect": {
+      "products": [
+        "CORAGEN",
+        "Coragen"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ CORAGEN",
+      "Percelen: ✅",
+      "Dosering: 0.18 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "CORAGEN"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.18 L/ha"
+    }
+  },
+  {
+    "id": "B4",
+    "cat": "Insecticide",
+    "input": "vandaag alle conference met karate zeon 0.15 L",
+    "expect": {
+      "products": [
+        "Karate"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "C1",
+    "cat": "Acaricide",
+    "input": "vandaag alle appels met nissorun 0.2 L",
+    "expect": {
+      "products": [
+        "Nissorun"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "note": "Alias nissorun→Nissorun (DB=Nissorun vloeibaar)",
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "C2",
+    "cat": "Acaricide",
+    "input": "vandaag alle peren met apollo 0.3 L",
+    "expect": {
+      "products": [
+        "Apollo"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Apollo",
+      "Percelen: ✅",
+      "Status: Product niet gevonden ❌",
+      "Dosering: 0.3 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Apollo"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": true,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.3 L/ha"
+    }
+  },
+  {
+    "id": "C3",
+    "cat": "Acaricide",
+    "input": "vandaag alle elstar met floramite 0.4 L",
+    "expect": {
+      "products": [
+        "Floramite"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Floramite",
+      "Percelen: ✅",
+      "Dosering: 0.4 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Floramite"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.4 L/ha"
+    }
+  },
+  {
+    "id": "D1",
+    "cat": "Groeiregulator",
+    "input": "vandaag alle appels met regalis plus 2.5 kg",
+    "expect": {
+      "products": [
+        "Regalis"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "D2",
+    "cat": "Overig",
+    "input": "vandaag alle conference met teldor 1.5 kg",
+    "expect": {
+      "products": [
+        "Teldor"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "D3",
+    "cat": "Overig",
+    "input": "vandaag alle peren met switch 1 kg",
+    "expect": {
+      "products": [
+        "Switch"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Switch",
+      "Percelen: ✅",
+      "Dosering: 1 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Switch"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "1 kg/ha"
+    }
+  },
+  {
+    "id": "E1",
+    "cat": "Lastige naam",
+    "input": "vandaag alle conference met chorus 0.6 kg",
+    "expect": {
+      "products": [
+        "CHORUS",
+        "Chorus"
+      ],
+      "unit": "kg",
+      "hasParcels": true
+    },
+    "note": "Alias chorus→Chorus (DB=CHORUS 50 WG)",
+    "pass": true,
+    "details": [
+      "Product: ✅ Chorus",
+      "Percelen: ✅",
+      "Status: Product niet gevonden ❌",
+      "Dosering: 0.6 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Chorus"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": true,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.6 kg/ha"
+    }
+  },
+  {
+    "id": "E2",
+    "cat": "Lastige naam",
+    "input": "vandaag alle appels met luna experience 0.75 L",
+    "expect": {
+      "products": [
+        "LUNA",
+        "Luna"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "note": "Alias luna→Luna Sensation (broken: DB=LUNA EXPERIENCE)",
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "E3",
+    "cat": "Lastige naam",
+    "input": "vandaag alle peren met captosan 1.1 L",
+    "expect": {
+      "products": [
+        "Captosan"
+      ],
+      "unit": "L",
+      "hasParcels": true
+    },
+    "pass": true,
+    "details": [
+      "Product: ✅ Captosan",
+      "Percelen: ✅",
+      "Dosering: 1.1 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Captosan"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "1.1 L/ha"
+    }
+  },
+  {
+    "id": "F1",
+    "cat": "Eenheid",
+    "input": "vandaag alle conference met merpan 700 gram",
+    "expect": {
+      "products": [
+        "Merpan"
+      ],
+      "hasParcels": true
+    },
+    "note": "700g = 0.7 kg - controle eenheidsconversie",
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "F2",
+    "cat": "Eenheid",
+    "input": "vandaag alle elstar met scala 750 ml",
+    "expect": {
+      "products": [
+        "Scala"
+      ],
+      "hasParcels": true
+    },
+    "note": "750ml = 0.75 L - controle ml→L conversie",
+    "pass": true,
+    "details": [
+      "Product: ✅ Scala",
+      "Percelen: ✅",
+      "Dosering: 750 ml/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Scala"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": false,
+      "dosage": "750 ml/ha"
+    }
+  },
+  {
+    "id": "F3",
+    "cat": "Eenheid",
+    "input": "vandaag alle peren met score 200 ml",
+    "expect": {
+      "products": [
+        "Score"
+      ],
+      "hasParcels": true
+    },
+    "note": "200ml = 0.2 L - controle ml→L conversie",
+    "pass": true,
+    "details": [
+      "Product: ✅ Score",
+      "Percelen: ✅",
+      "Dosering: 0.2 L/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Score"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.2 L/ha"
+    }
+  },
+  {
+    "id": "G1",
+    "cat": "Tankmix",
+    "input": "vandaag alle conference met merpan 0.7 kg en score 0.2 L",
+    "expect": {
+      "products": [
+        "Merpan",
+        "Score"
+      ],
+      "hasParcels": true
+    },
+    "note": "2-product tankmix met \"en\"",
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅",
+      "Tankmix: ❌ slechts 0 product(en) gevonden"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  },
+  {
+    "id": "G2",
+    "cat": "Tankmix",
+    "input": "vandaag alle peren met delan 0.5 kg + flint 0.15 kg",
+    "expect": {
+      "products": [
+        "Delan",
+        "Flint",
+        "FLINT"
+      ],
+      "hasParcels": true
+    },
+    "note": "2-product tankmix met \"+\"",
+    "pass": true,
+    "details": [
+      "Product: ✅ Delan, FLINT",
+      "Percelen: ✅",
+      "Tankmix: ✅ 2 producten",
+      "Dosering: 0.5 kg/ha"
+    ],
+    "state": {
+      "foundProducts": [
+        "Delan",
+        "FLINT"
+      ],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": "0.5 kg/ha"
+    }
+  },
+  {
+    "id": "G3",
+    "cat": "Tankmix",
+    "input": "vandaag alle conference met merpan 0.7 kg, score 0.2 L en flint 0.15 kg",
+    "expect": {
+      "products": [
+        "Merpan",
+        "Score",
+        "Flint",
+        "FLINT"
+      ],
+      "hasParcels": true
+    },
+    "note": "3-product tankmix",
+    "pass": false,
+    "details": [
+      "Product: ❌ Geen match (gevonden: geen)",
+      "Percelen: ✅",
+      "Tankmix: ❌ slechts 0 product(en) gevonden"
+    ],
+    "state": {
+      "foundProducts": [],
+      "hasAkkoord": false,
+      "hasWaarschuwing": false,
+      "hasAfgekeurd": false,
+      "hasNietGevonden": false,
+      "hasCard": true,
+      "hasParcels": true,
+      "dosage": null
+    }
+  }
+]

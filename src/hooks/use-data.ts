@@ -1,7 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { filterFertilizationEntries, filterCropProtectionEntries } from '@/lib/fertilization-utils';
 import {
     getParcels,
     getSprayableParcels,  // New: uses v_sprayable_parcels view
@@ -170,6 +172,9 @@ export const queryKeys = {
     positionContents: (cellId: string) => ['position-contents', cellId] as const,
     positionStacks: (cellId: string) => ['position-stacks', cellId] as const,
 
+    // BRP Gewashistorie (migration 016)
+    gewasHistorie: (parcelId: string) => ['gewas-historie', parcelId] as const,
+
     // Harvest Registrations (new in migration 009)
     harvestRegistrations: ['harvest-registrations'] as const,
     harvestRegistrationsBySeason: (season: string) => ['harvest-registrations', 'season', season] as const,
@@ -215,6 +220,46 @@ export function useLegacyParcels() {
 }
 
 // ============================================
+// BRP Gewashistorie Hooks
+// ============================================
+
+export function useGewasHistorie(parcelId: string | undefined) {
+    return useQuery({
+        queryKey: queryKeys.gewasHistorie(parcelId || ''),
+        queryFn: async () => {
+            if (!parcelId) return [];
+            const res = await fetch(`/api/parcels/${parcelId}/gewashistorie`);
+            if (!res.ok) return [];
+            const json = await res.json();
+            return json.data || [];
+        },
+        enabled: !!parcelId,
+        staleTime: 24 * 60 * 60 * 1000, // 24 hours
+    });
+}
+
+export function useRefreshGewasHistorie(parcelId: string | undefined) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async () => {
+            if (!parcelId) throw new Error('No parcel ID');
+            const res = await fetch(`/api/parcels/${parcelId}/gewashistorie`, {
+                method: 'POST',
+            });
+            if (!res.ok) throw new Error('Fetch failed');
+            const json = await res.json();
+            return json.data;
+        },
+        onSuccess: (data) => {
+            if (parcelId) {
+                queryClient.setQueryData(queryKeys.gewasHistorie(parcelId), data?.data || data || []);
+            }
+        },
+    });
+}
+
+// ============================================
 // Logbook Hooks (Slimme Invoer)
 // ============================================
 
@@ -236,6 +281,26 @@ export function useSpuitschriftEntries() {
         queryFn: getSpuitschriftEntries,
         staleTime: 2 * 60 * 1000, // 2 minutes
     });
+}
+
+// Filtered: only fertilization entries (for Bemestingsregister)
+export function useFertilizationEntries() {
+    const query = useSpuitschriftEntries();
+    const data = useMemo(
+        () => query.data ? filterFertilizationEntries(query.data) : [],
+        [query.data]
+    );
+    return { ...query, data };
+}
+
+// Filtered: only crop protection entries (for Spuitschrift)
+export function useCropProtectionEntries() {
+    const query = useSpuitschriftEntries();
+    const data = useMemo(
+        () => query.data ? filterCropProtectionEntries(query.data) : [],
+        [query.data]
+    );
+    return { ...query, data };
 }
 
 // Paginated version for large datasets
@@ -317,9 +382,11 @@ export function useInventory() {
 }
 
 // Computed hook for stock overview (processes movements into stock levels)
+// Includes both crop protection (CTGB) and fertilizer products
 export function useStockOverview() {
     const inventoryQuery = useInventory();
     const productsQuery = useCtgbProducts();
+    const fertilizersQuery = useFertilizers();
 
     const stock = React.useMemo(() => {
         if (!inventoryQuery.data) return [];
@@ -337,19 +404,21 @@ export function useStockOverview() {
     }, [inventoryQuery.data]);
 
     const allProductNames = React.useMemo(() => {
-        if (!productsQuery.data) return [];
-        return [...new Set(productsQuery.data.map(p => p.naam))].filter(Boolean) as string[];
-    }, [productsQuery.data]);
+        const ctgbNames = productsQuery.data?.map(p => p.naam).filter(Boolean) || [];
+        const fertilizerNames = fertilizersQuery.data?.map((f: any) => f.name).filter(Boolean) || [];
+        return [...new Set([...ctgbNames, ...fertilizerNames])] as string[];
+    }, [productsQuery.data, fertilizersQuery.data]);
 
     return {
         stock,
         allProducts: allProductNames,
-        isLoading: inventoryQuery.isLoading || productsQuery.isLoading,
-        isError: inventoryQuery.isError || productsQuery.isError,
-        error: inventoryQuery.error || productsQuery.error,
+        isLoading: inventoryQuery.isLoading || productsQuery.isLoading || fertilizersQuery.isLoading,
+        isError: inventoryQuery.isError || productsQuery.isError || fertilizersQuery.isError,
+        error: inventoryQuery.error || productsQuery.error || fertilizersQuery.error,
         refetch: () => {
             inventoryQuery.refetch();
             productsQuery.refetch();
+            fertilizersQuery.refetch();
         },
     };
 }
@@ -471,6 +540,7 @@ export function useInvalidateQueries() {
         invalidateParcels: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcels }),
         invalidateParcelGroups: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcelGroups }),
         invalidateInventory: () => queryClient.invalidateQueries({ queryKey: queryKeys.inventoryMovements }),
+        invalidateGewasHistorie: (parcelId: string) => queryClient.invalidateQueries({ queryKey: queryKeys.gewasHistorie(parcelId) }),
         invalidateAll: () => queryClient.invalidateQueries(),
         invalidateDashboard: () => queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
         invalidateConversations: () => queryClient.invalidateQueries({ queryKey: queryKeys.conversations }),

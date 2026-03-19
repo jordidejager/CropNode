@@ -65,9 +65,27 @@ import pdf from 'pdf-parse';
 async function getServerUserId(): Promise<string | null> {
     try {
         const supabase = await createServerClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        return user?.id || null;
-    } catch {
+
+        // Primary: getUser() validates token with Supabase server
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (user?.id) return user.id;
+
+        if (error) {
+            console.warn('[Actions] getUser() failed:', error.message, '— trying getSession() fallback');
+        }
+
+        // Fallback: getSession() reads JWT from cookies without external fetch
+        // Useful when Node.js v25 fetch intermittently fails (ECONNRESET)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+            console.log('[Actions] Recovered via getSession() fallback');
+            return session.user.id;
+        }
+
+        console.warn('[Actions] No user found (session expired or not logged in)');
+        return null;
+    } catch (error) {
+        console.error('[Actions] Auth exception:', error);
         return null;
     }
 }
@@ -948,8 +966,8 @@ export async function updateSpuitschriftEntryAction(
             return { success: false, message: 'Niet ingelogd. Log opnieuw in en probeer het opnieuw.' };
         }
 
-        // Get the existing entry
-        const existingEntry = await getSpuitschriftEntry(entryId);
+        // Get the existing entry (pass userId for multi-user safety)
+        const existingEntry = await getSpuitschriftEntry(entryId, userId);
         if (!existingEntry) {
             return { success: false, message: 'Spuitschrift regel niet gevonden.' };
         }
@@ -1094,7 +1112,8 @@ export async function updateSpuitschriftEntryAction(
 
 export async function moveSpuitschriftEntryToLogbook(entryId: string): Promise<{ success: boolean; message?: string }> {
     try {
-        const spuitschriftEntry = await getSpuitschriftEntry(entryId);
+        const userId = await getServerUserId();
+        const spuitschriftEntry = await getSpuitschriftEntry(entryId, userId);
         if (!spuitschriftEntry) {
             return { success: false, message: 'Spuitschrift regel niet gevonden.' };
         }
@@ -1556,6 +1575,8 @@ export interface ConversationData {
             targetReason?: string;
         }>;
         date?: string;
+        version?: 'v3';
+        fullDraft?: any; // Full SprayRegistrationGroup for V3 session restore
     };
     chatHistory: Array<{
         role: string;
@@ -1575,6 +1596,8 @@ export interface ConversationListItem {
         plots?: string[];
         products?: Array<{ product: string; dosage: number; unit: string }>;
         date?: string;
+        version?: 'v3';
+        fullDraft?: any;
     };
 }
 
@@ -1686,20 +1709,75 @@ export async function getConversations(status?: 'draft' | 'active' | 'completed'
             return [];
         }
 
-        let query = supabaseAdmin
-            .from('conversations')
-            .select('id, title, status, last_updated, created_at, draft_data')
-            .eq('user_id', userId)
-            .order('last_updated', { ascending: false });
+        const results: ConversationListItem[] = [];
 
-        if (status) {
-            query = query.eq('status', status);
+        // Always fetch conversations (drafts, active, and completed from V2 flow)
+        {
+            let query = supabaseAdmin
+                .from('conversations')
+                .select('id, title, status, last_updated, created_at, draft_data')
+                .eq('user_id', userId)
+                .order('last_updated', { ascending: false });
+
+            if (status) {
+                query = query.eq('status', status);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            if (data) results.push(...data);
         }
 
-        const { data, error } = await query;
+        // Also fetch spuitschrift entries as "completed" registrations
+        // (V3 creates entries directly in spuitschrift, not in conversations)
+        if (!status || status === 'completed') {
+            const { data: spuitschriftData, error: spError } = await supabaseAdmin
+                .from('spuitschrift')
+                .select('id, date, plots, products, status, created_at, original_raw_input')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(50);
 
-        if (error) throw error;
-        return data || [];
+            if (!spError && spuitschriftData) {
+                // Collect existing conversation titles to avoid near-duplicates
+                const existingTitles = new Set(results.map(r => r.title.toLowerCase()));
+
+                for (const entry of spuitschriftData) {
+                    // Build a title from raw input or products/plots
+                    const rawInput = entry.original_raw_input;
+                    const products = (entry.products as any[]) || [];
+                    const plots = (entry.plots as string[]) || [];
+                    const title = rawInput
+                        ? (rawInput.length > 60 ? rawInput.substring(0, 57) + '...' : rawInput)
+                        : products.map((p: any) => p.product).join(', ') || 'Registratie';
+
+                    // Skip if a conversation with very similar title already exists (likely V2 duplicate)
+                    if (existingTitles.has(title.toLowerCase())) continue;
+
+                    results.push({
+                        id: `sp_${entry.id}`,
+                        title,
+                        status: 'completed',
+                        last_updated: entry.created_at,
+                        created_at: entry.created_at,
+                        draft_data: {
+                            plots,
+                            products: products.map((p: any) => ({
+                                product: p.product || '',
+                                dosage: p.dosage || 0,
+                                unit: p.unit || 'L',
+                            })),
+                            date: entry.date,
+                        },
+                    });
+                }
+            }
+        }
+
+        // Sort all results by last_updated descending
+        results.sort((a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime());
+
+        return results;
     } catch (error: any) {
         console.error('Error fetching conversations:', error);
         return [];
