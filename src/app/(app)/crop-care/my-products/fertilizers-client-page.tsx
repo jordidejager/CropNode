@@ -13,6 +13,7 @@ import type { FertilizerProduct } from '@/lib/types';
 import { useDebounce } from '@/hooks/use-debounce';
 import { FertilizerCard } from '@/components/fertilizer-card';
 import { FertilizerDetailDialog } from '@/components/fertilizer-detail-dialog';
+import { compositionMatchesSearch } from '@/lib/element-info';
 
 type Category = 'Leaf' | 'Soil' | 'Fertigation';
 
@@ -39,7 +40,14 @@ export function FertilizersClientPage({ fertilizers }: { fertilizers: Fertilizer
 
         if (debouncedSearchTerm) {
             const lowercasedFilter = debouncedSearchTerm.toLowerCase();
-            results = results.filter(f => f.name.toLowerCase().includes(lowercasedFilter));
+            results = results.filter(f =>
+                // Zoek op productnaam
+                f.name.toLowerCase().includes(lowercasedFilter) ||
+                // Zoek op fabrikant
+                f.manufacturer.toLowerCase().includes(lowercasedFilter) ||
+                // Zoek op element in samenstelling (bijv. "koper", "ijzer", "borium")
+                compositionMatchesSearch(f.composition, lowercasedFilter)
+            );
         }
 
         return results;
@@ -58,7 +66,7 @@ export function FertilizersClientPage({ fertilizers }: { fertilizers: Fertilizer
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <input
                             type="text"
-                            placeholder="Zoek op naam..."
+                            placeholder="Zoek op naam, element of fabrikant..."
                             className="w-full pl-10 h-12 bg-card/40 border border-border/40 rounded-md outline-none focus:border-primary/50 transition-colors"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}

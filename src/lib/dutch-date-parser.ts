@@ -127,7 +127,7 @@ export function extractDateFromText(input: string, referenceDate?: Date): {
     /\b(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:(?:avonds?|ochtends?|middags?|nachts?|morgens?)|(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?|morgens?)))?\b/gi,
     // Standalone time-of-day words (when used after date context already matched)
     /\b(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?)\b/gi,
-    /\b\d{1,2}\s+(?:januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|jan|feb|mrt|apr|jun|jul|aug|sep|okt|nov|dec)(?:\s+\d{4})?\b/gi,
+    /\b(?:op\s+)?\d{1,2}\s+(?:januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|jan|feb|mrt|apr|jun|jul|aug|sep|okt|nov|dec)(?:\s+\d{4})?\b/gi,
     /\b\d{4}-\d{2}-\d{2}\b/g,
     /\b\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?\b/g,
   ];

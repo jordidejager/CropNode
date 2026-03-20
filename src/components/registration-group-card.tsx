@@ -51,6 +51,7 @@ interface RegistrationGroupCardProps {
     onRemoveUnit: (unitId: string) => void;
     onCancelAll: () => void;
     onProductUpdate?: (unitId: string, productIndex: number, update: Partial<ProductEntry>) => void;
+    onPlotRemove?: (unitId: string, plotId: string) => void;
 }
 
 // Helper function to extract main parcel name from sub-parcel name
@@ -347,6 +348,7 @@ function UnitPanel({
     onEdit,
     onRemove,
     onProductUpdate,
+    onPlotRemove,
 }: {
     unit: SprayRegistrationUnit;
     allParcels: ParcelLike[];
@@ -359,6 +361,7 @@ function UnitPanel({
     onEdit: () => void;
     onRemove: () => void;
     onProductUpdate?: (productIndex: number, update: Partial<ProductEntry>) => void;
+    onPlotRemove?: (plotId: string) => void;
 }) {
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -636,13 +639,24 @@ function UnitPanel({
                                             return (
                                                 <div
                                                     key={parcel.id}
-                                                    className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]"
+                                                    className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06] group/parcel"
                                                 >
-                                                    <div className="flex justify-between items-start">
+                                                    <div className="flex justify-between items-center">
                                                         <p className="text-sm text-white/90 font-medium truncate">{parcel.name}</p>
-                                                        <span className="text-xs text-emerald-400/80 font-medium ml-2">
-                                                            {(parcel.area || 0).toFixed(2)} ha
-                                                        </span>
+                                                        <div className="flex items-center gap-2 ml-2">
+                                                            <span className="text-xs text-emerald-400/80 font-medium">
+                                                                {(parcel.area || 0).toFixed(2)} ha
+                                                            </span>
+                                                            {!isConfirmed && onPlotRemove && unit.plots.length > 1 && (
+                                                                <button
+                                                                    onClick={() => onPlotRemove(parcel.id)}
+                                                                    className="opacity-0 group-hover/parcel:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400"
+                                                                    title="Perceel verwijderen"
+                                                                >
+                                                                    <X className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -654,7 +668,7 @@ function UnitPanel({
                                                 open={isGroupExpanded}
                                                 onOpenChange={(open) => setExpandedGroups(prev => ({ ...prev, [group.mainName]: open }))}
                                             >
-                                                <div className="bg-white/[0.05] rounded-lg border border-white/[0.08] overflow-hidden">
+                                                <div className="bg-white/[0.05] rounded-lg border border-white/[0.08] overflow-hidden group/group">
                                                     <CollapsibleTrigger asChild>
                                                         <button className="w-full p-3 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left">
                                                             <div className="flex items-center gap-2">
@@ -667,9 +681,24 @@ function UnitPanel({
                                                                     <p className="text-[10px] text-white/40">{group.parcels.length} sub-percelen</p>
                                                                 </div>
                                                             </div>
-                                                            <span className="text-xs text-emerald-400 font-medium">
-                                                                {group.totalArea.toFixed(2)} ha
-                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-emerald-400 font-medium">
+                                                                    {group.totalArea.toFixed(2)} ha
+                                                                </span>
+                                                                {!isConfirmed && onPlotRemove && unit.plots.length > group.parcels.length && (
+                                                                    <span
+                                                                        role="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            group.parcels.forEach(p => onPlotRemove(p.id));
+                                                                        }}
+                                                                        className="opacity-0 group-hover/group:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400"
+                                                                        title={`Alle ${group.mainName} percelen verwijderen`}
+                                                                    >
+                                                                        <X className="h-3.5 w-3.5" />
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
@@ -679,13 +708,24 @@ function UnitPanel({
                                                                 return (
                                                                     <div
                                                                         key={parcel.id}
-                                                                        className="bg-white/[0.02] rounded p-2 border border-white/[0.04]"
+                                                                        className="bg-white/[0.02] rounded p-2 border border-white/[0.04] group/sub"
                                                                     >
                                                                         <div className="flex justify-between items-center">
                                                                             <p className="text-[11px] text-white/70 truncate">{subName}</p>
-                                                                            <span className="text-[10px] text-white/40">
-                                                                                {(parcel.area || 0).toFixed(2)} ha
-                                                                            </span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <span className="text-[10px] text-white/40">
+                                                                                    {(parcel.area || 0).toFixed(2)} ha
+                                                                                </span>
+                                                                                {!isConfirmed && onPlotRemove && unit.plots.length > 1 && (
+                                                                                    <button
+                                                                                        onClick={() => onPlotRemove(parcel.id)}
+                                                                                        className="opacity-0 group-hover/sub:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400"
+                                                                                        title="Sub-perceel verwijderen"
+                                                                                    >
+                                                                                        <X className="h-3 w-3" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -771,7 +811,8 @@ export function RegistrationGroupCard({
     onEditUnit,
     onRemoveUnit,
     onCancelAll,
-    onProductUpdate
+    onProductUpdate,
+    onPlotRemove
 }: RegistrationGroupCardProps) {
     // Track which units are expanded - default: first one expanded
     const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(() => {
@@ -837,6 +878,7 @@ export function RegistrationGroupCard({
                         onEdit={() => onEditUnit(unit)}
                         onRemove={() => onRemoveUnit(unit.id)}
                         onProductUpdate={onProductUpdate ? (idx, update) => onProductUpdate(unit.id, idx, update) : undefined}
+                        onPlotRemove={onPlotRemove ? (plotId) => onPlotRemove(unit.id, plotId) : undefined}
                     />
                 ))}
             </div>

@@ -481,6 +481,9 @@ export function resolveParcelsByText(
   // Strip filler/verb words that shouldn't be in parcel resolution
   lower = lower.replace(/\b(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden|avond|ochtend|middag|nacht)\b/g, ' ');
 
+  // Strip leading "op" — leftover from date expressions like "op 4 maart" where the date is extracted but "op" remains
+  lower = lower.replace(/^op\s+/i, '');
+
   // Convert parentheses to spaces: "Steketee (Tessa)" → "Steketee Tessa"
   lower = lower.replace(/[()]/g, ' ');
 
@@ -511,14 +514,91 @@ export function resolveParcelsByText(
     }
   }
 
-  // Step 2: Resolve parcels from base text
+  // Step 2a: If text contains commas with additional content, split and resolve each part
+  // e.g., "thuis alle peren, pompus, murre, peren jan van w" → 4 parts resolved independently
+  if (/,/.test(baseText)) {
+    const commaParts = baseText.split(/\s*,\s*/).map(s => s.trim()).filter(s => s.length >= 2);
+    if (commaParts.length >= 2) {
+      const allIds: string[] = [];
+      for (const part of commaParts) {
+        const sub = resolveParcelsByText(part, parcels, parcelGroups);
+        sub.ids.forEach(id => { if (!allIds.includes(id)) allIds.push(id); });
+      }
+      if (allIds.length > 0) {
+        result.ids = allIds;
+        result.matchType = 'comma_split';
+        // Apply exclusions and return early
+        if (excludeTarget && result.ids.length > 0) {
+          const excludeParts2 = excludeTarget
+            .split(/\s*,\s*|\s+en\s+/)
+            .map(s => s.replace(/^(?:de|het)\s+/i, '').trim())
+            .filter(s => s.length >= 2);
+          for (const ep of excludeParts2) {
+            const excludeHits = parcels.filter(p => {
+              const name = p.name.toLowerCase();
+              const parcelName = (p as any).parcelName?.toLowerCase() || '';
+              return name.includes(ep) || parcelName.includes(ep);
+            });
+            excludeHits.forEach(h => {
+              const idx = result.ids.indexOf(h.id);
+              if (idx >= 0) {
+                result.ids.splice(idx, 1);
+                result.excludedIds.push(h.id);
+              }
+            });
+          }
+        }
+        return result;
+      }
+    }
+  }
+
+  // Step 2b: Location-scoped crop patterns BEFORE global crop patterns
+  // Handles BOTH orderings:
+  //   "[location] alle peren/appels" — e.g., "thuis alle peren"
+  //   "alle peren/appels [location]" — e.g., "alle peren thuis"
+  {
+    const locations = new Map<string, SprayableParcel[]>();
+    for (const p of parcels) {
+      const loc = (p.parcelName || '').toLowerCase();
+      if (!loc) continue;
+      if (!locations.has(loc)) locations.set(loc, []);
+      locations.get(loc)!.push(p);
+    }
+
+    // Pattern A: "[location] alle peren" (location prefix)
+    const locCropPrefixMatch = baseText.match(/^(\w[\w\s]*?)\s+(?:alle?|de|mijn)\s+(appels?|peren?)\b/);
+    // Pattern B: "alle peren [location]" (location suffix)
+    const locCropSuffixMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(appels?|peren?)\s+(\w[\w\s]*?)$/);
+
+    const locCropMatch = locCropPrefixMatch || locCropSuffixMatch;
+    if (locCropMatch) {
+      let locName: string;
+      let cropSearch: string;
+      if (locCropPrefixMatch) {
+        locName = locCropPrefixMatch[1].trim();
+        cropSearch = locCropPrefixMatch[2].startsWith('appel') ? 'appel' : 'peer';
+      } else {
+        // suffix: groups are (crop, location)
+        locName = locCropSuffixMatch![2].trim();
+        cropSearch = locCropSuffixMatch![1].startsWith('appel') ? 'appel' : 'peer';
+      }
+      const locParcels = locations.get(locName);
+      if (locParcels && locParcels.length > 0) {
+        result.ids = locParcels.filter(p => p.crop?.toLowerCase() === cropSearch).map(p => p.id);
+        result.matchType = `location_crop:${locName}:${cropSearch}`;
+      }
+    }
+  }
+
+  // Step 2c: Global crop patterns (only if location-scoped didn't match)
   // "alle appels" / "de appels" / "mijn appels"
-  if (/\b(?:alle?|de|mijn)\s+appels?\b/.test(baseText) || /\bappelpercelen\b/.test(baseText)) {
+  if (result.ids.length === 0 && (/\b(?:alle?|de|mijn)\s+appels?\b/.test(baseText) || /\bappelpercelen\b/.test(baseText))) {
     result.ids = parcels.filter(p => p.crop?.toLowerCase() === 'appel').map(p => p.id);
     result.matchType = 'crop:appel';
   }
   // "alle peren" / "de peren"
-  else if (/\b(?:alle?|de|mijn)\s+peren?\b/.test(baseText) || /\bperenpercelen\b/.test(baseText)) {
+  else if (result.ids.length === 0 && (/\b(?:alle?|de|mijn)\s+peren?\b/.test(baseText) || /\bperenpercelen\b/.test(baseText))) {
     result.ids = parcels.filter(p => p.crop?.toLowerCase() === 'peer').map(p => p.id);
     result.matchType = 'crop:peer';
   }

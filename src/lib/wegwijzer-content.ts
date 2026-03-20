@@ -61,7 +61,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['tijdlijn', 'spuitschrift', 'database-gewasbescherming', 'database-meststoffen', 'percelen'],
     keywords: ['slimme invoer', 'command center', 'registratie', 'spuiten', 'bemesten', 'AI', 'natuurlijke taal', 'spray', 'bespuiting'],
-    route: '/command-center/smart-input-v2',
+    route: '/command-center/smart-input-v3',
   },
   {
     id: 'tijdlijn',

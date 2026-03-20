@@ -101,6 +101,20 @@ interface FertilizationEntryCardProps {
 function FertilizationEntryCard({ entry, allParcels, isTankmix, onAction }: FertilizationEntryCardProps) {
     const selectedParcels = allParcels.filter(p => entry.plots.includes(p.id));
     const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    const { toast } = useToast();
+    const { invalidateSpuitschrift, invalidateInventory } = useInvalidateQueries();
+    const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
+    const [isDeleting, startDeleteTransition] = React.useTransition();
+
+    const handleDirectDelete = () => {
+        startDeleteTransition(async () => {
+            await deleteSpuitschriftEntry(entry.id);
+            toast({ title: 'Bemesting verwijderd', description: 'De bemestingsregistratie is permanent verwijderd.' });
+            invalidateSpuitschrift();
+            invalidateInventory();
+            onAction();
+        });
+    };
 
     const productsWithTotals = entry.products.map(product => ({
         ...product,
@@ -116,35 +130,66 @@ function FertilizationEntryCard({ entry, allParcels, isTankmix, onAction }: Fert
 
     return (
         <AccordionItem value={entry.id}>
-            <AccordionTrigger>
-                <div className="flex justify-between items-center w-full pr-4">
-                    <div className="flex items-center gap-2 text-left">
-                        <CropIcon parcels={selectedParcels} />
-                        <div>
-                            <p className="font-semibold">{formatDate(entry.date)}</p>
-                            <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
-                                {generateProductSummary()}
-                            </p>
+            <div className="flex items-center">
+                <AccordionTrigger className="flex-1">
+                    <div className="flex justify-between items-center w-full pr-4">
+                        <div className="flex items-center gap-2 text-left">
+                            <CropIcon parcels={selectedParcels} />
+                            <div>
+                                <p className="font-semibold">{formatDate(entry.date)}</p>
+                                <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
+                                    {generateProductSummary()}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {isTankmix && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400">
+                                    Tankmix
+                                </Badge>
+                            )}
+                            {entry.registrationType === 'spreading' && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
+                                    Strooien
+                                </Badge>
+                            )}
+                            <div className="text-right hidden sm:block">
+                                <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
+                                <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {isTankmix && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400">
-                                Tankmix
-                            </Badge>
-                        )}
-                        {entry.registrationType === 'spreading' && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
-                                Strooien
-                            </Badge>
-                        )}
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
-                            <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
-                        </div>
-                    </div>
-                </div>
-            </AccordionTrigger>
+                </AccordionTrigger>
+                <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mr-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsDeleteAlertOpen(true);
+                        }}
+                        disabled={isDeleting}
+                        title="Verwijderen"
+                    >
+                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Bemesting verwijderen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Weet je zeker dat je de bemestingsregistratie van {formatDate(entry.date)} wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDirectDelete} className="bg-destructive hover:bg-destructive/90">
+                                Verwijderen
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
             <AccordionContent className="px-4 pt-2 pb-4 space-y-4 bg-muted/50 rounded-b-md">
                 <div className="flex justify-between items-start">
                     <div>

@@ -660,6 +660,24 @@ export default function SmartInputV3Page() {
         });
     }, []);
 
+    const handlePlotRemove = React.useCallback((unitId: string, plotId: string) => {
+        setState(prev => {
+            if (!prev.draft) return prev;
+            const newUnits = prev.draft.units.map(u => {
+                if (u.id !== unitId) return u;
+                const newPlots = u.plots.filter(p => p !== plotId);
+                // Don't allow removing the last plot
+                if (newPlots.length === 0) return u;
+                return { ...u, plots: newPlots };
+            });
+            return {
+                ...prev,
+                draft: { ...prev.draft, units: newUnits },
+                draftHistory: [...prev.draftHistory.slice(-19), prev.draft],
+            };
+        });
+    }, []);
+
     // Wizard complete handler
     const handleWizardComplete = React.useCallback((registration: SprayRegistrationGroup) => {
         setState(prev => ({
@@ -699,6 +717,7 @@ export default function SmartInputV3Page() {
             onRemoveUnit={handleRemoveUnit}
             onCancelAll={handleCancelDraft}
             onProductUpdate={handleProductUpdate}
+            onPlotRemove={handlePlotRemove}
         />
     ) : (
         <EmptyStatusPanel />

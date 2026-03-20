@@ -62,11 +62,9 @@ function TimelineContent() {
         if (conversation.id.startsWith('sp_')) {
             // Spuitschrift entry — go to spuitschrift page
             router.push('/crop-care/logs');
-        } else if (conversation.draft_data?.version === 'v3') {
-            // V3 concept — go to smart-input-v3
-            router.push(`/command-center/smart-input-v3?session_id=${conversation.id}`);
         } else {
-            router.push(`/command-center/smart-input-v2?session_id=${conversation.id}`);
+            // All conversations go to V3
+            router.push(`/command-center/smart-input-v3?session_id=${conversation.id}`);
         }
     }, [router]);
 

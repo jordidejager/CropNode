@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { FertilizerProduct } from '@/lib/types';
 import { Building2, Package, Activity, Beaker, Calendar, Droplets } from 'lucide-react';
+import { getElementDisplayName, getElementDutchName } from '@/lib/element-info';
 
 interface FertilizerDetailDialogProps {
     fertilizer: FertilizerProduct | null;
@@ -94,12 +95,23 @@ export function FertilizerDetailDialog({
                         </h4>
                         {compositionEntries.length > 0 ? (
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                {compositionEntries.map(([key, value]) => (
-                                    <div key={key} className="p-3 rounded-lg border border-border/40 bg-card flex flex-col items-center justify-center gap-1 shadow-sm">
-                                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{key}</span>
-                                        <span className="text-lg font-bold text-primary">{value}%</span>
-                                    </div>
-                                ))}
+                                {compositionEntries.map(([key, value]) => {
+                                    const dutchName = getElementDutchName(key);
+                                    const formInfo = fertilizer.compositionForms?.[key];
+                                    return (
+                                        <div key={key} className="p-3 rounded-lg border border-border/40 bg-card flex flex-col items-center justify-center gap-1 shadow-sm">
+                                            <span className="text-[10px] font-bold text-muted-foreground text-center leading-tight">
+                                                {dutchName} ({key})
+                                            </span>
+                                            <span className="text-lg font-bold text-primary">{value}%</span>
+                                            {formInfo && (
+                                                <span className="text-[9px] text-muted-foreground/70 text-center leading-tight italic">
+                                                    {formInfo}
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="p-4 rounded-lg border border-dashed border-border/40 text-center text-sm text-muted-foreground">

@@ -393,6 +393,9 @@ export interface FertilizerProduct {
     Cu?: number;
     B?: number;
     Mo?: number;
+    P2O5?: number;
+    K2O?: number;
+    [key: string]: number | undefined;
   };
   searchKeywords: string[];
   description?: string;
@@ -400,6 +403,8 @@ export interface FertilizerProduct {
   density?: number;
   dosageFruit?: string;
   applicationTiming?: string;
+  /** Chemische vorm per element, bijv. {"Cu": "koperoxychloride", "Fe": "EDDHA-chelaat"} */
+  compositionForms?: Record<string, string>;
 }
 // ============================================
 // Research Hub Types

@@ -2098,6 +2098,7 @@ export async function getFertilizers(): Promise<FertilizerProduct[]> {
     density: item.density ? parseFloat(item.density) : undefined,
     dosageFruit: item.dosage_fruit,
     applicationTiming: item.application_timing,
+    compositionForms: item.composition_forms || undefined,
   }));
 }
 
@@ -2125,6 +2126,7 @@ export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
     density: item.density ? parseFloat(item.density) : undefined,
     dosageFruit: item.dosage_fruit,
     applicationTiming: item.application_timing,
+    compositionForms: item.composition_forms || undefined,
   }));
 }
 

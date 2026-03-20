@@ -6,6 +6,7 @@ import { Building2, Tag, Droplet, Sprout, Combine } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { FertilizerProduct } from '@/lib/types';
+import { getElementDutchName } from '@/lib/element-info';
 
 interface FertilizerCardProps {
     fertilizer: FertilizerProduct;
@@ -28,7 +29,7 @@ const formatComposition = (composition: FertilizerProduct['composition']): strin
     // NPK logic
     if (composition.N !== undefined || composition.P !== undefined || composition.K !== undefined) {
         if (composition.N !== undefined && composition.P === undefined && composition.K === undefined) {
-            return `N ${composition.N}%`;
+            return `Stikstof (N) ${composition.N}%`;
         }
         const n = composition.N ?? 0;
         const p = composition.P ?? 0;
@@ -36,13 +37,13 @@ const formatComposition = (composition: FertilizerProduct['composition']): strin
         return `NPK ${n}-${p}-${k}`;
     }
 
-    // Single elements fallback
+    // Single elements fallback - met Nederlandse naam
     const elements = Object.entries(composition)
         .filter(([_, v]) => v !== undefined && v !== null)
         .slice(0, 2);
 
     if (elements.length > 0) {
-        return elements.map(([k, v]) => `${k} ${v}%`).join(' + ');
+        return elements.map(([k, v]) => `${getElementDutchName(k)} (${k}) ${v}%`).join(' + ');
     }
 
     return '';

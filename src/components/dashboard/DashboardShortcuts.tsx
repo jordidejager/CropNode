@@ -25,7 +25,7 @@ interface ShortcutItem {
 const shortcuts: ShortcutItem[] = [
     {
         label: 'Slimme Invoer',
-        href: '/command-center/smart-input-v2',
+        href: '/command-center/smart-input-v3',
         icon: MessageSquare,
         getSubtext: () => 'Start een nieuwe registratie',
         gradient: 'from-emerald-500/20 to-emerald-600/5',

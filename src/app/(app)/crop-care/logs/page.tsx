@@ -267,9 +267,11 @@ interface SpuitschriftEntryCardProps {
     allParcels: SprayableParcel[];
     allProducts: string[];
     onAction: () => void;
+    onExpand?: () => void;
+    isOpen?: boolean;
 }
 
-function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: SpuitschriftEntryCardProps) {
+function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExpand, isOpen }: SpuitschriftEntryCardProps) {
     const [isEditing, setIsEditing] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
     const [editedDate, setEditedDate] = React.useState<Date>(entry.date);
@@ -378,32 +380,89 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
     const editedSelectedParcels = allParcels.filter(p => editedPlots.includes(p.id));
     const editedTotalArea = editedSelectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
 
+    const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
+    const [isDeleting, startDeleteTransition] = React.useTransition();
+
+    const handleDirectDelete = () => {
+        startDeleteTransition(async () => {
+            await deleteSpuitschriftEntry(entry.id);
+            toast({ title: 'Registratie verwijderd', description: 'De bespuiting is permanent verwijderd uit het spuitschrift.' });
+            invalidateSpuitschrift();
+            invalidateInventory();
+            onAction();
+        });
+    };
+
     return (
         <AccordionItem value={entry.id}>
-            <AccordionTrigger>
-                <div className="flex justify-between items-center w-full pr-4">
-                    <div className="flex items-center gap-2 text-left">
-                        <CropIcon parcels={selectedParcels} />
-                        <div>
-                            <p className="font-semibold">{formatDate(entry.date)}</p>
-                            <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
-                                {generateProductSummary()}
-                            </p>
+            <div className="flex items-center">
+                <AccordionTrigger className="flex-1">
+                    <div className="flex justify-between items-center w-full pr-4">
+                        <div className="flex items-center gap-2 text-left">
+                            <CropIcon parcels={selectedParcels} />
+                            <div>
+                                <p className="font-semibold">{formatDate(entry.date)}</p>
+                                <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
+                                    {generateProductSummary()}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {entry.registrationType === 'spreading' && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
+                                    Strooien
+                                </Badge>
+                            )}
+                            <div className="text-right hidden sm:block">
+                                <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
+                                <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {entry.registrationType === 'spreading' && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
-                                Strooien
-                            </Badge>
-                        )}
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
-                            <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
-                        </div>
-                    </div>
-                </div>
-            </AccordionTrigger>
+                </AccordionTrigger>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEdit();
+                        onExpand?.();
+                    }}
+                    title="Bewerken"
+                >
+                    <Edit className="h-4 w-4" />
+                </Button>
+                <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 mr-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsDeleteAlertOpen(true);
+                        }}
+                        disabled={isDeleting}
+                        title="Verwijderen"
+                    >
+                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Bespuiting verwijderen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Weet je zeker dat je de registratie van {formatDate(entry.date)} wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDirectDelete} className="bg-destructive hover:bg-destructive/90">
+                                Verwijderen
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
             <AccordionContent className="px-4 pt-2 pb-4 space-y-4 bg-muted/50 rounded-b-md">
                 {isEditing ? (
                     // Edit Mode
@@ -588,8 +647,10 @@ function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
     allProducts: string[];
     onAction: () => void;
 }) {
+    const [openItem, setOpenItem] = React.useState<string | undefined>(undefined);
+
     return (
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion type="single" collapsible className="w-full" value={openItem} onValueChange={setOpenItem}>
             {entries.map(entry => (
                 <SpuitschriftEntryCard
                     key={entry.id}
@@ -597,6 +658,8 @@ function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
                     allParcels={allParcels}
                     allProducts={allProducts}
                     onAction={onAction}
+                    isOpen={openItem === entry.id}
+                    onExpand={() => setOpenItem(entry.id)}
                 />
             ))}
         </Accordion>
