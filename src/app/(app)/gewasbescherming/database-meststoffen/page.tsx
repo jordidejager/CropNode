@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useFertilizers } from '@/hooks/use-data';
-import { FertilizersClientPage } from '../my-products/fertilizers-client-page';
+import { FertilizersClientPage } from '@/app/(app)/crop-care/my-products/fertilizers-client-page';
 import { ProductDatabaseSkeleton, ErrorState } from '@/components/ui/data-states';
 import { CardTitle, CardDescription } from '@/components/ui/card';
 

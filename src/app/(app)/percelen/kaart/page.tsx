@@ -1,6 +1,6 @@
 'use client';
 
-import { PercelenClientPage } from '../list/client-page';
+import { PercelenClientPage } from '@/app/(app)/parcels/list/client-page';
 
 export default function ParcelsMapPage() {
     return <PercelenClientPage forcedView="map" />;

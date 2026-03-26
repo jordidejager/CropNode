@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useCtgbProducts, useParcelHistory } from '@/hooks/use-data';
-import { MiddelenOverzichtClientPage } from '../my-products/client-page';
+import { MiddelenOverzichtClientPage } from '@/app/(app)/crop-care/my-products/client-page';
 import { ProductDatabaseSkeleton, ErrorState } from '@/components/ui/data-states';
 import { CardTitle, CardDescription } from '@/components/ui/card';
 
