@@ -1,0 +1,106 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { z } from 'zod';
+
+const UpdateNoteSchema = z.object({
+  content: z.string().min(1).max(2000).optional(),
+  status: z.enum(['open', 'done', 'transferred']).optional(),
+  is_pinned: z.boolean().optional(),
+});
+
+/**
+ * PATCH /api/field-notes/[id]
+ * Update an existing field note.
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    const result = UpdateNoteSchema.safeParse(body);
+
+    if (!result.success) {
+      const issues = result.error.issues.map(i => i.message).join(', ');
+      return NextResponse.json({ error: issues }, { status: 400 });
+    }
+
+    // Defense in depth: verify ownership
+    const { data: existing } = await supabase
+      .from('field_notes')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Notitie niet gevonden' }, { status: 404 });
+    }
+
+    const { data, error } = await supabase
+      .from('field_notes')
+      .update(result.data)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Field Notes API] PATCH error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    console.error('[Field Notes API] PATCH error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/field-notes/[id]
+ * Delete a field note.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const { error } = await supabase
+      .from('field_notes')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('[Field Notes API] DELETE error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('[Field Notes API] DELETE error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}

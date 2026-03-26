@@ -212,6 +212,8 @@ export async function addSpuitschriftEntry(
     registration_type: entry.registrationType || 'spraying',
     validation_message: entry.validationMessage,
     status: entry.status,
+    // registration_source: 'web' (default) or 'whatsapp' — only set if present
+    ...((entry as any).registrationSource && { registration_source: (entry as any).registrationSource }),
   };
 
   // Use supabaseAdmin to bypass RLS (server actions don't have cookie access)

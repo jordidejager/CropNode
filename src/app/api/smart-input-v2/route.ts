@@ -12,7 +12,6 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { requestContext } from '@/lib/request-context';
 import { classifyAndParseSpray } from '@/ai/flows/classify-and-parse-spray';
 import { registrationAgent, registrationAgentStream, type AgentOutput } from '@/ai/flows/registration-agent';
-import { validateParsedSprayData } from '@/lib/validation-service';
 import { resolveProductAliases, getProductSuggestions } from '@/lib/product-aliases';
 import {
     getSprayableParcels,
@@ -32,8 +31,10 @@ import type {
     CtgbProductSlim,
 } from '@/lib/types-v2';
 import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, CtgbProduct, FertilizerProduct, RegistrationType, ProductSource } from '@/lib/types';
-import { validateDraft, formatValidationResult, type DraftValidationResult, type DraftValidationIssue } from '@/lib/draft-validator';
 import { detectRegistrationType, resolveProductSources, resolveFertilizerProduct } from '@/lib/fertilizer-lookup';
+
+// Shared pipeline (extracted from this file)
+import { analyzeSprayInput, resolveParcelNamesToIds, type AnalysisResult } from '@/lib/spray-pipeline';
 
 // ============================================================================
 // AUTH HELPER
@@ -783,6 +784,36 @@ export async function POST(req: Request) {
 // ============================================================================
 
 async function handleFirstMessage(
+    message: string,
+    userId: string,
+    send: (msg: StreamMessageV2) => void,
+    context: string,
+    userContext?: SmartInputUserContext
+): Promise<void> {
+    // Delegate to shared pipeline and wrap result with streaming sends
+    send({ type: 'processing', phase: 'Invoer analyseren...' });
+
+    const result = await analyzeSprayInput(message, userId, { userContext });
+
+    // Convert AnalysisResult to SmartInputV2Response
+    const response: SmartInputV2Response = {
+        action: result.action,
+        humanSummary: result.humanSummary,
+        registration: result.registration,
+        validationFlags: result.validationFlags,
+        clarification: result.clarification,
+        processingTimeMs: result.processingTimeMs,
+    };
+
+    send({ type: 'complete', response });
+}
+
+/**
+ * LEGACY: Original handleFirstMessage logic preserved below.
+ * This was the inline implementation before extraction to spray-pipeline.ts.
+ * Kept for reference only — the active code path is the wrapper above.
+ */
+async function _handleFirstMessage_legacy(
     message: string,
     userId: string,
     send: (msg: StreamMessageV2) => void,

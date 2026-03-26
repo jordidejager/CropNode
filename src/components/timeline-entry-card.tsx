@@ -65,6 +65,9 @@ export function TimelineEntryCard({ entry, status, allParcels, onDelete, onEdit,
                         <div className="flex items-start gap-4 min-w-[200px]">
                             <div className="text-xl font-black text-white/50 font-mono tracking-tighter">
                                 {applicationTime}
+                                {(entry as any).registrationSource === 'whatsapp' && (
+                                    <span className="block text-[10px] text-emerald-500/60 font-normal tracking-normal mt-0.5" title="Via WhatsApp">📱 WhatsApp</span>
+                                )}
                             </div>
                             <div className="space-y-1">
                                 <h4 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">

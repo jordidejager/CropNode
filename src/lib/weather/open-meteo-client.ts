@@ -296,6 +296,7 @@ export async function fetchEnsembleData(
     longitude: longitude.toString(),
     models: ENSEMBLE_MODELS.join(','),
     hourly: ENSEMBLE_HOURLY_PARAMS.join(','),
+    forecast_days: FORECAST_DAYS.toString(),
     timezone: DEFAULT_TIMEZONE,
   });
 

@@ -43,7 +43,7 @@ export function RecentActivity() {
                 </h2>
                 {recentItems.length > 0 && (
                     <Link
-                        href="/crop-care/logs"
+                        href="/gewasbescherming"
                         className="text-xs text-white/25 hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
                     >
                         Bekijk alles

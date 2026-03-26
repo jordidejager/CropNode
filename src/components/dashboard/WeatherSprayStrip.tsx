@@ -208,7 +208,7 @@ export function WeatherSprayStrip() {
                     </div>
                     <p className="text-sm text-white/30 mb-2">Geen weerstation gekoppeld</p>
                     <Link
-                        href="/weather/dashboard"
+                        href="/weer"
                         className="text-xs text-emerald-400/60 hover:text-emerald-400 inline-flex items-center gap-1.5 transition-colors"
                     >
                         Stel een weerstation in
@@ -245,7 +245,7 @@ export function WeatherSprayStrip() {
                     Weer & spuitvenster
                 </h2>
                 <Link
-                    href="/weather/dashboard"
+                    href="/weer"
                     className="text-xs text-white/25 hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
                 >
                     Weerdashboard

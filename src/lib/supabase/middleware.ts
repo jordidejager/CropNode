@@ -49,7 +49,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Routes die beschermd moeten worden
-  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|command-center|parcels|crop-care|harvest-hub|research|perceelhistorie|bedrijf-dashboard|team-tasks|profile)/)
+  const isProtectedRoute = request.nextUrl.pathname.match(/^\/(app|dashboard|slimme-invoer|gewasbescherming|percelen|oogst|weer|kennisbank|urenregistratie|analytics|wegwijzer|command-center|parcels|crop-care|harvest-hub|research|perceelhistorie|bedrijf-dashboard|team-tasks|weather|profile)/)
   const isAuthPage = request.nextUrl.pathname === '/login'
     || request.nextUrl.pathname === '/forgot-password'
     || request.nextUrl.pathname === '/reset-password'
@@ -64,14 +64,14 @@ export async function updateSession(request: NextRequest) {
   // Ingelogd en probeert auth pagina te bezoeken (behalve reset-password)
   if (user && isAuthPage && request.nextUrl.pathname !== '/reset-password') {
     const url = request.nextUrl.clone()
-    url.pathname = '/command-center'
+    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
-  // Ingelogd en bezoekt landing page (/) -> redirect naar command-center
+  // Ingelogd en bezoekt landing page (/) -> redirect naar dashboard
   if (user && request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = '/command-center'
+    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 

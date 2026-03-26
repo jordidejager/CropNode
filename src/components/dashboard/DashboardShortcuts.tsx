@@ -25,7 +25,7 @@ interface ShortcutItem {
 const shortcuts: ShortcutItem[] = [
     {
         label: 'Slimme Invoer',
-        href: '/command-center/smart-input-v3',
+        href: '/slimme-invoer',
         icon: MessageSquare,
         getSubtext: () => 'Start een nieuwe registratie',
         gradient: 'from-emerald-500/20 to-emerald-600/5',
@@ -34,7 +34,7 @@ const shortcuts: ShortcutItem[] = [
     },
     {
         label: 'Spuitschrift',
-        href: '/crop-care/logs',
+        href: '/gewasbescherming',
         icon: ClipboardList,
         getSubtext: (data) => {
             const count = data?.stats?.recentSprayings;
@@ -47,7 +47,7 @@ const shortcuts: ShortcutItem[] = [
     },
     {
         label: 'Percelen',
-        href: '/parcels/list',
+        href: '/percelen',
         icon: Map,
         getSubtext: (data) => {
             const count = data?.stats?.totalParcels;
@@ -63,7 +63,7 @@ const shortcuts: ShortcutItem[] = [
     },
     {
         label: 'Urenregistratie',
-        href: '/team-tasks',
+        href: '/urenregistratie',
         icon: Timer,
         getSubtext: () => 'Uren bijhouden',
         gradient: 'from-purple-500/15 to-violet-600/5',
@@ -72,7 +72,7 @@ const shortcuts: ShortcutItem[] = [
     },
     {
         label: 'Weerdashboard',
-        href: '/weather/dashboard',
+        href: '/weer',
         icon: CloudSun,
         getSubtext: () => 'Bekijk het weer',
         gradient: 'from-blue-500/15 to-cyan-600/5',
@@ -81,7 +81,7 @@ const shortcuts: ShortcutItem[] = [
     },
     {
         label: 'Voorraad',
-        href: '/crop-care/inventory',
+        href: '/gewasbescherming/voorraad',
         icon: Package,
         getSubtext: () => 'Voorraad beheren',
         gradient: 'from-amber-500/15 to-orange-600/5',

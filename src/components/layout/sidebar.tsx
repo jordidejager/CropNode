@@ -3,42 +3,25 @@
 import * as React from 'react';
 import { Suspense, createContext, useContext, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
-    Home,
+    LayoutDashboard,
+    Sparkles,
+    StickyNote,
+    Shield,
     Map,
-    List,
-    MapPin,
-    ClipboardList,
-    Package,
-    FlaskConical,
-    Database,
-    Sprout,
+    Apple,
+    CloudSun,
+    BarChart3,
     BookOpen,
-    Library,
-    ChevronDown,
-    ChevronRight,
+    Clock,
+    Settings,
+    Compass,
     PanelLeftClose,
     PanelLeftOpen,
-    MessageSquare,
-    Clock,
-    Users,
-    Timer,
-    Bug,
     LogOut,
     Menu,
     X,
-    User,
-    Apple,
-    Thermometer,
-    BarChart3,
-    SlidersHorizontal,
-    Truck,
-    CloudSun,
-    Compass,
-    History,
-    LayoutDashboard,
-    Leaf,
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -106,189 +89,51 @@ export function MobileMenuButton() {
     );
 }
 
-interface NavItem {
+// ============================================================================
+// FLAT NAVIGATION STRUCTURE
+// ============================================================================
+
+interface FlatNavItem {
     label: string;
-    href?: string;
-    icon: any;
-    items?: NavItem[];
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    dividerAfter?: boolean;
+    badge?: string;
 }
 
-const menuStructure: NavItem[] = [
-    {
-        label: 'Command Center',
-        icon: Home,
-        items: [
-            { label: 'Dashboard', href: '/command-center', icon: LayoutDashboard },
-            { label: 'Slimme Invoer', href: '/command-center/smart-input-v3', icon: MessageSquare },
-            { label: 'Tijdlijn', href: '/command-center/timeline', icon: Clock },
-        ]
-    },
-    {
-        label: 'Percelen',
-        icon: Map,
-        items: [
-            { label: 'Lijstweergave', href: '/parcels/list', icon: List },
-            { label: 'Kaartweergave', href: '/parcels/map', icon: MapPin },
-        ]
-    },
-    {
-        label: 'Crop Care',
-        icon: Sprout,
-        items: [
-            { label: 'Spuitschrift', href: '/crop-care/logs', icon: ClipboardList },
-            { label: 'Bemestingsregister', href: '/crop-care/fertilization', icon: Leaf },
-            { label: 'Voorraad', href: '/crop-care/inventory', icon: Package },
-            { label: 'Mijn Producten', href: '/crop-care/my-products', icon: FlaskConical },
-            { label: 'Database Gewasbescherming', href: '/crop-care/db-protection', icon: Database },
-            { label: 'Database Meststoffen', href: '/crop-care/db-fertilizer', icon: Sprout },
-        ]
-    },
-    {
-        label: 'Harvest Hub',
-        icon: Apple,
-        items: [
-            { label: 'Oogstregistratie', href: '/harvest-hub/registration', icon: ClipboardList },
-            { label: 'Koelcelbeheer', href: '/harvest-hub/cold-storage', icon: Thermometer },
-            { label: 'Perceelanalyse', href: '/harvest-hub/field-analysis', icon: BarChart3 },
-            { label: 'Sortering & Kwaliteit', href: '/harvest-hub/quality', icon: SlidersHorizontal },
-            { label: 'Afleveroverzicht', href: '/harvest-hub/deliveries', icon: Truck },
-        ]
-    },
-    {
-        label: 'Team & Tasks',
-        icon: Users,
-        items: [
-            { label: 'Urenregistratie', href: '/team-tasks', icon: Timer },
-        ]
-    },
-    {
-        label: 'Research Hub',
-        icon: BookOpen,
-        items: [
-            { label: 'Field Signals', href: '/research?tab=signals', icon: BookOpen },
-            { label: 'Papers & Onderzoek', href: '/research?tab=papers', icon: FlaskConical },
-            { label: 'Kennisbank', href: '/research/kennisbank', icon: Library },
-            { label: 'Ziekten & Plagen', href: '/research/pests', icon: Bug },
-        ]
-    },
-    {
-        label: 'Weather Hub',
-        icon: CloudSun,
-        items: [
-            { label: 'Dashboard', href: '/weather/dashboard', icon: CloudSun },
-            { label: 'Historie (KNMI)', href: '/weather/historie', icon: History },
-            { label: 'Ziektedruk', href: '/weather/disease-pressure', icon: Bug },
-            { label: 'Expert Forecast', href: '/weather/expert', icon: SlidersHorizontal },
-        ]
-    },
+const menuItems: FlatNavItem[] = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Slimme Invoer', href: '/slimme-invoer', icon: Sparkles, badge: 'Nieuw' },
+    { label: 'Veldnotities', href: '/veldnotities', icon: StickyNote, dividerAfter: true },
+    { label: 'Gewasbescherming', href: '/gewasbescherming', icon: Shield },
+    { label: 'Percelen', href: '/percelen', icon: Map },
+    { label: 'Oogst & Opslag', href: '/oogst', icon: Apple },
+    { label: 'Weer', href: '/weer', icon: CloudSun },
+    { label: 'Analytics', href: '/analytics', icon: BarChart3, dividerAfter: true },
+    { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
+    { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
+    { label: 'Instellingen', href: '/instellingen/whatsapp', icon: Settings },
 ];
 
-// Flyout menu component for collapsed state with sub-items
-interface FlyoutMenuProps {
-    item: NavItem;
-    isLinkActive: (href: string) => boolean;
-}
-
-function FlyoutMenu({ item, isLinkActive }: FlyoutMenuProps) {
-    const [isHovered, setIsHovered] = React.useState(false);
-    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-    const isGroupActive = item.items?.some(sub => isLinkActive(sub.href!));
-
-    const handleMouseEnter = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setIsHovered(true);
-    };
-
-    const handleMouseLeave = () => {
-        timeoutRef.current = setTimeout(() => setIsHovered(false), 150);
-    };
-
-    return (
-        <div
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-        >
-            {/* Icon Button */}
-            <div
-                className={cn(
-                    "flex items-center justify-center w-full px-3 py-3 rounded-xl transition-all duration-200 cursor-pointer",
-                    isGroupActive
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
-                )}
-            >
-                <item.icon className={cn(
-                    "size-5 shrink-0",
-                    isGroupActive ? "text-emerald-500" : ""
-                )} />
-            </div>
-
-            {/* Flyout Panel */}
-            <AnimatePresence>
-                {isHovered && (
-                    <motion.div
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -8 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute left-full top-0 ml-2 z-[100]"
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                    >
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl py-2 min-w-[200px]">
-                            {/* Header */}
-                            <div className="px-4 py-2 border-b border-white/5">
-                                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                                    {item.label}
-                                </span>
-                            </div>
-
-                            {/* Sub Items */}
-                            <div className="py-1">
-                                {item.items?.map((sub) => (
-                                    <Link
-                                        key={sub.label}
-                                        href={sub.href!}
-                                        className={cn(
-                                            "flex items-center gap-3 px-4 py-2.5 transition-all duration-200",
-                                            isLinkActive(sub.href!)
-                                                ? "bg-emerald-500/10 text-emerald-400"
-                                                : "text-slate-400 hover:text-white hover:bg-white/5"
-                                        )}
-                                    >
-                                        <sub.icon className="size-4 shrink-0" />
-                                        <span className="text-sm font-medium">{sub.label}</span>
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-}
+// ============================================================================
+// SIDEBAR CONTENT
+// ============================================================================
 
 function SidebarContent() {
     const pathname = usePathname();
-    const searchParams = useSearchParams();
 
-    // Mobile sidebar state - use try/catch for when context is not available
+    // Mobile sidebar state
     let mobileContext: MobileSidebarContextType | null = null;
     try {
         mobileContext = useMobileSidebar();
     } catch {
-        // Context not available, sidebar is being used outside provider
+        // Context not available
     }
     const isMobileOpen = mobileContext?.isOpen ?? false;
     const closeMobile = mobileContext?.close ?? (() => {});
 
     // Collapse State (desktop only)
     const [isCollapsed, setIsCollapsed] = React.useState(false);
-    // Group State (open accordions)
-    const [openGroups, setOpenGroups] = React.useState<string[]>([]);
     // User State
     const [userEmail, setUserEmail] = React.useState<string | null>(null);
     const [userInitials, setUserInitials] = React.useState<string>('');
@@ -308,28 +153,18 @@ function SidebarContent() {
         });
     }, []);
 
-    // Initialize from LocalStorage
+    // Initialize collapse from LocalStorage
     React.useEffect(() => {
         const savedCollapse = localStorage.getItem('sidebar_collapsed');
         if (savedCollapse !== null) setIsCollapsed(JSON.parse(savedCollapse));
-
-        const savedGroups = localStorage.getItem('sidebar_groups');
-        if (savedGroups !== null) setOpenGroups(JSON.parse(savedGroups));
-        else {
-            // Auto-open group if active sub-item
-            const activeGroup = menuStructure.find(group =>
-                group.items?.some(sub => sub.href === pathname)
-            );
-            if (activeGroup) setOpenGroups([activeGroup.label]);
-        }
-    }, [pathname]);
+    }, []);
 
     // Close mobile sidebar on navigation
     React.useEffect(() => {
         closeMobile();
     }, [pathname, closeMobile]);
 
-    // Save to LocalStorage
+    // Save collapse to LocalStorage
     const toggleCollapse = React.useCallback(() => {
         setIsCollapsed(prev => {
             const newState = !prev;
@@ -338,33 +173,13 @@ function SidebarContent() {
         });
     }, []);
 
-    const toggleGroup = (label: string) => {
-        setOpenGroups(prev => {
-            const next = prev.includes(label)
-                ? prev.filter(g => g !== label)
-                : [...prev, label];
-            localStorage.setItem('sidebar_groups', JSON.stringify(next));
-            return next;
-        });
-    };
-
+    // Active state: prefix matching
     const isLinkActive = React.useCallback((href: string) => {
-        if (href === pathname) return true;
-
-        // Check for query params match
-        if (href && href.includes('?')) {
-            const [path, query] = href.split('?');
-            if (path !== pathname) return false;
-
-            const params = new URLSearchParams(query);
-            for (const [key, value] of params.entries()) {
-                if (searchParams.get(key) !== value) return false;
-            }
-            return true;
-        }
-
+        if (pathname === href) return true;
+        // Prefix match for sub-routes (e.g., /gewasbescherming/bemesting)
+        if (href !== '/' && pathname.startsWith(href + '/')) return true;
         return false;
-    }, [pathname, searchParams]);
+    }, [pathname]);
 
     // Sidebar content JSX
     const sidebarContent = (
@@ -372,17 +187,15 @@ function SidebarContent() {
             <aside
                 className={cn(
                     "h-screen bg-[#020617] border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col z-50 shrink-0",
-                    // Desktop: sticky, width based on collapse state
                     "md:sticky md:top-0",
-                    isCollapsed ? "md:w-[72px]" : "md:w-72",
-                    // Mobile: full width when open
+                    isCollapsed ? "md:w-[72px]" : "md:w-[220px]",
                     "w-72"
                 )}
             >
-                {/* Header with integrated toggle for collapsed state */}
+                {/* Header */}
                 <div className={cn(
-                    "h-16 flex items-center gap-3 mb-4 shrink-0 relative",
-                    isCollapsed ? "px-4 justify-center" : "px-6"
+                    "h-16 flex items-center gap-3 mb-2 shrink-0 relative",
+                    isCollapsed ? "px-4 justify-center" : "px-5"
                 )}>
                     {isCollapsed ? (
                         <LogoIcon theme="dark" size={32} />
@@ -392,11 +205,10 @@ function SidebarContent() {
                             animate={{ opacity: 1, x: 0 }}
                             className="flex items-center overflow-hidden"
                         >
-                            <Logo variant="horizontal" theme="dark" width={140} height={32} />
+                            <Logo variant="horizontal" theme="dark" width={130} height={30} />
                         </motion.div>
                     )}
 
-                    {/* Toggle button in header when collapsed */}
                     {isCollapsed && (
                         <button
                             onClick={toggleCollapse}
@@ -408,136 +220,86 @@ function SidebarContent() {
                     )}
                 </div>
 
-                {/* Navigation */}
+                {/* Navigation - flat list */}
                 <nav className={cn(
-                    "flex-1 space-y-1 overflow-y-auto custom-scrollbar",
+                    "flex-1 flex flex-col overflow-y-auto custom-scrollbar",
                     isCollapsed ? "px-2" : "px-3"
                 )}>
-                    {menuStructure.map((item) => {
-                        const hasSubItems = item.items && item.items.length > 0;
-                        const isOpen = openGroups.includes(item.label);
-                        const isGroupActive = item.items?.some(sub => isLinkActive(sub.href!)) || (item.href && isLinkActive(item.href));
-
-                        // COLLAPSED STATE
-                        if (isCollapsed) {
-                            // Item with sub-items: show flyout on hover
-                            if (hasSubItems) {
-                                return (
-                                    <FlyoutMenu
-                                        key={item.label}
-                                        item={item}
-                                        isLinkActive={isLinkActive}
-                                    />
-                                );
-                            }
-
-                            // Single item: direct link with tooltip
-                            return (
-                                <Tooltip key={item.label}>
-                                    <TooltipTrigger asChild>
-                                        <Link
-                                            href={item.href!}
-                                            className={cn(
-                                                "flex items-center justify-center w-full px-3 py-3 rounded-xl transition-all duration-200",
-                                                isLinkActive(item.href!)
-                                                    ? "bg-emerald-500/10 text-emerald-400"
-                                                    : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
-                                            )}
-                                        >
-                                            <item.icon className={cn(
-                                                "size-5 shrink-0",
-                                                isLinkActive(item.href!) ? "text-emerald-500" : ""
-                                            )} />
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
-                                        {item.label}
-                                    </TooltipContent>
-                                </Tooltip>
-                            );
-                        }
-
-                        // EXPANDED STATE
-                        const itemContent = (
-                            <div
-                                onClick={() => hasSubItems && toggleGroup(item.label)}
-                                className={cn(
-                                    "flex items-center w-full gap-3 px-3 py-3 rounded-xl transition-all duration-200 cursor-pointer relative group",
-                                    item.href && isLinkActive(item.href)
-                                        ? "bg-emerald-500/10 backdrop-blur-md border-l-4 border-emerald-500 text-emerald-400"
-                                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200",
-                                    !item.href && isGroupActive && !isOpen ? "bg-emerald-500/5 text-emerald-500/80" : ""
+                    <div className="space-y-0.5">
+                        {menuItems.map((item) => (
+                            <React.Fragment key={item.label}>
+                                {isCollapsed ? (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link
+                                                href={item.href}
+                                                className={cn(
+                                                    "flex items-center justify-center w-full px-3 py-2.5 rounded-xl transition-all duration-200",
+                                                    isLinkActive(item.href)
+                                                        ? "bg-emerald-500/10 text-emerald-400"
+                                                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                                )}
+                                            >
+                                                <item.icon className={cn(
+                                                    "size-5 shrink-0",
+                                                    isLinkActive(item.href) ? "text-emerald-500" : ""
+                                                )} />
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
+                                            {item.label}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                ) : (
+                                    <Link
+                                        href={item.href}
+                                        className={cn(
+                                            "flex items-center w-full gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
+                                            isLinkActive(item.href)
+                                                ? "bg-emerald-500/10 text-emerald-400"
+                                                : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                        )}
+                                    >
+                                        <item.icon className={cn(
+                                            "size-[18px] shrink-0 transition-colors",
+                                            isLinkActive(item.href) ? "text-emerald-500" : "text-slate-400 group-hover:text-slate-200"
+                                        )} />
+                                        <span className={cn(
+                                            "text-[13px] font-semibold truncate",
+                                            isLinkActive(item.href) ? "text-emerald-400" : ""
+                                        )}>
+                                            {item.label}
+                                        </span>
+                                        {item.badge && (
+                                            <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                    </Link>
                                 )}
-                            >
-                                <item.icon className={cn(
-                                    "size-5 shrink-0 transition-colors",
-                                    isGroupActive || (item.href && isLinkActive(item.href)) ? "text-emerald-500" : "text-slate-400 group-hover:text-slate-200"
-                                )} />
-                                <span className={cn(
-                                    "text-sm font-bold tracking-wide truncate",
-                                    isGroupActive || (item.href && isLinkActive(item.href)) ? "text-emerald-500" : ""
-                                )}>
-                                    {item.label}
-                                </span>
-                                {hasSubItems && (
-                                    <div className="ml-auto">
-                                        {isOpen ? <ChevronDown className="size-4 opacity-50" /> : <ChevronRight className="size-4 opacity-50" />}
+
+                                {/* Divider */}
+                                {item.dividerAfter && (
+                                    <div className={cn("py-1.5", isCollapsed ? "mx-1" : "mx-2")}>
+                                        <div className="h-px bg-white/[0.06]" />
                                     </div>
                                 )}
-                            </div>
-                        );
+                            </React.Fragment>
+                        ))}
+                    </div>
 
-                        return (
-                            <div key={item.label} className="space-y-1">
-                                {item.href ? (
-                                    <Link href={item.href}>{itemContent}</Link>
-                                ) : (
-                                    itemContent
-                                )}
-
-                                {/* Accordion Sub-items */}
-                                <AnimatePresence initial={false}>
-                                    {hasSubItems && isOpen && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: "auto", opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            className="overflow-hidden pl-4 ml-4 border-l border-white/5 space-y-1"
-                                        >
-                                            {item.items?.map((sub) => (
-                                                <Link
-                                                    key={sub.label}
-                                                    href={sub.href!}
-                                                    className={cn(
-                                                        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
-                                                        isLinkActive(sub.href!)
-                                                            ? "bg-emerald-500/10 text-emerald-400"
-                                                            : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
-                                                    )}
-                                                >
-                                                    <sub.icon className="size-4 shrink-0" />
-                                                    <span>{sub.label}</span>
-                                                </Link>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        );
-                    })}
-
-                    {/* Separator + Wegwijzer link */}
-                    <div className={cn("pt-3 mt-3 border-t border-white/5", isCollapsed ? "mx-1" : "mx-1")}>
+                    {/* Wegwijzer - pushed to bottom */}
+                    <div className={cn("mt-auto pt-2 border-t border-white/[0.06]", isCollapsed ? "mx-1" : "mx-1")}>
                         {isCollapsed ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Link
                                         href="/wegwijzer"
                                         className={cn(
-                                            "flex items-center justify-center w-full px-3 py-3 rounded-xl transition-all duration-200",
+                                            "flex items-center justify-center w-full px-3 py-2.5 rounded-xl transition-all duration-200",
                                             isLinkActive('/wegwijzer')
                                                 ? "bg-emerald-500/10 text-emerald-400"
-                                                : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                                : "hover:bg-white/5 text-slate-500 hover:text-slate-300"
                                         )}
                                     >
                                         <Compass className={cn(
@@ -554,19 +316,19 @@ function SidebarContent() {
                             <Link
                                 href="/wegwijzer"
                                 className={cn(
-                                    "flex items-center w-full gap-3 px-3 py-3 rounded-xl transition-all duration-200 group",
+                                    "flex items-center w-full gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
                                     isLinkActive('/wegwijzer')
-                                        ? "bg-emerald-500/10 backdrop-blur-md border-l-4 border-emerald-500 text-emerald-400"
-                                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                        ? "bg-emerald-500/10 text-emerald-400"
+                                        : "hover:bg-white/5 text-slate-500 hover:text-slate-300"
                                 )}
                             >
                                 <Compass className={cn(
-                                    "size-5 shrink-0 transition-colors",
-                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : "text-slate-400 group-hover:text-slate-200"
+                                    "size-[18px] shrink-0 transition-colors",
+                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : "text-slate-500 group-hover:text-slate-300"
                                 )} />
                                 <span className={cn(
-                                    "text-sm font-bold tracking-wide truncate",
-                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : ""
+                                    "text-[13px] font-medium truncate",
+                                    isLinkActive('/wegwijzer') ? "text-emerald-400" : ""
                                 )}>
                                     Wegwijzer
                                 </span>
@@ -575,15 +337,15 @@ function SidebarContent() {
                     </div>
                 </nav>
 
-                {/* Footer / Toggle */}
+                {/* Footer / User + Toggle */}
                 <div className={cn(
                     "border-t border-white/5 shrink-0",
-                    isCollapsed ? "p-2" : "p-4"
+                    isCollapsed ? "p-2" : "p-3"
                 )}>
                     {/* User Card */}
                     <div className={cn(
-                        "flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 mb-3 transition-all duration-300",
-                        isCollapsed ? "justify-center p-2" : "p-3"
+                        "flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 mb-2 transition-all duration-300",
+                        isCollapsed ? "justify-center p-2" : "p-2.5"
                     )}>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -594,7 +356,7 @@ function SidebarContent() {
                                         isCollapsed ? "justify-center" : ""
                                     )}
                                 >
-                                    <div className="size-9 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-red-500/30 group-hover:border-red-500/50 transition-all">
+                                    <div className="size-8 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-red-500/30 group-hover:border-red-500/50 transition-all">
                                         <span className="text-[10px] font-black text-red-400">{userInitials || '?'}</span>
                                     </div>
                                     {!isCollapsed && (
@@ -621,9 +383,9 @@ function SidebarContent() {
                                     <TooltipTrigger asChild>
                                         <button
                                             type="submit"
-                                            className="size-8 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all"
+                                            className="size-7 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all"
                                         >
-                                            <LogOut className="size-4" />
+                                            <LogOut className="size-3.5" />
                                         </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="bg-slate-800 text-white font-bold border-white/10">
@@ -636,14 +398,14 @@ function SidebarContent() {
 
                     {/* Logout button when collapsed */}
                     {isCollapsed && (
-                        <form action={logout} className="mb-3">
+                        <form action={logout} className="mb-2">
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button
                                         type="submit"
-                                        className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 transition-all text-slate-400 hover:text-red-400"
+                                        className="w-full h-8 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 transition-all text-slate-400 hover:text-red-400"
                                     >
-                                        <LogOut className="size-4" />
+                                        <LogOut className="size-3.5" />
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
@@ -653,28 +415,26 @@ function SidebarContent() {
                         </form>
                     )}
 
-                    {/* Toggle Button - Always visible and clickable */}
-                    {!isCollapsed && (
+                    {/* Toggle Button */}
+                    {!isCollapsed ? (
                         <Button
                             variant="ghost"
                             onClick={toggleCollapse}
-                            className="w-full h-11 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
+                            className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
                         >
-                            <PanelLeftClose className="size-5 mr-2" />
+                            <PanelLeftClose className="size-4 mr-2" />
                             <span className="text-xs font-bold">Inklappen</span>
                         </Button>
-                    )}
-
-                    {isCollapsed && (
+                    ) : (
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     onClick={toggleCollapse}
-                                    className="w-full h-11 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
+                                    className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
                                 >
-                                    <PanelLeftOpen className="size-5" />
+                                    <PanelLeftOpen className="size-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
@@ -687,11 +447,9 @@ function SidebarContent() {
         </TooltipProvider>
     );
 
-    // Desktop: render sidebar directly
-    // Mobile: render with overlay and slide animation
     return (
         <>
-            {/* Desktop sidebar - always visible */}
+            {/* Desktop sidebar */}
             <div className="hidden md:block">
                 {sidebarContent}
             </div>
@@ -700,7 +458,6 @@ function SidebarContent() {
             <AnimatePresence>
                 {isMobileOpen && (
                     <>
-                        {/* Overlay */}
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -709,8 +466,6 @@ function SidebarContent() {
                             className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
                             onClick={closeMobile}
                         />
-
-                        {/* Sliding sidebar */}
                         <motion.div
                             initial={{ x: '-100%' }}
                             animate={{ x: 0 }}
@@ -730,12 +485,12 @@ function SidebarContent() {
 // Sidebar skeleton for Suspense fallback
 function SidebarSkeleton() {
     return (
-        <aside className="h-screen sticky top-0 bg-[#020617] border-r border-white/5 w-72 flex flex-col z-50 shrink-0">
-            <div className="h-16 flex items-center gap-3 mb-4 px-6">
-                <div className="h-8 w-32 bg-white/5 rounded animate-pulse" />
+        <aside className="h-screen sticky top-0 bg-[#020617] border-r border-white/5 w-[220px] flex flex-col z-50 shrink-0">
+            <div className="h-16 flex items-center gap-3 mb-2 px-5">
+                <div className="h-8 w-28 bg-white/5 rounded animate-pulse" />
             </div>
-            <nav className="flex-1 px-3 space-y-2">
-                {[1, 2, 3, 4, 5].map(i => (
+            <nav className="flex-1 px-3 space-y-1">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
                     <div key={i} className="h-10 bg-white/5 rounded-xl animate-pulse" />
                 ))}
             </nav>
@@ -743,7 +498,6 @@ function SidebarSkeleton() {
     );
 }
 
-// Wrap in Suspense for useSearchParams() - required by Next.js 13+
 export function Sidebar() {
     return (
         <Suspense fallback={<SidebarSkeleton />}>

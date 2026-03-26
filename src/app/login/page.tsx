@@ -120,7 +120,7 @@ export default function LoginPage() {
       }
 
       // Success - redirect (alleen voor fruitteelt)
-      router.push('/command-center')
+      router.push('/dashboard')
       router.refresh()
     } catch (err) {
       console.error('[Auth] Exception:', err)

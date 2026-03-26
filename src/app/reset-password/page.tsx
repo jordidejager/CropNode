@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
 
       // Redirect to app after 2 seconds
       setTimeout(() => {
-        router.push('/command-center')
+        router.push('/dashboard')
       }, 2000)
     } catch (err) {
       console.error('[ResetPassword] Exception:', err)

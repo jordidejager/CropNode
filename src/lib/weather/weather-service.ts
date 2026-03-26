@@ -315,7 +315,8 @@ export async function aggregateDaily(
     .eq('station_id', stationId)
     .gte('timestamp', startOfDay)
     .lte('timestamp', endOfDay)
-    .order('timestamp');
+    .order('timestamp')
+    .limit(3000);
 
   if (!hourlyRows || hourlyRows.length === 0) return;
 
@@ -558,7 +559,8 @@ export async function getHourlyRange(
     .eq('model_name', 'best_match')
     .gte('timestamp', `${startDate}T00:00:00`)
     .lte('timestamp', `${endDate}T23:59:59`)
-    .order('timestamp');
+    .order('timestamp')
+    .limit(3000);
 
   return (data ?? []).map(mapHourlyRow);
 }
@@ -605,7 +607,8 @@ export async function getCurrentAndForecast(
     .eq('model_name', 'best_match')
     .gte('timestamp', twoHoursAgo.toISOString())
     .lte('timestamp', twoDaysLater.toISOString())
-    .order('timestamp');
+    .order('timestamp')
+    .limit(3000);
 
   return (data ?? []).map(mapHourlyRow);
 }
@@ -677,7 +680,8 @@ export async function getMultiModelForecast(
     .eq('station_id', stationId)
     .eq('is_forecast', true)
     .neq('model_name', 'best_match')
-    .order('timestamp');
+    .order('timestamp')
+    .limit(3000);
 
   if (!data || data.length === 0) {
     return { models: {}, last_updated: new Date().toISOString() };

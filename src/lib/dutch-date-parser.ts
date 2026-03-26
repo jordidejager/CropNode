@@ -31,9 +31,12 @@ export function parseDutchDate(input: string, referenceDate?: Date): Date | null
   const today = stripTime(ref);
   const lower = input.toLowerCase().trim();
 
-  // 1. Relative dates
+  // 1. Relative dates (including "vanavond", "vanochtend", etc. — all mean today)
   if (/\bvandaag\b/.test(lower)) return today;
+  if (/\b(?:vanavond|vannacht)\b/.test(lower)) return today;
+  if (/\b(?:vanochtend|vanmorgen|vanmiddag)\b/.test(lower)) return today;
   if (/\bgisteren\b/.test(lower)) return addDays(today, -1);
+  if (/\bgisteravond\b/.test(lower)) return addDays(today, -1);
   if (/\beergisteren\b/.test(lower)) return addDays(today, -2);
 
   // 2. "vorige week [dag]" / "afgelopen [dag]"
@@ -123,7 +126,7 @@ export function extractDateFromText(input: string, referenceDate?: Date): {
   const patterns = [
     /\b(?:vorige\s+week|afgelopen\s+week)\s+(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?))?\b/gi,
     /\b(?:afgelopen|vorige)\s+(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?))?\b/gi,
-    /\b(?:vandaag|gisteren|eergisteren)(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?))?\b/gi,
+    /\b(?:vandaag|gisteren|gisteravond|eergisteren|vanavond|vannacht|vanochtend|vanmorgen|vanmiddag)(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?))?\b/gi,
     /\b(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:(?:avonds?|ochtends?|middags?|nachts?|morgens?)|(?:\s+(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?|morgens?)))?\b/gi,
     // Standalone time-of-day words (when used after date context already matched)
     /\b(?:'s\s+)?(?:avonds?|ochtends?|middags?|nachts?)\b/gi,

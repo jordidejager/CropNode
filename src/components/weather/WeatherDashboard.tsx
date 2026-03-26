@@ -7,6 +7,7 @@ import {
   useWeatherForecast,
   useWeatherHourly,
   useWeatherRefresh,
+  useWeatherMultiModel,
 } from '@/hooks/use-weather';
 import { ErrorState } from '@/components/ui/data-states';
 import { StationSelector } from './StationSelector';
@@ -21,6 +22,7 @@ import { LastUpdated } from './LastUpdated';
 import { WeatherDashboardSkeleton } from './WeatherDashboardSkeleton';
 import { WeatherEmptyState } from './WeatherEmptyState';
 import { StationLocationBanner } from './StationLocationBanner';
+import { MultiModelPreview } from './MultiModelPreview';
 
 export function WeatherDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -59,6 +61,9 @@ export function WeatherDashboard() {
     today,
     sevenDaysLater
   );
+
+  // Multi-model data for 14-day preview
+  const { data: multiModelData } = useWeatherMultiModel(activeStationId);
 
   // Refresh mutation
   const refreshMutation = useWeatherRefresh();
@@ -227,6 +232,11 @@ export function WeatherDashboard() {
               dailyData={forecastData}
               hourlyData={allHourlyData}
             />
+          )}
+
+          {/* Section 7: 14-Day Multi-Model Preview */}
+          {multiModelData && (
+            <MultiModelPreview data={multiModelData} />
           )}
 
           {/* Last Updated + Refresh */}

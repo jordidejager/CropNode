@@ -475,8 +475,8 @@ export function resolveParcelsByText(
   // Strip day names (including compound forms like "woensdagavond", "dinsdagochtend")
   lower = lower.replace(/\b(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:avonds?|ochtends?|middags?|nachts?|morgens?)?\b/g, ' ');
 
-  // Strip other date/time words
-  lower = lower.replace(/\b(?:vandaag|gisteren|eergisteren|vorige|afgelopen)\b/g, ' ');
+  // Strip other date/time words (including "vanavond", "vanochtend", etc.)
+  lower = lower.replace(/\b(?:vandaag|gisteren|eergisteren|vorige|afgelopen|vanavond|vanochtend|vanmiddag|vannacht|vanmorgen)\b/g, ' ');
 
   // Strip filler/verb words that shouldn't be in parcel resolution
   lower = lower.replace(/\b(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden|avond|ochtend|middag|nacht)\b/g, ' ');
@@ -514,19 +514,21 @@ export function resolveParcelsByText(
     }
   }
 
-  // Step 2a: If text contains commas with additional content, split and resolve each part
+  // Step 2a: If text contains commas or " en " separators, split and resolve each part
   // e.g., "thuis alle peren, pompus, murre, peren jan van w" → 4 parts resolved independently
-  if (/,/.test(baseText)) {
-    const commaParts = baseText.split(/\s*,\s*/).map(s => s.trim()).filter(s => s.length >= 2);
-    if (commaParts.length >= 2) {
+  // e.g., "peren jan van w en alles murre" → 2 parts resolved independently
+  const hasSeparators = /,/.test(baseText) || /\s+en\s+/.test(baseText);
+  if (hasSeparators) {
+    const splitParts = baseText.split(/\s*,\s*|\s+en\s+/).map(s => s.trim()).filter(s => s.length >= 2);
+    if (splitParts.length >= 2) {
       const allIds: string[] = [];
-      for (const part of commaParts) {
+      for (const part of splitParts) {
         const sub = resolveParcelsByText(part, parcels, parcelGroups);
         sub.ids.forEach(id => { if (!allIds.includes(id)) allIds.push(id); });
       }
       if (allIds.length > 0) {
         result.ids = allIds;
-        result.matchType = 'comma_split';
+        result.matchType = 'split';
         // Apply exclusions and return early
         if (excludeTarget && result.ids.length > 0) {
           const excludeParts2 = excludeTarget
@@ -553,24 +555,21 @@ export function resolveParcelsByText(
     }
   }
 
-  // Step 2b: Location-scoped crop patterns BEFORE global crop patterns
-  // Handles BOTH orderings:
-  //   "[location] alle peren/appels" — e.g., "thuis alle peren"
-  //   "alle peren/appels [location]" — e.g., "alle peren thuis"
+  // Step 2b: Location-scoped patterns BEFORE global patterns
+  // These are more specific and must be checked first to prevent false global matches.
+  // Build location map once for all location-based checks.
+  const locations = new Map<string, SprayableParcel[]>();
+  for (const p of parcels) {
+    const loc = (p.parcelName || '').toLowerCase();
+    if (!loc) continue;
+    if (!locations.has(loc)) locations.set(loc, []);
+    locations.get(loc)!.push(p);
+  }
+
+  // Step 2b-i: "[location] alle peren/appels" OR "alle peren/appels [location]"
   {
-    const locations = new Map<string, SprayableParcel[]>();
-    for (const p of parcels) {
-      const loc = (p.parcelName || '').toLowerCase();
-      if (!loc) continue;
-      if (!locations.has(loc)) locations.set(loc, []);
-      locations.get(loc)!.push(p);
-    }
-
-    // Pattern A: "[location] alle peren" (location prefix)
     const locCropPrefixMatch = baseText.match(/^(\w[\w\s]*?)\s+(?:alle?|de|mijn)\s+(appels?|peren?)\b/);
-    // Pattern B: "alle peren [location]" (location suffix)
     const locCropSuffixMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(appels?|peren?)\s+(\w[\w\s]*?)$/);
-
     const locCropMatch = locCropPrefixMatch || locCropSuffixMatch;
     if (locCropMatch) {
       let locName: string;
@@ -579,7 +578,6 @@ export function resolveParcelsByText(
         locName = locCropPrefixMatch[1].trim();
         cropSearch = locCropPrefixMatch[2].startsWith('appel') ? 'appel' : 'peer';
       } else {
-        // suffix: groups are (crop, location)
         locName = locCropSuffixMatch![2].trim();
         cropSearch = locCropSuffixMatch![1].startsWith('appel') ? 'appel' : 'peer';
       }
@@ -587,6 +585,41 @@ export function resolveParcelsByText(
       if (locParcels && locParcels.length > 0) {
         result.ids = locParcels.filter(p => p.crop?.toLowerCase() === cropSearch).map(p => p.id);
         result.matchType = `location_crop:${locName}:${cropSearch}`;
+      }
+    }
+  }
+
+  // Step 2b-ii: "alles [location]" / "heel [location]" — all parcels at a specific location
+  // MUST run before global "alles/overal" to prevent "alles murre" → ALL parcels
+  if (result.ids.length === 0) {
+    const locationAllMatch = baseText.match(/\b(?:alles|heel|alle?\s+(?:bomen|percelen))\s+(\w[\w\s]*?)$/);
+    if (locationAllMatch) {
+      const locName = locationAllMatch[1].trim();
+      const locParcels = locations.get(locName);
+      if (locParcels && locParcels.length > 0) {
+        result.ids = locParcels.map(p => p.id);
+        result.matchType = `location:${locName}`;
+      }
+    }
+  }
+
+  // Step 2b-iii: "alle [crop] [location]" — e.g., "alle peren thuis" (already handled by 2b-i suffix)
+  // Step 2b-iv: "alle [variety] [location]" — e.g., "alle conference thuis"
+  if (result.ids.length === 0) {
+    const locationVarietyMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(\w+)\s+(\w[\w\s]*?)$/);
+    if (locationVarietyMatch) {
+      const varietySearch = locationVarietyMatch[1].toLowerCase();
+      const locName = locationVarietyMatch[2].trim();
+      const locParcels = locations.get(locName);
+      if (locParcels && locParcels.length > 0) {
+        const varietyHits = locParcels.filter(p =>
+          p.variety?.toLowerCase() === varietySearch ||
+          p.variety?.toLowerCase().includes(varietySearch)
+        );
+        if (varietyHits.length > 0) {
+          result.ids = varietyHits.map(p => p.id);
+          result.matchType = `location_variety:${locName}:${varietySearch}`;
+        }
       }
     }
   }
@@ -603,9 +636,20 @@ export function resolveParcelsByText(
     result.matchType = 'crop:peer';
   }
   // "overal" / "alles" / "alle bomen" / "het hele bedrijf"
-  else if (/\b(?:overal|alles)\b/.test(baseText) || /\b(?:alle?|het\s+hele?)\s+(?:bomen|bedrijf|percelen)\b/.test(baseText)) {
+  // ONLY match if "alles"/"overal" stands alone or is followed by non-location words
+  else if (result.ids.length === 0 && (/\boveral\b/.test(baseText) || /\b(?:alle?|het\s+hele?)\s+(?:bomen|bedrijf|percelen)\b/.test(baseText))) {
     result.ids = parcels.map(p => p.id);
     result.matchType = 'all';
+  }
+  // "alles" alone (without location after it — location already handled in step 2b-ii)
+  else if (result.ids.length === 0 && /\balles\b/.test(baseText)) {
+    // Check if "alles" is followed by a known location — if so, skip (already handled)
+    const allesMatch = baseText.match(/\balles\s+(\w+)/);
+    const isAllesWithLocation = allesMatch && locations.has(allesMatch[1].trim());
+    if (!isAllesWithLocation) {
+      result.ids = parcels.map(p => p.id);
+      result.matchType = 'all';
+    }
   }
   else {
     // Try variety match: "alle conference" / "de elstar"
@@ -625,62 +669,7 @@ export function resolveParcelsByText(
       }
     }
 
-    // Try location-based match: "alles thuis", "alle peren thuis", "heel murre", "alle conference murre"
-    if (result.ids.length === 0) {
-      // Build location map from parcelName
-      const locations = new Map<string, SprayableParcel[]>();
-      for (const p of parcels) {
-        const loc = (p.parcelName || '').toLowerCase();
-        if (!loc) continue;
-        if (!locations.has(loc)) locations.set(loc, []);
-        locations.get(loc)!.push(p);
-      }
-
-      // Pattern: "alles [location]" / "heel [location]" / "alle bomen [location]"
-      const locationAllMatch = baseText.match(/\b(?:alles|heel|alle?\s+(?:bomen|percelen))\s+(\w[\w\s]*?)$/);
-      if (locationAllMatch) {
-        const locName = locationAllMatch[1].trim();
-        const locParcels = locations.get(locName);
-        if (locParcels && locParcels.length > 0) {
-          result.ids = locParcels.map(p => p.id);
-          result.matchType = `location:${locName}`;
-        }
-      }
-
-      // Pattern: "alle [crop] [location]" — e.g., "alle peren thuis"
-      if (result.ids.length === 0) {
-        const locationCropMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(appels?|peren?)\s+(\w[\w\s]*?)$/);
-        if (locationCropMatch) {
-          const cropSearch = locationCropMatch[1].startsWith('appel') ? 'appel' : 'peer';
-          const locName = locationCropMatch[2].trim();
-          const locParcels = locations.get(locName);
-          if (locParcels && locParcels.length > 0) {
-            result.ids = locParcels.filter(p => p.crop?.toLowerCase() === cropSearch).map(p => p.id);
-            result.matchType = `location_crop:${locName}:${cropSearch}`;
-          }
-        }
-      }
-
-      // Pattern: "alle [variety] [location]" — e.g., "alle conference thuis"
-      if (result.ids.length === 0) {
-        const locationVarietyMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(\w+)\s+(\w[\w\s]*?)$/);
-        if (locationVarietyMatch) {
-          const varietySearch = locationVarietyMatch[1].toLowerCase();
-          const locName = locationVarietyMatch[2].trim();
-          const locParcels = locations.get(locName);
-          if (locParcels && locParcels.length > 0) {
-            const varietyHits = locParcels.filter(p =>
-              p.variety?.toLowerCase() === varietySearch ||
-              p.variety?.toLowerCase().includes(varietySearch)
-            );
-            if (varietyHits.length > 0) {
-              result.ids = varietyHits.map(p => p.id);
-              result.matchType = `location_variety:${locName}:${varietySearch}`;
-            }
-          }
-        }
-      }
-    }
+    // Location-based patterns already handled in Step 2b above.
 
     // Try parcel group name match
     if (result.ids.length === 0 && parcelGroups) {

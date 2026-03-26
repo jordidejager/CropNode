@@ -61,7 +61,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['tijdlijn', 'spuitschrift', 'database-gewasbescherming', 'database-meststoffen', 'percelen'],
     keywords: ['slimme invoer', 'command center', 'registratie', 'spuiten', 'bemesten', 'AI', 'natuurlijke taal', 'spray', 'bespuiting'],
-    route: '/command-center/smart-input-v3',
+    route: '/slimme-invoer',
   },
   {
     id: 'tijdlijn',
@@ -86,7 +86,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer', 'spuitschrift'],
     keywords: ['tijdlijn', 'chronologisch', 'overzicht', 'activiteiten', 'logboek', 'historie'],
-    route: '/command-center/timeline',
+    route: '/dashboard/tijdlijn',
   },
   {
     id: 'percelen',
@@ -123,7 +123,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer', 'spuitschrift', 'perceelanalyse'],
     keywords: ['percelen', 'blokken', 'boomgaard', 'gewas', 'ras', 'oppervlakte', 'hectare', 'intekenen', 'tekenen', 'kaart', 'RVO', 'polygoon', 'subperceel', 'samenstelling'],
-    route: '/parcels/list',
+    route: '/percelen',
   },
   {
     id: 'spuitschrift',
@@ -148,7 +148,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer', 'database-gewasbescherming'],
     keywords: ['spuitschrift', 'logboek', 'bespuiting', 'gewasbescherming', 'NVWA', 'controle', 'export'],
-    route: '/crop-care/logs',
+    route: '/gewasbescherming',
   },
   {
     id: 'voorraad',
@@ -173,7 +173,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer', 'database-gewasbescherming', 'database-meststoffen'],
     keywords: ['voorraad', 'inventaris', 'producten', 'hoeveelheid', 'bestellen'],
-    route: '/crop-care/inventory',
+    route: '/gewasbescherming/voorraad',
   },
   {
     id: 'mijn-producten',
@@ -198,7 +198,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['database-gewasbescherming', 'database-meststoffen', 'slimme-invoer', 'voorraad'],
     keywords: ['mijn producten', 'favorieten', 'seizoenspakket', 'middelen'],
-    route: '/crop-care/my-products',
+    route: '/gewasbescherming/producten',
   },
   {
     id: 'database-gewasbescherming',
@@ -223,7 +223,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer', 'spuitschrift'],
     keywords: ['CTGB', 'database', 'gewasbescherming', 'toelating', 'middelen', 'werkzame stof', 'veiligheidstermijn'],
-    route: '/crop-care/db-protection',
+    route: '/gewasbescherming/database',
   },
   {
     id: 'database-meststoffen',
@@ -247,7 +247,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['slimme-invoer'],
     keywords: ['meststoffen', 'bemesting', 'bladbemesting', 'strooien', 'granulaat', 'nutrienten'],
-    route: '/crop-care/db-fertilizer',
+    route: '/gewasbescherming/database-meststoffen',
   },
   {
     id: 'oogstregistratie',
@@ -272,7 +272,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['perceelanalyse', 'koelcelbeheer', 'spuitschrift'],
     keywords: ['oogst', 'registratie', 'plukken', 'kilogrammen', 'kwaliteit', 'klasse'],
-    route: '/harvest-hub/registration',
+    route: '/oogst',
   },
   {
     id: 'koelcelbeheer',
@@ -298,7 +298,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['oogstregistratie', 'afleveroverzicht'],
     keywords: ['koelcel', 'bewaring', 'opslag', 'kisten', 'inslag', 'uitslag', 'plattegrond'],
-    route: '/harvest-hub/cold-storage',
+    route: '/oogst/koelcel',
   },
   {
     id: 'perceelanalyse',
@@ -323,7 +323,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['oogstregistratie', 'spuitschrift'],
     keywords: ['analyse', 'vergelijking', 'opbrengst', 'seizoenen', 'patronen', 'grafiek'],
-    route: '/harvest-hub/field-analysis',
+    route: '/percelen',
   },
   {
     id: 'sortering-kwaliteit',
@@ -348,7 +348,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['oogstregistratie'],
     keywords: ['sortering', 'kwaliteit', 'maatsortering', 'klasse', 'vision', 'grootte'],
-    route: '/harvest-hub/quality',
+    route: '/oogst/sortering',
   },
   {
     id: 'afleveroverzicht',
@@ -373,7 +373,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['koelcelbeheer', 'oogstregistratie'],
     keywords: ['aflevering', 'veiling', 'cooperatie', 'afnemer', 'prijs', 'opbrengst'],
-    route: '/harvest-hub/deliveries',
+    route: '/oogst/aflevering',
   },
   {
     id: 'team-tasks',
@@ -399,7 +399,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['percelen', 'spuitschrift', 'oogstregistratie'],
     keywords: ['team', 'taken', 'uren', 'medewerkers', 'planning', 'loon'],
-    route: '/team-tasks',
+    route: '/urenregistratie',
   },
   {
     id: 'seizoenswijzer',
@@ -425,7 +425,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['kennisbank', 'database-gewasbescherming', 'slimme-invoer'],
     keywords: ['seizoen', 'kalender', 'bloei', 'fenologie', 'fase', 'advies', 'timing'],
-    route: '/research?tab=signals',
+    route: '/kennisbank',
   },
   {
     id: 'kennisbank',
@@ -450,7 +450,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['database-gewasbescherming', 'seizoenswijzer'],
     keywords: ['kennisbank', 'ziekten', 'plagen', 'factsheet', 'bestrijding', 'symptomen', 'encyclopedie'],
-    route: '/research/kennisbank',
+    route: '/kennisbank/artikelen',
   },
   {
     id: 'veldklimaat',
@@ -476,7 +476,7 @@ export const wegwijzerSections: WegwijzerSection[] = [
     ],
     relatedSections: ['seizoenswijzer'],
     keywords: ['weer', 'klimaat', 'temperatuur', 'neerslag', 'wind', 'spuiten', 'buienradar', 'forecast'],
-    route: '/weather/dashboard',
+    route: '/weer',
   },
 ];
 

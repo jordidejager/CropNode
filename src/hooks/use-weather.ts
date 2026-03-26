@@ -63,7 +63,7 @@ export function useWeatherStations() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return [];
+      if (!user) throw new Error('Niet ingelogd — log opnieuw in');
 
       const { data } = await supabase
         .from('weather_stations')
