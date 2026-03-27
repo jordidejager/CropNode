@@ -8,7 +8,6 @@
  */
 
 import { createHmac } from 'crypto';
-import { after } from 'next/server';
 import { handleIncomingMessage } from '@/lib/whatsapp/message-handler';
 import { markAsRead } from '@/lib/whatsapp/client';
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from '@/lib/whatsapp/types';
@@ -64,31 +63,35 @@ export async function POST(request: Request) {
       return new Response('OK', { status: 200 });
     }
 
-    // 5. Schedule processing AFTER returning 200 to Meta
-    // next/server's after() keeps the serverless function alive after response
-    after(async () => {
-      for (const msg of messages) {
-        try {
-          // Mark as read (non-blocking)
-          markAsRead(msg.id).catch(() => {});
+    // 5. Process messages synchronously before returning
+    // Vercel serverless has up to 60s (Pro) or 10s (Hobby) timeout.
+    // Meta allows up to 20s before retry. This approach is simpler and
+    // more reliable than after()/waitUntil() which can silently fail.
+    for (const msg of messages) {
+      try {
+        // Mark as read (non-blocking)
+        markAsRead(msg.id).catch(() => {});
 
-          // Extract message content
-          const messageText = msg.text?.body || null;
-          const buttonReplyId = msg.interactive?.button_reply?.id || null;
+        // Extract message content
+        const messageText = msg.text?.body || null;
+        const buttonReplyId = msg.interactive?.button_reply?.id || null;
 
-          // Route to message handler
-          await handleIncomingMessage(
-            msg.from,
-            messageText,
-            buttonReplyId,
-            msg.id,
-            msg.type
-          );
-        } catch (error) {
-          console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
-        }
+        console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
+
+        // Route to message handler
+        await handleIncomingMessage(
+          msg.from,
+          messageText,
+          buttonReplyId,
+          msg.id,
+          msg.type
+        );
+
+        console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
+      } catch (error) {
+        console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
       }
-    });
+    }
 
     return new Response('OK', { status: 200 });
   } catch (error) {
