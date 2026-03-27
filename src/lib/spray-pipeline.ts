@@ -335,7 +335,7 @@ export function preprocessProductExtraction(message: string): PreProcessedProduc
 
         for (const segment of segments) {
             // Pattern A: product_name dosage unit (e.g. "merpan 2 L")
-            const matchA = segment.match(/^([a-zà-ü][\w\s-]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
+            const matchA = segment.match(/^([a-zà-ü][\w\s-]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?/i);
             if (matchA) {
                 const rawName = matchA[1].trim();
                 const rawDosage = parseFloat(matchA[2].replace(',', '.'));
@@ -347,13 +347,36 @@ export function preprocessProductExtraction(message: string): PreProcessedProduc
             }
 
             // Pattern B: dosage unit product_name (e.g. "2.5 kg acs koper")
-            const matchB = segment.match(/^(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?\s+([a-zà-ü][\w\s-]+)$/i);
+            const matchB = segment.match(/^(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?\s+([a-zà-ü][\w\s-]+)/i);
             if (matchB) {
                 const rawDosage = parseFloat(matchB[1].replace(',', '.'));
                 const rawUnit = matchB[2].toLowerCase();
                 const rawName = matchB[3].trim();
                 if (rawName.length >= 2 && !CROP_NAMES.test(rawName)) {
                     products.push({ product: rawName, dosage: rawDosage, unit: rawUnit });
+                    continue;
+                }
+            }
+
+            // Pattern C: dosage product_name (no unit, e.g. "1,7 syllit flow")
+            // Dosage comes BEFORE product name, no explicit unit → default L
+            const matchC = segment.match(/^(\d+[.,]?\d*)\s+([a-zà-ü][\w\s-]+?)(?:\s+gespoten|\s+gestrooid|\s+gebruikt)?$/i);
+            if (matchC) {
+                const rawDosage = parseFloat(matchC[1].replace(',', '.'));
+                const rawName = matchC[2].trim();
+                if (rawName.length >= 2 && !CROP_NAMES.test(rawName) && rawDosage > 0) {
+                    products.push({ product: rawName, dosage: rawDosage, unit: 'l' });
+                    continue;
+                }
+            }
+
+            // Pattern D: product_name dosage (no unit, e.g. "syllit flow 1,7")
+            const matchD = segment.match(/^([a-zà-ü][\w\s-]*?)\s+(\d+[.,]?\d*)(?:\s+gespoten|\s+gestrooid|\s+gebruikt)?$/i);
+            if (matchD) {
+                const rawName = matchD[1].trim();
+                const rawDosage = parseFloat(matchD[2].replace(',', '.'));
+                if (rawName.length >= 2 && !CROP_NAMES.test(rawName) && rawDosage > 0) {
+                    products.push({ product: rawName, dosage: rawDosage, unit: 'l' });
                     continue;
                 }
             }

@@ -62,6 +62,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS field_notes_updated_at ON field_notes;
 CREATE TRIGGER field_notes_updated_at
   BEFORE UPDATE ON field_notes
   FOR EACH ROW

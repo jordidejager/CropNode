@@ -1,7 +1,17 @@
-import { NextResponse } from 'next/server';
-import { after } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { classifyFieldNote } from '@/ai/flows/classify-field-note';
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+async function getAuthUser(supabase: SupabaseClient) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (user) return user;
+  if (error) console.warn('[field-notes] getUser() failed:', error.message, '— trying getSession() fallback');
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user ?? null;
+}
 
 const CreateNoteSchema = z.object({
   content: z.string().min(1, 'Notitie mag niet leeg zijn').max(2000, 'Notitie mag maximaal 2000 tekens bevatten'),
@@ -16,7 +26,7 @@ const CreateNoteSchema = z.object({
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(supabase);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -73,7 +83,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(supabase);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -102,24 +112,37 @@ export async function POST(request: Request) {
     }
 
     // Fire-and-forget: classify in background after response is sent
+    const noteId = data.id;
+    const noteContent = data.content;
+    const userId = user.id;
     after(async () => {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
-          process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'http://localhost:3005';
+        const admin = createAdminClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
 
-        await fetch(`${baseUrl}/api/field-notes/classify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            noteId: data.id,
-            content: data.content,
-            userId: user.id,
-          }),
-        });
+        const { data: parcels } = await admin
+          .from('sub_parcels')
+          .select('id, name, crop, variety')
+          .eq('user_id', userId)
+          .limit(50);
+
+        const result = await classifyFieldNote(noteContent, parcels ?? []);
+
+        const update: Record<string, unknown> = {};
+        if (result.tag !== null) update.auto_tag = result.tag;
+        if (result.parcel_id !== null) update.parcel_id = result.parcel_id;
+
+        if (Object.keys(update).length > 0) {
+          const { error: updateError } = await admin
+            .from('field_notes')
+            .update(update)
+            .eq('id', noteId)
+            .eq('user_id', userId);
+          if (updateError) console.error('[Field Notes] Background classification update failed:', updateError);
+        }
       } catch (err) {
-        // Classification failure must never surface to user
         console.error('[Field Notes] Background classification failed:', err);
       }
     });

@@ -213,7 +213,7 @@ function ParcelSelector({ currentParcelId, onSelect, onClose }: ParcelSelectorPr
   const filtered = useMemo(() =>
     parcels.filter(p =>
       !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.variety.toLowerCase().includes(search.toLowerCase())
+      (p.variety ?? '').toLowerCase().includes(search.toLowerCase())
     ),
     [parcels, search]
   );

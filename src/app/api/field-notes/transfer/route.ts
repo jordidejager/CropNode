@@ -11,11 +11,20 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { analyzeSprayInput } from '@/lib/spray-pipeline';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+async function getAuthUser(supabase: SupabaseClient) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (user) return user;
+  if (error) console.warn('[field-notes/transfer] getUser() failed:', error.message, '— trying getSession() fallback');
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user ?? null;
+}
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(supabase);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
