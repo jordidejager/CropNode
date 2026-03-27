@@ -47,6 +47,7 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'score': 'Score 250 EC',
     'difenoconazool': 'Score 250 EC',
     'syllit': 'Syllit Flow 400 SC',
+    'syllit flow': 'Syllit Flow 400 SC',
     'dodine': 'Syllit Flow 400 SC',
     'folicur': 'Folicur',
     'tebuconazool': 'Folicur',

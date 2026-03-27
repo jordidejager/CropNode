@@ -44,11 +44,19 @@ export async function processNewRegistration(
     const conversation = await createConversation(userId, phoneNumber, waMessageId, inputText);
 
     // 3. Run the shared analysis pipeline
-    const result = await analyzeSprayInput(inputText, userId);
+    console.log(`[processNewRegistration] Running analyzeSprayInput for user ${userId}...`);
+    let result;
+    try {
+      result = await analyzeSprayInput(inputText, userId);
+      console.log(`[processNewRegistration] Pipeline result: action=${result.action}, hasRegistration=${!!result.registration}`);
+    } catch (pipelineError) {
+      console.error('[processNewRegistration] Pipeline crashed:', pipelineError);
+      throw pipelineError;
+    }
 
     // 4. Handle different results
     if (result.action === 'answer_query' || !result.registration) {
-      // Not a registration — send help message
+      // Not a spray registration — send help message
       const msg = formatNotRecognizedMessage();
       await sendTextMessage(metaPhone, msg);
       await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });

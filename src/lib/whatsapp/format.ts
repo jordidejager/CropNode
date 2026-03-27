@@ -160,10 +160,14 @@ export function formatNotRecognizedMessage(): string {
   return [
     '🤔 Ik herkende geen registratie in je bericht.',
     '',
-    'Probeer het zo:',
+    '*Bespuiting of bemesting:*',
     '• "Alle appels gespoten met Captan 2L/ha"',
     '• "Conference bemest met MKP 3 kg/ha"',
     '• "Gisteren Elstar en Jonagold met Score 0.3L"',
+    '',
+    '*Veldnotitie:*',
+    '• "Notitie: veel bladluis gezien op Elstar"',
+    '• "Noteer: hagelschade blok 2"',
   ].join('\n');
 }
 

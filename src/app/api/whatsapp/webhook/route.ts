@@ -4,13 +4,18 @@
  * POST: Incoming messages from WhatsApp users.
  *
  * IMPORTANT: Meta expects a 200 response within 20 seconds.
- * Processing is done asynchronously after returning 200.
+ * We return 200 immediately and process messages in the background
+ * using Next.js after() API (available in Next.js 15+).
  */
 
 import { createHmac } from 'crypto';
+import { after } from 'next/server';
 import { handleIncomingMessage } from '@/lib/whatsapp/message-handler';
 import { markAsRead } from '@/lib/whatsapp/client';
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from '@/lib/whatsapp/types';
+
+// Allow up to 60s for the function (Pro plan) or 10s (Hobby)
+export const maxDuration = 60;
 
 // ============================================================================
 // GET — Webhook Verification
@@ -63,36 +68,37 @@ export async function POST(request: Request) {
       return new Response('OK', { status: 200 });
     }
 
-    // 5. Process messages synchronously before returning
-    // Vercel serverless has up to 60s (Pro) or 10s (Hobby) timeout.
-    // Meta allows up to 20s before retry. This approach is simpler and
-    // more reliable than after()/waitUntil() which can silently fail.
-    for (const msg of messages) {
-      try {
-        // Mark as read (non-blocking)
-        markAsRead(msg.id).catch(() => {});
+    // 5. Schedule async processing using Next.js after()
+    // This returns 200 immediately to Meta, then processes in the background.
+    after(async () => {
+      for (const msg of messages) {
+        try {
+          // Mark as read (non-blocking)
+          markAsRead(msg.id).catch(() => {});
 
-        // Extract message content
-        const messageText = msg.text?.body || null;
-        const buttonReplyId = msg.interactive?.button_reply?.id || null;
+          // Extract message content
+          const messageText = msg.text?.body || null;
+          const buttonReplyId = msg.interactive?.button_reply?.id || null;
 
-        console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
+          console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
 
-        // Route to message handler
-        await handleIncomingMessage(
-          msg.from,
-          messageText,
-          buttonReplyId,
-          msg.id,
-          msg.type
-        );
+          // Route to message handler
+          await handleIncomingMessage(
+            msg.from,
+            messageText,
+            buttonReplyId,
+            msg.id,
+            msg.type
+          );
 
-        console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
-      } catch (error) {
-        console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
+          console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
+        } catch (error) {
+          console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
+        }
       }
-    }
+    });
 
+    // Return 200 immediately — Meta won't retry
     return new Response('OK', { status: 200 });
   } catch (error) {
     console.error('[WhatsApp Webhook] Top-level error:', error);

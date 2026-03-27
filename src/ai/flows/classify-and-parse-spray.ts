@@ -120,15 +120,54 @@ export interface ClassifyAndParseOutput {
 }
 
 /**
- * Parse flat product string "name:dosage:unit" into ProductEntry
+ * Parse flat product string "name:dosage:unit" into ProductEntry.
+ * Handles Dutch decimal comma (e.g., "Syllit Flow:1,7:L" → dosage 1.7)
  */
 function parseProductString(str: string): ProductEntry {
   const parts = str.split(':');
+  // Replace Dutch decimal comma with dot for parseFloat
+  const rawDosage = (parts[1] || '0').replace(',', '.');
   return {
     product: parts[0] || '',
-    dosage: parseFloat(parts[1]) || 0,
+    dosage: parseFloat(rawDosage) || 0,
     unit: parts[2] || 'L',
   };
+}
+
+/**
+ * Split a comma-separated product list string, handling Dutch decimal commas.
+ * e.g., "Syllit Flow:1,7:L,Score:0,3:L" → ["Syllit Flow:1,7:L", "Score:0,3:L"]
+ *
+ * Strategy: split on commas that are followed by a non-digit character (product name start),
+ * NOT commas that are followed by a digit (which are Dutch decimal commas).
+ */
+function splitProductList(str: string): string[] {
+  // Split on comma followed by a letter or space+letter (new product),
+  // not comma followed by a digit (Dutch decimal)
+  const products: string[] = [];
+  let current = '';
+  const chars = str.split('');
+
+  for (let i = 0; i < chars.length; i++) {
+    if (chars[i] === ',' && i + 1 < chars.length) {
+      const nextChar = str[i + 1]?.trim();
+      // If next non-space char is a digit, this comma is a Dutch decimal separator
+      const nextNonSpace = str.substring(i + 1).trimStart()[0];
+      if (nextNonSpace && /\d/.test(nextNonSpace)) {
+        // Dutch decimal comma — keep it as part of current product
+        current += ',';
+      } else {
+        // Product separator — push current and start new
+        if (current.trim()) products.push(current.trim());
+        current = '';
+      }
+    } else {
+      current += chars[i];
+    }
+  }
+  if (current.trim()) products.push(current.trim());
+
+  return products;
 }
 
 /**
@@ -150,7 +189,7 @@ function unflattenOutput(raw: ClassifyAndParseOutputRaw): ClassifyAndParseOutput
     if (raw.sprayData.registrations && raw.sprayData.registrations.length > 0) {
       result.sprayData.registrations = raw.sprayData.registrations.map(reg => ({
         plots: reg.plotIds ? reg.plotIds.split(',').map(s => s.trim()).filter(Boolean) : [],
-        products: reg.productList ? reg.productList.split(',').map(s => parseProductString(s.trim())) : [],
+        products: reg.productList ? splitProductList(reg.productList).map(s => parseProductString(s)) : [],
         label: reg.label,
       }));
     }
@@ -160,7 +199,7 @@ function unflattenOutput(raw: ClassifyAndParseOutputRaw): ClassifyAndParseOutput
     }
 
     if (raw.sprayData.products) {
-      result.sprayData.products = raw.sprayData.products.split(',').map(s => parseProductString(s.trim()));
+      result.sprayData.products = splitProductList(raw.sprayData.products).map(s => parseProductString(s));
     }
   }
 
@@ -209,6 +248,7 @@ Als de intent REGISTER_SPRAY of MODIFY_DRAFT is, parse dan ook de spray data:
 - Voorbeelden: "ACS Koper", "Cuprofix", "Luna Sensation" → gewoon overnemen in de output
 
 - Dosering = 0 als niet gespecificeerd (systeem vult aan)
+- Dosering ALTIJD met punt als decimaal (1.7, NIET 1,7) — Nederlandse komma wordt door systeem verkeerd geparsed
 - Unit = "L" als niet gespecificeerd
 - Datum = ${new Date().toISOString().split('T')[0]} voor "vandaag"
 

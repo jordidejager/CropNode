@@ -12,6 +12,7 @@ import {
   logMessage,
 } from './store';
 import { processNewRegistration } from './registration-processor';
+import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import {
   formatUnknownNumberMessage,
@@ -165,6 +166,11 @@ export async function handleIncomingMessage(
 
     // STATE: idle (or no active conversation) + text message
     if (messageText) {
+      // Quick check: if message looks like a field note, skip spray pipeline
+      if (isFieldNoteIntent(messageText)) {
+        await processFieldNote(userId, e164Phone, messageText, waMessageId);
+        return;
+      }
       await processNewRegistration(userId, e164Phone, messageText, waMessageId);
       return;
     }
