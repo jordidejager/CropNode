@@ -24,7 +24,7 @@ const modules = [
     title: 'Slimme Invoer',
     color: 'emerald',
     description: 'Typ in natuurlijke taal — AI herkent alles',
-    detail: 'Van spraak naar gevalideerde registratie in seconden. Multi-perceel, multi-product, met correctie-feedback.',
+    detail: 'Van spraak naar gevalideerde registratie in seconden. Multi-perceel, multi-product, met CTGB validatie en correctie-feedback. De snelste manier om te registreren.',
     metrics: [
       { label: 'Gemiddelde verwerkingstijd', value: '< 3s' },
       { label: 'Herkenningsnauwkeurigheid', value: '99.2%' },
@@ -32,25 +32,25 @@ const modules = [
     ],
   },
   {
-    id: 'weather',
-    icon: Cloud,
-    title: 'Weather Hub',
-    color: 'sky',
-    description: '5-model ensemble met spuitvenster-advies',
-    detail: '48-uurs Expert Forecast, 7-daagse voorspelling, Delta-T, bladnat-uren, GDD tracking en ensemble-pluim visualisatie.',
+    id: 'protection',
+    icon: Shield,
+    title: 'Gewasbescherming',
+    color: 'green',
+    description: 'Spuitschrift, bemesting, voorraad & CTGB database',
+    detail: 'Compleet beheer: spuitschrift, bemestingsregister, voorraadbeheer, productdatabase en 6-staps CTGB validatie. Alles wat je nodig hebt voor gewasbescherming op één plek.',
     metrics: [
-      { label: 'Weermodellen', value: '5 modellen' },
-      { label: 'Forecast bereik', value: '48 uur' },
-      { label: 'Update frequentie', value: 'Elk uur' },
+      { label: 'CTGB producten', value: '1.000+' },
+      { label: 'Validatie stappen', value: '6 checks' },
+      { label: 'Submodules', value: '6 tabs' },
     ],
   },
   {
     id: 'parcels',
     icon: MapPin,
-    title: 'Perceelbeheer',
+    title: 'Percelen',
     color: 'amber',
     description: 'Kaart met blokindeling en RVO-import',
-    detail: 'Twee-laags hiërarchie met ras, onderstam, plantjaar en gewogen samenstellingen. Importeer direct vanuit RVO.',
+    detail: 'Twee-laags hiërarchie met ras, onderstam, plantjaar en gewogen samenstellingen. Lijst- en kaartweergave. Importeer direct vanuit RVO/PDOK.',
     metrics: [
       { label: 'Kaart precisie', value: 'GPS exact' },
       { label: 'Import bron', value: 'RVO / PDOK' },
@@ -58,25 +58,12 @@ const modules = [
     ],
   },
   {
-    id: 'protection',
-    icon: Shield,
-    title: 'Gewasbescherming',
-    color: 'green',
-    description: '6-staps CTGB validatie & spuitschrift',
-    detail: 'Automatische controle op toelating, dosering, spuitinterval, maximale seizoenstoepassingen, werkzame stof som en veiligheidstermijn. Export als spuitschrift.',
-    metrics: [
-      { label: 'CTGB producten', value: '1.000+' },
-      { label: 'Validatie stappen', value: '6 checks' },
-      { label: 'Compliance', value: '100%' },
-    ],
-  },
-  {
     id: 'harvest',
     icon: Apple,
-    title: 'Harvest Hub',
+    title: 'Oogst & Opslag',
     color: 'orange',
-    description: 'Plukregistratie & koelcel-visualisatie',
-    detail: 'Track kistposities per koelcel met herkomst, ras en opslagdatum. Kwaliteitsklassen en capaciteitsplanning in real-time.',
+    description: 'Registratie, koelcel, sortering & aflevering',
+    detail: 'Track kistposities per koelcel met herkomst, ras en opslagdatum. Kwaliteitsklassen, sorteringsoverzichten en afleverregistratie — van pluk tot aflevering.',
     metrics: [
       { label: 'Koelcel weergave', value: 'Visueel grid' },
       { label: 'Kwaliteitsklassen', value: 'I / II / III' },
@@ -84,12 +71,38 @@ const modules = [
     ],
   },
   {
+    id: 'weather',
+    icon: Cloud,
+    title: 'Weer',
+    color: 'sky',
+    description: '5-model ensemble met spuitvenster-advies',
+    detail: '48-uurs Expert Forecast met ensemble-pluim, 7-daagse voorspelling, Delta-T, bladnat-uren en GDD tracking. Altijd weten wanneer je kunt spuiten.',
+    metrics: [
+      { label: 'Weermodellen', value: '5 modellen' },
+      { label: 'Forecast bereik', value: '48 uur' },
+      { label: 'Update frequentie', value: 'Elk uur' },
+    ],
+  },
+  {
+    id: 'analytics',
+    icon: Database,
+    title: 'Analytics',
+    color: 'teal',
+    description: 'Seizoensdashboard, kosten & ziektedruk',
+    detail: 'Inputkosten, kosten per hectare, behandeloverzichten en kostenverdeling per perceel. Plus ziektedrukanalyse voor slimmere beslissingen.',
+    metrics: [
+      { label: 'Overzicht', value: 'Per seizoen' },
+      { label: 'Kosten', value: 'Per ha' },
+      { label: 'Ziektedruk', value: 'Real-time' },
+    ],
+  },
+  {
     id: 'research',
     icon: BookOpen,
     title: 'Kennisbank',
     color: 'purple',
-    description: '20+ ziekten & plagen encyclopedie',
-    detail: 'Lifecycle-timelines, risiconiveaus, seizoensactiviteit, symptomen en bestrijdingsmethoden. Plus veldsignalen delen.',
+    description: 'Ziekten & plagen, papers & artikelen',
+    detail: 'Encyclopedie met 20+ ziekten en plagen inclusief lifecycle-timelines, risiconiveaus en bestrijdingsmethoden. Plus wetenschappelijke papers en praktijkartikelen.',
     metrics: [
       { label: 'Encyclopedie', value: '20+ items' },
       { label: 'Seizoensfilter', value: 'Automatisch' },
@@ -99,27 +112,14 @@ const modules = [
   {
     id: 'team',
     icon: Users,
-    title: 'Team & Tasks',
+    title: 'Urenregistratie',
     color: 'blue',
     description: 'Live timer met kostenberekening',
-    detail: 'Registreer uren per taak, per perceel, per persoon. Met automatische pauze-aftrek en werkdag-weging.',
+    detail: 'Registreer uren per taak, per perceel, per persoon. Met automatische pauze-aftrek, werkdag-weging en kostenrapportages per periode.',
     metrics: [
       { label: 'Timer', value: 'Real-time' },
       { label: 'Kosten', value: 'Per uur' },
       { label: 'Rapportage', value: 'Per periode' },
-    ],
-  },
-  {
-    id: 'inventory',
-    icon: Package,
-    title: 'Voorraadbeheer',
-    color: 'teal',
-    description: 'Automatische voorraadverwerking',
-    detail: 'Bij elke bevestigde registratie wordt de voorraad automatisch bijgewerkt. Met leveringsregistratie en alerting.',
-    metrics: [
-      { label: 'Verwerking', value: 'Automatisch' },
-      { label: 'Alerts', value: 'Negatief saldo' },
-      { label: 'Transacties', value: 'Volledige log' },
     ],
   },
 ];
@@ -320,7 +320,7 @@ export function PlatformOverview() {
             Modules
           </motion.span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-white mb-4">
-            8 modules,{' '}
+            9 modules,{' '}
             <span className="text-slate-400">één ecosysteem</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
@@ -372,7 +372,7 @@ export function PlatformOverview() {
           className="mt-12 flex flex-wrap justify-center gap-8 sm:gap-12"
         >
           {[
-            { icon: Zap, value: '8', label: 'Geïntegreerde modules' },
+            { icon: Zap, value: '9', label: 'Geïntegreerde modules' },
             { icon: Database, value: '1.000+', label: 'CTGB producten' },
             { icon: Sparkles, value: '<3s', label: 'AI responstijd' },
           ].map((stat, i) => (

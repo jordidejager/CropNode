@@ -56,9 +56,14 @@ Doe twee dingen:
    - "waarneming" — een observatie in het veld (bijv. schurft gezien, luis ontdekt, bloei, vruchtzetting, hagelschade, beschadiging)
    - "overig" — past niet in bovenstaande categorieën
 
-2. PERCEEL — als de notitie een perceelnaam, bloknaam of locatie noemt die matcht met de onderstaande lijst, geef dan het id terug. Als er geen perceel herkenbaar is, geef null.
+2. PERCEEL — Strikte regels:
+   - Geef alleen een parcel_id als de EXACTE perceelnaam (of een duidelijke afkorting ervan) letterlijk in de notitietekst voorkomt.
+   - Raad NOOIT een perceel op basis van gewas, ras, of indirecte aanwijzingen.
+   - Als MEERDERE percelen worden genoemd → geef null (we kunnen maar één koppelen).
+   - Als de naam NIET letterlijk in de tekst staat → geef null.
+   - Twijfel? → geef null.
 
-Beschikbare percelen (id, naam, gewas, ras):
+Beschikbare percelen:
 ${input.parcelsJson}
 
 Notitie: "${sanitizeForPrompt(input.content)}"
@@ -121,7 +126,7 @@ export async function classifyFieldNote(
     });
 
     return {
-      tag: result.confidence >= 0.5 ? result.tag : null,
+      tag: result.confidence >= 0.6 ? result.tag : null,
       parcel_id: result.parcel_id ?? null,
     };
   } catch (error) {

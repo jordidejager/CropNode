@@ -16,6 +16,9 @@ import {
   AlertTriangle,
   Timer,
   TrendingDown,
+  BarChart3,
+  TrendingUp,
+  Euro,
 } from 'lucide-react';
 
 /* ─── Weather Hub Visual ─── */
@@ -752,6 +755,82 @@ function InventoryVisual({ isInView }: { isInView: boolean }) {
 }
 
 /* ─── Feature Data ─── */
+/* ─── Analytics Visual ─── */
+function AnalyticsVisual({ isInView }: { isInView: boolean }) {
+  const months = ['Jan', 'Feb', 'Mrt', 'Apr', 'Mei', 'Jun'];
+  const costs = [320, 580, 890, 1240, 680, 420]; // €/ha
+  const maxCost = Math.max(...costs);
+  const kpis = [
+    { label: 'Inputkosten', value: '€4.130', trend: '+12%', up: true },
+    { label: 'Kosten/ha', value: '€89', trend: '-8%', up: false },
+    { label: 'Behandelingen', value: '24', trend: '+3', up: true },
+  ];
+
+  return (
+    <div className="mt-4 space-y-3">
+      {/* KPI row */}
+      <div className="grid grid-cols-3 gap-2">
+        {kpis.map((kpi, i) => (
+          <motion.div
+            key={kpi.label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.4, delay: 0.3 + i * 0.1 }}
+            className="rounded-lg bg-slate-800/40 border border-white/[0.04] p-2 text-center"
+          >
+            <div className="text-xs font-bold text-white">{kpi.value}</div>
+            <div className="flex items-center justify-center gap-1 mt-0.5">
+              <TrendingUp className={`w-2 h-2 ${kpi.up ? 'text-emerald-400' : 'text-red-400 rotate-180'}`} />
+              <span className={`text-[9px] ${kpi.up ? 'text-emerald-400/70' : 'text-red-400/70'}`}>{kpi.trend}</span>
+            </div>
+            <div className="text-[8px] text-slate-600 mt-0.5">{kpi.label}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Bar chart */}
+      <div className="rounded-xl bg-slate-800/40 border border-teal-500/10 p-3 overflow-hidden">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Euro className="w-3 h-3 text-teal-400/60" />
+            <span className="text-[10px] text-teal-400/80 font-medium uppercase tracking-wider">Kostenverdeling</span>
+          </div>
+          <span className="text-[9px] text-slate-600">Oogst 2026</span>
+        </div>
+
+        <div className="flex items-end gap-1.5 h-16">
+          {months.map((month, i) => {
+            const height = (costs[i] / maxCost) * 100;
+            return (
+              <div key={month} className="flex-1 flex flex-col items-center gap-1">
+                <motion.div
+                  initial={{ height: 0 }}
+                  animate={isInView ? { height: `${height}%` } : {}}
+                  transition={{ duration: 0.6, delay: 0.5 + i * 0.08, ease: 'easeOut' }}
+                  className="w-full rounded-sm bg-gradient-to-t from-teal-500/40 to-teal-400/20 border border-teal-500/20"
+                  style={{ minHeight: 2 }}
+                />
+                <span className="text-[8px] text-slate-600">{month}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Ziektedruk mini card */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.4, delay: 1.2 }}
+        className="flex items-center gap-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/10 px-2.5 py-1.5"
+      >
+        <AlertTriangle className="w-3 h-3 text-amber-400/70 shrink-0" />
+        <span className="text-[9px] text-amber-400/70">Ziektedruk schurft: <span className="text-amber-300 font-medium">Hoog</span> — 42 infectieperioden dit seizoen</span>
+      </motion.div>
+    </div>
+  );
+}
+
 const features = [
   {
     id: 'weather',
@@ -816,6 +895,15 @@ const features = [
     color: 'teal',
     Visual: InventoryVisual,
   },
+  {
+    id: 'analytics',
+    icon: BarChart3,
+    title: 'Analytics',
+    description: 'Seizoensdashboard met inputkosten, kosten/ha, behandeloverzicht, kostenverdeling per perceel en ziektedrukanalyse.',
+    size: 'large' as const,
+    color: 'cyan',
+    Visual: AnalyticsVisual,
+  },
 ];
 
 /* ─── Color Maps ─── */
@@ -827,6 +915,7 @@ const iconColors: Record<string, string> = {
   orange: 'text-orange-400',
   blue: 'text-blue-400',
   teal: 'text-teal-400',
+  cyan: 'text-cyan-400',
 };
 
 const bgColors: Record<string, string> = {
@@ -837,6 +926,7 @@ const bgColors: Record<string, string> = {
   orange: 'bg-orange-500/10 border-orange-500/15',
   blue: 'bg-blue-500/10 border-blue-500/15',
   teal: 'bg-teal-500/10 border-teal-500/15',
+  cyan: 'bg-cyan-500/10 border-cyan-500/15',
 };
 
 const hoverBorders: Record<string, string> = {
@@ -847,6 +937,7 @@ const hoverBorders: Record<string, string> = {
   orange: 'hover:border-orange-500/25',
   blue: 'hover:border-blue-500/25',
   teal: 'hover:border-teal-500/25',
+  cyan: 'hover:border-cyan-500/25',
 };
 
 /* ─── Feature Card ─── */
@@ -935,7 +1026,7 @@ export function FeatureBento() {
             <span className="text-slate-400">Niets dat je niet nodig hebt.</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            7 geïntegreerde modules die naadloos samenwerken — van het veld tot het kantoor.
+            8 geïntegreerde modules die naadloos samenwerken — van het veld tot het kantoor.
           </p>
         </motion.div>
 

@@ -7,7 +7,7 @@
  * Contains:
  * - Helper functions: getDefaultUnitForProduct, normalizeDosageUnit,
  *   preprocessCropSelection, preprocessProductExtraction, resolveParcelNamesToIds
- * - Main pipeline: analyzeSprayInput()
+ * - Main pipeline: analyzeSprayInput() — now delegates to registration-pipeline
  */
 
 import { classifyAndParseSpray } from '@/ai/flows/classify-and-parse-spray';
@@ -32,6 +32,7 @@ import type {
 import { validateDraft, formatValidationResult } from '@/lib/draft-validator';
 import { detectRegistrationType, resolveProductSources, resolveFertilizerProduct } from '@/lib/fertilizer-lookup';
 import { deterministicParse } from '@/lib/deterministic-parser';
+import { runRegistrationPipeline, type AnalysisResult } from '@/lib/registration-pipeline';
 
 // User-scoped data fetches (for WhatsApp pipeline, no cookie auth)
 import {
@@ -44,14 +45,9 @@ import {
 // TYPES
 // ============================================================================
 
-export type AnalysisResult = {
-    action: 'new_draft' | 'clarification_needed' | 'answer_query';
-    humanSummary: string;
-    registration?: SprayRegistrationGroup;
-    validationFlags?: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }>;
-    clarification?: { question: string; options?: string[]; field: string };
-    processingTimeMs: number;
-};
+// Re-export AnalysisResult from registration-pipeline so existing importers
+// (whatsapp/format.ts, smart-input-v2/route.ts, TransferModal.tsx, etc.) keep working.
+export type { AnalysisResult } from '@/lib/registration-pipeline';
 
 export interface PreProcessResult {
     /** Pre-resolved parcel IDs based on crop/variety keywords. null = no match found */
@@ -612,15 +608,29 @@ export function resolveParcelNamesToIds(
 
 /**
  * Core spray analysis pipeline.
- * Contains the EXACT same logic as handleFirstMessage() from the route handler,
- * but returns a Promise<AnalysisResult> instead of calling send() callbacks.
  *
- * Data fetching strategy:
- * - When options.userContext is provided: uses client-provided data (web API case)
- * - When NOT provided: calls user-scoped functions from whatsapp/store (WhatsApp case)
- * - Shared data (CTGB products, fertilizers, dosages) always fetched from supabase-store
+ * Now delegates to runRegistrationPipeline from @/lib/registration-pipeline,
+ * which uses the shared deterministic-first V3 logic with admin-client data
+ * fetching (works for both WhatsApp and server-side use cases).
+ *
+ * The options.userContext parameter is kept for API compatibility but is no
+ * longer used — the pipeline always fetches via the admin client with explicit
+ * userId filtering, which is correct for all callers.
  */
 export async function analyzeSprayInput(
+    message: string,
+    userId: string,
+    options?: { userContext?: SmartInputUserContext }
+): Promise<AnalysisResult> {
+    return runRegistrationPipeline(message, userId);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy implementation kept below for reference / potential rollback.
+// The code below is NOT executed anymore.
+// ---------------------------------------------------------------------------
+
+async function _legacyAnalyzeSprayInput_unused(
     message: string,
     userId: string,
     options?: { userContext?: SmartInputUserContext }

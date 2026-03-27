@@ -12,9 +12,6 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      // Root
-      { source: '/', destination: '/dashboard', permanent: false },
-
       // Dashboard
       { source: '/command-center', destination: '/dashboard', permanent: true },
       { source: '/command-center/timeline', destination: '/dashboard/tijdlijn', permanent: true },

@@ -12,8 +12,7 @@ import {
   getParcels,
   getSprayableParcelsById,
 } from '@/lib/supabase-store';
-import { validateSprayData } from '@/lib/validation-service';
-import type { SpuitschriftEntry, LogbookEntry, ProductEntry, ParsedSprayData } from '@/lib/types';
+import type { SpuitschriftEntry, LogbookEntry, ProductEntry } from '@/lib/types';
 
 // Import addParcelHistoryEntries dynamically to avoid circular dependency
 // (it's defined in actions.ts which imports from this file)
@@ -60,11 +59,15 @@ export async function confirmRegistration(
       return { success: false, message: 'Geen producten opgegeven.' };
     }
 
-    // Fetch parcels for validation and history
-    const [allParcels, sprayableParcels] = await Promise.all([
-      getParcels(),
-      getSprayableParcelsById(params.plots),
-    ]);
+    // Parcels only needed for history (addParcelHistoryFn). Fetch lazily.
+    let allParcels: Awaited<ReturnType<typeof getParcels>> = [];
+    let sprayableParcels: Awaited<ReturnType<typeof getSprayableParcelsById>> = [];
+    if (addParcelHistoryFn) {
+      [allParcels, sprayableParcels] = await Promise.all([
+        getParcels(),
+        getSprayableParcelsById(params.plots),
+      ]);
+    }
 
     // Parse and validate date
     let entryDate: Date;
@@ -78,42 +81,11 @@ export async function confirmRegistration(
     }
     console.log('[confirmRegistration] Using date:', entryDate.toISOString());
 
-    // Validate (only CTGB products, not fertilizers)
-    const ctgbOnlyProducts = params.products.filter(p => !p.source || p.source === 'ctgb');
-    const parsedData: ParsedSprayData = {
-      plots: params.plots,
-      products: ctgbOnlyProducts,
-    };
-
-    let validationMessage: string | null = null;
-    let updatedProducts: ProductEntry[] | undefined;
-    let errorCount = 0;
-    let warningCount = 0;
-
-    if (ctgbOnlyProducts.length > 0) {
-      const result = await validateSprayData(parsedData, allParcels, entryDate);
-      validationMessage = result.validationMessage;
-      updatedProducts = result.updatedProducts;
-      errorCount = result.errorCount;
-      warningCount = result.warningCount;
-    }
-
-    // Merge back validated CTGB products with fertilizer products
-    const finalProducts = updatedProducts
-      ? params.products.map(p => {
-          if (p.source === 'fertilizer') return p;
-          const updated = updatedProducts!.find(u => u.product === p.product);
-          return updated || p;
-        })
-      : params.products;
-
-    // Block on validation errors
-    if (errorCount > 0) {
-      return {
-        success: false,
-        message: `Kan niet bevestigen: ${validationMessage || 'Validatiefouten gevonden.'}`
-      };
-    }
+    // Validation was already done by runRegistrationPipeline before the user confirmed.
+    // Re-validation here is skipped to avoid cookie-auth dependency in server-side context.
+    const finalProducts = params.products;
+    const validationMessage: string | null = params.validationMessage || null;
+    const warningCount = validationMessage ? 1 : 0;
 
     // Build spuitschrift entry
     const spuitschriftEntry: Omit<SpuitschriftEntry, 'id' | 'spuitschriftId'> & { registrationSource?: string } = {

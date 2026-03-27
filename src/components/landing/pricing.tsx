@@ -14,7 +14,7 @@ const tiers = [
     features: [
       '2 AI-registraties per dag',
       'Perceelbeheer met kaart',
-      'CTGB productzoeker',
+      'CTGB productdatabase',
       'Weer dashboard',
     ],
     cta: 'Gratis starten',
@@ -27,8 +27,8 @@ const tiers = [
     features: [
       '8 AI-registraties per dag',
       'Alles van Gratis',
+      'Gewasbescherming (6 tabs)',
       'Urenregistratie & timer',
-      'Voorraadbeheer',
       'Spuitschrift export',
     ],
     cta: 'Start met Basis',
@@ -41,10 +41,10 @@ const tiers = [
     features: [
       'Onbeperkt AI-registraties',
       'Alles van Basis',
-      'Weather Hub (5 modellen)',
-      'Harvest Hub & koelcel',
-      'Research Hub & encyclopedie',
-      'Perceelhistorie & analytics',
+      'Weer (5 modellen + forecast)',
+      'Oogst & Opslag + koelcel',
+      'Analytics & ziektedruk',
+      'Kennisbank & encyclopedie',
       'Prioriteit support',
     ],
     cta: 'Start met Pro',

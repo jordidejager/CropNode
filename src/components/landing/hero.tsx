@@ -337,7 +337,7 @@ const stats = [
   { icon: Shield, value: '1.000+', label: 'CTGB producten' },
   { icon: Cloud, value: '5', label: 'Weermodellen' },
   { icon: Zap, value: '<3s', label: 'AI response' },
-  { icon: Cpu, value: '6-staps', label: 'Validatie' },
+  { icon: Cpu, value: '9', label: 'Modules' },
 ];
 
 export function Hero() {
@@ -364,6 +364,25 @@ export function Hero() {
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-emerald-400/[0.04] rounded-full blur-[100px]" />
         {/* Bottom-left glow */}
         <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-teal-500/[0.04] rounded-full blur-[100px]" />
+
+        {/* Floating particles */}
+        {[
+          { x: '15%', y: '20%', size: 3, delay: 0, duration: 6 },
+          { x: '85%', y: '30%', size: 2, delay: 1, duration: 8 },
+          { x: '70%', y: '70%', size: 4, delay: 2, duration: 7 },
+          { x: '25%', y: '80%', size: 2, delay: 0.5, duration: 9 },
+          { x: '50%', y: '15%', size: 3, delay: 3, duration: 6 },
+          { x: '90%', y: '60%', size: 2, delay: 1.5, duration: 8 },
+        ].map((p, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full bg-emerald-400"
+            style={{ left: p.x, top: p.y, width: p.size, height: p.size }}
+            animate={{ y: [-10, 10, -10], opacity: [0.15, 0.4, 0.15] }}
+            transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
+          />
+        ))}
+
         {/* Grain texture */}
         <div
           className="absolute inset-0 opacity-[0.012]"

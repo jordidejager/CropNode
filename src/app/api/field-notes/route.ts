@@ -1,4 +1,4 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -110,11 +110,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Fire-and-forget: classify in background after response is sent
+    // Fire-and-forget classification (no await — runs in background)
     const noteId = data.id;
     const noteContent = data.content;
     const userId = user.id;
-    after(async () => {
+    void (async () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15_000);
       try {
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
       } finally {
         clearTimeout(timeoutId);
       }
-    });
+    })();
 
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
