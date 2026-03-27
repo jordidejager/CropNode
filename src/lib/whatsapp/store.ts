@@ -153,7 +153,7 @@ export async function getActiveConversation(phoneNumber: string): Promise<WhatsA
   const { data, error } = await fromTable('whatsapp_conversations')
     .select('*')
     .eq('phone_number', e164)
-    .in('state', ['idle', 'awaiting_confirmation'])
+    .in('state', ['idle', 'awaiting_product_selection', 'awaiting_confirmation'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -212,8 +212,8 @@ export async function updateConversationState(
     updateData.pending_registration = pendingRegistration;
   }
 
-  // Refresh expiration when transitioning to awaiting_confirmation
-  if (state === 'awaiting_confirmation') {
+  // Refresh expiration when awaiting user input
+  if (state === 'awaiting_confirmation' || state === 'awaiting_product_selection') {
     updateData.expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   }
 

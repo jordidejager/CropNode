@@ -14,6 +14,7 @@ import {
 import { processNewRegistration } from './registration-processor';
 import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
+import { handleProductSelection } from './product-selection-handler';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -131,6 +132,20 @@ export async function handleIncomingMessage(
     console.log(`[WhatsApp Handler] User ${userId}, state: ${state}, type: ${messageType}${buttonReplyId ? `, button: ${buttonReplyId}` : ''}`);
 
     // --- F. Route based on state ---
+
+    // Product selection: user picks from CTGB suggestions
+    if (state === 'awaiting_product_selection' && conversation) {
+      if (buttonReplyId?.startsWith('product_select:')) {
+        await handleProductSelection(userId, e164Phone, conversation, buttonReplyId);
+        return;
+      }
+      // User typed a new message instead → treat as new registration
+      if (messageText) {
+        await updateConversationState(conversation.id, 'cancelled');
+        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        return;
+      }
+    }
 
     if (state === 'awaiting_confirmation' && conversation) {
       // Handle button replies

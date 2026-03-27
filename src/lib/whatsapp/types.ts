@@ -20,10 +20,22 @@ export interface WhatsAppLinkedNumber {
 
 export type ConversationState =
   | 'idle'
+  | 'awaiting_product_selection'
   | 'awaiting_confirmation'
   | 'confirmed'
   | 'cancelled'
   | 'expired';
+
+/**
+ * Stored inside pending_registration JSONB when we need the user to
+ * pick the correct product name from a list of CTGB suggestions.
+ */
+export interface ProductSelectionContext {
+  unitIndex: number;
+  productIndex: number;
+  originalName: string;
+  options: string[]; // CTGB product names (max 3)
+}
 
 export interface WhatsAppConversation {
   id: string;

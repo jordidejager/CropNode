@@ -17,6 +17,7 @@ import {
   formatNotRecognizedMessage,
   formatErrorMessage,
 } from './format';
+import { sendProductSelectionPrompt } from './product-selection-handler';
 import { stripPlus } from './phone-utils';
 
 /**
@@ -72,30 +73,64 @@ export async function processNewRegistration(
       return;
     }
 
-    // 5. Build parcel name map for formatting
+    // 5. Check for unresolved products with suggestions → product selection flow
+    const allProducts = result.registration.units.flatMap(u => u.products) as any[];
+    const firstUnresolved = allProducts.findIndex(
+      p => p.resolved === false && p.suggestions?.length > 0
+    );
+
+    if (firstUnresolved !== -1) {
+      const unresolvedProd = allProducts[firstUnresolved];
+      // Find which unit/product index this is
+      let unitIdx = 0, prodIdx = 0;
+      outer: for (let ui = 0; ui < result.registration.units.length; ui++) {
+        for (let pi = 0; pi < result.registration.units[ui].products.length; pi++) {
+          const p = result.registration.units[ui].products[pi] as any;
+          if (p.resolved === false && p.suggestions?.length > 0) {
+            unitIdx = ui; prodIdx = pi;
+            break outer;
+          }
+        }
+      }
+
+      // Store conversation + send product selection buttons
+      await updateConversationState(conversation.id, 'awaiting_confirmation', result.registration);
+      await sendProductSelectionPrompt(
+        phoneNumber,
+        conversation.id,
+        result.registration,
+        unitIdx,
+        prodIdx,
+        unresolvedProd.product,
+        unresolvedProd.suggestions.map((s: any) => s.naam || s).slice(0, 3)
+      );
+      return;
+    }
+
+    // 6. Build parcel name map for formatting
     const parcels = await getSprayableParcelsForUser(userId);
     const parcelNameMap = new Map(
       parcels.map(p => [p.id, { name: p.name, area: p.area, crop: p.crop, variety: p.variety }])
     );
 
-    // 6. Format the summary
+    // 7. Format the summary
     const summaryText = formatRegistrationSummary(result, parcelNameMap);
 
-    // 7. Store pending registration in conversation
+    // 8. Store pending registration in conversation
     await updateConversationState(
       conversation.id,
       'awaiting_confirmation',
       result.registration
     );
 
-    // 8. Send interactive buttons
+    // 9. Send interactive buttons
     await sendInteractiveButtons(metaPhone, summaryText, [
       { id: 'confirm', title: '✓ Bevestig' },
       { id: 'edit', title: '✏ Wijzig' },
       { id: 'cancel', title: '✗ Annuleer' },
     ]);
 
-    // 9. Log outbound
+    // 10. Log outbound
     await logMessage({
       phoneNumber,
       direction: 'outbound',

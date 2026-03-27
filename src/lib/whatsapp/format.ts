@@ -186,6 +186,18 @@ export function formatEditMessage(): string {
 }
 
 /**
+ * Format the product selection prompt.
+ * Shown when the pipeline finds an unrecognized product with CTGB suggestions.
+ */
+export function formatProductSelectionMessage(originalName: string, options: string[]): string {
+  return [
+    `🔍 *"${originalName}"* niet herkend in CTGB.`,
+    '',
+    'Welk middel bedoel je?',
+  ].join('\n');
+}
+
+/**
  * Format rate limit message.
  */
 export function formatRateLimitMessage(): string {
