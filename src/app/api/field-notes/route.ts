@@ -1,7 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
-import { classifyFieldNote } from '@/ai/flows/classify-field-note';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -116,10 +115,13 @@ export async function POST(request: Request) {
     const noteContent = data.content;
     const userId = user.id;
     after(async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
       try {
         const admin = createAdminClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { global: { fetch: (url, opts) => fetch(url, { ...opts, signal: controller.signal }) } }
         );
 
         const { data: parcels } = await admin
@@ -128,6 +130,7 @@ export async function POST(request: Request) {
           .eq('user_id', userId)
           .limit(50);
 
+        const { classifyFieldNote } = await import('@/ai/flows/classify-field-note');
         const result = await classifyFieldNote(noteContent, parcels ?? []);
 
         const update: Record<string, unknown> = {};
@@ -135,15 +138,16 @@ export async function POST(request: Request) {
         if (result.parcel_id !== null) update.parcel_id = result.parcel_id;
 
         if (Object.keys(update).length > 0) {
-          const { error: updateError } = await admin
+          await admin
             .from('field_notes')
             .update(update)
             .eq('id', noteId)
             .eq('user_id', userId);
-          if (updateError) console.error('[Field Notes] Background classification update failed:', updateError);
         }
       } catch (err) {
-        console.error('[Field Notes] Background classification failed:', err);
+        console.error('[Field Notes] Background classification failed:', err instanceof Error ? err.message : err);
+      } finally {
+        clearTimeout(timeoutId);
       }
     });
 

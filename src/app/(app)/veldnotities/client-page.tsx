@@ -395,9 +395,14 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
             </span>
           )}
 
-          {/* Auto tag */}
-          {note.auto_tag && (
+          {/* Auto tag — or pending indicator */}
+          {note.auto_tag ? (
             <TagChip tag={note.auto_tag} size="sm" />
+          ) : !isDone && !isTransferred && Date.now() - new Date(note.created_at).getTime() < 60_000 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-white/[0.08] bg-white/[0.03] text-[10px] text-white/20 animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-white/20 animate-ping" />
+              Analyseren...
+            </span>
           )}
 
           {/* Parcel badge */}

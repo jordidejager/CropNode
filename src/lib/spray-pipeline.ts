@@ -31,6 +31,7 @@ import type {
 } from '@/lib/types';
 import { validateDraft, formatValidationResult } from '@/lib/draft-validator';
 import { detectRegistrationType, resolveProductSources, resolveFertilizerProduct } from '@/lib/fertilizer-lookup';
+import { deterministicParse } from '@/lib/deterministic-parser';
 
 // User-scoped data fetches (for WhatsApp pipeline, no cookie auth)
 import {
@@ -724,11 +725,70 @@ export async function analyzeSprayInput(
         console.warn(`[${context}] Failed to load parcel groups:`, e);
     }
 
-    // Step 1b: Pre-process crop selection and exceptions (deterministic, no AI needed)
+    // Step 1b: Try V3 deterministic parser first (same as Slimme Invoer V3)
+    const deterResult = deterministicParse(
+        message,
+        allParcels,
+        parcelGroups.map(g => ({ id: g.id, name: g.name, parcelIds: g.subParcelIds })) as any
+    );
+    console.log(`[${context}] Deterministic parse: confidence=${deterResult.confidence.toFixed(2)}, parcels=${deterResult.parcelIds?.length ?? 0}, products=${deterResult.products?.length ?? 0}`);
+
+    if (deterResult.success && deterResult.confidence >= 0.85 && (deterResult.products?.length ?? 0) > 0) {
+        // FAST PATH: skip AI entirely
+        console.log(`[${context}] ⚡ FAST PATH via deterministic parser`);
+
+        const parcelIds = deterResult.parcelIds || [];
+        const rawProducts: ProductEntry[] = (deterResult.products || []).map(p => ({
+            product: p.product,
+            dosage: p.dosage,
+            unit: p.unit,
+        }));
+
+        // Resolve product aliases
+        const resolvedAliases = await resolveProductAliases(rawProducts.map(p => p.product));
+        const products: ProductEntry[] = rawProducts.map(p => {
+            const resolved = resolvedAliases.get(p.product);
+            return { ...p, product: resolved?.resolvedName || p.product };
+        });
+
+        const registrationGroup: SprayRegistrationGroup = {
+            groupId: crypto.randomUUID(),
+            date: deterResult.date || new Date(),
+            rawInput: message,
+            units: deterResult.isGrouped && deterResult.registrations
+                ? deterResult.registrations.map(r => ({
+                    id: crypto.randomUUID(),
+                    plots: r.parcelIds,
+                    products: r.products.map(p => {
+                        const resolved = resolvedAliases.get(p.product);
+                        return { product: resolved?.resolvedName || p.product, dosage: p.dosage, unit: p.unit };
+                    }),
+                    label: r.label,
+                    status: 'pending' as const,
+                }))
+                : [{
+                    id: crypto.randomUUID(),
+                    plots: parcelIds,
+                    products,
+                    status: 'pending' as const,
+                }],
+            registrationType,
+        };
+
+        return {
+            action: 'new_draft',
+            humanSummary: `${products.map(p => p.product).join(', ')} op ${parcelIds.length} percelen`,
+            registration: registrationGroup,
+            validationFlags: [],
+            processingTimeMs: Date.now() - startTime,
+        };
+    }
+
+    // Step 1c: Pre-process crop selection and exceptions (deterministic, no AI needed)
     const preProcessed = preprocessCropSelection(message, allParcels);
     console.log(`[${context}] Pre-processing: preResolved=${preProcessed.preResolvedPlots?.length ?? 'none'}, excluded=${preProcessed.excludedPlots.length}, hasExclusion=${preProcessed.hasExclusion}`);
 
-    // Step 2: Run combined intent + parse flow
+    // Step 2: Run combined intent + parse flow (AI)
     const parcelContext = JSON.stringify(
         allParcels.map(p => ({
             id: p.id,
