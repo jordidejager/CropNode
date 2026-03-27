@@ -8,6 +8,7 @@
  */
 
 import { createHmac } from 'crypto';
+import { after } from 'next/server';
 import { handleIncomingMessage } from '@/lib/whatsapp/message-handler';
 import { markAsRead } from '@/lib/whatsapp/client';
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from '@/lib/whatsapp/types';
@@ -63,41 +64,31 @@ export async function POST(request: Request) {
       return new Response('OK', { status: 200 });
     }
 
-    // 5. Process each message asynchronously
-    // Return 200 immediately, process in background
-    const processPromises = messages.map(async (msg) => {
-      try {
-        // Mark as read (non-blocking)
-        markAsRead(msg.id).catch(() => {});
+    // 5. Schedule processing AFTER returning 200 to Meta
+    // next/server's after() keeps the serverless function alive after response
+    after(async () => {
+      for (const msg of messages) {
+        try {
+          // Mark as read (non-blocking)
+          markAsRead(msg.id).catch(() => {});
 
-        // Extract message content
-        const messageText = msg.text?.body || null;
-        const buttonReplyId = msg.interactive?.button_reply?.id || null;
+          // Extract message content
+          const messageText = msg.text?.body || null;
+          const buttonReplyId = msg.interactive?.button_reply?.id || null;
 
-        // Route to message handler
-        await handleIncomingMessage(
-          msg.from,
-          messageText,
-          buttonReplyId,
-          msg.id,
-          msg.type
-        );
-      } catch (error) {
-        console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
+          // Route to message handler
+          await handleIncomingMessage(
+            msg.from,
+            messageText,
+            buttonReplyId,
+            msg.id,
+            msg.type
+          );
+        } catch (error) {
+          console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
+        }
       }
     });
-
-    // Use waitUntil if available (Vercel serverless), otherwise just fire
-    // @ts-ignore — waitUntil may not be in the type definitions
-    if (typeof globalThis.waitUntil === 'function') {
-      // @ts-ignore
-      globalThis.waitUntil(Promise.all(processPromises));
-    } else {
-      // Fire and forget — don't await
-      Promise.all(processPromises).catch(err => {
-        console.error('[WhatsApp Webhook] Background processing error:', err);
-      });
-    }
 
     return new Response('OK', { status: 200 });
   } catch (error) {
