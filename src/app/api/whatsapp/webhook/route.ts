@@ -3,18 +3,16 @@
  * GET: Meta webhook verification (required during setup).
  * POST: Incoming messages from WhatsApp users.
  *
- * IMPORTANT: Meta expects a 200 response within 20 seconds.
- * We return 200 immediately and process messages in the background
- * using Next.js after() API (available in Next.js 15+).
+ * Processes messages synchronously. The AI pipeline takes ~5-8s.
+ * Meta allows up to 20s before retrying, Vercel Pro allows 60s per function.
+ * Synchronous is simpler and more reliable than async patterns.
  */
 
 import { createHmac } from 'crypto';
-import { after } from 'next/server';
 import { handleIncomingMessage } from '@/lib/whatsapp/message-handler';
 import { markAsRead } from '@/lib/whatsapp/client';
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from '@/lib/whatsapp/types';
 
-// Allow up to 60s for the function (Pro plan) or 10s (Hobby)
 export const maxDuration = 60;
 
 // ============================================================================
@@ -64,45 +62,36 @@ export async function POST(request: Request) {
     // 4. Extract messages
     const messages = extractMessages(payload);
     if (messages.length === 0) {
-      // Status update or other non-message event — acknowledge
       return new Response('OK', { status: 200 });
     }
 
-    // 5. Schedule async processing using Next.js after()
-    // This returns 200 immediately to Meta, then processes in the background.
-    after(async () => {
-      for (const msg of messages) {
-        try {
-          // Mark as read (non-blocking)
-          markAsRead(msg.id).catch(() => {});
+    // 5. Process messages synchronously
+    for (const msg of messages) {
+      try {
+        markAsRead(msg.id).catch(() => {});
 
-          // Extract message content
-          const messageText = msg.text?.body || null;
-          const buttonReplyId = msg.interactive?.button_reply?.id || null;
+        const messageText = msg.text?.body || null;
+        const buttonReplyId = msg.interactive?.button_reply?.id || null;
 
-          console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
+        console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
 
-          // Route to message handler
-          await handleIncomingMessage(
-            msg.from,
-            messageText,
-            buttonReplyId,
-            msg.id,
-            msg.type
-          );
+        await handleIncomingMessage(
+          msg.from,
+          messageText,
+          buttonReplyId,
+          msg.id,
+          msg.type
+        );
 
-          console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
-        } catch (error) {
-          console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
-        }
+        console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
+      } catch (error) {
+        console.error(`[WhatsApp Webhook] Error processing message ${msg.id}:`, error);
       }
-    });
+    }
 
-    // Return 200 immediately — Meta won't retry
     return new Response('OK', { status: 200 });
   } catch (error) {
     console.error('[WhatsApp Webhook] Top-level error:', error);
-    // Still return 200 to prevent Meta from retrying
     return new Response('OK', { status: 200 });
   }
 }
@@ -111,9 +100,6 @@ export async function POST(request: Request) {
 // Helpers
 // ============================================================================
 
-/**
- * Verify the X-Hub-Signature-256 header using HMAC-SHA256.
- */
 function verifySignature(body: string, signature: string | null): boolean {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
@@ -131,7 +117,6 @@ function verifySignature(body: string, signature: string | null): boolean {
     .update(body)
     .digest('hex');
 
-  // Constant-time comparison
   if (signature.length !== expectedSignature.length) return false;
 
   let mismatch = 0;
@@ -142,9 +127,6 @@ function verifySignature(body: string, signature: string | null): boolean {
   return mismatch === 0;
 }
 
-/**
- * Extract messages from the nested Meta webhook payload structure.
- */
 function extractMessages(payload: WhatsAppWebhookPayload): WhatsAppInboundMessage[] {
   const messages: WhatsAppInboundMessage[] = [];
 

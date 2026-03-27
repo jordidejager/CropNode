@@ -6,11 +6,12 @@ const UpdateNoteSchema = z.object({
   content: z.string().min(1).max(2000).optional(),
   status: z.enum(['open', 'done', 'transferred']).optional(),
   is_pinned: z.boolean().optional(),
+  parcel_id: z.string().nullable().optional(),
 });
 
 /**
  * PATCH /api/field-notes/[id]
- * Update an existing field note.
+ * Update an existing field note (content, status, is_pinned, parcel_id).
  */
 export async function PATCH(
   request: Request,
@@ -32,7 +33,7 @@ export async function PATCH(
       return NextResponse.json({ error: issues }, { status: 400 });
     }
 
-    // Defense in depth: verify ownership
+    // Defense in depth: verify ownership (RLS also enforces this)
     const { data: existing } = await supabase
       .from('field_notes')
       .select('id')
@@ -49,7 +50,10 @@ export async function PATCH(
       .update(result.data)
       .eq('id', id)
       .eq('user_id', user.id)
-      .select()
+      .select(`
+        *,
+        sub_parcel:sub_parcels(id, name, crop, variety)
+      `)
       .single();
 
     if (error) {
@@ -69,7 +73,7 @@ export async function PATCH(
 
 /**
  * DELETE /api/field-notes/[id]
- * Delete a field note.
+ * Delete a field note (hard delete, RLS enforces ownership).
  */
 export async function DELETE(
   _request: Request,

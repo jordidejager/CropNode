@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -9,7 +10,8 @@ const CreateNoteSchema = z.object({
 /**
  * GET /api/field-notes
  * Fetch all field notes for the authenticated user.
- * Optional query params: status, search
+ * Joins sub_parcels to return parcel name alongside parcel_id.
+ * Optional query params: status, search, parcel_id
  */
 export async function GET(request: Request) {
   try {
@@ -22,10 +24,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const parcelId = searchParams.get('parcel_id');
 
     let query = supabase
       .from('field_notes')
-      .select('*')
+      .select(`
+        *,
+        sub_parcel:sub_parcels(id, name, crop, variety)
+      `)
       .eq('user_id', user.id)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
@@ -36,6 +42,10 @@ export async function GET(request: Request) {
 
     if (search) {
       query = query.ilike('content', `%${search}%`);
+    }
+
+    if (parcelId) {
+      query = query.eq('parcel_id', parcelId);
     }
 
     const { data, error } = await query;
@@ -57,7 +67,7 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/field-notes
- * Create a new field note.
+ * Create a new field note, then fire-and-forget AI classification.
  * Body: { content: string }
  */
 export async function POST(request: Request) {
@@ -81,6 +91,7 @@ export async function POST(request: Request) {
       .insert({
         user_id: user.id,
         content: result.data.content,
+        source: 'web',
       })
       .select()
       .single();
@@ -89,6 +100,29 @@ export async function POST(request: Request) {
       console.error('[Field Notes API] POST error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Fire-and-forget: classify in background after response is sent
+    after(async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
+          process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3005';
+
+        await fetch(`${baseUrl}/api/field-notes/classify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            noteId: data.id,
+            content: data.content,
+            userId: user.id,
+          }),
+        });
+      } catch (err) {
+        // Classification failure must never surface to user
+        console.error('[Field Notes] Background classification failed:', err);
+      }
+    });
 
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
