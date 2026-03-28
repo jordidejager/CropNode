@@ -194,7 +194,15 @@ export async function createConversation(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Surface table-not-found errors clearly so the fix is obvious in logs
+    if (error.message?.includes('does not exist') || error.code === '42P01') {
+      throw new Error(
+        `[DB] Tabel whatsapp_conversations bestaat niet — run migratie 029_whatsapp_fix.sql in Supabase. Originele fout: ${error.message}`
+      );
+    }
+    throw new Error(error.message);
+  }
   return mapConversation(data as any);
 }
 
