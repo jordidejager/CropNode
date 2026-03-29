@@ -100,10 +100,31 @@ export async function handleEditInput(
   const metaPhone = stripPlus(phoneNumber);
 
   try {
-    const field = conversation.lastInput?.replace('edit:', '') as 'date' | 'products' | 'parcels' | undefined;
+    const lastInput = conversation.lastInput || '';
     const pending = conversation.pendingRegistration as SprayRegistrationGroup | null;
 
-    if (!field || !pending) {
+    if (!pending) {
+      await updateConversationState(conversation.id, 'idle');
+      return;
+    }
+
+    // Handle dosage input: "dosage:ProductName"
+    if (lastInput.startsWith('dosage:')) {
+      const productName = lastInput.replace('dosage:', '');
+      const updated = tryDosageUpdate(inputText, productName, pending);
+      if (updated) {
+        await finishEdit(userId, phoneNumber, conversation, updated);
+      } else {
+        const msg = `❓ Kon _"${inputText}"_ niet herkennen als dosering. Typ bijv. _"0,6 kg"_ of _"1,5 L"_:`;
+        await sendTextMessage(metaPhone, msg);
+        await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+      }
+      return;
+    }
+
+    const field = lastInput.replace('edit:', '') as 'date' | 'products' | 'parcels' | undefined;
+
+    if (!field) {
       await updateConversationState(conversation.id, 'idle');
       return;
     }
@@ -215,6 +236,20 @@ export async function handleEditListReply(
     return; // Stay in awaiting_edit_input state
   }
 
+  if (replyId.startsWith('editprod:dosage:')) {
+    const productName = replyId.replace('editprod:dosage:', '');
+    const product = pending.units.flatMap(u => u.products).find(p => p.product === productName);
+    const currentDos = product ? `${product.dosage} ${product.unit || 'L'}/ha` : '';
+
+    // Switch to dosage input mode — store the product name
+    await updateConversationState(conversation.id, 'awaiting_edit_input', undefined, `dosage:${productName}`);
+
+    const msg = `📏 *${productName}*\nHuidige dosering: ${currentDos}\n\nTyp de nieuwe dosering, bijv. _"0,6 kg"_ of _"1,5 L"_:`;
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    return;
+  }
+
   if (replyId.startsWith('editprod:remove:')) {
     const productName = replyId.replace('editprod:remove:', '');
     await handleEditInput(userId, phoneNumber, conversation, `geen ${productName}`);
@@ -288,33 +323,52 @@ async function sendProductList(
   phoneNumber: string,
   pending: SprayRegistrationGroup
 ): Promise<void> {
-  const products = pending.units.flatMap(u => u.products);
-  const rows: Array<{ id: string; title: string; description?: string }> = [];
+  // Filter out unresolved products (parcel names parsed as products)
+  const allProducts = pending.units.flatMap(u => u.products);
+  const products = allProducts.filter(p => (p as any).resolved !== false);
 
-  // Only show removal option if there are 2+ products
-  if (products.length > 1) {
-    for (const prod of products) {
-      const dosStr = prod.dosage > 0 ? `${prod.dosage} ${prod.unit || 'L'}/ha` : '';
-      rows.push({
-        id: `editprod:remove:${prod.product}`,
-        title: `❌ ${prod.product}`.substring(0, 24),
-        description: dosStr ? `Verwijder — ${dosStr}` : 'Verwijder dit middel',
-      });
-    }
+  if (products.length === 0) {
+    const msg = '🌿 Geen middelen gevonden. Typ de middelen en doseringen opnieuw:';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    return;
   }
 
-  // Always offer the option to type a new list
-  rows.push({
-    id: 'editprod:type',
-    title: '📝 Nieuwe lijst typen',
-    description: 'Typ alle middelen en doseringen opnieuw',
-  });
+  const sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> = [];
 
+  // Section 1: Dosering aanpassen
+  const dosageRows = products.map(prod => ({
+    id: `editprod:dosage:${prod.product}`,
+    title: `📏 ${prod.product}`.substring(0, 24),
+    description: `Nu: ${prod.dosage} ${prod.unit || 'L'}/ha — tik om te wijzigen`,
+  }));
+  sections.push({ title: 'Dosering aanpassen', rows: dosageRows });
+
+  // Section 2: Verwijderen (only if 2+ products, and we have room)
+  if (products.length > 1 && dosageRows.length + products.length + 1 <= 10) {
+    const removeRows = products.map(prod => ({
+      id: `editprod:remove:${prod.product}`,
+      title: `❌ ${prod.product}`.substring(0, 24),
+      description: 'Verwijder dit middel',
+    }));
+    sections.push({ title: 'Verwijderen', rows: removeRows });
+  }
+
+  // Section 3: Type new list (always, if we have room)
+  const totalRows = sections.reduce((s, sec) => s + sec.rows.length, 0);
+  if (totalRows < 10) {
+    sections.push({
+      title: 'Overig',
+      rows: [{ id: 'editprod:type', title: '📝 Nieuwe lijst typen', description: 'Typ alle middelen opnieuw' }],
+    });
+  }
+
+  const bodyLines = products.map(p => `• ${p.product} — ${p.dosage} ${p.unit || 'L'}/ha`);
   await sendListMessage(
     metaPhone,
-    `🌿 Huidige middelen:\n${products.map(p => `• ${p.product} (${p.dosage} ${p.unit || 'L'}/ha)`).join('\n')}\n\nWat wil je wijzigen?`,
+    `🌿 Huidige middelen:\n${bodyLines.join('\n')}\n\nWat wil je wijzigen?`,
     'Wijzig middelen',
-    [{ title: 'Middelen', rows }]
+    sections
   );
   await logMessage({ phoneNumber, direction: 'outbound', messageText: 'Middelenkeuze getoond' });
 }
@@ -554,6 +608,44 @@ function tryDirectParcelEdit(
   return {
     ...pending,
     units: [{ ...pending.units[0], plots: matchedPlots, products: pending.units[0]?.products || [] }],
+  };
+}
+
+/**
+ * Parse a dosage string like "0,6 kg", "1.5 L", "0,75" and update the product.
+ */
+function tryDosageUpdate(
+  input: string,
+  productName: string,
+  pending: SprayRegistrationGroup
+): SprayRegistrationGroup | null {
+  const normalized = input.toLowerCase().replace(',', '.').trim();
+
+  // Parse: "0.6 kg", "1.5 L", "0.75", "0.5 kg/ha"
+  const match = normalized.match(/^(\d+(?:\.\d+)?)\s*(kg|l|liter|ml)?/);
+  if (!match) return null;
+
+  const newDosage = parseFloat(match[1]);
+  if (isNaN(newDosage) || newDosage <= 0) return null;
+
+  let newUnit = match[2] || null;
+  if (newUnit === 'liter') newUnit = 'L';
+  if (newUnit === 'l') newUnit = 'L';
+  if (newUnit === 'ml') { newUnit = 'L'; } // Keep as-is, user likely means ml
+
+  return {
+    ...pending,
+    units: pending.units.map(unit => ({
+      ...unit,
+      products: unit.products.map(p => {
+        if (p.product !== productName) return p;
+        return {
+          ...p,
+          dosage: newDosage,
+          ...(newUnit && { unit: newUnit }),
+        };
+      }),
+    })),
   };
 }
 
