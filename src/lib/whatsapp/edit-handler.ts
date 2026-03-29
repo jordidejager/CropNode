@@ -2,9 +2,13 @@
  * WhatsApp Edit Handler.
  * Handles the "Wijzig" flow: shows a menu of what to change (date/products/parcels),
  * then accepts one piece of input and updates the pending registration accordingly.
+ *
+ * Uses direct parsing for simple edits (date, removal) — only falls back to the
+ * full pipeline when the user provides a complete new product list with dosages.
  */
 
 import { analyzeSprayInput } from '@/lib/spray-pipeline';
+import { deterministicParse } from '@/lib/deterministic-parser';
 import { sendInteractiveButtons, sendTextMessage } from './client';
 import { updateConversationState, logMessage, getSprayableParcelsForUser } from './store';
 import {
@@ -15,7 +19,7 @@ import {
 } from './format';
 import { stripPlus } from './phone-utils';
 import type { WhatsAppConversation } from './types';
-import type { SprayRegistrationGroup } from '@/lib/types';
+import type { SprayRegistrationGroup, ProductEntry } from '@/lib/types';
 
 // ============================================================================
 // Show the edit-choice menu (called when user clicks "Wijzig")
@@ -84,39 +88,53 @@ export async function handleEditInput(
       return;
     }
 
-    // Fetch parcels first so we can use names (not UUIDs) in synthetic messages
+    // Fetch parcels for name resolution
     const parcels = await getSprayableParcelsForUser(userId);
     const parcelNameMap = new Map(
-      parcels.map(p => [p.id, { name: p.name, area: p.area ?? null, crop: p.crop ?? '', variety: p.variety ?? null }])
+      parcels.map(p => [p.id, { name: p.name, area: p.area ?? undefined, crop: p.crop ?? undefined, variety: p.variety ?? undefined }])
     );
 
-    // Build a synthetic full-message that the pipeline can parse
-    const syntheticMessage = buildSyntheticMessage(field, inputText, pending, parcelNameMap);
-    const result = await analyzeSprayInput(syntheticMessage, userId);
+    let updated: SprayRegistrationGroup | null = null;
+    let validationFlags: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }> = [];
 
-    if (!result.registration) {
-      const msg = `❓ Kon _"${inputText}"_ niet verwerken als ${fieldLabel(field)}. Probeer het opnieuw.`;
-      await sendTextMessage(metaPhone, msg);
-      await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
-      return;
+    // Try direct (fast) edit first — no pipeline needed
+    if (field === 'date') {
+      updated = tryDirectDateEdit(inputText, pending, parcels);
+    } else if (field === 'products') {
+      updated = tryDirectProductEdit(inputText, pending);
+    } else if (field === 'parcels') {
+      updated = tryDirectParcelEdit(inputText, pending, parcels);
     }
 
-    // Merge the parsed part back into the pending registration
-    const updated = mergeEdit(field, pending, result.registration);
+    // If direct edit didn't work, fall back to full pipeline
+    if (!updated) {
+      const syntheticMessage = buildSyntheticMessage(field, inputText, pending, parcelNameMap);
+      const result = await analyzeSprayInput(syntheticMessage, userId);
+
+      if (!result.registration) {
+        const msg = `❓ Kon _"${inputText}"_ niet verwerken als ${fieldLabel(field)}. Probeer het opnieuw.`;
+        await sendTextMessage(metaPhone, msg);
+        await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+        return;
+      }
+
+      updated = mergeEdit(field, pending, result.registration);
+      validationFlags = result.validationFlags || [];
+    }
 
     // Store updated registration and go back to awaiting_confirmation
     await updateConversationState(
       conversation.id,
       'awaiting_confirmation',
       updated,
-      conversation.lastInput  // keep lastInput unchanged (not used in confirmation state)
+      conversation.lastInput
     );
 
     // Show updated summary with buttons
-    const fakeResult = { ...result, registration: updated };
+    const fakeResult = { action: 'new_draft' as const, registration: updated, humanSummary: '', validationFlags, processingTimeMs: 0 };
     const summaryText = formatRegistrationSummary(fakeResult as any, parcelNameMap);
 
-    const hasBlockingErrors = (result.validationFlags || []).some(f => f.type === 'error');
+    const hasBlockingErrors = validationFlags.some(f => f.type === 'error');
     if (hasBlockingErrors) {
       await sendTextMessage(metaPhone, summaryText);
       await logMessage({ phoneNumber, direction: 'outbound', messageText: summaryText });
@@ -146,6 +164,112 @@ export async function handleEditInput(
 }
 
 // ============================================================================
+// Direct edit handlers — fast, no AI needed
+// ============================================================================
+
+/**
+ * Try to parse a date directly from user input.
+ * Handles: "gisteren", "eergisteren", "28 maart", "zaterdag", etc.
+ */
+function tryDirectDateEdit(
+  input: string,
+  pending: SprayRegistrationGroup,
+  parcels: Array<{ id: string; name: string; area?: number | null }>
+): SprayRegistrationGroup | null {
+  // Use deterministicParse with a dummy message to extract the date
+  const sprayableParcels = parcels.map(p => ({
+    id: p.id, name: p.name, area: p.area ?? 0,
+    crop: '', variety: null, parcelId: p.id, parcelName: p.name,
+    location: null, geometry: null, source: null, rvoId: null, synonyms: [],
+  }));
+  const parseResult = deterministicParse(
+    `${input} perceel gespoten met delan`,
+    sprayableParcels as any
+  );
+
+  if (parseResult.date) {
+    return { ...pending, date: parseResult.date };
+  }
+  return null;
+}
+
+/**
+ * Try to handle product edits directly:
+ * - "geen X" / "zonder X" → remove product X
+ * - "X vervangen door Y" → not supported yet, fall back to pipeline
+ */
+function tryDirectProductEdit(
+  input: string,
+  pending: SprayRegistrationGroup
+): SprayRegistrationGroup | null {
+  const normalized = input.toLowerCase().trim();
+
+  // Pattern: "geen X" or "zonder X" — remove a product
+  const removeMatch = normalized.match(/^(?:geen|zonder|verwijder|weg met)\s+(.+)$/);
+  if (removeMatch) {
+    const productToRemove = removeMatch[1].trim();
+    const allProducts = pending.units.flatMap(u => u.products);
+
+    // Find matching product (fuzzy: check if product name contains the input or vice versa)
+    const matchIdx = allProducts.findIndex(p =>
+      p.product.toLowerCase().includes(productToRemove) ||
+      productToRemove.includes(p.product.toLowerCase())
+    );
+
+    if (matchIdx === -1) {
+      return null; // Product not found, fall back to pipeline
+    }
+
+    const remainingProducts = allProducts.filter((_, i) => i !== matchIdx);
+    if (remainingProducts.length === 0) {
+      return null; // Can't remove all products
+    }
+
+    return {
+      ...pending,
+      units: pending.units.map(unit => ({ ...unit, products: remainingProducts })),
+    };
+  }
+
+  // Not a simple removal — fall back to pipeline
+  return null;
+}
+
+/**
+ * Try to resolve parcel names directly from user input.
+ * Handles: "zuidhoek en busje", "alleen conference murre"
+ */
+function tryDirectParcelEdit(
+  input: string,
+  pending: SprayRegistrationGroup,
+  parcels: Array<{ id: string; name: string }>
+): SprayRegistrationGroup | null {
+  const normalized = input.toLowerCase().replace(/^alleen\s+/, '').trim();
+
+  // Split on common separators
+  const names = normalized.split(/\s*(?:,|en)\s*/).map(n => n.trim()).filter(Boolean);
+  if (names.length === 0) return null;
+
+  // Match each name to a parcel
+  const matchedPlots: string[] = [];
+  for (const name of names) {
+    const match = parcels.find(p =>
+      p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())
+    );
+    if (match) {
+      matchedPlots.push(match.id);
+    }
+  }
+
+  if (matchedPlots.length === 0) return null;
+
+  return {
+    ...pending,
+    units: [{ ...pending.units[0], plots: matchedPlots, products: pending.units[0]?.products || [] }],
+  };
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -163,9 +287,12 @@ function buildSyntheticMessage(
   field: 'date' | 'products' | 'parcels',
   userInput: string,
   pending: SprayRegistrationGroup,
-  parcelNameMap: Map<string, { name: string; area: number | null; crop: string; variety: string | null }>
+  parcelNameMap: Map<string, { name: string; area?: number; crop?: string; variety?: string }>
 ): string {
-  const productNames = pending.units[0]?.products.map(p => p.product).join(' en ') || 'delan';
+  const productNames = pending.units[0]?.products.map(p => {
+    const dosageStr = p.dosage > 0 ? `${p.dosage} ${p.unit || 'L'} ` : '';
+    return `${dosageStr}${p.product}`;
+  }).join(' en ') || 'delan';
   const plotIds = pending.units.flatMap(u => u.plots);
   const resolvedNames = plotIds.map(id => parcelNameMap.get(id)?.name).filter(Boolean);
   const plotNames = resolvedNames.length > 0 ? resolvedNames.join(', ') : 'perceel';

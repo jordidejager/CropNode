@@ -4,7 +4,7 @@
  */
 
 import { confirmRegistration } from '@/lib/registration-service';
-import { addParcelHistoryEntries, getSprayableParcelsById } from '@/lib/supabase-store';
+import { addParcelHistoryEntries } from '@/lib/supabase-store';
 import { invalidateContextCache } from '@/lib/registration-pipeline';
 import { sendTextMessage } from './client';
 import { updateConversationState, logMessage } from './store';
@@ -49,7 +49,6 @@ export async function handleConfirmation(
     const allProducts = reg.units.flatMap(u => u.products);
 
     // 3. Save via shared confirmation service (with parcel history for interval tracking)
-    const sprayableParcels = await getSprayableParcelsById(allPlots);
     const result = await confirmRegistration(
       {
         userId,
@@ -60,7 +59,7 @@ export async function handleConfirmation(
         registrationType: reg.registrationType || 'spraying',
         registrationSource: 'whatsapp',
       },
-      async ({ logbookEntry, isConfirmation, spuitschriftId }) => {
+      async ({ logbookEntry, sprayableParcels, isConfirmation, spuitschriftId }) => {
         await addParcelHistoryEntries({
           logbookEntry,
           sprayableParcels,
