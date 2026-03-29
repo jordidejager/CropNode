@@ -212,6 +212,11 @@ export async function addSpuitschriftEntry(
     registration_type: entry.registrationType || 'spraying',
     validation_message: entry.validationMessage,
     status: entry.status,
+    harvest_year: (function() {
+      const d = entry.date instanceof Date ? entry.date : (entry.date ? new Date(entry.date) : new Date());
+      const month = d.getMonth() + 1;
+      return month >= 11 ? d.getFullYear() + 1 : d.getFullYear();
+    })(),
     // registration_source: 'web' (default) or 'whatsapp' — only set if present
     ...((entry as any).registrationSource && { registration_source: (entry as any).registrationSource }),
   };

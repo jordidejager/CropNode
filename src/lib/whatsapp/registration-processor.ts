@@ -116,21 +116,29 @@ export async function processNewRegistration(
     // 7. Format the summary
     const summaryText = formatRegistrationSummary(result, parcelNameMap);
 
-    // 8. Store pending registration in conversation
+    // 8. Check for blocking errors — if any, send text only (no confirm button)
+    const hasBlockingErrors = (result.validationFlags || []).some(f => f.type === 'error');
+    if (hasBlockingErrors) {
+      await sendTextMessage(metaPhone, summaryText);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: summaryText });
+      return;
+    }
+
+    // 9. Store pending registration in conversation
     await updateConversationState(
       conversation.id,
       'awaiting_confirmation',
       result.registration
     );
 
-    // 9. Send interactive buttons
+    // 10. Send interactive buttons
     await sendInteractiveButtons(metaPhone, summaryText, [
       { id: 'confirm', title: '✓ Bevestig' },
       { id: 'edit', title: '✏ Wijzig' },
       { id: 'cancel', title: '✗ Annuleer' },
     ]);
 
-    // 10. Log outbound
+    // 11. Log outbound
     await logMessage({
       phoneNumber,
       direction: 'outbound',

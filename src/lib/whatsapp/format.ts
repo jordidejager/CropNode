@@ -93,12 +93,12 @@ export function formatRegistrationSummary(
   const dateStr = formatDate(group.date);
   lines.push(`📅 Datum: ${dateStr}`);
 
-  // Validation warnings
-  if (result.validationFlags && result.validationFlags.length > 0) {
+  // Only show blocking errors (not interval warnings or info)
+  const blockingErrors = (result.validationFlags || []).filter(f => f.type === 'error');
+  if (blockingErrors.length > 0) {
     lines.push('');
-    for (const flag of result.validationFlags) {
-      const icon = flag.type === 'error' ? '❌' : flag.type === 'warning' ? '⚠️' : 'ℹ️';
-      lines.push(`${icon} ${flag.message}`);
+    for (const flag of blockingErrors) {
+      lines.push(`❌ ${flag.message}`);
     }
   }
 
