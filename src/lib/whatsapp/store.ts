@@ -153,7 +153,7 @@ export async function getActiveConversation(phoneNumber: string): Promise<WhatsA
   const { data, error } = await fromTable('whatsapp_conversations')
     .select('*')
     .eq('phone_number', e164)
-    .in('state', ['idle', 'awaiting_product_selection', 'awaiting_confirmation'])
+    .in('state', ['idle', 'awaiting_confirmation', 'awaiting_product_selection', 'awaiting_edit_choice', 'awaiting_edit_input'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

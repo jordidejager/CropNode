@@ -192,7 +192,7 @@ export function formatEditChoiceBody(): string {
  */
 export function formatEditInputPrompt(field: 'date' | 'products' | 'parcels'): string {
   if (field === 'date') return '📅 Typ de nieuwe datum, bijv. _"gisteren"_, _"28 maart"_ of _"zaterdag"_:';
-  if (field === 'products') return '🌿 Typ de middelen en doseringen opnieuw, bijv. _"0,5 kg delan en 1,8 liter soriale"_:';
+  if (field === 'products') return '🌿 Typ de *volledige nieuwe lijst* van middelen en doseringen (niet wat je wil verwijderen), bijv:\n_"0,5 kg delan en 0,75 L pyrus"_';
   return '📍 Typ de percelen opnieuw, bijv. _"zuidhoek, busje en conference murre"_:';
 }
 
