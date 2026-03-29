@@ -181,7 +181,23 @@ export function formatErrorMessage(): string {
 }
 
 /**
- * Format "edit" instruction message.
+ * Format "edit choice" body — shown as body of the edit-choice interactive message.
+ */
+export function formatEditChoiceBody(): string {
+  return 'Wat wil je aanpassen?';
+}
+
+/**
+ * Format the prompt for each edit field.
+ */
+export function formatEditInputPrompt(field: 'date' | 'products' | 'parcels'): string {
+  if (field === 'date') return '📅 Typ de nieuwe datum, bijv. _"gisteren"_, _"28 maart"_ of _"zaterdag"_:';
+  if (field === 'products') return '🌿 Typ de middelen en doseringen opnieuw, bijv. _"0,5 kg delan en 1,8 liter soriale"_:';
+  return '📍 Typ de percelen opnieuw, bijv. _"zuidhoek, busje en conference murre"_:';
+}
+
+/**
+ * Format "edit" instruction message (legacy fallback).
  */
 export function formatEditMessage(): string {
   return '✏️ Stuur je registratie opnieuw met de aanpassing.';

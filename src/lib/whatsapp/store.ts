@@ -209,7 +209,8 @@ export async function createConversation(
 export async function updateConversationState(
   conversationId: string,
   state: ConversationState,
-  pendingRegistration?: SprayRegistrationGroup | null
+  pendingRegistration?: SprayRegistrationGroup | null,
+  lastInput?: string | null
 ): Promise<void> {
   const updateData: Record<string, unknown> = {
     state,
@@ -220,8 +221,17 @@ export async function updateConversationState(
     updateData.pending_registration = pendingRegistration;
   }
 
+  if (lastInput !== undefined) {
+    updateData.last_input = lastInput;
+  }
+
   // Refresh expiration when awaiting user input
-  if (state === 'awaiting_confirmation' || state === 'awaiting_product_selection') {
+  if (
+    state === 'awaiting_confirmation' ||
+    state === 'awaiting_product_selection' ||
+    state === 'awaiting_edit_choice' ||
+    state === 'awaiting_edit_input'
+  ) {
     updateData.expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   }
 

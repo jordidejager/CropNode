@@ -15,11 +15,11 @@ import { processNewRegistration } from './registration-processor';
 import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
+import { handleEditChoice, handleEditFieldSelected, handleEditInput } from './edit-handler';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
   formatCancellationMessage,
-  formatEditMessage,
   formatExpiredMessage,
   formatRateLimitMessage,
 } from './format';
@@ -163,10 +163,7 @@ export async function handleIncomingMessage(
       }
 
       if (buttonReplyId === 'edit') {
-        await updateConversationState(conversation.id, 'idle');
-        const msg = formatEditMessage();
-        await sendTextMessage(metaPhone, msg);
-        await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: msg });
+        await handleEditChoice(e164Phone, conversation);
         return;
       }
 
@@ -175,6 +172,36 @@ export async function handleIncomingMessage(
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
         await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        return;
+      }
+    }
+
+    // State: awaiting_edit_choice — user picks which field to edit
+    if (state === 'awaiting_edit_choice' && conversation) {
+      if (buttonReplyId === 'edit:date') {
+        await handleEditFieldSelected(e164Phone, conversation, 'date');
+        return;
+      }
+      if (buttonReplyId === 'edit:products') {
+        await handleEditFieldSelected(e164Phone, conversation, 'products');
+        return;
+      }
+      if (buttonReplyId === 'edit:parcels') {
+        await handleEditFieldSelected(e164Phone, conversation, 'parcels');
+        return;
+      }
+      // User typed something instead of picking → treat as new registration
+      if (messageText) {
+        await updateConversationState(conversation.id, 'cancelled');
+        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        return;
+      }
+    }
+
+    // State: awaiting_edit_input — user types the new value for the chosen field
+    if (state === 'awaiting_edit_input' && conversation) {
+      if (messageText) {
+        await handleEditInput(userId, e164Phone, conversation, messageText);
         return;
       }
     }

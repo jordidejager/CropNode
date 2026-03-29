@@ -22,6 +22,8 @@ export type ConversationState =
   | 'idle'
   | 'awaiting_product_selection'
   | 'awaiting_confirmation'
+  | 'awaiting_edit_choice'
+  | 'awaiting_edit_input'
   | 'confirmed'
   | 'cancelled'
   | 'expired';

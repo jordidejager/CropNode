@@ -131,11 +131,13 @@ export async function processFieldNote(
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Admin client niet beschikbaar');
 
-    const { error } = await admin
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (admin as any)
       .from('field_notes')
       .insert({
         user_id: userId,
         content,
+        source: 'whatsapp',
         status: 'open',
         auto_tag: autoTag,
         is_pinned: false,
