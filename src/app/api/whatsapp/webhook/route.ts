@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       try {
         markAsRead(msg.id).catch(() => {});
 
-        const messageText = msg.text?.body || null;
+        const messageText = msg.text?.body || msg.image?.caption || null;
         const buttonReplyId = msg.interactive?.button_reply?.id
           || msg.interactive?.list_reply?.id
           || null;

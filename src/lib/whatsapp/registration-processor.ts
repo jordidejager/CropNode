@@ -14,9 +14,9 @@ import {
 } from './store';
 import {
   formatRegistrationSummary,
-  formatNotRecognizedMessage,
   formatErrorMessage,
 } from './format';
+import { processFieldNote } from './field-note-processor';
 import { sendProductSelectionPrompt } from './product-selection-handler';
 import { stripPlus } from './phone-utils';
 
@@ -57,10 +57,8 @@ export async function processNewRegistration(
 
     // 4. Handle different results
     if (result.action === 'answer_query' || !result.registration) {
-      // Not a spray registration — send help message
-      const msg = formatNotRecognizedMessage();
-      await sendTextMessage(metaPhone, msg);
-      await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+      // Not a spray registration — save as field note instead
+      await processFieldNote(userId, phoneNumber, inputText, waMessageId);
       return;
     }
 

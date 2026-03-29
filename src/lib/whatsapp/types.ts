@@ -107,6 +107,8 @@ export interface WhatsAppInboundMessage {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string; description?: string };
   };
+  image?: { id: string; mime_type: string; sha256: string; caption?: string };
+  audio?: { id: string; mime_type: string };
 }
 
 // ============================================================================

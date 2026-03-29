@@ -107,7 +107,14 @@ export async function handleIncomingMessage(
       return;
     }
 
-    // --- D. Handle unsupported message types ---
+    // --- D. Handle image messages → save as field note ---
+    if (messageType === 'image') {
+      const noteContent = messageText || '📸 Foto-notitie';
+      await processFieldNote(userId, e164Phone, noteContent, waMessageId, { isPhoto: true });
+      return;
+    }
+
+    // --- E. Handle other unsupported message types ---
     if (messageType !== 'text' && messageType !== 'interactive') {
       const msg = formatUnsupportedMediaMessage();
       await sendTextMessage(metaPhone, msg);
