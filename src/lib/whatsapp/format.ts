@@ -8,6 +8,8 @@ import type { AnalysisResult } from '@/lib/spray-pipeline';
 import type { SprayRegistrationGroup, SprayRegistrationUnit } from '@/lib/types';
 
 const MAX_WHATSAPP_LENGTH = 4096;
+// Interactive messages (with buttons) have a stricter body limit
+const MAX_INTERACTIVE_BODY_LENGTH = 1020;
 
 /**
  * Format a registration analysis result for WhatsApp display.
@@ -106,9 +108,9 @@ export function formatRegistrationSummary(
 
   let text = lines.join('\n');
 
-  // Truncate if too long
-  if (text.length > MAX_WHATSAPP_LENGTH) {
-    text = text.substring(0, MAX_WHATSAPP_LENGTH - 20) + '\n\n_...ingekort_';
+  // Interactive button messages are limited to 1024 chars — truncate firmly
+  if (text.length > MAX_INTERACTIVE_BODY_LENGTH) {
+    text = text.substring(0, MAX_INTERACTIVE_BODY_LENGTH - 20) + '\n\n_...ingekort_';
   }
 
   return text;

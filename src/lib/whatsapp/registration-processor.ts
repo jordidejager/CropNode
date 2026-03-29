@@ -141,12 +141,11 @@ export async function processNewRegistration(
   } catch (error) {
     console.error('[processNewRegistration] Error:', error);
 
-    // Send error message to user — include detail for debugging
+    // Send error message to user
     try {
-      const detail = error instanceof Error ? error.message : String(error);
-      const debugMsg = `❌ Fout: ${detail.substring(0, 300)}`;
-      await sendTextMessage(metaPhone, debugMsg);
-      await logMessage({ phoneNumber, direction: 'outbound', messageText: debugMsg });
+      const errorMsg = formatErrorMessage();
+      await sendTextMessage(metaPhone, errorMsg);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: errorMsg });
     } catch (sendError) {
       console.error('[processNewRegistration] Failed to send error message:', sendError);
     }
