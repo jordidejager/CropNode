@@ -20,6 +20,7 @@ import {
     getAllFertilizers,
     type SprayableParcel,
 } from '@/lib/supabase-store';
+import type { ParcelHistoryEntry } from '@/lib/types';
 import type {
     SprayRegistrationGroup,
     SprayRegistrationUnit,
@@ -53,7 +54,13 @@ export interface CachedContext {
     products: CtgbProduct[];
     fertilizers: FertilizerProduct[];
     parcelGroups: Array<{ id: string; name: string; subParcelIds: string[] }>;
+    parcelHistory: ParcelHistoryEntry[];
     loadedAt: number;
+}
+
+/** Invalidate the context cache for a user — call after saving a registration. */
+export function invalidateContextCache(userId: string): void {
+    contextCache.delete(userId);
 }
 
 // ============================================================================
@@ -82,7 +89,7 @@ export async function getOrLoadContext(userId: string): Promise<CachedContext> {
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Admin client unavailable - check SUPABASE_SERVICE_ROLE_KEY');
 
-    const [parcelsResult, products, fertilizers, parcelGroupsResult] = await Promise.all([
+    const [parcelsResult, products, fertilizers, parcelGroupsResult, parcelHistoryResult] = await Promise.all([
         // Parcels: admin + explicit userId filter
         admin
             .from('v_sprayable_parcels')
@@ -140,15 +147,43 @@ export async function getOrLoadContext(userId: string): Promise<CachedContext> {
                     subParcelIds: (g.parcel_group_members || []).map((m: any) => m.sub_parcel_id),
                 }));
             }),
+        // Parcel history: last 90 days for interval validation
+        admin
+            .from('parcel_history')
+            .select('id, parcel_id, parcel_name, crop, variety, product, dosage, unit, date, registration_type')
+            .eq('user_id', userId)
+            .gte('date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+            .order('date', { ascending: false })
+            .then(({ data, error }) => {
+                if (error) {
+                    console.error('[Pipeline Context] Parcel history error:', error.message);
+                    return [] as ParcelHistoryEntry[];
+                }
+                return (data || []).map((item: any): ParcelHistoryEntry => ({
+                    id: item.id,
+                    logId: item.log_id || item.id,
+                    spuitschriftId: item.spuitschrift_id || item.id,
+                    parcelId: item.parcel_id,
+                    parcelName: item.parcel_name,
+                    crop: item.crop,
+                    variety: item.variety,
+                    product: item.product,
+                    dosage: item.dosage,
+                    unit: item.unit,
+                    date: new Date(item.date),
+                    registrationType: item.registration_type || 'spraying',
+                }));
+            }),
     ]);
 
-    console.log(`[Pipeline Context] Loaded for user ${userId.substring(0, 8)}...: parcels=${parcelsResult.length}, products=${products.length}, fertilizers=${fertilizers.length}, groups=${parcelGroupsResult.length}`);
+    console.log(`[Pipeline Context] Loaded for user ${userId.substring(0, 8)}...: parcels=${parcelsResult.length}, products=${products.length}, fertilizers=${fertilizers.length}, groups=${parcelGroupsResult.length}, history=${parcelHistoryResult.length}`);
 
     const ctx: CachedContext = {
         parcels: parcelsResult,
         products,
         fertilizers,
         parcelGroups: parcelGroupsResult,
+        parcelHistory: parcelHistoryResult,
         loadedAt: Date.now(),
     };
 
@@ -420,7 +455,7 @@ export async function runRegistrationPipeline(
                         { plots: allPlots, products: ctgbProducts, date: dateStr },
                         ctx.parcels.map(p => ({ id: p.id, name: p.name, area: p.area || 0, crop: p.crop, variety: p.variety })) as any,
                         ctx.products,
-                        [] as any // Parcel history not needed for first-pass validation
+                        ctx.parcelHistory as any
                     )
                     : Promise.resolve({ isValid: true, validationMessage: '' as string | null, errorCount: 0, warningCount: 0 }),
                 Promise.resolve(validateDraft(registrationGroup, {
@@ -432,7 +467,7 @@ export async function runRegistrationPipeline(
                             gewas: g.gewas || '', doelorganisme: g.doelorganisme, dosering: g.dosering, maxToepassingen: g.maxToepassingen,
                         })),
                     })),
-                    recentHistory: [],
+                    recentHistory: ctx.parcelHistory as any,
                     productAliases: [],
                     loadedAt: new Date().toISOString(),
                 })),

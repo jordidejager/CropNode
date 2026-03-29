@@ -84,8 +84,14 @@ export async function handleEditInput(
       return;
     }
 
+    // Fetch parcels first so we can use names (not UUIDs) in synthetic messages
+    const parcels = await getSprayableParcelsForUser(userId);
+    const parcelNameMap = new Map(
+      parcels.map(p => [p.id, { name: p.name, area: p.area ?? null, crop: p.crop ?? '', variety: p.variety ?? null }])
+    );
+
     // Build a synthetic full-message that the pipeline can parse
-    const syntheticMessage = buildSyntheticMessage(field, inputText, pending);
+    const syntheticMessage = buildSyntheticMessage(field, inputText, pending, parcelNameMap);
     const result = await analyzeSprayInput(syntheticMessage, userId);
 
     if (!result.registration) {
@@ -97,12 +103,6 @@ export async function handleEditInput(
 
     // Merge the parsed part back into the pending registration
     const updated = mergeEdit(field, pending, result.registration);
-
-    // Build parcel name map for formatting
-    const parcels = await getSprayableParcelsForUser(userId);
-    const parcelNameMap = new Map(
-      parcels.map(p => [p.id, { name: p.name, area: p.area, crop: p.crop, variety: p.variety }])
-    );
 
     // Store updated registration and go back to awaiting_confirmation
     await updateConversationState(
@@ -157,15 +157,18 @@ function fieldLabel(field: 'date' | 'products' | 'parcels'): string {
 
 /**
  * Build a synthetic full-spray message so the pipeline can parse just the changed part.
+ * Uses actual parcel names (resolved from IDs) so the deterministic parser can match them.
  */
 function buildSyntheticMessage(
   field: 'date' | 'products' | 'parcels',
   userInput: string,
-  pending: SprayRegistrationGroup
+  pending: SprayRegistrationGroup,
+  parcelNameMap: Map<string, { name: string; area: number | null; crop: string; variety: string | null }>
 ): string {
-  // Use names from pending registration for the unchanged parts
   const productNames = pending.units[0]?.products.map(p => p.product).join(' en ') || 'delan';
-  const plotNames = pending.units.flatMap(u => u.plots).join(', ') || 'perceel';
+  const plotIds = pending.units.flatMap(u => u.plots);
+  const resolvedNames = plotIds.map(id => parcelNameMap.get(id)?.name).filter(Boolean);
+  const plotNames = resolvedNames.length > 0 ? resolvedNames.join(', ') : 'perceel';
 
   if (field === 'date') {
     return `${userInput} ${plotNames} gespoten met ${productNames}`;

@@ -4,6 +4,8 @@
  */
 
 import { confirmRegistration } from '@/lib/registration-service';
+import { addParcelHistoryEntries, getSprayableParcelsById } from '@/lib/supabase-store';
+import { invalidateContextCache } from '@/lib/registration-pipeline';
 import { sendTextMessage } from './client';
 import { updateConversationState, logMessage } from './store';
 import { formatConfirmationMessage, formatExpiredMessage, formatErrorMessage } from './format';
@@ -46,16 +48,28 @@ export async function handleConfirmation(
     const allPlots = reg.units.flatMap(u => u.plots);
     const allProducts = reg.units.flatMap(u => u.products);
 
-    // 3. Save via shared confirmation service
-    const result = await confirmRegistration({
-      userId,
-      plots: allPlots,
-      products: allProducts,
-      date: reg.date,
-      rawInput: reg.rawInput || conversation.lastInput || 'WhatsApp registratie',
-      registrationType: reg.registrationType || 'spraying',
-      registrationSource: 'whatsapp',
-    });
+    // 3. Save via shared confirmation service (with parcel history for interval tracking)
+    const sprayableParcels = await getSprayableParcelsById(allPlots);
+    const result = await confirmRegistration(
+      {
+        userId,
+        plots: allPlots,
+        products: allProducts,
+        date: reg.date,
+        rawInput: reg.rawInput || conversation.lastInput || 'WhatsApp registratie',
+        registrationType: reg.registrationType || 'spraying',
+        registrationSource: 'whatsapp',
+      },
+      async ({ logbookEntry, isConfirmation, spuitschriftId }) => {
+        await addParcelHistoryEntries({
+          logbookEntry,
+          sprayableParcels,
+          isConfirmation,
+          spuitschriftId,
+          providedUserId: userId,
+        });
+      }
+    );
 
     if (!result.success) {
       const msg = `❌ ${result.message || 'Kon de registratie niet opslaan.'}`;
@@ -64,7 +78,10 @@ export async function handleConfirmation(
       return;
     }
 
-    // 4. Update conversation state
+    // 4. Invalidate pipeline context cache so next validation uses fresh history
+    invalidateContextCache(userId);
+
+    // 5. Update conversation state
     await updateConversationState(conversation.id, 'confirmed');
 
     // 5. Send confirmation message
