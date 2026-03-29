@@ -95,6 +95,52 @@ export async function sendInteractiveButtons(
 }
 
 /**
+ * Send an interactive list message (dropdown with up to 10 rows).
+ * @param to Phone number without +
+ * @param bodyText Message body text (max 1024 chars)
+ * @param buttonLabel Label on the dropdown button (max 20 chars)
+ * @param sections Array of sections with rows
+ * @returns WhatsApp message ID
+ */
+export async function sendListMessage(
+  to: string,
+  bodyText: string,
+  buttonLabel: string,
+  sections: Array<{
+    title: string;
+    rows: Array<{ id: string; title: string; description?: string }>;
+  }>
+): Promise<string> {
+  const totalRows = sections.reduce((sum, s) => sum + s.rows.length, 0);
+  if (totalRows > 10) {
+    throw new Error('WhatsApp list messages support max 10 rows total.');
+  }
+
+  console.log(`[WhatsApp Client] Sending list to ${to} with ${totalRows} rows`);
+
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      body: { text: bodyText },
+      action: {
+        button: buttonLabel.substring(0, 20),
+        sections: sections.map(s => ({
+          title: s.title.substring(0, 24),
+          rows: s.rows.map(r => ({
+            id: r.id,
+            title: r.title.substring(0, 24),
+            ...(r.description && { description: r.description.substring(0, 72) }),
+          })),
+        })),
+      },
+    },
+  });
+}
+
+/**
  * Mark a message as read (sends blue checkmarks).
  * @param messageId The WhatsApp message ID (wamid.xxx)
  */

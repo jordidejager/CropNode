@@ -71,7 +71,9 @@ export async function POST(request: Request) {
         markAsRead(msg.id).catch(() => {});
 
         const messageText = msg.text?.body || null;
-        const buttonReplyId = msg.interactive?.button_reply?.id || null;
+        const buttonReplyId = msg.interactive?.button_reply?.id
+          || msg.interactive?.list_reply?.id
+          || null;
 
         console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
 

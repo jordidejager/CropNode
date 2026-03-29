@@ -15,7 +15,7 @@ import { processNewRegistration } from './registration-processor';
 import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
-import { handleEditChoice, handleEditFieldSelected, handleEditInput } from './edit-handler';
+import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -179,15 +179,15 @@ export async function handleIncomingMessage(
     // State: awaiting_edit_choice — user picks which field to edit
     if (state === 'awaiting_edit_choice' && conversation) {
       if (buttonReplyId === 'edit:date') {
-        await handleEditFieldSelected(e164Phone, conversation, 'date');
+        await handleEditFieldSelected(e164Phone, conversation, 'date', userId);
         return;
       }
       if (buttonReplyId === 'edit:products') {
-        await handleEditFieldSelected(e164Phone, conversation, 'products');
+        await handleEditFieldSelected(e164Phone, conversation, 'products', userId);
         return;
       }
       if (buttonReplyId === 'edit:parcels') {
-        await handleEditFieldSelected(e164Phone, conversation, 'parcels');
+        await handleEditFieldSelected(e164Phone, conversation, 'parcels', userId);
         return;
       }
       // User typed something instead of picking → treat as new registration
@@ -198,8 +198,14 @@ export async function handleIncomingMessage(
       }
     }
 
-    // State: awaiting_edit_input — user types the new value for the chosen field
+    // State: awaiting_edit_input — user picks from list or types a new value
     if (state === 'awaiting_edit_input' && conversation) {
+      // List reply (editdate:*, editprod:*, editparcel:*)
+      if (buttonReplyId?.startsWith('edit')) {
+        await handleEditListReply(userId, e164Phone, conversation, buttonReplyId);
+        return;
+      }
+      // Free-text fallback
       if (messageText) {
         await handleEditInput(userId, e164Phone, conversation, messageText);
         return;

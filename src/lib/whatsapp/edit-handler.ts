@@ -1,28 +1,31 @@
 /**
  * WhatsApp Edit Handler.
- * Handles the "Wijzig" flow: shows a menu of what to change (date/products/parcels),
- * then accepts one piece of input and updates the pending registration accordingly.
+ * Handles the "Wijzig" flow using WhatsApp interactive list menus:
  *
- * Uses direct parsing for simple edits (date, removal) — only falls back to the
- * full pipeline when the user provides a complete new product list with dosages.
+ * 1. User taps "Wijzig" → shows field choice (Datum/Middelen/Percelen)
+ * 2. User picks field → shows a list menu with inline options:
+ *    - Datum: common date choices (vandaag, gisteren, eergisteren, etc.)
+ *    - Middelen: current products with "verwijder" + "Andere middelen" fallback
+ *    - Percelen: current parcels with "verwijder" + user's other parcels to add
+ * 3. User picks from list → direct update, no typing needed
+ *    (fallback: "Andere…" option → asks user to type freely)
  */
 
 import { analyzeSprayInput } from '@/lib/spray-pipeline';
 import { deterministicParse } from '@/lib/deterministic-parser';
-import { sendInteractiveButtons, sendTextMessage } from './client';
+import { sendInteractiveButtons, sendListMessage, sendTextMessage } from './client';
 import { updateConversationState, logMessage, getSprayableParcelsForUser } from './store';
 import {
   formatEditChoiceBody,
-  formatEditInputPrompt,
   formatRegistrationSummary,
   formatErrorMessage,
 } from './format';
 import { stripPlus } from './phone-utils';
 import type { WhatsAppConversation } from './types';
-import type { SprayRegistrationGroup, ProductEntry } from '@/lib/types';
+import type { SprayRegistrationGroup } from '@/lib/types';
 
 // ============================================================================
-// Show the edit-choice menu (called when user clicks "Wijzig")
+// Step 1: Show the edit-choice menu (called when user clicks "Wijzig")
 // ============================================================================
 
 export async function handleEditChoice(
@@ -43,17 +46,19 @@ export async function handleEditChoice(
 }
 
 // ============================================================================
-// User picked a field to edit — ask for new value
+// Step 2: User picked a field → show interactive list for that field
 // ============================================================================
 
 export async function handleEditFieldSelected(
   phoneNumber: string,
   conversation: WhatsAppConversation,
-  field: 'date' | 'products' | 'parcels'
+  field: 'date' | 'products' | 'parcels',
+  userId?: string
 ): Promise<void> {
   const metaPhone = stripPlus(phoneNumber);
+  const pending = conversation.pendingRegistration as SprayRegistrationGroup | null;
 
-  // Store which field is being edited in lastInput
+  // Store which field is being edited
   await updateConversationState(
     conversation.id,
     'awaiting_edit_input',
@@ -61,13 +66,29 @@ export async function handleEditFieldSelected(
     `edit:${field}`
   );
 
-  const prompt = formatEditInputPrompt(field);
-  await sendTextMessage(metaPhone, prompt);
-  await logMessage({ phoneNumber, direction: 'outbound', messageText: prompt });
+  if (!pending) {
+    const msg = '❌ Geen registratie gevonden om te wijzigen.';
+    await sendTextMessage(metaPhone, msg);
+    return;
+  }
+
+  // Show a list menu based on the field
+  if (field === 'date') {
+    await sendDateList(metaPhone, phoneNumber, pending);
+  } else if (field === 'products') {
+    await sendProductList(metaPhone, phoneNumber, pending);
+  } else if (field === 'parcels' && userId) {
+    await sendParcelList(metaPhone, phoneNumber, pending, userId);
+  } else {
+    // Fallback to text input
+    const msg = '📍 Typ de percelen, bijv. _"zuidhoek en busje"_:';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+  }
 }
 
 // ============================================================================
-// User typed the new value — parse & update pending registration
+// Step 3: User picked from list → apply edit directly
 // ============================================================================
 
 export async function handleEditInput(
@@ -83,7 +104,6 @@ export async function handleEditInput(
     const pending = conversation.pendingRegistration as SprayRegistrationGroup | null;
 
     if (!field || !pending) {
-      // Fallback: treat as new registration
       await updateConversationState(conversation.id, 'idle');
       return;
     }
@@ -95,7 +115,6 @@ export async function handleEditInput(
     );
 
     let updated: SprayRegistrationGroup | null = null;
-    let validationFlags: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }> = [];
 
     // Try direct (fast) edit first — no pipeline needed
     if (field === 'date') {
@@ -107,6 +126,7 @@ export async function handleEditInput(
     }
 
     // If direct edit didn't work, fall back to full pipeline
+    let validationFlags: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }> = [];
     if (!updated) {
       const syntheticMessage = buildSyntheticMessage(field, inputText, pending, parcelNameMap);
       const result = await analyzeSprayInput(syntheticMessage, userId);
@@ -122,15 +142,9 @@ export async function handleEditInput(
       validationFlags = result.validationFlags || [];
     }
 
-    // Store updated registration and go back to awaiting_confirmation
-    await updateConversationState(
-      conversation.id,
-      'awaiting_confirmation',
-      updated,
-      conversation.lastInput
-    );
+    // Store updated registration and show summary
+    await updateConversationState(conversation.id, 'awaiting_confirmation', updated);
 
-    // Show updated summary with buttons
     const fakeResult = { action: 'new_draft' as const, registration: updated, humanSummary: '', validationFlags, processingTimeMs: 0 };
     const summaryText = formatRegistrationSummary(fakeResult as any, parcelNameMap);
 
@@ -163,20 +177,314 @@ export async function handleEditInput(
   }
 }
 
+/**
+ * Handle a list selection for editing (called from message handler for list reply IDs).
+ * This is the fast path — directly modifies the pending registration.
+ */
+export async function handleEditListReply(
+  userId: string,
+  phoneNumber: string,
+  conversation: WhatsAppConversation,
+  replyId: string
+): Promise<void> {
+  const metaPhone = stripPlus(phoneNumber);
+  const pending = conversation.pendingRegistration as SprayRegistrationGroup | null;
+
+  if (!pending) {
+    await sendTextMessage(metaPhone, '❌ Geen registratie gevonden.');
+    return;
+  }
+
+  // Parse the reply ID
+  // Formats: "editdate:gisteren", "editprod:remove:Delan DF", "editprod:type", "editparcel:remove:uuid", "editparcel:add:uuid"
+
+  if (replyId.startsWith('editdate:')) {
+    const dateKey = replyId.replace('editdate:', '');
+    const newDate = resolveDateKey(dateKey);
+    if (newDate) {
+      await handleEditInput(userId, phoneNumber, conversation, newDate);
+    }
+    return;
+  }
+
+  if (replyId === 'editprod:type') {
+    // User wants to type a new product list — ask for text input
+    const msg = '🌿 Typ de *volledige nieuwe lijst* van middelen en doseringen, bijv:\n_"0,5 kg delan en 0,75 L pyrus"_';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    return; // Stay in awaiting_edit_input state
+  }
+
+  if (replyId.startsWith('editprod:remove:')) {
+    const productName = replyId.replace('editprod:remove:', '');
+    await handleEditInput(userId, phoneNumber, conversation, `geen ${productName}`);
+    return;
+  }
+
+  if (replyId.startsWith('editparcel:remove:')) {
+    const parcelId = replyId.replace('editparcel:remove:', '');
+    const currentPlots = pending.units.flatMap(u => u.plots);
+    const remainingPlots = currentPlots.filter(id => id !== parcelId);
+
+    if (remainingPlots.length === 0) {
+      await sendTextMessage(metaPhone, '❌ Je moet minimaal 1 perceel overhouden.');
+      return;
+    }
+
+    const updated: SprayRegistrationGroup = {
+      ...pending,
+      units: [{ ...pending.units[0], plots: remainingPlots }],
+    };
+
+    await finishEdit(userId, phoneNumber, conversation, updated);
+    return;
+  }
+
+  if (replyId.startsWith('editparcel:add:')) {
+    const parcelId = replyId.replace('editparcel:add:', '');
+    const currentPlots = pending.units.flatMap(u => u.plots);
+    if (!currentPlots.includes(parcelId)) {
+      currentPlots.push(parcelId);
+    }
+
+    const updated: SprayRegistrationGroup = {
+      ...pending,
+      units: [{ ...pending.units[0], plots: currentPlots }],
+    };
+
+    await finishEdit(userId, phoneNumber, conversation, updated);
+    return;
+  }
+
+  // Unknown reply ID — ignore
+  console.warn(`[handleEditListReply] Unknown reply ID: ${replyId}`);
+}
+
+// ============================================================================
+// List builders
+// ============================================================================
+
+async function sendDateList(
+  metaPhone: string,
+  phoneNumber: string,
+  pending: SprayRegistrationGroup
+): Promise<void> {
+  const currentDate = pending.date ? new Date(pending.date) : new Date();
+  const currentStr = currentDate.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const rows = buildDateRows();
+
+  await sendListMessage(
+    metaPhone,
+    `📅 Huidige datum: *${currentStr}*\n\nKies een nieuwe datum:`,
+    'Kies datum',
+    [{ title: 'Datum', rows }]
+  );
+  await logMessage({ phoneNumber, direction: 'outbound', messageText: `Datumkeuze getoond` });
+}
+
+async function sendProductList(
+  metaPhone: string,
+  phoneNumber: string,
+  pending: SprayRegistrationGroup
+): Promise<void> {
+  const products = pending.units.flatMap(u => u.products);
+  const rows: Array<{ id: string; title: string; description?: string }> = [];
+
+  // Only show removal option if there are 2+ products
+  if (products.length > 1) {
+    for (const prod of products) {
+      const dosStr = prod.dosage > 0 ? `${prod.dosage} ${prod.unit || 'L'}/ha` : '';
+      rows.push({
+        id: `editprod:remove:${prod.product}`,
+        title: `❌ ${prod.product}`.substring(0, 24),
+        description: dosStr ? `Verwijder — ${dosStr}` : 'Verwijder dit middel',
+      });
+    }
+  }
+
+  // Always offer the option to type a new list
+  rows.push({
+    id: 'editprod:type',
+    title: '📝 Nieuwe lijst typen',
+    description: 'Typ alle middelen en doseringen opnieuw',
+  });
+
+  await sendListMessage(
+    metaPhone,
+    `🌿 Huidige middelen:\n${products.map(p => `• ${p.product} (${p.dosage} ${p.unit || 'L'}/ha)`).join('\n')}\n\nWat wil je wijzigen?`,
+    'Wijzig middelen',
+    [{ title: 'Middelen', rows }]
+  );
+  await logMessage({ phoneNumber, direction: 'outbound', messageText: 'Middelenkeuze getoond' });
+}
+
+async function sendParcelList(
+  metaPhone: string,
+  phoneNumber: string,
+  pending: SprayRegistrationGroup,
+  userId: string
+): Promise<void> {
+  const currentPlots = pending.units.flatMap(u => u.plots);
+  const allParcels = await getSprayableParcelsForUser(userId);
+
+  const rows: Array<{ id: string; title: string; description?: string }> = [];
+
+  // Current parcels — option to remove (only if 2+ selected)
+  const selectedParcels = allParcels.filter(p => currentPlots.includes(p.id));
+  if (selectedParcels.length > 1) {
+    for (const p of selectedParcels.slice(0, 5)) {
+      rows.push({
+        id: `editparcel:remove:${p.id}`,
+        title: `❌ ${p.name}`.substring(0, 24),
+        description: `Verwijder — ${p.area?.toFixed(2) || '?'} ha`,
+      });
+    }
+  }
+
+  // Other parcels — option to add (up to remaining row slots)
+  const otherParcels = allParcels.filter(p => !currentPlots.includes(p.id));
+  const slotsLeft = 10 - rows.length;
+  for (const p of otherParcels.slice(0, slotsLeft)) {
+    rows.push({
+      id: `editparcel:add:${p.id}`,
+      title: `➕ ${p.name}`.substring(0, 24),
+      description: `Toevoegen — ${p.area?.toFixed(2) || '?'} ha`,
+    });
+  }
+
+  if (rows.length === 0) {
+    const msg = '📍 Typ de percelen, bijv. _"zuidhoek en busje"_:';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    return;
+  }
+
+  const selectedNames = selectedParcels.map(p => p.name).join(', ');
+  await sendListMessage(
+    metaPhone,
+    `📍 Huidige percelen: *${selectedNames}*\n\nVerwijder of voeg percelen toe:`,
+    'Wijzig percelen',
+    [{ title: 'Percelen', rows }]
+  );
+  await logMessage({ phoneNumber, direction: 'outbound', messageText: 'Perceelkeuze getoond' });
+}
+
+// ============================================================================
+// Shared finish-edit helper
+// ============================================================================
+
+async function finishEdit(
+  userId: string,
+  phoneNumber: string,
+  conversation: WhatsAppConversation,
+  updated: SprayRegistrationGroup
+): Promise<void> {
+  const metaPhone = stripPlus(phoneNumber);
+  const parcels = await getSprayableParcelsForUser(userId);
+  const parcelNameMap = new Map(
+    parcels.map(p => [p.id, { name: p.name, area: p.area ?? undefined, crop: p.crop ?? undefined, variety: p.variety ?? undefined }])
+  );
+
+  await updateConversationState(conversation.id, 'awaiting_confirmation', updated);
+
+  const fakeResult = { action: 'new_draft' as const, registration: updated, humanSummary: '', validationFlags: [] as any[], processingTimeMs: 0 };
+  const summaryText = formatRegistrationSummary(fakeResult as any, parcelNameMap);
+
+  await sendInteractiveButtons(metaPhone, summaryText, [
+    { id: 'confirm', title: '✓ Bevestig' },
+    { id: 'edit', title: '✏ Wijzig' },
+    { id: 'cancel', title: '✗ Annuleer' },
+  ]);
+  await logMessage({
+    phoneNumber,
+    direction: 'outbound',
+    messageText: summaryText,
+    metadata: { buttons: ['confirm', 'edit', 'cancel'] },
+  });
+}
+
+// ============================================================================
+// Date helpers
+// ============================================================================
+
+function buildDateRows(): Array<{ id: string; title: string; description?: string }> {
+  const today = new Date();
+  const rows: Array<{ id: string; title: string; description?: string }> = [];
+
+  // Today
+  rows.push({
+    id: 'editdate:vandaag',
+    title: 'Vandaag',
+    description: formatDateDescription(today),
+  });
+
+  // Yesterday
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  rows.push({
+    id: 'editdate:gisteren',
+    title: 'Gisteren',
+    description: formatDateDescription(yesterday),
+  });
+
+  // Day before yesterday
+  const eergisteren = new Date(today);
+  eergisteren.setDate(eergisteren.getDate() - 2);
+  rows.push({
+    id: 'editdate:eergisteren',
+    title: 'Eergisteren',
+    description: formatDateDescription(eergisteren),
+  });
+
+  // Previous 4 days
+  for (let i = 3; i <= 6; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dayName = d.toLocaleDateString('nl-NL', { weekday: 'long' });
+    const capitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+    rows.push({
+      id: `editdate:${i}daggeleden`,
+      title: capitalized,
+      description: formatDateDescription(d),
+    });
+  }
+
+  return rows;
+}
+
+function formatDateDescription(date: Date): string {
+  return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function resolveDateKey(key: string): string | null {
+  const today = new Date();
+
+  if (key === 'vandaag') return 'vandaag';
+  if (key === 'gisteren') return 'gisteren';
+  if (key === 'eergisteren') return 'eergisteren';
+
+  // "3daggeleden", "4daggeleden", etc.
+  const match = key.match(/^(\d+)daggeleden$/);
+  if (match) {
+    const days = parseInt(match[1], 10);
+    const d = new Date(today);
+    d.setDate(d.getDate() - days);
+    return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' });
+  }
+
+  return null;
+}
+
 // ============================================================================
 // Direct edit handlers — fast, no AI needed
 // ============================================================================
 
-/**
- * Try to parse a date directly from user input.
- * Handles: "gisteren", "eergisteren", "28 maart", "zaterdag", etc.
- */
 function tryDirectDateEdit(
   input: string,
   pending: SprayRegistrationGroup,
   parcels: Array<{ id: string; name: string; area?: number | null }>
 ): SprayRegistrationGroup | null {
-  // Use deterministicParse with a dummy message to extract the date
   const sprayableParcels = parcels.map(p => ({
     id: p.id, name: p.name, area: p.area ?? 0,
     crop: '', variety: null, parcelId: p.id, parcelName: p.name,
@@ -193,11 +501,6 @@ function tryDirectDateEdit(
   return null;
 }
 
-/**
- * Try to handle product edits directly:
- * - "geen X" / "zonder X" → remove product X
- * - "X vervangen door Y" → not supported yet, fall back to pipeline
- */
 function tryDirectProductEdit(
   input: string,
   pending: SprayRegistrationGroup
@@ -210,20 +513,15 @@ function tryDirectProductEdit(
     const productToRemove = removeMatch[1].trim();
     const allProducts = pending.units.flatMap(u => u.products);
 
-    // Find matching product (fuzzy: check if product name contains the input or vice versa)
     const matchIdx = allProducts.findIndex(p =>
       p.product.toLowerCase().includes(productToRemove) ||
       productToRemove.includes(p.product.toLowerCase())
     );
 
-    if (matchIdx === -1) {
-      return null; // Product not found, fall back to pipeline
-    }
+    if (matchIdx === -1) return null;
 
     const remainingProducts = allProducts.filter((_, i) => i !== matchIdx);
-    if (remainingProducts.length === 0) {
-      return null; // Can't remove all products
-    }
+    if (remainingProducts.length === 0) return null;
 
     return {
       ...pending,
@@ -231,34 +529,24 @@ function tryDirectProductEdit(
     };
   }
 
-  // Not a simple removal — fall back to pipeline
   return null;
 }
 
-/**
- * Try to resolve parcel names directly from user input.
- * Handles: "zuidhoek en busje", "alleen conference murre"
- */
 function tryDirectParcelEdit(
   input: string,
   pending: SprayRegistrationGroup,
   parcels: Array<{ id: string; name: string }>
 ): SprayRegistrationGroup | null {
   const normalized = input.toLowerCase().replace(/^alleen\s+/, '').trim();
-
-  // Split on common separators
   const names = normalized.split(/\s*(?:,|en)\s*/).map(n => n.trim()).filter(Boolean);
   if (names.length === 0) return null;
 
-  // Match each name to a parcel
   const matchedPlots: string[] = [];
   for (const name of names) {
     const match = parcels.find(p =>
       p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())
     );
-    if (match) {
-      matchedPlots.push(match.id);
-    }
+    if (match) matchedPlots.push(match.id);
   }
 
   if (matchedPlots.length === 0) return null;
@@ -270,7 +558,7 @@ function tryDirectParcelEdit(
 }
 
 // ============================================================================
-// Helpers
+// Pipeline fallback helpers
 // ============================================================================
 
 function fieldLabel(field: 'date' | 'products' | 'parcels'): string {
@@ -279,10 +567,6 @@ function fieldLabel(field: 'date' | 'products' | 'parcels'): string {
   return 'percelen';
 }
 
-/**
- * Build a synthetic full-spray message so the pipeline can parse just the changed part.
- * Uses actual parcel names (resolved from IDs) so the deterministic parser can match them.
- */
 function buildSyntheticMessage(
   field: 'date' | 'products' | 'parcels',
   userInput: string,
@@ -297,30 +581,19 @@ function buildSyntheticMessage(
   const resolvedNames = plotIds.map(id => parcelNameMap.get(id)?.name).filter(Boolean);
   const plotNames = resolvedNames.length > 0 ? resolvedNames.join(', ') : 'perceel';
 
-  if (field === 'date') {
-    return `${userInput} ${plotNames} gespoten met ${productNames}`;
-  }
-  if (field === 'products') {
-    return `${plotNames} gespoten met ${userInput}`;
-  }
-  // parcels
+  if (field === 'date') return `${userInput} ${plotNames} gespoten met ${productNames}`;
+  if (field === 'products') return `${plotNames} gespoten met ${userInput}`;
   return `${userInput} gespoten met ${productNames}`;
 }
 
-/**
- * Merge the newly parsed part into the original pending registration.
- */
 function mergeEdit(
   field: 'date' | 'products' | 'parcels',
   pending: SprayRegistrationGroup,
   parsed: SprayRegistrationGroup
 ): SprayRegistrationGroup {
-  if (field === 'date') {
-    return { ...pending, date: parsed.date };
-  }
+  if (field === 'date') return { ...pending, date: parsed.date };
 
   if (field === 'products') {
-    // Replace products in ALL units with the newly parsed products
     const newProducts = parsed.units.flatMap(u => u.products);
     return {
       ...pending,
@@ -328,7 +601,6 @@ function mergeEdit(
     };
   }
 
-  // parcels — replace plots across units, keeping products
   const newPlots = parsed.units.flatMap(u => u.plots);
   return {
     ...pending,
