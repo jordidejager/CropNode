@@ -16,7 +16,7 @@ import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
-import { attachGpsToNote } from './field-note-processor';
+import { attachGpsToNote, consumePendingGps } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -144,15 +144,14 @@ export async function handleIncomingMessage(
 
     // --- F. Route based on state ---
 
-    // Location messages: attach to existing note or save as new
+    // Location messages: attach to pending note or save as new
     if (messageType === 'location' && extras?.location) {
       const loc = extras.location;
 
-      // If awaiting GPS for a specific note, attach it
-      if (state === 'awaiting_gps' && conversation?.lastInput?.startsWith('gps:')) {
-        const noteId = conversation.lastInput.replace('gps:', '');
-        await attachGpsToNote(noteId, loc.latitude, loc.longitude, e164Phone);
-        await updateConversationState(conversation.id, 'idle');
+      // Check if there's a recent note awaiting GPS (from location_request_message)
+      const pendingNoteId = consumePendingGps(e164Phone);
+      if (pendingNoteId) {
+        await attachGpsToNote(pendingNoteId, loc.latitude, loc.longitude, e164Phone);
         return;
       }
 

@@ -16,6 +16,28 @@ import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 
 // ============================================================================
+// Pending GPS tracking (in-memory, per phone number)
+// ============================================================================
+
+/** Maps phone number → last saved note ID awaiting GPS. Expires after 10 min. */
+const pendingGpsMap = new Map<string, { noteId: string; timestamp: number }>();
+const GPS_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Store a note ID that's awaiting GPS for a phone number. */
+export function setPendingGps(phoneNumber: string, noteId: string): void {
+  pendingGpsMap.set(phoneNumber, { noteId, timestamp: Date.now() });
+}
+
+/** Get and clear the pending GPS note ID for a phone number. Returns null if expired/missing. */
+export function consumePendingGps(phoneNumber: string): string | null {
+  const entry = pendingGpsMap.get(phoneNumber);
+  if (!entry) return null;
+  pendingGpsMap.delete(phoneNumber);
+  if (Date.now() - entry.timestamp > GPS_TIMEOUT_MS) return null;
+  return entry.noteId;
+}
+
+// ============================================================================
 // Field note intent detection (simple keyword-based, no AI needed)
 // ============================================================================
 
@@ -247,13 +269,8 @@ export async function processFieldNote(
     const hasGps = insertData.latitude != null;
     if (!hasGps && inserted?.id) {
       try {
-        // Store noteId in conversation for when location arrives
-        const { updateConversationState, createConversation } = await import('./store');
-        const { getActiveConversation } = await import('./store');
-        const conversation = await getActiveConversation(phoneNumber);
-        if (conversation) {
-          await updateConversationState(conversation.id, 'awaiting_gps', undefined, `gps:${inserted.id}`);
-        }
+        // Track this note so the next location message gets attached to it
+        setPendingGps(phoneNumber, inserted.id);
 
         await sendLocationRequest(metaPhone, '📍 Deel je locatie om de notitie op de kaart te zetten:');
         await logMessage({ phoneNumber, direction: 'outbound', messageText: '[locatie-verzoek]' });
