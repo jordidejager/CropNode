@@ -210,6 +210,20 @@ export async function processFieldNote(
       }
     }
 
+    // GPS-based parcel matching (if we have coordinates)
+    if (insertData.latitude != null && insertData.longitude != null) {
+      try {
+        const parcelIds = await matchParcelByGps(
+          insertData.latitude as number,
+          insertData.longitude as number,
+          userId
+        );
+        if (parcelIds.length > 0) {
+          insertData.parcel_ids = parcelIds;
+        }
+      } catch { /* non-fatal */ }
+    }
+
     // Save to field_notes using admin client (bypasses RLS)
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Admin client niet beschikbaar');
@@ -321,13 +335,14 @@ export async function handleAddGpsButton(
 
 /**
  * Attach GPS coordinates to an existing field note.
- * Called when a location message arrives after the user tapped "Locatie toevoegen".
+ * Also tries to match the nearest parcel based on GPS (point-in-polygon).
  */
 export async function attachGpsToNote(
   noteId: string,
   latitude: number,
   longitude: number,
-  phoneNumber: string
+  phoneNumber: string,
+  userId?: string
 ): Promise<void> {
   const metaPhone = stripPlus(phoneNumber);
 
@@ -335,14 +350,25 @@ export async function attachGpsToNote(
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Admin client niet beschikbaar');
 
+    const updateData: Record<string, unknown> = { latitude, longitude };
+
+    // Try GPS-based parcel matching if userId is available
+    if (userId) {
+      const parcelIds = await matchParcelByGps(latitude, longitude, userId);
+      if (parcelIds.length > 0) {
+        updateData.parcel_ids = parcelIds;
+      }
+    }
+
     const { error } = await (admin as any)
       .from('field_notes')
-      .update({ latitude, longitude })
+      .update(updateData)
       .eq('id', noteId);
 
     if (error) throw new Error(error.message);
 
-    const msg = '📍 GPS-locatie toegevoegd aan je notitie!';
+    const parcelNote = updateData.parcel_ids ? ' Perceel automatisch herkend.' : '';
+    const msg = `📍 GPS-locatie toegevoegd aan je notitie!${parcelNote}`;
     await sendTextMessage(metaPhone, msg);
     await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
   } catch (err) {
@@ -351,6 +377,61 @@ export async function attachGpsToNote(
     await sendTextMessage(metaPhone, msg);
     await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
   }
+}
+
+/**
+ * Match a GPS point to the user's parcels using point-in-polygon.
+ * Returns matching parcel IDs (usually 1, but could overlap).
+ */
+async function matchParcelByGps(
+  latitude: number,
+  longitude: number,
+  userId: string
+): Promise<string[]> {
+  try {
+    const { getOrLoadContext } = await import('@/lib/registration-pipeline');
+    const ctx = await getOrLoadContext(userId);
+
+    const matchedIds: string[] = [];
+    for (const parcel of ctx.parcels) {
+      if (!parcel.geometry) continue;
+      if (pointInGeoJson(latitude, longitude, parcel.geometry)) {
+        matchedIds.push(parcel.id);
+      }
+    }
+    return matchedIds;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Simple point-in-polygon check for GeoJSON Polygon/MultiPolygon.
+ * Uses ray-casting algorithm.
+ */
+function pointInGeoJson(lat: number, lng: number, geometry: any): boolean {
+  if (!geometry?.type) return false;
+
+  if (geometry.type === 'Polygon') {
+    return pointInPolygon(lat, lng, geometry.coordinates[0]); // outer ring
+  }
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some((poly: any) => pointInPolygon(lat, lng, poly[0]));
+  }
+  return false;
+}
+
+/** Ray-casting algorithm for point-in-polygon. Ring is [[lng, lat], ...] (GeoJSON order). */
+function pointInPolygon(lat: number, lng: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][1], yi = ring[i][0]; // GeoJSON: [lng, lat]
+    const xj = ring[j][1], yj = ring[j][0];
+    if ((yi > lng) !== (yj > lng) && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 // ============================================================================

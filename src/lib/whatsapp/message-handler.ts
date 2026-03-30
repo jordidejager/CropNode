@@ -166,7 +166,7 @@ export async function handleIncomingMessage(
           .maybeSingle();
 
         if (recentNote?.id) {
-          await attachGpsToNote(recentNote.id, loc.latitude, loc.longitude, e164Phone);
+          await attachGpsToNote(recentNote.id, loc.latitude, loc.longitude, e164Phone, userId);
           return;
         }
       } catch (err) {
