@@ -294,11 +294,13 @@ export async function processFieldNote(
       }
     }
 
-    // Fire-and-forget: AI classification for better tagging + parcel matching
+    // AI classification — await to prevent Vercel serverless from killing it
     if (inserted?.id) {
-      classifyFieldNoteAsync(inserted.id, content, userId, photoUrl).catch(err => {
+      try {
+        await classifyFieldNoteAsync(inserted.id, content, userId, photoUrl);
+      } catch (err) {
         console.error('[processFieldNote] AI classification failed (non-fatal):', err);
-      });
+      }
     }
 
   } catch (error) {

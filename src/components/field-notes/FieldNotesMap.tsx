@@ -158,11 +158,14 @@ export function FieldNotesMap({ notes, onNoteClick, onViewInList }: FieldNotesMa
         </div>
       </div>`;
 
+      // Wrap popup content with inline dark styles (styled-jsx can be unreliable)
+      const styledContent = `<div style="background:rgba(24,24,27,0.97);color:white;border-radius:10px;padding:10px;margin:-12px;max-width:220px;font-size:12px;line-height:1.4">${photoHtml}<div style="color:rgba(255,255,255,0.85)">${contentText}</div><div style="display:flex;gap:4px;align-items:center;margin-top:4px;flex-wrap:wrap"><span style="background:${color};color:white;font-size:9px;padding:1px 6px;border-radius:99px;font-weight:500">${tagLabel}</span><span style="font-size:10px;color:rgba(255,255,255,0.3)">${formatTime(note.created_at)}${sourceIcon}</span></div>${parcelHtml}${obsHtml}<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px"><a href="#" data-note-id="${note.id}" class="fn-view-in-list" style="font-size:11px;color:#10b981;text-decoration:none;font-weight:500">Bekijk in lijst →</a></div></div>`;
+
       const popup = L.popup({
         className: 'field-note-popup',
-        maxWidth: 240,
+        maxWidth: 260,
         closeButton: true,
-      }).setContent(popupContent);
+      }).setContent(styledContent);
 
       marker.bindPopup(popup);
 
@@ -207,6 +210,12 @@ export function FieldNotesMap({ notes, onNoteClick, onViewInList }: FieldNotesMa
         className="h-[500px] md:h-[600px] rounded-2xl overflow-hidden border border-white/[0.06]"
       />
       <style jsx global>{`
+        .leaflet-popup-pane {
+          z-index: 800 !important;
+        }
+        .leaflet-popup {
+          z-index: 800 !important;
+        }
         .field-note-tooltip {
           background: rgba(24, 24, 27, 0.95) !important;
           border: 1px solid rgba(255, 255, 255, 0.1) !important;
