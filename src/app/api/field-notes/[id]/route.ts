@@ -15,7 +15,7 @@ const UpdateNoteSchema = z.object({
   content: z.string().min(1).max(2000).optional(),
   status: z.enum(['open', 'done', 'transferred']).optional(),
   is_pinned: z.boolean().optional(),
-  parcel_id: z.string().nullable().optional(),
+  parcel_ids: z.array(z.string()).optional(),
 });
 
 /**
@@ -54,15 +54,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Notitie niet gevonden' }, { status: 404 });
     }
 
-    const { data, error } = await supabase
+    const { data: updated, error } = await supabase
       .from('field_notes')
       .update(result.data)
       .eq('id', id)
       .eq('user_id', user.id)
-      .select(`
-        *,
-        sub_parcel:sub_parcels(id, name, crop, variety)
-      `)
+      .select('*')
       .single();
 
     if (error) {
@@ -70,7 +67,18 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, data });
+    // Resolve sub_parcels for the updated parcel_ids
+    const parcelIds: string[] = updated.parcel_ids ?? [];
+    let sub_parcels: { id: string; name: string; crop: string; variety: string }[] = [];
+    if (parcelIds.length > 0) {
+      const { data: parcels } = await supabase
+        .from('sub_parcels')
+        .select('id, name, crop, variety')
+        .in('id', parcelIds);
+      sub_parcels = parcels ?? [];
+    }
+
+    return NextResponse.json({ success: true, data: { ...updated, sub_parcels } });
   } catch (error) {
     console.error('[Field Notes API] PATCH error:', error);
     return NextResponse.json(

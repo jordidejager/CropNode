@@ -337,7 +337,7 @@ const stats = [
   { icon: Shield, value: '1.000+', label: 'CTGB producten' },
   { icon: Cloud, value: '5', label: 'Weermodellen' },
   { icon: Zap, value: '<3s', label: 'AI response' },
-  { icon: Cpu, value: '9', label: 'Modules' },
+  { icon: Cpu, value: '10', label: 'Modules' },
 ];
 
 export function Hero() {
@@ -434,7 +434,7 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mt-8 text-lg sm:text-xl text-slate-400 max-w-xl mx-auto lg:mx-0 leading-relaxed"
             >
-              Van spraakgestuurde registraties tot real-time weermodellen.
+              Van WhatsApp-registraties tot real-time weermodellen.
               Het complete platform voor de moderne{' '}
               <span className="text-slate-200">fruitteelt</span>.
             </motion.p>

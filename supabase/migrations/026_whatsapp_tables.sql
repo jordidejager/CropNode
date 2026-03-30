@@ -26,6 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_phone
 -- RLS: users see only their own numbers
 ALTER TABLE whatsapp_linked_numbers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own numbers" ON whatsapp_linked_numbers;
+DROP POLICY IF EXISTS "Users can insert own numbers" ON whatsapp_linked_numbers;
+DROP POLICY IF EXISTS "Users can update own numbers" ON whatsapp_linked_numbers;
+DROP POLICY IF EXISTS "Users can delete own numbers" ON whatsapp_linked_numbers;
+
 CREATE POLICY "Users can view own numbers"
   ON whatsapp_linked_numbers FOR SELECT
   USING (auth.uid() = user_id);
@@ -62,6 +67,8 @@ CREATE INDEX IF NOT EXISTS idx_wa_conv_phone
   ON whatsapp_conversations(phone_number, state);
 
 ALTER TABLE whatsapp_conversations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own conversations" ON whatsapp_conversations;
 
 CREATE POLICY "Users can view own conversations"
   ON whatsapp_conversations FOR SELECT

@@ -1,12 +1,18 @@
 /**
- * @fileoverview Field Note Classification Flow
+ * @fileoverview Field Note Classification Flow — V2
  *
- * Single Gemini call that does two things:
+ * Single Gemini call that does three things:
  * 1. Classifies the note into a tag (bespuiting, bemesting, taak, waarneming, overig)
- * 2. Detects a parcel name/id from the note text
+ * 2. Detects ALL parcel/location/variety/group references in the text
+ * 3. Detects observation subject + category (for "waarneming" notes only)
  *
- * Used by the Veldnotities V2 feature for auto-tagging + parcel linking.
- * Follows the same Genkit pattern as classify-and-parse-spray.ts.
+ * Parcel resolution strategy mirrors V3 Slimme Invoer:
+ * - Match against parcel GROUPS (e.g., "spoor" → Spoor Noord + Spoor Zuid)
+ * - Match against parent PARCEL NAME / location (e.g., "jachthoek" → all Jachthoek sub-parcels)
+ * - Match against VARIETY (e.g., "conference" → all Conference sub-parcels)
+ * - Match against sub-parcel BLOCK NAME (e.g., "noord")
+ * - Match against SYNONYMS (user-defined aliases)
+ * - Handles crop patterns: "alle appels", "alle peren", "alles"
  */
 
 import { ai } from '@/ai/genkit';
@@ -14,26 +20,59 @@ import { z } from 'genkit';
 import { sanitizeForPrompt } from '@/lib/ai-sanitizer';
 
 // ============================================
-// Schemas
+// Types
+// ============================================
+
+export interface ParcelForClassification {
+  id: string;
+  name: string;        // sub-parcel block name (e.g., "Noord", "Blok 2")
+  parcel_name: string; // parent parcel / location name (e.g., "Jachthoek", "Steketee")
+  crop: string;        // "Appel" | "Peer"
+  variety: string | null; // "Conference", "Elstar", etc.
+  synonyms: string[];
+}
+
+export interface ParcelGroupForClassification {
+  id: string;
+  name: string;           // group name (e.g., "Spoor")
+  sub_parcel_ids: string[];
+}
+
+export interface ClassifyFieldNoteResult {
+  tag: 'bespuiting' | 'bemesting' | 'taak' | 'waarneming' | 'overig' | null;
+  parcel_ids: string[];
+  observation_subject: string | null;  // e.g., "Perenknopkever", "Bloedluis"
+  observation_category: 'insect' | 'schimmel' | 'ziekte' | 'fysiologisch' | 'overig' | null;
+}
+
+// ============================================
+// Gemini schema
 // ============================================
 
 const ClassifyFieldNoteInputSchema = z.object({
   content: z.string().describe('The raw field note text from the farmer'),
-  parcelsJson: z.string().describe('JSON array of available parcels: [{id, name, crop, variety}]'),
+  parcelContext: z.string().describe('Available parcel locations, groups, varieties and block names'),
+  photoUrl: z.string().optional().describe('Public URL of attached photo for vision analysis'),
 });
 
 const ClassifyFieldNoteOutputSchema = z.object({
   tag: z.enum(['bespuiting', 'bemesting', 'taak', 'waarneming', 'overig']).describe(
-    'The category of the note'
+    'Category of the note'
   ),
-  parcel_id: z.string().nullable().describe(
-    'The sub_parcel id if a parcel name was detected in the note, otherwise null'
+  parcel_mentions: z.array(z.string()).describe(
+    'Exact words/phrases from the note text that refer to parcel locations, groups, varieties, blocks, or crops'
+  ),
+  observation_subject: z.string().nullable().describe(
+    'For waarneming only: the exact pest/disease/disorder name from the text (e.g., "Perenknopkever", "Bloedluis", "Schurft"). Null for other tags.'
+  ),
+  observation_category: z.enum(['insect', 'schimmel', 'ziekte', 'fysiologisch', 'overig']).nullable().describe(
+    'For waarneming only: category of the observation. Null for other tags.'
   ),
   confidence: z.number().describe('Confidence score 0.0–1.0'),
 });
 
 // ============================================
-// Flow
+// Gemini flow
 // ============================================
 
 const classifyFieldNoteFlow = ai.defineFlow(
@@ -43,44 +82,83 @@ const classifyFieldNoteFlow = ai.defineFlow(
     outputSchema: ClassifyFieldNoteOutputSchema,
   },
   async (input) => {
-    const { output } = await ai.generate({
-      model: 'googleai/gemini-2.5-flash-lite',
-      prompt: `Je bent een classificatie-assistent voor een fruitteler-platform. Analyseer de volgende notitie van een Nederlandse fruitteler.
+    const hasPhoto = !!input.photoUrl;
 
-Doe twee dingen:
+    const promptText = `Je bent een classificatie-assistent voor een fruitteler-platform. Analyseer de volgende notitie van een Nederlandse fruitteler.${hasPhoto ? ' Er is ook een foto bijgevoegd.' : ''}
 
-1. CATEGORIE — classificeer de notitie in exact één van deze categorieën:
-   - "bespuiting" — gaat over spuiten, gewasbescherming, fungicide, insecticide, middelen (bijv. Captan, Delan, Score, Merpan, Luna Sensation, spuiten)
-   - "bemesting" — gaat over bemesten, meststoffen, voeding, bladvoeding (bijv. MKP, Ureum, kalium, stikstof, strooien)
-   - "taak" — een to-do, actie, reminder, iets dat gedaan moet worden (bijv. bellen, checken, bestellen, repareren, regelen)
-   - "waarneming" — een observatie in het veld (bijv. schurft gezien, luis ontdekt, bloei, vruchtzetting, hagelschade, beschadiging)
-   - "overig" — past niet in bovenstaande categorieën
+Doe ${hasPhoto ? 'vier' : 'drie'} dingen:
 
-2. PERCEEL — Strikte regels:
-   - Geef alleen een parcel_id als de EXACTE perceelnaam (of een duidelijke afkorting ervan) letterlijk in de notitietekst voorkomt.
-   - Raad NOOIT een perceel op basis van gewas, ras, of indirecte aanwijzingen.
-   - Als MEERDERE percelen worden genoemd → geef null (we kunnen maar één koppelen).
-   - Als de naam NIET letterlijk in de tekst staat → geef null.
-   - Twijfel? → geef null.
+1. CATEGORIE — classificeer in exact één categorie:
+   - "bespuiting" — spuiten, gewasbescherming, fungicide, insecticide, middelen (Captan, Delan, Score, Merpan, Luna Sensation)
+   - "bemesting" — bemesten, meststoffen, voeding, bladvoeding (MKP, Ureum, kalium, stikstof, strooien)
+   - "taak" — to-do, actie, reminder (bellen, checken, bestellen, repareren, regelen)
+   - "waarneming" — observatie in het veld (ziekte gezien, plaag ontdekt, bloei, vruchtzetting, hagelschade)
+   - "overig" — past niet in bovenstaande
 
-Beschikbare percelen:
-${input.parcelsJson}
+2. PERCEELVERMELDINGEN — geef alle exacte woorden/zinsdelen terug uit de tekst die verwijzen naar:
+   - Locaties/perceelnamen (bijv. "jachthoek", "steketee", "koleswei", "yese", "spoor")
+   - Perceelgroepen (bijv. "spoor" als dat een groepsnaam is)
+   - Rassen als perceelverwijzing (bijv. "conference", "elstar", "kanzi") — ALLEEN als ze als locatie gebruikt worden, niet als productbeschrijving
+   - Blokken (bijv. "noord", "oost", "blok 1")
+   - Gewasgroepen: "alle appels", "alle peren", "alles", "de peren", "de appels" → letterlijk teruggeven
 
+   ${input.parcelContext ? `Beschikbare percelen: ${input.parcelContext}` : ''}
+
+   NOOIT: productnamen, doseringen, merknamen, datums, tijdsaanduidingen
+   Altijd een array: ["koleswei"] of ["jachthoek", "steketee"] of []
+
+3. WAARNEMING (alleen als tag="waarneming") — extraheer het geobserveerde:
+   - observation_subject: de exacte naam van de plaag/ziekte/aandoening uit de tekst
+     Voorbeelden: "Perenknopkever", "Bloedluis", "Appelbloesemkever", "Schurft", "Meeldauw", "Hagelschade"
+   - observation_category:
+     * "insect" — insecten en mijten (bloedluis, perenknopkever, appelbloesemkever, spintmijt, fruitmot, schildluis, letselmuisje)
+     * "schimmel" — schimmelziekten (schurft, meeldauw, monilia, kanker, roest)
+     * "ziekte" — bacteriële/virale ziekten (bacterievuur, pseudomonas, phytophthora)
+     * "fysiologisch" — fysieke beschadiging of fysiologische problemen (hagel, vorst, zonnebrand, stip, droogval, glazigheid)
+     * "overig" — overige waarnemingen (bloei, vruchtzetting, kleur, groei)
+   - Als tag NIET "waarneming" is → geef null voor beide
+${hasPhoto ? `
+4. FOTOANALYSE — Bekijk de bijgevoegde foto en gebruik deze om:
+   - De categorie nauwkeuriger te bepalen (zichtbare ziekte/plaag → waarneming)
+   - Het onderwerp van de waarneming te identificeren (specifieke plaag of ziekte op het blad/vrucht)
+   - Als de tekst vaag is maar de foto duidelijk een ziekte/plaag toont, gebruik de foto als primaire bron
+   - Dit is een AI-suggestie, geen diagnose
+` : ''}
 Notitie: "${sanitizeForPrompt(input.content)}"
 
-Antwoord ALLEEN met JSON, geen uitleg:
+Antwoord ALLEEN met JSON:
 {
-  "tag": "bespuiting" | "bemesting" | "taak" | "waarneming" | "overig",
-  "parcel_id": "perceel-id-string" | null,
-  "confidence": 0.0 t/m 1.0
-}`,
+  "tag": "...",
+  "parcel_mentions": ["..."],
+  "observation_subject": "..." | null,
+  "observation_category": "..." | null,
+  "confidence": 0.0
+}`;
+
+    // Build multimodal prompt: text + optional photo
+    const prompt = hasPhoto
+      ? [
+          { text: promptText },
+          { media: { url: input.photoUrl!, contentType: 'image/jpeg' } },
+        ]
+      : promptText;
+
+    const { output } = await ai.generate({
+      model: 'googleai/gemini-2.5-flash-lite',
+      prompt,
       output: {
         schema: ClassifyFieldNoteOutputSchema,
       },
     });
 
     if (!output) {
-      return { tag: 'overig' as const, parcel_id: null, confidence: 0 };
+      return {
+        tag: 'overig' as const,
+        parcel_mentions: [],
+        observation_subject: null,
+        observation_category: null,
+        confidence: 0,
+      };
     }
 
     return output;
@@ -88,49 +166,134 @@ Antwoord ALLEEN met JSON, geen uitleg:
 );
 
 // ============================================
+// Parcel context builder
+// ============================================
+
+function buildParcelContext(
+  parcels: ParcelForClassification[],
+  groups: ParcelGroupForClassification[]
+): string {
+  const locations = [...new Set(parcels.map(p => p.parcel_name).filter(n => n.length > 0))].slice(0, 25);
+  const varieties = [...new Set(parcels.map(p => p.variety).filter(Boolean) as string[])].slice(0, 20);
+  const groupNames = groups.map(g => g.name);
+
+  const parts: string[] = [];
+  if (locations.length) parts.push(`Locaties: ${locations.join(', ')}`);
+  if (groupNames.length) parts.push(`Groepen: ${groupNames.join(', ')}`);
+  if (varieties.length) parts.push(`Rassen: ${varieties.join(', ')}`);
+
+  return parts.join(' | ');
+}
+
+// ============================================
+// Parcel resolver (V3-style)
+// ============================================
+
+// Crop keywords that map to crop names
+const CROP_KEYWORDS: Record<string, string[]> = {
+  'appel': ['Appel'],
+  'appels': ['Appel'],
+  'alle appels': ['Appel'],
+  'alle appel': ['Appel'],
+  'de appels': ['Appel'],
+  'peer': ['Peer'],
+  'peren': ['Peer'],
+  'alle peren': ['Peer'],
+  'alle peer': ['Peer'],
+  'de peren': ['Peer'],
+  'alles': ['Appel', 'Peer'],
+  'overal': ['Appel', 'Peer'],
+  'heel bedrijf': ['Appel', 'Peer'],
+  'hele bedrijf': ['Appel', 'Peer'],
+};
+
+function resolveParcelIds(
+  mentions: string[],
+  parcels: ParcelForClassification[],
+  groups: ParcelGroupForClassification[]
+): string[] {
+  const ids = new Set<string>();
+
+  for (const mention of mentions) {
+    const m = mention.toLowerCase().trim();
+    if (m.length < 2) continue;
+
+    // 0. Crop/global patterns ("alle appels", "peren", "alles")
+    const cropMatch = CROP_KEYWORDS[m];
+    if (cropMatch) {
+      parcels.filter(p => cropMatch.includes(p.crop)).forEach(p => ids.add(p.id));
+      continue; // crop pattern is definitive
+    }
+
+    // 1. Parcel group — name prefix or exact match
+    for (const g of groups) {
+      const gn = g.name.toLowerCase();
+      if (gn.startsWith(m) || m.startsWith(gn)) {
+        g.sub_parcel_ids.forEach(id => ids.add(id));
+      }
+    }
+
+    // 2. Parent parcel / location — prefix match (highest priority for normal mentions)
+    // "jachthoek" → all sub-parcels where parcel_name starts with "jachthoek"
+    parcels
+      .filter(p => p.parcel_name.toLowerCase().startsWith(m))
+      .forEach(p => ids.add(p.id));
+
+    // 3. Sub-parcel block name — prefix match
+    // "noord" → all sub-parcels where block name starts with "noord"
+    parcels
+      .filter(p => p.name.toLowerCase().startsWith(m))
+      .forEach(p => ids.add(p.id));
+
+    // 4. Variety — prefix match
+    // "conference" → all sub-parcels with variety starting with "conference"
+    parcels
+      .filter(p => p.variety?.toLowerCase().startsWith(m))
+      .forEach(p => ids.add(p.id));
+
+    // 5. Synonyms — exact match (user-defined aliases)
+    for (const p of parcels) {
+      if (p.synonyms.some(s => s.toLowerCase() === m)) {
+        ids.add(p.id);
+      }
+    }
+  }
+
+  return [...ids];
+}
+
+// ============================================
 // Public API
 // ============================================
 
-export interface ParcelForClassification {
-  id: string;
-  name: string;
-  crop: string;
-  variety: string;
-}
-
-export interface ClassifyFieldNoteResult {
-  tag: 'bespuiting' | 'bemesting' | 'taak' | 'waarneming' | 'overig' | null;
-  parcel_id: string | null;
-}
-
 /**
- * Classify a field note: detect tag + parcel in a single AI call.
- * Returns null values on failure — never throws.
- * Low confidence (<0.5) tag is discarded (returns null).
+ * Classify a field note using a single Gemini call.
+ * Returns tag, parcel_ids (resolved from all match strategies), and observation metadata.
+ * Never throws — returns null values on failure.
  */
 export async function classifyFieldNote(
   content: string,
-  parcels: ParcelForClassification[]
+  parcels: ParcelForClassification[],
+  groups: ParcelGroupForClassification[] = [],
+  photoUrl?: string | null
 ): Promise<ClassifyFieldNoteResult> {
   try {
-    const parcelsCompact = parcels.slice(0, 50).map(p => ({
-      id: p.id,
-      name: p.name,
-      crop: p.crop,
-      variety: p.variety,
-    }));
-
+    const parcelContext = buildParcelContext(parcels, groups);
     const result = await classifyFieldNoteFlow({
       content,
-      parcelsJson: JSON.stringify(parcelsCompact),
+      parcelContext,
+      ...(photoUrl ? { photoUrl } : {}),
     });
+    const parcel_ids = resolveParcelIds(result.parcel_mentions ?? [], parcels, groups);
 
     return {
       tag: result.confidence >= 0.6 ? result.tag : null,
-      parcel_id: result.parcel_id ?? null,
+      parcel_ids,
+      observation_subject: result.observation_subject ?? null,
+      observation_category: result.observation_category ?? null,
     };
   } catch (error) {
-    console.error('[classifyFieldNote] AI classification failed:', error);
-    return { tag: null, parcel_id: null };
+    console.error('[classifyFieldNote] failed:', error);
+    return { tag: null, parcel_ids: [], observation_subject: null, observation_category: null };
   }
 }

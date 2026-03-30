@@ -4,7 +4,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   StickyNote, Search, Pin, Trash2, Check, ChevronDown, ChevronUp,
   NotebookPen, Send, Droplets, Leaf, ListTodo, Eye, Tag, MapPin,
-  MapPinPlus, ArrowRight, CheckCircle2
+  MapPinPlus, ArrowRight, CheckCircle2, Bug, Shrub, Activity, Wind, Info,
+  Camera, X, Loader2, List, MapIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,6 +13,13 @@ import {
   type FieldNote
 } from '@/hooks/use-field-notes';
 import { useParcels } from '@/hooks/use-data';
+import { PhotoLightbox } from '@/components/field-notes/PhotoLightbox';
+import dynamic from 'next/dynamic';
+
+const FieldNotesMap = dynamic(
+  () => import('@/components/field-notes/FieldNotesMap').then(m => m.FieldNotesMap),
+  { ssr: false, loading: () => <div className="h-[500px] md:h-[600px] rounded-2xl bg-white/[0.03] animate-pulse" /> }
+);
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -115,9 +123,25 @@ function formatRelativeTime(dateStr: string): string {
 // QUICK ADD INPUT
 // ============================================================================
 
-function QuickAddInput({ onSubmit, compact = false }: { onSubmit: (content: string) => void; compact?: boolean }) {
+interface QuickAddSubmitData {
+  content: string;
+  photo?: File;
+  latitude?: number;
+  longitude?: number;
+}
+
+function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
+  onSubmit: (data: QuickAddSubmitData) => void;
+  compact?: boolean;
+  isUploading?: boolean;
+}) {
   const [value, setValue] = useState('');
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -128,14 +152,66 @@ function QuickAddInput({ onSubmit, compact = false }: { onSubmit: (content: stri
 
   useEffect(() => { autoResize(); }, [value, autoResize]);
 
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => { if (photoPreview) URL.revokeObjectURL(photoPreview); };
+  }, [photoPreview]);
+
+  const handlePhotoSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+
+    // Try EXIF GPS as fallback (only if no manual GPS)
+    if (!gpsLocation) {
+      try {
+        const { extractGpsFromPhoto } = await import('@/lib/photo-upload');
+        const coords = await extractGpsFromPhoto(file);
+        if (coords) setGpsLocation(coords);
+      } catch { /* ignore */ }
+    }
+
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+  }, [gpsLocation]);
+
+  const handleRemovePhoto = useCallback(() => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPendingPhoto(null);
+    setPhotoPreview(null);
+  }, [photoPreview]);
+
+  const handleGps = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setIsLocating(false);
+      },
+      () => { setIsLocating(false); }, // Silent fail
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || trimmed.length > 2000) return;
-    onSubmit(trimmed);
+    if (!trimmed || trimmed.length > 2000 || isUploading) return;
+    onSubmit({
+      content: trimmed,
+      photo: pendingPhoto ?? undefined,
+      latitude: gpsLocation?.lat,
+      longitude: gpsLocation?.lng,
+    });
     setValue('');
+    setPendingPhoto(null);
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(null);
+    setGpsLocation(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setTimeout(() => textareaRef.current?.focus(), 0);
-  }, [value, onSubmit]);
+  }, [value, onSubmit, pendingPhoto, gpsLocation, photoPreview, isUploading]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
@@ -155,39 +231,119 @@ function QuickAddInput({ onSubmit, compact = false }: { onSubmit: (content: stri
             <span className="text-xs font-semibold text-white/40">Nieuwe notitie</span>
           </div>
         )}
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={compact
-              ? "Snelle notitie..."
-              : "Typ je notitie... bijv. 'Blok 3 Elstar morgen spuiten met Delan'"
-            }
-            rows={1}
-            maxLength={2000}
-            className={cn(
-              'w-full bg-transparent text-white/90 placeholder:text-white/20 resize-none outline-none',
-              compact ? 'text-sm pr-10' : 'text-sm md:text-base pr-12'
-            )}
-          />
+
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={compact
+            ? "Snelle notitie..."
+            : "Typ je notitie... bijv. 'Blok 3 Elstar morgen spuiten met Delan'"
+          }
+          rows={1}
+          maxLength={2000}
+          className={cn(
+            'w-full bg-transparent text-white/90 placeholder:text-white/20 resize-none outline-none',
+            compact ? 'text-sm' : 'text-sm md:text-base'
+          )}
+        />
+
+        {/* Photo preview */}
+        {photoPreview && (
+          <div className="relative inline-block mt-2">
+            <img
+              src={photoPreview}
+              alt="Preview"
+              className="h-12 w-12 rounded-lg object-cover border border-white/[0.08]"
+            />
+            <button
+              onClick={handleRemovePhoto}
+              className="absolute -top-1.5 -right-1.5 h-5 w-5 flex items-center justify-center rounded-full bg-zinc-800 border border-white/10 text-white/60 hover:text-white transition-colors"
+              aria-label="Foto verwijderen"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Action buttons row */}
+        {!compact && (
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-1">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
+
+              {/* Camera button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  'h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200',
+                  pendingPhoto
+                    ? 'text-emerald-400 bg-emerald-500/10'
+                    : 'text-white/25 hover:text-white/50 hover:bg-white/[0.05]'
+                )}
+                aria-label="Foto maken"
+              >
+                <Camera className="h-4 w-4" />
+              </button>
+
+              {/* GPS button */}
+              <button
+                onClick={handleGps}
+                disabled={isLocating}
+                className={cn(
+                  'h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200',
+                  gpsLocation
+                    ? 'text-emerald-400 bg-emerald-500/10'
+                    : 'text-white/25 hover:text-white/50 hover:bg-white/[0.05]',
+                  isLocating && 'animate-pulse'
+                )}
+                aria-label="Locatie vastleggen"
+              >
+                <MapPin className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Submit button */}
+            <button
+              onClick={handleSubmit}
+              disabled={!value.trim() || isUploading}
+              className={cn(
+                'h-8 w-8 flex items-center justify-center rounded-xl transition-all duration-200',
+                'text-emerald-400/40 hover:text-emerald-400 hover:bg-emerald-500/10',
+                'disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-emerald-400/40',
+              )}
+              aria-label="Opslaan"
+            >
+              {isUploading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Send className="h-4 w-4" />
+              }
+            </button>
+          </div>
+        )}
+
+        {compact && (
           <button
             onClick={handleSubmit}
-            disabled={!value.trim()}
-            className={cn(
-              'absolute right-0 bottom-0 flex items-center justify-center rounded-xl transition-all duration-200',
-              'text-emerald-400/40 hover:text-emerald-400 hover:bg-emerald-500/10',
-              'disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-emerald-400/40',
-              compact ? 'h-8 w-8' : 'h-9 w-9 md:h-8 md:w-8'
-            )}
+            disabled={!value.trim() || isUploading}
+            className="absolute right-3 bottom-3 h-8 w-8 flex items-center justify-center rounded-xl text-emerald-400/40 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 transition-all duration-200"
             aria-label="Opslaan"
           >
-            <Send className={cn(compact ? 'h-4 w-4' : 'h-4 w-4 md:h-3.5 md:w-3.5')} />
+            <Send className="h-4 w-4" />
           </button>
-        </div>
+        )}
+
         {!compact && (
-          <p className="text-[10px] text-white/15 mt-2 hidden md:block">
+          <p className="text-[10px] text-white/15 mt-1 hidden md:block">
             Enter om op te slaan · Shift+Enter voor nieuwe regel
           </p>
         )}
@@ -266,10 +422,33 @@ function ParcelSelector({ currentParcelId, onSelect, onClose }: ParcelSelectorPr
 }
 
 // ============================================================================
+// OBSERVATION HELPERS
+// ============================================================================
+
+const OBSERVATION_CATEGORY_LABELS: Record<string, string> = {
+  insect: 'Insect',
+  schimmel: 'Schimmel',
+  ziekte: 'Ziekte',
+  fysiologisch: 'Fysiologisch',
+  overig: 'Overig',
+};
+
+function ObservationIcon({ category }: { category: string | null }) {
+  const cls = 'h-2.5 w-2.5';
+  switch (category) {
+    case 'insect': return <Bug className={cls} />;
+    case 'schimmel': return <Shrub className={cls} />;
+    case 'ziekte': return <Activity className={cls} />;
+    case 'fysiologisch': return <Wind className={cls} />;
+    default: return <Info className={cls} />;
+  }
+}
+
+// ============================================================================
 // NOTE CARD
 // ============================================================================
 
-function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdateParcel, onTransfer }: {
+function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdateParcel, onTransfer, onPhotoClick, onObservationFilter }: {
   note: FieldNote;
   onToggleStatus: () => void;
   onTogglePin: () => void;
@@ -277,6 +456,8 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
   onEdit: (content: string) => void;
   onUpdateParcel: (parcelId: string | null) => void;
   onTransfer: () => void;
+  onPhotoClick?: (url: string) => void;
+  onObservationFilter?: (subject: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(note.content);
@@ -314,6 +495,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
 
   return (
     <motion.div
+      id={`note-${note.id}`}
       layout
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -381,9 +563,25 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
           </div>
         )}
 
+        {/* Photo thumbnail */}
+        {note.photo_url && (
+          <button
+            onClick={() => onPhotoClick?.(note.photo_url!)}
+            className="mt-2 rounded-xl overflow-hidden border border-white/[0.08] hover:border-emerald-500/30 transition-colors flex-shrink-0"
+          >
+            <img
+              src={note.photo_url}
+              alt="Veldnotitie foto"
+              loading="lazy"
+              className="h-20 w-20 object-cover"
+            />
+          </button>
+        )}
+
         {/* Badges row: timestamp + tags + perceel */}
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-          <span className={cn('text-[11px] tabular-nums', isDone || isTransferred ? 'text-white/15' : 'text-white/25')}>
+          <span className={cn('text-[11px] tabular-nums inline-flex items-center gap-1', isDone || isTransferred ? 'text-white/15' : 'text-white/25')}>
+            {note.source === 'whatsapp' && <span title="Via WhatsApp" className="text-[10px]">💬</span>}
             {formatRelativeTime(note.created_at)}
           </span>
 
@@ -405,11 +603,30 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
             </span>
           )}
 
-          {/* Parcel badge */}
-          {note.sub_parcel && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10px] text-white/40 font-medium">
+          {/* Parcel badges — deduplicated by location name, max 4 */}
+          {[...new Map(
+            (note.sub_parcels ?? []).map(sp => [sp.parcel_name || sp.name, sp])
+          ).values()].slice(0, 4).map(sp => (
+            <span key={sp.parcel_name || sp.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10px] text-white/40 font-medium">
               <MapPin className="h-2.5 w-2.5" />
-              <span className="max-w-[80px] truncate">{note.sub_parcel.name}</span>
+              <span className="max-w-[100px] truncate">{sp.parcel_name || sp.name}</span>
+            </span>
+          ))}
+
+          {/* Observation badges — clickable to filter */}
+          {note.observation_subject && (
+            <button
+              onClick={() => onObservationFilter?.(note.observation_subject!)}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-medium hover:bg-amber-500/20 transition-colors cursor-pointer"
+              title={`Filter op ${note.observation_subject}`}
+            >
+              <ObservationIcon category={note.observation_category} />
+              <span className="max-w-[100px] truncate">{note.observation_subject}</span>
+            </button>
+          )}
+          {note.observation_category && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/[0.06] border border-amber-500/[0.12] text-[10px] text-amber-500/60 font-medium">
+              {OBSERVATION_CATEGORY_LABELS[note.observation_category]}
             </span>
           )}
         </div>
@@ -434,7 +651,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
             onClick={() => setShowParcelSelector(!showParcelSelector)}
             className={cn(
               'h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200',
-              note.parcel_id
+              (note.parcel_ids?.length ?? 0) > 0
                 ? 'text-emerald-400 hover:bg-emerald-500/10'
                 : 'text-white/30 hover:text-emerald-400 hover:bg-emerald-500/10'
             )}
@@ -444,7 +661,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
           </button>
           {showParcelSelector && (
             <ParcelSelector
-              currentParcelId={note.parcel_id}
+              currentParcelId={(note.parcel_ids ?? [])[0] ?? null}
               onSelect={onUpdateParcel}
               onClose={() => setShowParcelSelector(false)}
             />
@@ -604,12 +821,52 @@ export function VeldnotitiesClient() {
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('all');
   const [activeTags, setActiveTags] = useState<Tag[]>([]);
   const [activeParcelId, setActiveParcelId] = useState<string | null>(null);
+  const [activeObservation, setActiveObservation] = useState<string | null>(null);
   const [transferNoteId, setTransferNoteId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'invoer' | 'kaart' | 'archief'>('invoer');
+  const [dateFilter, setDateFilter] = useState<'week' | 'month' | 'season' | 'all'>('all');
+  const [archiveCategory, setArchiveCategory] = useState<Tag | null>(null);
 
   const transferNote = transferNoteId ? notes?.find(n => n.id === transferNoteId) : null;
 
-  const handleCreate = useCallback((content: string) => {
-    createMutation.mutate(content, {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleCreate = useCallback(async (data: QuickAddSubmitData) => {
+    let photo_url: string | null = null;
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+
+    // Try photo upload — failure never blocks note saving
+    if (data.photo) {
+      try {
+        setIsUploading(true);
+        const { compressPhoto, uploadPhotoToSupabase } = await import('@/lib/photo-upload');
+        const compressed = await compressPhoto(data.photo);
+        const { data: { user } } = await (await import('@/lib/supabase/client')).createClient().auth.getUser();
+        if (user) {
+          photo_url = await uploadPhotoToSupabase(compressed, user.id);
+        }
+      } catch (err) {
+        console.error('[Photo upload] failed:', err);
+        // Don't show toast — just save without photo
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    // Only include GPS if available
+    if (data.latitude != null && data.longitude != null) {
+      latitude = data.latitude;
+      longitude = data.longitude;
+    }
+
+    // Always save the note — even if photo/GPS failed
+    createMutation.mutate({
+      content: data.content,
+      ...(photo_url ? { photo_url } : {}),
+      ...(latitude != null ? { latitude, longitude } : {}),
+    }, {
       onError: (err) => {
         toast({ title: 'Fout', description: err.message, variant: 'destructive' });
       },
@@ -641,7 +898,10 @@ export function VeldnotitiesClient() {
   }, [updateMutation]);
 
   const handleUpdateParcel = useCallback((note: FieldNote, parcelId: string | null) => {
-    updateMutation.mutate({ id: note.id, updates: { parcel_id: parcelId } });
+    const parcel_ids = parcelId
+      ? [...new Set([...(note.parcel_ids ?? []), parcelId])]
+      : [];
+    updateMutation.mutate({ id: note.id, updates: { parcel_ids } });
   }, [updateMutation]);
 
   const handleTagToggle = useCallback((tag: Tag) => {
@@ -671,11 +931,37 @@ export function VeldnotitiesClient() {
     }
 
     if (activeParcelId) {
-      result = result.filter(n => n.parcel_id === activeParcelId);
+      result = result.filter(n => (n.parcel_ids ?? []).includes(activeParcelId));
+    }
+
+    if (activeObservation) {
+      result = result.filter(n => n.observation_subject === activeObservation);
+    }
+
+    // Date filter (used by map and archive tabs)
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      let cutoff: Date;
+      switch (dateFilter) {
+        case 'week': cutoff = new Date(now.getTime() - 7 * 86400000); break;
+        case 'month': cutoff = new Date(now.getTime() - 30 * 86400000); break;
+        case 'season': {
+          // Season starts Aug 1 of current or previous year
+          const year = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+          cutoff = new Date(year, 7, 1);
+          break;
+        }
+      }
+      result = result.filter(n => new Date(n.created_at) >= cutoff);
+    }
+
+    // Archive category filter
+    if (archiveCategory) {
+      result = result.filter(n => n.auto_tag === archiveCategory);
     }
 
     return result;
-  }, [notes, searchQuery, activeStatus, activeTags, activeParcelId]);
+  }, [notes, searchQuery, activeStatus, activeTags, activeParcelId, activeObservation, dateFilter, archiveCategory]);
 
   return (
     <div className="max-w-3xl mx-auto pb-12 relative">
@@ -683,18 +969,51 @@ export function VeldnotitiesClient() {
 
       <div className="relative space-y-6">
         {/* Page header */}
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-            <StickyNote className="h-5 w-5 text-emerald-400" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <StickyNote className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-white/90">Veldnotities</h1>
+              <p className="text-xs text-white/30">Snelle notities vanuit het veld</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold text-white/90">Veldnotities</h1>
-            <p className="text-xs text-white/30">Snelle notities vanuit het veld</p>
+
+          {/* 3-tab navigation: Invoer / Kaart / Archief */}
+          <div className="flex items-center gap-1 rounded-xl border border-white/[0.08] p-0.5">
+            {([
+              { key: 'invoer' as const, label: 'Invoer', icon: List, badge: (notes ?? []).filter(n => n.status === 'open').length },
+              { key: 'kaart' as const, label: 'Kaart', icon: MapIcon, badge: (notes ?? []).filter(n => n.latitude != null).length },
+              { key: 'archief' as const, label: 'Archief', icon: StickyNote, badge: null },
+            ]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setViewMode(tab.key)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                  viewMode === tab.key
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'text-white/30 hover:text-white/50 hover:bg-white/[0.04]'
+                )}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {tab.badge != null && tab.badge > 0 && (
+                  <span className={cn(
+                    'text-[9px] px-1.5 py-0.5 rounded-full font-semibold',
+                    viewMode === tab.key ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/[0.06] text-white/25'
+                  )}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Quick add */}
-        <QuickAddInput onSubmit={handleCreate} />
+        <QuickAddInput onSubmit={handleCreate} isUploading={isUploading} />
 
         {/* Search + filter bar */}
         <div className="space-y-3">
@@ -734,38 +1053,270 @@ export function VeldnotitiesClient() {
           />
         </div>
 
-        {/* Notes list */}
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
-          {isLoading ? (
-            <NotesSkeleton />
-          ) : !notes || notes.length === 0 ? (
-            <EmptyState />
-          ) : filteredNotes.length === 0 ? (
-            <div className="py-10 text-center">
-              <p className="text-sm text-white/30">Geen notities gevonden</p>
-            </div>
-          ) : (
-            <AnimatePresence mode="popLayout">
-              {filteredNotes.map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onToggleStatus={() => handleToggleStatus(note)}
-                  onTogglePin={() => handleTogglePin(note)}
-                  onDelete={() => handleDelete(note)}
-                  onEdit={(content) => handleEdit(note, content)}
-                  onUpdateParcel={(parcelId) => handleUpdateParcel(note, parcelId)}
-                  onTransfer={() => setTransferNoteId(note.id)}
-                />
-              ))}
-            </AnimatePresence>
-          )}
-        </div>
+        {/* Active observation filter chip */}
+        {activeObservation && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-white/30">Filter:</span>
+            <button
+              onClick={() => setActiveObservation(null)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400 font-medium hover:bg-amber-500/20 transition-colors"
+            >
+              {activeObservation}
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
 
-        {notes && notes.length > 0 && (
-          <p className="text-[11px] text-white/15 text-center">
-            {filteredNotes.length} van {notes.length} notities
-          </p>
+        {/* Datum filter — only on kaart + archief tabs */}
+        {(viewMode === 'kaart' || viewMode === 'archief') && (
+          <div className="flex items-center gap-2">
+            {(['all', 'week', 'month', 'season'] as const).map(d => (
+              <button
+                key={d}
+                onClick={() => setDateFilter(d)}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors',
+                  dateFilter === d
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                    : 'text-white/30 hover:text-white/50 hover:bg-white/[0.04] border border-transparent'
+                )}
+              >
+                {{ all: 'Alles', week: 'Deze week', month: 'Deze maand', season: 'Dit seizoen' }[d]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ═══ TAB CONTENT ═══ */}
+
+        {/* ── INVOER TAB ── */}
+        {viewMode === 'invoer' && (
+          <>
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+              {isLoading ? (
+                <NotesSkeleton />
+              ) : !notes || notes.length === 0 ? (
+                <EmptyState />
+              ) : filteredNotes.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-white/30">Geen notities gevonden</p>
+                </div>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {filteredNotes.map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onToggleStatus={() => handleToggleStatus(note)}
+                      onTogglePin={() => handleTogglePin(note)}
+                      onDelete={() => handleDelete(note)}
+                      onEdit={(content) => handleEdit(note, content)}
+                      onUpdateParcel={(parcelId) => handleUpdateParcel(note, parcelId)}
+                      onTransfer={() => setTransferNoteId(note.id)}
+                      onPhotoClick={(url) => setLightboxUrl(url)}
+                      onObservationFilter={(subject) => setActiveObservation(subject)}
+                    />
+                  ))}
+                </AnimatePresence>
+              )}
+            </div>
+
+            {notes && notes.length > 0 && (
+              <p className="text-[11px] text-white/15 text-center">
+                {filteredNotes.length} van {notes.length} notities
+              </p>
+            )}
+          </>
+        )}
+
+        {/* ── KAART TAB ── */}
+        {viewMode === 'kaart' && (() => {
+          const geoNotes = filteredNotes.filter(n => n.latitude != null && n.longitude != null);
+          return geoNotes.length > 0 ? (
+            <>
+              <FieldNotesMap
+                notes={filteredNotes}
+                onViewInList={(noteId) => {
+                  setViewMode('invoer');
+                  // Brief delay then scroll to note — the note should be visible in the list
+                  setTimeout(() => {
+                    document.getElementById(`note-${noteId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
+              />
+              <p className="text-[11px] text-white/15 text-center">
+                {geoNotes.length} notitie{geoNotes.length !== 1 ? 's' : ''} met locatie
+                {filteredNotes.length > geoNotes.length && (
+                  <span> · {filteredNotes.length - geoNotes.length} zonder locatie (alleen in lijst)</span>
+                )}
+              </p>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-16 text-center">
+              <MapPin className="h-8 w-8 text-white/10 mx-auto mb-3" />
+              <p className="text-sm text-white/30">Geen notities met locatie</p>
+              <p className="text-xs text-white/15 mt-1">Gebruik de 📍 knop bij het maken van een notitie</p>
+            </div>
+          );
+        })()}
+
+        {/* ── ARCHIEF TAB ── */}
+        {viewMode === 'archief' && (
+          <div className="space-y-6">
+            {/* Category cards grid */}
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {(Object.entries(TAG_CONFIG) as [Tag, typeof TAG_CONFIG[Tag]][]).map(([key, cfg]) => {
+                const count = (notes ?? []).filter(n => n.auto_tag === key).length;
+                const Icon = cfg.icon;
+                const isActive = archiveCategory === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setArchiveCategory(isActive ? null : key)}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all',
+                      isActive
+                        ? `${cfg.bg} ${cfg.border} ${cfg.text}`
+                        : 'border-white/[0.06] bg-white/[0.02] text-white/40 hover:bg-white/[0.04]'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="text-[10px] font-semibold">{cfg.label}</span>
+                    <span className={cn('text-lg font-bold', isActive ? cfg.text : 'text-white/60')}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Sub-tag filter chips (when a category is selected) */}
+            {archiveCategory && (() => {
+              const subTags = [...new Set(
+                (notes ?? [])
+                  .filter(n => n.auto_tag === archiveCategory && n.observation_subject)
+                  .map(n => n.observation_subject!)
+              )];
+              return subTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setActiveObservation(null)}
+                    className={cn(
+                      'px-2 py-1 rounded-full text-[10px] font-medium border transition-colors',
+                      !activeObservation
+                        ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
+                        : 'border-white/[0.08] text-white/30 hover:bg-white/[0.04]'
+                    )}
+                  >
+                    Alle
+                  </button>
+                  {subTags.map(st => (
+                    <button
+                      key={st}
+                      onClick={() => setActiveObservation(activeObservation === st ? null : st)}
+                      className={cn(
+                        'px-2 py-1 rounded-full text-[10px] font-medium border transition-colors',
+                        activeObservation === st
+                          ? 'bg-amber-500/15 border-amber-500/25 text-amber-400'
+                          : 'border-white/[0.08] text-white/30 hover:bg-white/[0.04]'
+                      )}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              ) : null;
+            })()}
+
+            {/* Timeline grouped by month */}
+            <div className="space-y-4">
+              {(() => {
+                // Group notes by month
+                const grouped = new Map<string, FieldNote[]>();
+                for (const note of filteredNotes) {
+                  const d = new Date(note.created_at);
+                  const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+                  const label = d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+                  if (!grouped.has(key)) grouped.set(key, []);
+                  grouped.get(key)!.push(note);
+                }
+
+                if (grouped.size === 0) {
+                  return (
+                    <div className="py-10 text-center">
+                      <p className="text-sm text-white/30">Geen notities gevonden</p>
+                      {archiveCategory && (
+                        <p className="text-xs text-white/15 mt-1">Probeer een ander filter of categorie</p>
+                      )}
+                    </div>
+                  );
+                }
+
+                return [...grouped.entries()]
+                  .sort(([a], [b]) => b.localeCompare(a))
+                  .map(([key, monthNotes]) => {
+                    const d = new Date(monthNotes[0].created_at);
+                    const monthLabel = d.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+                    return (
+                      <div key={key}>
+                        <h3 className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-2 px-1">
+                          {monthLabel}
+                        </h3>
+                        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden divide-y divide-white/[0.04]">
+                          {monthNotes.map(note => {
+                            const tagCfg = note.auto_tag ? TAG_CONFIG[note.auto_tag as Tag] : null;
+                            const parcelName = (note.sub_parcels ?? [])[0]?.parcel_name;
+                            return (
+                              <button
+                                key={note.id}
+                                onClick={() => {
+                                  setViewMode('invoer');
+                                  setTimeout(() => {
+                                    document.getElementById(`note-${note.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  }, 100);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors text-left"
+                              >
+                                {note.photo_url && (
+                                  <img
+                                    src={note.photo_url}
+                                    alt=""
+                                    loading="lazy"
+                                    className="flex-shrink-0 h-10 w-10 rounded-lg object-cover border border-white/[0.08]"
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white/70 truncate">{note.content}</p>
+                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                    {tagCfg && (
+                                      <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded-md', tagCfg.bg, tagCfg.text)}>
+                                        {tagCfg.label}
+                                      </span>
+                                    )}
+                                    {note.observation_subject && (
+                                      <span className="text-[9px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
+                                        {note.observation_subject}
+                                      </span>
+                                    )}
+                                    {parcelName && (
+                                      <span className="text-[9px] text-white/25">📍 {parcelName}</span>
+                                    )}
+                                    {note.source === 'whatsapp' && (
+                                      <span className="text-[9px]" title="Via WhatsApp">💬</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-white/20 flex-shrink-0 tabular-nums">
+                                  {new Date(note.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+              })()}
+            </div>
+          </div>
         )}
       </div>
 
@@ -779,6 +1330,13 @@ export function VeldnotitiesClient() {
             onClose={() => setTransferNoteId(null)}
             onTransferred={() => setTransferNoteId(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Photo lightbox */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
         )}
       </AnimatePresence>
     </div>

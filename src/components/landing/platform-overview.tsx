@@ -15,6 +15,7 @@ import {
   Sparkles,
   Database,
   Zap,
+  MessageCircle,
 } from 'lucide-react';
 
 const modules = [
@@ -29,6 +30,19 @@ const modules = [
       { label: 'Gemiddelde verwerkingstijd', value: '< 3s' },
       { label: 'Herkenningsnauwkeurigheid', value: '99.2%' },
       { label: 'Ondersteunde talen', value: 'NL / EN' },
+    ],
+  },
+  {
+    id: 'whatsapp',
+    icon: MessageCircle,
+    title: 'WhatsApp Bot',
+    color: 'green',
+    description: 'Registreer via WhatsApp — stuur, valideer, bevestig',
+    detail: 'De CropNode Assistent verwerkt je berichten in natuurlijke taal. Stuur een bespuiting of veldnotitie, ontvang een CTGB-gevalideerd overzicht, en bevestig met één tap. Gratis via Meta Cloud API.',
+    metrics: [
+      { label: 'Kosten', value: 'Gratis' },
+      { label: 'Validatie', value: 'CTGB ✓' },
+      { label: 'Nummers', value: '5 per account' },
     ],
   },
   {
@@ -128,7 +142,7 @@ const colorClasses: Record<string, { icon: string; bg: string; border: string; t
   emerald: { icon: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'bg-emerald-400', activeBg: 'bg-emerald-500/[0.08]' },
   sky: { icon: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400', glow: 'bg-sky-400', activeBg: 'bg-sky-500/[0.08]' },
   amber: { icon: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400', glow: 'bg-amber-400', activeBg: 'bg-amber-500/[0.08]' },
-  green: { icon: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'bg-emerald-400', activeBg: 'bg-emerald-500/[0.08]' },
+  green: { icon: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20', text: 'text-green-400', glow: 'bg-green-400', activeBg: 'bg-green-500/[0.08]' },
   orange: { icon: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', text: 'text-orange-400', glow: 'bg-orange-400', activeBg: 'bg-orange-500/[0.08]' },
   purple: { icon: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-400', glow: 'bg-purple-400', activeBg: 'bg-purple-500/[0.08]' },
   blue: { icon: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400', glow: 'bg-blue-400', activeBg: 'bg-blue-500/[0.08]' },
@@ -320,7 +334,7 @@ export function PlatformOverview() {
             Modules
           </motion.span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-white mb-4">
-            9 modules,{' '}
+            10 modules,{' '}
             <span className="text-slate-400">één ecosysteem</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
@@ -372,7 +386,7 @@ export function PlatformOverview() {
           className="mt-12 flex flex-wrap justify-center gap-8 sm:gap-12"
         >
           {[
-            { icon: Zap, value: '9', label: 'Geïntegreerde modules' },
+            { icon: Zap, value: '10', label: 'Geïntegreerde modules' },
             { icon: Database, value: '1.000+', label: 'CTGB producten' },
             { icon: Sparkles, value: '<3s', label: 'AI responstijd' },
           ].map((stat, i) => (

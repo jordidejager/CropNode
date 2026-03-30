@@ -76,6 +76,14 @@ function CompactNoteRow({ note }: { note: FieldNote }) {
       )}>
         {isDone && <Check className="h-2.5 w-2.5" />}
       </div>
+      {note.photo_url && (
+        <img
+          src={note.photo_url}
+          alt=""
+          loading="lazy"
+          className="flex-shrink-0 h-10 w-10 rounded-lg object-cover border border-white/[0.08]"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <p className={cn(
           "text-sm truncate",
@@ -83,7 +91,7 @@ function CompactNoteRow({ note }: { note: FieldNote }) {
         )}>
           {note.content}
         </p>
-        {(tag || note.sub_parcel) && (
+        {(tag || (note.sub_parcels && note.sub_parcels.length > 0)) && (
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {tag && (
               <span className={cn(
@@ -93,9 +101,9 @@ function CompactNoteRow({ note }: { note: FieldNote }) {
                 {tag.label}
               </span>
             )}
-            {note.sub_parcel && (
+            {note.sub_parcels?.[0] && (
               <span className="text-[10px] text-white/30 bg-white/[0.04] px-1.5 py-0.5 rounded-md">
-                {note.sub_parcel.name}
+                {note.sub_parcels[0].parcel_name || note.sub_parcels[0].name}
               </span>
             )}
           </div>
@@ -114,7 +122,7 @@ export function FieldNotesCard() {
   const { toast } = useToast();
 
   const handleCreate = useCallback((content: string) => {
-    createMutation.mutate(content, {
+    createMutation.mutate({ content }, {
       onError: (err) => {
         toast({ title: 'Fout', description: err.message, variant: 'destructive' });
       },

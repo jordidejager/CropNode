@@ -1,13 +1,14 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 
 export interface SubParcelInfo {
   id: string;
-  name: string;
+  name: string;        // display name (from v_sprayable_parcels: e.g. "Yese Red Prince (Jonagold)")
+  parcel_name: string; // parent location name (e.g. "Yese", "Jachthoek")
   crop: string;
-  variety: string;
+  variety: string | null;
 }
 
 export interface FieldNote {
@@ -17,18 +18,20 @@ export interface FieldNote {
   status: 'open' | 'done' | 'transferred';
   auto_tag: 'bespuiting' | 'bemesting' | 'taak' | 'waarneming' | 'overig' | null;
   is_pinned: boolean;
-  parcel_id: string | null;
+  parcel_ids: string[];
+  observation_subject: string | null;
+  observation_category: 'insect' | 'schimmel' | 'ziekte' | 'fysiologisch' | 'overig' | null;
+  photo_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
   source: 'web' | 'whatsapp' | 'voice';
   created_at: string;
   updated_at: string;
-  // Joined from sub_parcels via API
-  sub_parcel?: SubParcelInfo | null;
+  // Resolved parcel info (joined by API)
+  sub_parcels?: SubParcelInfo[];
 }
 
 const QUERY_KEY = ['field-notes'];
-
-// How often to refetch when there are notes with null auto_tag (classification pending)
-const PENDING_POLL_INTERVAL_MS = 4000;
 
 async function fetchFieldNotes(): Promise<FieldNote[]> {
   const res = await fetch('/api/field-notes');
@@ -37,74 +40,62 @@ async function fetchFieldNotes(): Promise<FieldNote[]> {
   return json.data;
 }
 
-async function createFieldNote(content: string): Promise<FieldNote> {
-  const res = await fetch('/api/field-notes', {
+interface CreateFieldNoteInput {
+  content: string;
+  photo_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+async function createFieldNote(input: CreateFieldNoteInput): Promise<FieldNote> {
+  return fetchWithRetry('/api/field-notes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Fout bij opslaan notitie');
-  return json.data;
+    body: JSON.stringify(input),
+  }, 'Fout bij opslaan notitie');
+}
+
+/** Retry once on network errors (handles HMR/Turbopack restarts) */
+async function fetchWithRetry(url: string, init: RequestInit, fallbackError: string, attempt = 0): Promise<any> {
+  try {
+    const res = await fetch(url, init);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || fallbackError);
+    return json.data;
+  } catch (err) {
+    if (attempt < 1 && err instanceof TypeError && String(err.message).includes('fetch')) {
+      await new Promise(r => setTimeout(r, 1000));
+      return fetchWithRetry(url, init, fallbackError, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 async function updateFieldNote(
   id: string,
-  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_id'>>
+  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_ids'>>
 ): Promise<FieldNote> {
-  const res = await fetch(`/api/field-notes/${id}`, {
+  return fetchWithRetry(`/api/field-notes/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Fout bij bijwerken notitie');
-  return json.data;
+  }, 'Fout bij bijwerken notitie');
 }
 
 async function deleteFieldNote(id: string): Promise<void> {
-  const res = await fetch(`/api/field-notes/${id}`, { method: 'DELETE' });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Fout bij verwijderen notitie');
+  await fetchWithRetry(`/api/field-notes/${id}`, { method: 'DELETE' }, 'Fout bij verwijderen notitie');
 }
 
 /**
  * Main hook for field notes.
- * Automatically polls when there are notes with pending auto_tag (null).
+ * Classification now happens synchronously in the POST route,
+ * so the tag is already set when the mutation resolves.
  */
 export function useFieldNotes() {
-  const queryClient = useQueryClient();
-
-  const query = useQuery({
+  return useQuery({
     queryKey: QUERY_KEY,
     queryFn: fetchFieldNotes,
-    // No refetchInterval by default — managed below
-    refetchInterval: false,
   });
-
-  // Poll if any notes are awaiting classification
-  useEffect(() => {
-    const notes = query.data;
-    if (!notes) return;
-
-    // Check for newly created notes (temp IDs or notes with null auto_tag created <30s ago)
-    const hasPending = notes.some(
-      (n) =>
-        n.auto_tag === null &&
-        n.status === 'open' &&
-        Date.now() - new Date(n.created_at).getTime() < 30_000
-    );
-
-    if (!hasPending) return;
-
-    const timer = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-    }, PENDING_POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [query.data, queryClient]);
-
-  return query;
 }
 
 export function useCreateFieldNote() {
@@ -112,22 +103,27 @@ export function useCreateFieldNote() {
 
   return useMutation({
     mutationFn: createFieldNote,
-    onMutate: async (content) => {
+    onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEY });
       const previous = queryClient.getQueryData<FieldNote[]>(QUERY_KEY);
 
       const optimistic: FieldNote = {
         id: `temp-${Date.now()}`,
         user_id: '',
-        content,
+        content: input.content,
         status: 'open',
         auto_tag: null,
         is_pinned: false,
-        parcel_id: null,
+        parcel_ids: [],
+        observation_subject: null,
+        observation_category: null,
+        photo_url: input.photo_url ?? null,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
         source: 'web',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        sub_parcel: null,
+        sub_parcels: [],
       };
 
       queryClient.setQueryData<FieldNote[]>(QUERY_KEY, (old) =>
@@ -141,6 +137,23 @@ export function useCreateFieldNote() {
         queryClient.setQueryData(QUERY_KEY, context.previous);
       }
     },
+    onSuccess: (data) => {
+      // Trigger AI classification from the client — non-blocking.
+      // Includes photo URL for Gemini Vision analysis if available.
+      fetch('/api/field-notes/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          noteId: data.id,
+          content: data.content,
+          ...(data.photo_url ? { photoUrl: data.photo_url } : {}),
+        }),
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      }).catch(() => {
+        // Classify failed silently — note is saved, just without tag
+      });
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
@@ -153,7 +166,7 @@ export function useUpdateFieldNote() {
   return useMutation({
     mutationFn: ({ id, updates }: {
       id: string;
-      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_id'>>;
+      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_ids'>>;
     }) => updateFieldNote(id, updates),
     onMutate: async ({ id, updates }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEY });
@@ -218,7 +231,7 @@ export function useRestoreFieldNote() {
       return withNote;
     });
     // Re-create on server
-    createFieldNote(note.content).then(() => {
+    createFieldNote({ content: note.content }).then(() => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     });
   }, [queryClient]);

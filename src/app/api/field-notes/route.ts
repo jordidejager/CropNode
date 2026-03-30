@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -14,6 +13,9 @@ async function getAuthUser(supabase: SupabaseClient) {
 
 const CreateNoteSchema = z.object({
   content: z.string().min(1, 'Notitie mag niet leeg zijn').max(2000, 'Notitie mag maximaal 2000 tekens bevatten'),
+  photo_url: z.string().url().nullable().optional(),
+  latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+  longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
 });
 
 /**
@@ -37,32 +39,46 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('field_notes')
-      .select(`
-        *,
-        sub_parcel:sub_parcels(id, name, crop, variety)
-      `)
+      .select('*')
       .eq('user_id', user.id)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
 
-    if (status) {
-      query = query.eq('status', status);
-    }
+    if (status) query = query.eq('status', status);
+    if (search) query = query.ilike('content', `%${search}%`);
+    if (parcelId) query = query.contains('parcel_ids', [parcelId]);
 
-    if (search) {
-      query = query.ilike('content', `%${search}%`);
-    }
-
-    if (parcelId) {
-      query = query.eq('parcel_id', parcelId);
-    }
-
-    const { data, error } = await query;
+    const { data: notes, error } = await query;
 
     if (error) {
       console.error('[Field Notes API] GET error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Resolve parcel names for all notes in one query
+    // Resolve parcel display info using v_sprayable_parcels (has correct parcel_name via LEFT JOIN)
+    const allParcelIds = [...new Set((notes ?? []).flatMap(n => n.parcel_ids ?? []))];
+    let parcelMap: Record<string, { id: string; name: string; parcel_name: string; crop: string; variety: string | null }> = {};
+    if (allParcelIds.length > 0) {
+      const { data: parcels } = await supabase
+        .from('v_sprayable_parcels')
+        .select('id, name, parcel_name, crop, variety')
+        .in('id', allParcelIds);
+      parcelMap = Object.fromEntries(
+        (parcels ?? []).map((p: any) => [p.id, {
+          id: p.id,
+          name: p.name || '',
+          parcel_name: p.parcel_name || '',
+          crop: p.crop || '',
+          variety: p.variety || null,
+        }])
+      );
+    }
+
+    const data = (notes ?? []).map(note => ({
+      ...note,
+      sub_parcels: (note.parcel_ids ?? []).map((id: string) => parcelMap[id]).filter(Boolean),
+    }));
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
@@ -95,62 +111,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: issues }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    // Build insert payload — photo_url/lat/lng only if provided
+    const insertPayload: Record<string, unknown> = {
+      user_id: user.id,
+      content: result.data.content,
+      source: 'web',
+    };
+    if (result.data.photo_url) insertPayload.photo_url = result.data.photo_url;
+    if (result.data.latitude != null) insertPayload.latitude = result.data.latitude;
+    if (result.data.longitude != null) insertPayload.longitude = result.data.longitude;
+
+    // Try with all fields first; if it fails (e.g. migration not run), retry with just content
+    let note: any;
+    const { data: d1, error: err1 } = await supabase
       .from('field_notes')
-      .insert({
-        user_id: user.id,
-        content: result.data.content,
-        source: 'web',
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
-    if (error) {
-      console.error('[Field Notes API] POST error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (err1 && Object.keys(insertPayload).length > 3) {
+      // Retry without photo/GPS columns (migration 030 might not be applied yet)
+      console.warn('[Field Notes API] insert failed, retrying without photo/GPS:', err1.message);
+      const { data: d2, error: err2 } = await supabase
+        .from('field_notes')
+        .insert({ user_id: user.id, content: result.data.content, source: 'web' })
+        .select()
+        .single();
+      if (err2) {
+        console.error('[Field Notes API] POST error:', err2);
+        return NextResponse.json({ error: err2.message }, { status: 500 });
+      }
+      note = d2;
+    } else if (err1) {
+      console.error('[Field Notes API] POST error:', err1);
+      return NextResponse.json({ error: err1.message }, { status: 500 });
+    } else {
+      note = d1;
     }
 
-    // Fire-and-forget classification (no await — runs in background)
-    const noteId = data.id;
-    const noteContent = data.content;
-    const userId = user.id;
-    void (async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15_000);
-      try {
-        const admin = createAdminClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          { global: { fetch: (url, opts) => fetch(url, { ...opts, signal: controller.signal }) } }
-        );
-
-        const { data: parcels } = await admin
-          .from('sub_parcels')
-          .select('id, name, crop, variety')
-          .eq('user_id', userId)
-          .limit(50);
-
-        const { classifyFieldNote } = await import('@/ai/flows/classify-field-note');
-        const result = await classifyFieldNote(noteContent, parcels ?? []);
-
-        const update: Record<string, unknown> = {};
-        if (result.tag !== null) update.auto_tag = result.tag;
-        if (result.parcel_id !== null) update.parcel_id = result.parcel_id;
-
-        if (Object.keys(update).length > 0) {
-          await admin
-            .from('field_notes')
-            .update(update)
-            .eq('id', noteId)
-            .eq('user_id', userId);
-        }
-      } catch (err) {
-        console.error('[Field Notes] Background classification failed:', err instanceof Error ? err.message : err);
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    })();
-
+    // Return immediately — classification is triggered by the client separately
+    const data = { ...note, parcel_ids: note.parcel_ids ?? [], sub_parcels: [] };
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
     console.error('[Field Notes API] POST error:', error);

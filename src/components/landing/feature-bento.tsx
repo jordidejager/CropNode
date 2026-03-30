@@ -19,6 +19,10 @@ import {
   BarChart3,
   TrendingUp,
   Euro,
+  MessageCircle,
+  Phone,
+  Check,
+  Send,
 } from 'lucide-react';
 
 /* ─── Weather Hub Visual ─── */
@@ -296,25 +300,42 @@ function ResearchVisual({ isInView }: { isInView: boolean }) {
 
 /* ─── Perceelbeheer Map Visual ─── */
 function ParcelMapVisual({ isInView }: { isInView: boolean }) {
-  // Parcels matching real CropNode app layout — scattered at various angles across landscape
-  // Based on actual Dutch orchard map with angled fields following property/ditch lines
+  // Organic irregular polygons matching real Dutch orchard aerial boundaries
+  // Each parcel uses 6-8 vertices for natural-looking field edges
   const parcels = [
-    // Top-right: large angled parcel (NW-SE orientation)
-    { d: 'M245,4 L340,18 L332,52 L237,38 Z', label: 'Elstar Noord', ha: '5,20', cx: 289, cy: 28 },
-    // Right: wide angled parcel
-    { d: 'M300,55 L370,42 L375,78 L305,90 Z', label: 'Kerkpad', ha: '4,50', cx: 340, cy: 66 },
-    // Center: medium angled parcel
-    { d: 'M155,30 L232,22 L238,58 L161,66 Z', label: 'Conference', ha: '4,80', cx: 196, cy: 44 },
-    // Center-left: diagonal parcel
-    { d: 'M80,42 L148,32 L156,68 L88,78 Z', label: 'Boomgaard Z.', ha: '3,80', cx: 118, cy: 55 },
-    // Bottom-center: large field
-    { d: 'M130,74 L228,65 L234,98 L136,106 Z', label: 'Jonagold', ha: '3,40', cx: 182, cy: 86 },
-    // Bottom-left: smaller triangular field
-    { d: 'M18,68 L72,58 L80,92 L26,100 Z', label: 'Rivierzicht', ha: '3,50', cx: 49, cy: 80 },
-    // Top-left: small parcel
-    { d: 'M30,14 L78,8 L82,36 L34,42 Z', label: 'Hoogveld', ha: '2,10', cx: 56, cy: 25 },
-    // Far right bottom
-    { d: 'M320,82 L368,76 L372,102 L324,108 Z', label: 'Elstar Zuid', ha: '3,35', cx: 346, cy: 92 },
+    {
+      d: 'M248,5 L290,4 L322,10 L342,20 L336,46 L310,52 L278,50 L250,42 L244,24 Z',
+      verts: [[248,5],[290,4],[322,10],[342,20],[336,46],[310,52],[278,50],[250,42],[244,24]],
+      label: 'Betuwe Noord', ras: 'Elstar', ha: '5,20', cx: 292, cy: 26, selected: true,
+    },
+    {
+      d: 'M304,54 L338,46 L362,42 L380,50 L382,72 L372,84 L344,88 L312,84 L302,68 Z',
+      label: 'Kerkpad', ras: 'Conference', ha: '4,50', cx: 344, cy: 64,
+    },
+    {
+      d: 'M156,26 L198,18 L232,20 L242,30 L240,52 L224,62 L178,64 L158,54 Z',
+      label: 'De Hoek', ras: 'Conference', ha: '4,80', cx: 200, cy: 40,
+    },
+    {
+      d: 'M74,40 L112,30 L142,32 L152,42 L154,62 L140,74 L104,76 L78,68 Z',
+      label: 'Zandweg', ras: 'Jonagold', ha: '3,80', cx: 118, cy: 53,
+    },
+    {
+      d: 'M126,76 L174,68 L216,64 L238,70 L244,88 L234,102 L196,108 L138,106 L128,92 Z',
+      label: 'Langgaard', ras: 'Elstar', ha: '3,40', cx: 186, cy: 86,
+    },
+    {
+      d: 'M12,64 L44,54 L70,56 L82,66 L80,86 L66,96 L30,98 L14,86 Z',
+      label: 'Rivierzicht', ras: 'Cox Orange', ha: '3,50', cx: 50, cy: 76,
+    },
+    {
+      d: 'M26,12 L54,6 L78,8 L88,18 L86,34 L72,42 L40,40 L28,30 Z',
+      label: 'Hoogveld', ras: 'Boskoop', ha: '2,10', cx: 58, cy: 24,
+    },
+    {
+      d: 'M320,82 L348,76 L372,78 L384,86 L382,100 L370,110 L340,112 L322,102 Z',
+      label: 'Nieuwe Weg', ras: 'Conference', ha: '3,35', cx: 352, cy: 93,
+    },
   ];
 
   return (
@@ -330,53 +351,101 @@ function ParcelMapVisual({ isInView }: { isInView: boolean }) {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-slate-900/10" />
 
         <svg viewBox="0 0 390 115" className="relative w-full h-full" preserveAspectRatio="xMidYMid meet">
-          {parcels.map((p, i) => (
-            <g key={i}>
-              {/* Glow */}
-              <motion.path
-                d={p.d}
-                fill="rgba(249,115,22,0.06)"
-                stroke="rgba(249,115,22,0.2)"
-                strokeWidth="5"
-                strokeLinejoin="round"
-                initial={{ opacity: 0 }}
-                animate={isInView ? { opacity: 1 } : {}}
-                transition={{ duration: 0.4, delay: 0.4 + i * 0.08 }}
-              />
-              {/* Fill + outline */}
-              <motion.path
-                d={p.d}
-                fill="rgba(249,115,22,0.18)"
-                stroke="rgba(249,115,22,0.9)"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-                initial={{ opacity: 0, pathLength: 0 }}
-                animate={isInView ? { opacity: 1, pathLength: 1 } : {}}
-                transition={{ duration: 0.6, delay: 0.3 + i * 0.08 }}
-              />
-              {/* Label */}
-              <motion.text
-                x={p.cx} y={p.cy - 1}
-                textAnchor="middle" fontSize="6.5" fill="rgba(255,255,255,0.95)" fontWeight="600"
-                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}
-                initial={{ opacity: 0 }}
-                animate={isInView ? { opacity: 1 } : {}}
-                transition={{ delay: 0.6 + i * 0.08 }}
-              >
-                {p.label}
-              </motion.text>
-              <motion.text
-                x={p.cx} y={p.cy + 8}
-                textAnchor="middle" fontSize="5" fill="rgba(249,115,22,0.85)" fontWeight="500"
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
-                initial={{ opacity: 0 }}
-                animate={isInView ? { opacity: 1 } : {}}
-                transition={{ delay: 0.7 + i * 0.08 }}
-              >
-                {p.ha} ha
-              </motion.text>
-            </g>
-          ))}
+          <defs>
+            <linearGradient id="scanGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="rgba(249,115,22,0)" />
+              <stop offset="35%" stopColor="rgba(249,115,22,0.25)" />
+              <stop offset="50%" stopColor="rgba(249,115,22,0.5)" />
+              <stop offset="65%" stopColor="rgba(249,115,22,0.25)" />
+              <stop offset="100%" stopColor="rgba(249,115,22,0)" />
+            </linearGradient>
+          </defs>
+
+          {/* Animated scan line */}
+          <motion.rect
+            x="0" width="390" height="1.5" rx="0.5"
+            fill="url(#scanGrad)"
+            initial={{ y: -2 }}
+            animate={isInView ? { y: [0, 115] } : {}}
+            transition={{ duration: 3.5, delay: 1.6, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }}
+          />
+
+          {parcels.map((p, i) => {
+            const sel = 'selected' in p;
+            return (
+              <g key={i}>
+                {/* Outer glow */}
+                <motion.path
+                  d={p.d}
+                  fill={sel ? 'rgba(249,115,22,0.10)' : 'rgba(249,115,22,0.05)'}
+                  stroke="rgba(249,115,22,0.18)"
+                  strokeWidth={sel ? '7' : '4'}
+                  strokeLinejoin="round"
+                  initial={{ opacity: 0 }}
+                  animate={isInView ? { opacity: 1 } : {}}
+                  transition={{ duration: 0.4, delay: 0.4 + i * 0.08 }}
+                />
+                {/* Fill + outline */}
+                <motion.path
+                  d={p.d}
+                  fill={sel ? 'rgba(249,115,22,0.22)' : 'rgba(249,115,22,0.14)'}
+                  stroke="rgba(249,115,22,0.9)"
+                  strokeWidth={sel ? '2' : '1.5'}
+                  strokeLinejoin="round"
+                  initial={{ opacity: 0, pathLength: 0 }}
+                  animate={isInView ? { opacity: 1, pathLength: 1 } : {}}
+                  transition={{ duration: 0.6, delay: 0.3 + i * 0.08 }}
+                />
+                {/* Selected: pulsing glow */}
+                {sel && (
+                  <motion.path
+                    d={p.d}
+                    fill="none"
+                    stroke="rgba(249,115,22,0.4)"
+                    strokeWidth="3"
+                    strokeLinejoin="round"
+                    initial={{ opacity: 0 }}
+                    animate={isInView ? { opacity: [0, 0.6, 0], strokeWidth: [2, 4, 2] } : {}}
+                    transition={{ duration: 2.5, delay: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                )}
+                {/* Selected: vertex handles */}
+                {sel && p.verts?.map((v, j) => (
+                  <motion.circle
+                    key={j}
+                    cx={v[0]} cy={v[1]} r="1.8"
+                    fill="rgba(249,115,22,0.85)"
+                    stroke="rgba(255,255,255,0.7)"
+                    strokeWidth="0.6"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={isInView ? { scale: 1, opacity: 1 } : {}}
+                    transition={{ delay: 0.9 + j * 0.04, type: 'spring', stiffness: 200 }}
+                  />
+                ))}
+                {/* Label */}
+                <motion.text
+                  x={p.cx} y={p.cy - 1}
+                  textAnchor="middle" fontSize="6.5" fill="rgba(255,255,255,0.95)" fontWeight="600"
+                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}
+                  initial={{ opacity: 0 }}
+                  animate={isInView ? { opacity: 1 } : {}}
+                  transition={{ delay: 0.6 + i * 0.08 }}
+                >
+                  {p.label}
+                </motion.text>
+                <motion.text
+                  x={p.cx} y={p.cy + 7}
+                  textAnchor="middle" fontSize="5" fill="rgba(249,115,22,0.80)" fontWeight="500"
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
+                  initial={{ opacity: 0 }}
+                  animate={isInView ? { opacity: 1 } : {}}
+                  transition={{ delay: 0.7 + i * 0.08 }}
+                >
+                  {p.ras} · {p.ha} ha
+                </motion.text>
+              </g>
+            );
+          })}
         </svg>
 
         {/* Search bar mock */}
@@ -412,6 +481,28 @@ function ParcelMapVisual({ isInView }: { isInView: boolean }) {
         >
           <div className="text-[7px] text-slate-500 uppercase tracking-wider">Totaal</div>
           <span className="text-[11px] text-orange-400 font-bold">30,65 ha</span>
+        </motion.div>
+
+        {/* Selected parcel detail popup */}
+        <motion.div
+          initial={{ opacity: 0, y: 4, scale: 0.9 }}
+          animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+          transition={{ delay: 1.3, type: 'spring', stiffness: 150 }}
+          className="absolute bottom-[38px] right-[90px] px-2.5 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-orange-500/25 shadow-lg shadow-orange-500/5"
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full bg-orange-400"
+              animate={isInView ? { scale: [1, 1.3, 1] } : {}}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+            <span className="text-[8px] text-orange-300 font-bold">Betuwe Noord</span>
+          </div>
+          <div className="flex items-center gap-3 text-[7px]">
+            <div><span className="text-slate-500">Ras</span><div className="text-white/80 font-medium">Elstar</div></div>
+            <div><span className="text-slate-500">Opp.</span><div className="text-white/80 font-medium">5,20 ha</div></div>
+            <div><span className="text-slate-500">Blokken</span><div className="text-white/80 font-medium">A — D</div></div>
+          </div>
         </motion.div>
 
         {/* Bottom bar */}
@@ -831,7 +922,166 @@ function AnalyticsVisual({ isInView }: { isInView: boolean }) {
   );
 }
 
+/* ─── WhatsApp Bot Visual ─── */
+function WhatsAppVisual({ isInView }: { isInView: boolean }) {
+  return (
+    <div className="mt-4 space-y-2.5">
+      {/* Chat window */}
+      <div className="rounded-xl bg-[#0b141a] border border-green-500/10 overflow-hidden shadow-xl">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-[#1f2c34] border-b border-white/[0.05]">
+          {/* CropNode leaf logo avatar */}
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#0d1a0d] border border-green-500/25 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+                <path d="M16 4 C21 4, 28 9, 28 17 C28 24, 22 29, 16 28 C10 27, 4 23, 4 16 C4 9, 10 4, 16 4 Z" stroke="#22c55e" strokeWidth="1.8" strokeLinejoin="round" fill="rgba(34,197,94,0.06)" />
+                <path d="M16 6.5 L15.5 26.5" stroke="#22c55e" strokeWidth="1.1" strokeLinecap="round" opacity="0.55" />
+                <path d="M15.5 12 L21.5 15.5" stroke="#22c55e" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
+                <path d="M15.5 17 L21.5 20" stroke="#22c55e" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
+                <path d="M15.5 12 L9.5 15.5" stroke="#22c55e" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
+                <path d="M15.5 17 L9.5 20" stroke="#22c55e" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
+              </svg>
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-[1.5px] border-[#1f2c34]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-white/92 leading-none mb-0.5">CropNode Assistent</p>
+            <p className="text-[9px] text-green-400/60">online · Meta WhatsApp</p>
+          </div>
+          <Phone className="w-3.5 h-3.5 text-white/25 flex-shrink-0" />
+        </div>
+
+        {/* Messages area */}
+        <div className="px-2.5 pt-2.5 pb-1.5 space-y-2 min-h-[200px]">
+
+          {/* User bubble */}
+          <motion.div
+            initial={{ opacity: 0, x: 18, scale: 0.96 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : {}}
+            transition={{ duration: 0.35, delay: 0.3, ease: 'easeOut' }}
+            className="flex justify-end"
+          >
+            <div className="max-w-[84%] rounded-lg rounded-tr-sm bg-[#005c4b] px-2.5 py-1.5 shadow-sm">
+              <p className="text-[10.5px] text-white/90 leading-relaxed">
+                Gisteren alle appels met 1,7 syllit flow gespoten
+              </p>
+              <div className="flex items-center justify-end gap-0.5 mt-0.5">
+                <span className="text-[8px] text-white/35">14:32</span>
+                <Check className="w-2.5 h-2.5 text-sky-400/70" />
+                <Check className="w-2.5 h-2.5 text-sky-400/70 -ml-1.5" />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Typing indicator */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={isInView ? { opacity: [0, 0, 1, 1, 1, 0] } : {}}
+            transition={{ duration: 2.4, delay: 0.7, times: [0, 0.04, 0.15, 0.65, 0.82, 1], ease: 'easeInOut' }}
+            className="flex justify-start"
+          >
+            <div className="flex items-center gap-1 px-3 py-2.5 rounded-lg rounded-tl-sm bg-[#1f2c34]">
+              {[0, 0.2, 0.4].map((offset, i) => (
+                <motion.div
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-white/35"
+                  animate={isInView ? { y: [0, -4, 0] } : {}}
+                  transition={{ duration: 0.65, delay: 1.0 + offset, repeat: 3, ease: 'easeInOut' }}
+                />
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Bot response bubble */}
+          <motion.div
+            initial={{ opacity: 0, x: -14, scale: 0.97 }}
+            animate={isInView ? { opacity: 1, x: 0, scale: 1 } : {}}
+            transition={{ duration: 0.4, delay: 1.9, ease: 'easeOut' }}
+            className="flex justify-start"
+          >
+            <div className="max-w-[93%] rounded-lg rounded-tl-sm bg-[#1f2c34] px-2.5 py-2 border border-white/[0.04]">
+              <div className="text-[10px] text-white/80 leading-[1.75] space-y-0.5">
+                <div>🌿 <span className="font-semibold text-white/92">Syllit Flow 400 SC</span> <span className="text-green-400/80">(CTGB ✓)</span></div>
+                <div><span className="text-white/45">💧 Dosering:</span> <span className="text-white/75">1,7 L/ha</span></div>
+                <div className="pt-0.5">📍 <span className="font-semibold text-white/90">Percelen:</span></div>
+                <div className="pl-3 text-white/50">· Betuwe Noord (Elstar) — 5,20 ha</div>
+                <div className="pl-3 text-white/50">· Zandweg (Jonagold) — 3,80 ha</div>
+                <div className="pl-3 text-white/50">· Langgaard (Elstar) — 3,40 ha</div>
+                <div className="pt-0.5"><span className="text-white/45">📅 Datum:</span> <span className="text-white/75">28 mrt 2026</span></div>
+              </div>
+              <span className="text-[8px] text-white/25 block text-right mt-1.5">14:33</span>
+            </div>
+          </motion.div>
+
+          {/* "Klopt dit?" bubble */}
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={isInView ? { opacity: 1, x: 0 } : {}}
+            transition={{ duration: 0.3, delay: 2.3 }}
+            className="flex justify-start"
+          >
+            <div className="rounded-lg rounded-tl-sm bg-[#1f2c34] px-2.5 py-1.5 border border-white/[0.04]">
+              <p className="text-[10px] text-white/85">Klopt dit?</p>
+            </div>
+          </motion.div>
+
+          {/* Quick reply buttons */}
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.35, delay: 2.55 }}
+            className="flex gap-1.5"
+          >
+            {[
+              { label: '✓ Bevestig', cls: 'bg-green-500/15 border-green-500/25 text-green-400' },
+              { label: '🖊 Wijzig', cls: 'bg-white/[0.04] border-white/[0.08] text-white/40' },
+              { label: '✗ Annuleer', cls: 'bg-white/[0.04] border-white/[0.08] text-white/40' },
+            ].map((btn) => (
+              <div key={btn.label} className={`px-2 py-1 rounded text-[9px] font-medium border ${btn.cls}`}>
+                {btn.label}
+              </div>
+            ))}
+          </motion.div>
+        </div>
+
+        {/* Input bar */}
+        <div className="flex items-center gap-2 px-2.5 py-2 bg-[#1f2c34] border-t border-white/[0.04]">
+          <div className="flex-1 px-3 py-1.5 rounded-full bg-[#2a3942] text-[10px] text-white/25 truncate">
+            Typ een bericht...
+          </div>
+          <div className="w-7 h-7 rounded-full bg-green-500/70 flex items-center justify-center flex-shrink-0">
+            <Send className="w-3 h-3 text-white" />
+          </div>
+        </div>
+      </div>
+
+      {/* Feature pills */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.4, delay: 1.6 }}
+        className="flex flex-wrap gap-1.5"
+      >
+        {['Registratie via chat', 'Veldnotities', 'CTGB validatie', 'Gratis'].map((label) => (
+          <span key={label} className="px-2 py-0.5 rounded-full bg-green-500/[0.08] border border-green-500/15 text-[9px] text-green-400/70">
+            {label}
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
 const features = [
+  {
+    id: 'whatsapp',
+    icon: MessageCircle,
+    title: 'WhatsApp Bot',
+    description: 'Registreer bespuitingen en veldnotities direct via WhatsApp. Stuur een bericht, ontvang een CTGB-gevalideerd overzicht, en bevestig met één tap.',
+    size: 'large' as const,
+    color: 'green',
+    Visual: WhatsAppVisual,
+  },
   {
     id: 'weather',
     icon: Cloud,
@@ -916,6 +1166,7 @@ const iconColors: Record<string, string> = {
   blue: 'text-blue-400',
   teal: 'text-teal-400',
   cyan: 'text-cyan-400',
+  green: 'text-green-400',
 };
 
 const bgColors: Record<string, string> = {
@@ -927,6 +1178,7 @@ const bgColors: Record<string, string> = {
   blue: 'bg-blue-500/10 border-blue-500/15',
   teal: 'bg-teal-500/10 border-teal-500/15',
   cyan: 'bg-cyan-500/10 border-cyan-500/15',
+  green: 'bg-green-500/10 border-green-500/15',
 };
 
 const hoverBorders: Record<string, string> = {
@@ -938,6 +1190,7 @@ const hoverBorders: Record<string, string> = {
   blue: 'hover:border-blue-500/25',
   teal: 'hover:border-teal-500/25',
   cyan: 'hover:border-cyan-500/25',
+  green: 'hover:border-green-500/25',
 };
 
 /* ─── Feature Card ─── */
@@ -1026,7 +1279,7 @@ export function FeatureBento() {
             <span className="text-slate-400">Niets dat je niet nodig hebt.</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            8 geïntegreerde modules die naadloos samenwerken — van het veld tot het kantoor.
+            9 geïntegreerde modules die naadloos samenwerken — van WhatsApp tot het spuitschrift.
           </p>
         </motion.div>
 
