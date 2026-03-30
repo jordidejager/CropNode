@@ -16,6 +16,7 @@ import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
+import { handleAddGpsButton, attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -117,9 +118,19 @@ export async function handleIncomingMessage(
       return;
     }
 
-    // --- D2. Handle location messages → save as field note with GPS ---
+    // --- D2. Handle location messages ---
     if (messageType === 'location' && extras?.location) {
       const loc = extras.location;
+
+      // Check if user was asked to add GPS to an existing note
+      if (conversation?.state === 'awaiting_gps' && conversation.lastInput?.startsWith('gps:')) {
+        const noteId = conversation.lastInput.replace('gps:', '');
+        await attachGpsToNote(noteId, loc.latitude, loc.longitude, e164Phone);
+        await updateConversationState(conversation.id, 'idle');
+        return;
+      }
+
+      // Otherwise save as new field note with GPS
       const noteContent = loc.name || loc.address || '📍 Locatie-notitie';
       await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
         latitude: loc.latitude,
@@ -232,6 +243,17 @@ export async function handleIncomingMessage(
         await handleEditInput(userId, e164Phone, conversation, messageText);
         return;
       }
+    }
+
+    // Handle "📍 Locatie toevoegen" button from field note confirmation
+    if (buttonReplyId?.startsWith('addgps:')) {
+      const noteId = buttonReplyId.replace('addgps:', '');
+      // Create or update conversation to awaiting_gps state
+      if (conversation) {
+        await updateConversationState(conversation.id, 'awaiting_gps', undefined, `gps:${noteId}`);
+      }
+      await handleAddGpsButton(e164Phone, noteId);
+      return;
     }
 
     // STATE: idle (or no active conversation) + text message

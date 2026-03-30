@@ -153,7 +153,7 @@ export async function getActiveConversation(phoneNumber: string): Promise<WhatsA
   const { data, error } = await fromTable('whatsapp_conversations')
     .select('*')
     .eq('phone_number', e164)
-    .in('state', ['idle', 'awaiting_confirmation', 'awaiting_product_selection', 'awaiting_edit_choice', 'awaiting_edit_input'])
+    .in('state', ['idle', 'awaiting_confirmation', 'awaiting_product_selection', 'awaiting_edit_choice', 'awaiting_edit_input', 'awaiting_gps'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -230,7 +230,8 @@ export async function updateConversationState(
     state === 'awaiting_confirmation' ||
     state === 'awaiting_product_selection' ||
     state === 'awaiting_edit_choice' ||
-    state === 'awaiting_edit_input'
+    state === 'awaiting_edit_input' ||
+    state === 'awaiting_gps'
   ) {
     updateData.expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   }

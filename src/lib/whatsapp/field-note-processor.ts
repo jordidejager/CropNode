@@ -11,7 +11,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-client';
-import { sendTextMessage } from './client';
+import { sendTextMessage, sendInteractiveButtons } from './client';
 import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 
@@ -240,7 +240,20 @@ export async function processFieldNote(
       '✅ Zichtbaar in je Veldnotities.',
     ].join('\n');
 
-    await sendTextMessage(metaPhone, msg);
+    // Text notes without GPS: offer location button
+    const hasGps = insertData.latitude != null;
+    if (!hasGps && inserted?.id) {
+      try {
+        await sendInteractiveButtons(metaPhone, msg, [
+          { id: `addgps:${inserted.id}`, title: '📍 Locatie toevoegen' },
+        ]);
+      } catch {
+        // Fallback to plain text if buttons fail
+        await sendTextMessage(metaPhone, msg);
+      }
+    } else {
+      await sendTextMessage(metaPhone, msg);
+    }
     await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
 
     // Fire-and-forget: AI classification for better tagging + parcel matching
@@ -260,6 +273,59 @@ export async function processFieldNote(
     } catch {
       // ignore
     }
+  }
+}
+
+// ============================================================================
+// GPS toevoegen aan bestaande notitie (na "📍 Locatie toevoegen" knop)
+// ============================================================================
+
+/**
+ * Handle the "📍 Locatie toevoegen" button press.
+ * Sends a prompt asking the user to share their WhatsApp location.
+ */
+export async function handleAddGpsButton(
+  phoneNumber: string,
+  noteId: string
+): Promise<void> {
+  const metaPhone = stripPlus(phoneNumber);
+  const msg = '📍 Deel je locatie via het 📎 menu onderaan in WhatsApp.\n\n_Tik op 📎 → Locatie → Deel huidige locatie_';
+  await sendTextMessage(metaPhone, msg);
+  await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+  // noteId is stored in conversation state by the caller (message-handler)
+}
+
+/**
+ * Attach GPS coordinates to an existing field note.
+ * Called when a location message arrives after the user tapped "Locatie toevoegen".
+ */
+export async function attachGpsToNote(
+  noteId: string,
+  latitude: number,
+  longitude: number,
+  phoneNumber: string
+): Promise<void> {
+  const metaPhone = stripPlus(phoneNumber);
+
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Admin client niet beschikbaar');
+
+    const { error } = await (admin as any)
+      .from('field_notes')
+      .update({ latitude, longitude })
+      .eq('id', noteId);
+
+    if (error) throw new Error(error.message);
+
+    const msg = '📍 GPS-locatie toegevoegd aan je notitie!';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+  } catch (err) {
+    console.error('[attachGpsToNote] Error:', err);
+    const msg = '❗ Kon locatie niet toevoegen. Probeer het opnieuw.';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
   }
 }
 

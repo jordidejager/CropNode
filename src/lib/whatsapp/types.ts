@@ -24,6 +24,7 @@ export type ConversationState =
   | 'awaiting_confirmation'
   | 'awaiting_edit_choice'
   | 'awaiting_edit_input'
+  | 'awaiting_gps'
   | 'confirmed'
   | 'cancelled'
   | 'expired';
