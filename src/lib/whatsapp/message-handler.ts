@@ -16,7 +16,7 @@ import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
-import { attachGpsToNote, consumePendingGps } from './field-note-processor';
+import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -144,18 +144,36 @@ export async function handleIncomingMessage(
 
     // --- F. Route based on state ---
 
-    // Location messages: attach to pending note or save as new
+    // Location messages: attach to recent note or save as new
     if (messageType === 'location' && extras?.location) {
       const loc = extras.location;
 
-      // Check if there's a recent note awaiting GPS (from location_request_message)
-      const pendingNoteId = consumePendingGps(e164Phone);
-      if (pendingNoteId) {
-        await attachGpsToNote(pendingNoteId, loc.latitude, loc.longitude, e164Phone);
-        return;
+      // Check if there's a recent WhatsApp note without GPS (last 10 min)
+      // This is stateless — works across Vercel serverless instances
+      try {
+        const { getSupabaseAdmin } = await import('@/lib/supabase-client');
+        const admin = getSupabaseAdmin();
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { data: recentNote } = await (admin as any)
+          .from('field_notes')
+          .select('id')
+          .eq('user_id', userId)
+          .is('latitude', null)
+          .eq('source', 'whatsapp')
+          .gte('created_at', tenMinAgo)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (recentNote?.id) {
+          await attachGpsToNote(recentNote.id, loc.latitude, loc.longitude, e164Phone);
+          return;
+        }
+      } catch (err) {
+        console.warn('[WhatsApp Handler] Pending GPS lookup failed:', err);
       }
 
-      // Otherwise save as new field note with GPS
+      // No recent note found — save as new field note with GPS
       const noteContent = loc.name || loc.address || '📍 Locatie-notitie';
       await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
         latitude: loc.latitude,
