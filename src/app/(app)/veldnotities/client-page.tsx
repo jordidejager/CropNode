@@ -5,7 +5,7 @@ import {
   StickyNote, Search, Pin, Trash2, Check, ChevronDown, ChevronUp,
   NotebookPen, Send, Droplets, Leaf, ListTodo, Eye, Tag, MapPin,
   MapPinPlus, ArrowRight, CheckCircle2, Bug, Shrub, Activity, Wind, Info,
-  Camera, X, Loader2, List, MapIcon
+  Camera, X, Loader2, List, MapIcon, Lock, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -128,6 +128,7 @@ interface QuickAddSubmitData {
   photo?: File;
   latitude?: number;
   longitude?: number;
+  is_locked?: boolean;
 }
 
 function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
@@ -140,6 +141,7 @@ function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -203,12 +205,14 @@ function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
       photo: pendingPhoto ?? undefined,
       latitude: gpsLocation?.lat,
       longitude: gpsLocation?.lng,
+      is_locked: isLocked || undefined,
     });
     setValue('');
     setPendingPhoto(null);
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
     setGpsLocation(null);
+    setIsLocked(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, [value, onSubmit, pendingPhoto, gpsLocation, photoPreview, isUploading]);
@@ -309,6 +313,21 @@ function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
                 aria-label="Locatie vastleggen"
               >
                 <MapPin className="h-4 w-4" />
+              </button>
+
+              {/* Lock button */}
+              <button
+                onClick={() => setIsLocked(!isLocked)}
+                className={cn(
+                  'h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200',
+                  isLocked
+                    ? 'text-amber-400 bg-amber-500/10'
+                    : 'text-white/25 hover:text-white/50 hover:bg-white/[0.05]'
+                )}
+                aria-label={isLocked ? 'Ontgrendelen' : 'Vergrendelen'}
+                title={isLocked ? 'Notitie wordt vergrendeld opgeslagen' : 'Vergrendel notitie'}
+              >
+                {isLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
               </button>
             </div>
 
@@ -448,10 +467,11 @@ function ObservationIcon({ category }: { category: string | null }) {
 // NOTE CARD
 // ============================================================================
 
-function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdateParcel, onTransfer, onPhotoClick, onObservationFilter }: {
+function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, onEdit, onUpdateParcel, onTransfer, onPhotoClick, onObservationFilter }: {
   note: FieldNote;
   onToggleStatus: () => void;
   onTogglePin: () => void;
+  onToggleLock: () => void;
   onDelete: () => void;
   onEdit: (content: string) => void;
   onUpdateParcel: (parcelId: string | null) => void;
@@ -503,7 +523,8 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
       className={cn(
         'group flex gap-3 px-4 py-3.5 md:px-5 transition-all duration-200',
         'hover:bg-white/[0.02] border-b border-white/[0.04] last:border-b-0',
-        isTransferred && 'opacity-60'
+        isTransferred && 'opacity-60',
+        note.is_locked && 'bg-amber-500/[0.03] border-l-2 border-l-amber-500/20'
       )}
     >
       {/* Checkbox */}
@@ -682,6 +703,19 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onDelete, onEdit, onUpdat
         </button>
 
         <button
+          onClick={onToggleLock}
+          className={cn(
+            'h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200',
+            note.is_locked
+              ? 'text-amber-400 hover:bg-amber-500/10'
+              : 'text-white/30 hover:text-amber-400 hover:bg-amber-500/10'
+          )}
+          aria-label={note.is_locked ? 'Ontgrendelen' : 'Vergrendelen'}
+        >
+          {note.is_locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+        </button>
+
+        <button
           onClick={onDelete}
           className="h-8 w-8 flex items-center justify-center rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
           aria-label="Verwijderen"
@@ -827,6 +861,7 @@ export function VeldnotitiesClient() {
   const [viewMode, setViewMode] = useState<'invoer' | 'kaart' | 'archief'>('invoer');
   const [dateFilter, setDateFilter] = useState<'week' | 'month' | 'season' | 'all'>('all');
   const [archiveCategory, setArchiveCategory] = useState<Tag | null>(null);
+  const [showLocked, setShowLocked] = useState(false);
 
   const transferNote = transferNoteId ? notes?.find(n => n.id === transferNoteId) : null;
 
@@ -882,6 +917,10 @@ export function VeldnotitiesClient() {
     updateMutation.mutate({ id: note.id, updates: { is_pinned: !note.is_pinned } });
   }, [updateMutation]);
 
+  const handleToggleLock = useCallback((note: FieldNote) => {
+    updateMutation.mutate({ id: note.id, updates: { is_locked: !note.is_locked } });
+  }, [updateMutation]);
+
   const handleDelete = useCallback((note: FieldNote) => {
     deleteMutation.mutate(note.id, {
       onSuccess: () => {
@@ -914,6 +953,11 @@ export function VeldnotitiesClient() {
   const filteredNotes = useMemo(() => {
     if (!notes) return [];
     let result = notes;
+
+    // Hide locked notes by default
+    if (!showLocked) {
+      result = result.filter(n => !n.is_locked);
+    }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -961,7 +1005,7 @@ export function VeldnotitiesClient() {
     }
 
     return result;
-  }, [notes, searchQuery, activeStatus, activeTags, activeParcelId, activeObservation, dateFilter, archiveCategory]);
+  }, [notes, searchQuery, activeStatus, activeTags, activeParcelId, activeObservation, dateFilter, archiveCategory, showLocked]);
 
   return (
     <div className="max-w-3xl mx-auto pb-12 relative">
@@ -1028,6 +1072,21 @@ export function VeldnotitiesClient() {
                 className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white/80 placeholder:text-white/20 outline-none focus:border-emerald-500/30 transition-colors"
               />
             </div>
+
+            {/* Vergrendelde toggle */}
+            <button
+              onClick={() => setShowLocked(!showLocked)}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl text-xs font-medium border transition-colors whitespace-nowrap',
+                showLocked
+                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                  : 'bg-white/[0.03] border-white/[0.08] text-white/30 hover:text-white/50'
+              )}
+              title={showLocked ? 'Vergrendelde notities worden getoond' : 'Vergrendelde notities zijn verborgen'}
+            >
+              {showLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+              <span className="hidden sm:inline">{showLocked ? 'Verborgen aan' : 'Verborgen'}</span>
+            </button>
 
             {/* Perceel filter */}
             {parcels.length > 0 && (

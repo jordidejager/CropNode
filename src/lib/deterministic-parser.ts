@@ -536,10 +536,12 @@ export function resolveParcelsByText(
             .map(s => s.replace(/^(?:de|het)\s+/i, '').trim())
             .filter(s => s.length >= 2);
           for (const ep of excludeParts2) {
+            const excludeWords = ep.split(/\s+/).filter((w: string) => w.length >= 2 && !PARCEL_SEARCH_STOP_WORDS.has(w));
             const excludeHits = parcels.filter(p => {
               const name = p.name.toLowerCase();
               const parcelName = (p as any).parcelName?.toLowerCase() || '';
-              return name.includes(ep) || parcelName.includes(ep);
+              const combined = name + ' ' + parcelName;
+              return excludeWords.length > 0 && excludeWords.every((w: string) => combined.includes(w));
             });
             excludeHits.forEach(h => {
               const idx = result.ids.indexOf(h.id);
@@ -764,12 +766,15 @@ export function resolveParcelsByText(
       if (excludeByVariety.length > 0) {
         excludedIds.push(...excludeByVariety.map(p => p.id));
       } else {
-        // Try name match (check first word / parcelName / full name)
+        // Try name match with word-order-independent matching
+        // "nieuwe conference jachthoek" should match "Jachthoek Nieuwe Conference (Conference)"
+        const excludeWords = partLower.split(/\s+/).filter(w => w.length >= 2 && !PARCEL_SEARCH_STOP_WORDS.has(w));
         const excludeByName = parcels.filter(p => {
           const name = p.name.toLowerCase();
-          const firstWord = name.split(' ')[0];
           const parcelName = (p as any).parcelName?.toLowerCase() || '';
-          return name.includes(partLower) || firstWord === partLower || parcelName === partLower;
+          const combined = name + ' ' + parcelName;
+          // All exclude words must appear somewhere in the parcel name (order-independent)
+          return excludeWords.length > 0 && excludeWords.every(w => combined.includes(w));
         });
         excludedIds.push(...excludeByName.map(p => p.id));
       }

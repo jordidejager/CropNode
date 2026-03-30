@@ -16,6 +16,7 @@ const CreateNoteSchema = z.object({
   photo_url: z.string().url().nullable().optional(),
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
+  is_locked: z.boolean().optional(),
 });
 
 /**
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
     if (result.data.photo_url) insertPayload.photo_url = result.data.photo_url;
     if (result.data.latitude != null) insertPayload.latitude = result.data.latitude;
     if (result.data.longitude != null) insertPayload.longitude = result.data.longitude;
+    if (result.data.is_locked) insertPayload.is_locked = true;
 
     // Try with all fields first; if it fails (e.g. migration not run), retry with just content
     let note: any;

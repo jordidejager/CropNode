@@ -15,6 +15,7 @@ const UpdateNoteSchema = z.object({
   content: z.string().min(1).max(2000).optional(),
   status: z.enum(['open', 'done', 'transferred']).optional(),
   is_pinned: z.boolean().optional(),
+  is_locked: z.boolean().optional(),
   parcel_ids: z.array(z.string()).optional(),
 });
 

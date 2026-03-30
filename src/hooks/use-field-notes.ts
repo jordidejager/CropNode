@@ -21,6 +21,7 @@ export interface FieldNote {
   parcel_ids: string[];
   observation_subject: string | null;
   observation_category: 'insect' | 'schimmel' | 'ziekte' | 'fysiologisch' | 'overig' | null;
+  is_locked: boolean;
   photo_url: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -45,6 +46,7 @@ interface CreateFieldNoteInput {
   photo_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  is_locked?: boolean;
 }
 
 async function createFieldNote(input: CreateFieldNoteInput): Promise<FieldNote> {
@@ -73,7 +75,7 @@ async function fetchWithRetry(url: string, init: RequestInit, fallbackError: str
 
 async function updateFieldNote(
   id: string,
-  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_ids'>>
+  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids'>>
 ): Promise<FieldNote> {
   return fetchWithRetry(`/api/field-notes/${id}`, {
     method: 'PATCH',
@@ -114,6 +116,7 @@ export function useCreateFieldNote() {
         status: 'open',
         auto_tag: null,
         is_pinned: false,
+        is_locked: input.is_locked ?? false,
         parcel_ids: [],
         observation_subject: null,
         observation_category: null,
@@ -166,7 +169,7 @@ export function useUpdateFieldNote() {
   return useMutation({
     mutationFn: ({ id, updates }: {
       id: string;
-      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'parcel_ids'>>;
+      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids'>>;
     }) => updateFieldNote(id, updates),
     onMutate: async ({ id, updates }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEY });
