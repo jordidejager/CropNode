@@ -11,7 +11,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-client';
-import { sendTextMessage, sendInteractiveButtons } from './client';
+import { sendTextMessage, sendLocationRequest } from './client';
 import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 
@@ -240,21 +240,28 @@ export async function processFieldNote(
       '✅ Zichtbaar in je Veldnotities.',
     ].join('\n');
 
-    // Text notes without GPS: offer location button
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+
+    // Notes without GPS: send location request (one-tap GPS sharing)
     const hasGps = insertData.latitude != null;
     if (!hasGps && inserted?.id) {
       try {
-        await sendInteractiveButtons(metaPhone, msg, [
-          { id: `addgps:${inserted.id}`, title: '📍 Locatie toevoegen' },
-        ]);
-      } catch {
-        // Fallback to plain text if buttons fail
-        await sendTextMessage(metaPhone, msg);
+        // Store noteId in conversation for when location arrives
+        const { updateConversationState, createConversation } = await import('./store');
+        const { getActiveConversation } = await import('./store');
+        const conversation = await getActiveConversation(phoneNumber);
+        if (conversation) {
+          await updateConversationState(conversation.id, 'awaiting_gps', undefined, `gps:${inserted.id}`);
+        }
+
+        await sendLocationRequest(metaPhone, '📍 Deel je locatie om de notitie op de kaart te zetten:');
+        await logMessage({ phoneNumber, direction: 'outbound', messageText: '[locatie-verzoek]' });
+      } catch (locErr) {
+        // Non-fatal — note is already saved
+        console.warn('[processFieldNote] Location request failed:', locErr);
       }
-    } else {
-      await sendTextMessage(metaPhone, msg);
     }
-    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
 
     // Fire-and-forget: AI classification for better tagging + parcel matching
     if (inserted?.id) {

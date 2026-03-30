@@ -16,7 +16,7 @@ import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
-import { handleAddGpsButton, attachGpsToNote } from './field-note-processor';
+import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
   formatUnsupportedMediaMessage,
@@ -118,30 +118,8 @@ export async function handleIncomingMessage(
       return;
     }
 
-    // --- D2. Handle location messages ---
-    if (messageType === 'location' && extras?.location) {
-      const loc = extras.location;
-
-      // Check if user was asked to add GPS to an existing note
-      if (conversation?.state === 'awaiting_gps' && conversation.lastInput?.startsWith('gps:')) {
-        const noteId = conversation.lastInput.replace('gps:', '');
-        await attachGpsToNote(noteId, loc.latitude, loc.longitude, e164Phone);
-        await updateConversationState(conversation.id, 'idle');
-        return;
-      }
-
-      // Otherwise save as new field note with GPS
-      const noteContent = loc.name || loc.address || '📍 Locatie-notitie';
-      await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        locationName: loc.name || loc.address || undefined,
-      });
-      return;
-    }
-
     // --- E. Handle other unsupported message types ---
-    if (messageType !== 'text' && messageType !== 'interactive') {
+    if (messageType !== 'text' && messageType !== 'interactive' && messageType !== 'location') {
       const msg = formatUnsupportedMediaMessage();
       await sendTextMessage(metaPhone, msg);
       await logMessage({
@@ -165,6 +143,28 @@ export async function handleIncomingMessage(
     console.log(`[WhatsApp Handler] User ${userId}, state: ${state}, type: ${messageType}${buttonReplyId ? `, button: ${buttonReplyId}` : ''}`);
 
     // --- F. Route based on state ---
+
+    // Location messages: attach to existing note or save as new
+    if (messageType === 'location' && extras?.location) {
+      const loc = extras.location;
+
+      // If awaiting GPS for a specific note, attach it
+      if (state === 'awaiting_gps' && conversation?.lastInput?.startsWith('gps:')) {
+        const noteId = conversation.lastInput.replace('gps:', '');
+        await attachGpsToNote(noteId, loc.latitude, loc.longitude, e164Phone);
+        await updateConversationState(conversation.id, 'idle');
+        return;
+      }
+
+      // Otherwise save as new field note with GPS
+      const noteContent = loc.name || loc.address || '📍 Locatie-notitie';
+      await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        locationName: loc.name || loc.address || undefined,
+      });
+      return;
+    }
 
     // Product selection: user picks from CTGB suggestions
     if (state === 'awaiting_product_selection' && conversation) {
@@ -243,17 +243,6 @@ export async function handleIncomingMessage(
         await handleEditInput(userId, e164Phone, conversation, messageText);
         return;
       }
-    }
-
-    // Handle "📍 Locatie toevoegen" button from field note confirmation
-    if (buttonReplyId?.startsWith('addgps:')) {
-      const noteId = buttonReplyId.replace('addgps:', '');
-      // Create or update conversation to awaiting_gps state
-      if (conversation) {
-        await updateConversationState(conversation.id, 'awaiting_gps', undefined, `gps:${noteId}`);
-      }
-      await handleAddGpsButton(e164Phone, noteId);
-      return;
     }
 
     // STATE: idle (or no active conversation) + text message

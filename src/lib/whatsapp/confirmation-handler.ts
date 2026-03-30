@@ -10,6 +10,7 @@ import { sendTextMessage } from './client';
 import { updateConversationState, logMessage } from './store';
 import { formatConfirmationMessage, formatExpiredMessage, formatErrorMessage } from './format';
 import { stripPlus } from './phone-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-client';
 import type { WhatsAppConversation } from './types';
 import type { SprayRegistrationGroup } from '@/lib/types';
 
@@ -77,7 +78,24 @@ export async function handleConfirmation(
       return;
     }
 
-    // 4. Invalidate pipeline context cache so next validation uses fresh history
+    // 4. Mirror to field_notes as transferred note (complete logbook)
+    try {
+      const admin = getSupabaseAdmin();
+      const rawInput = reg.rawInput || conversation.lastInput || 'WhatsApp registratie';
+      await (admin as any).from('field_notes').insert({
+        user_id: userId,
+        content: rawInput,
+        source: 'whatsapp',
+        status: 'transferred',
+        auto_tag: reg.registrationType === 'fertilization' ? 'bemesting' : 'bespuiting',
+        is_pinned: false,
+      });
+    } catch (mirrorErr) {
+      // Mirror failure must never block the registration
+      console.warn('[handleConfirmation] field_notes mirror failed:', mirrorErr);
+    }
+
+    // 5. Invalidate pipeline context cache so next validation uses fresh history
     invalidateContextCache(userId);
 
     // 5. Update conversation state

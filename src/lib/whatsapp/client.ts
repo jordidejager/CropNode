@@ -141,6 +141,31 @@ export async function sendListMessage(
 }
 
 /**
+ * Send a location request message.
+ * Shows a button that opens the location picker directly — one tap for the user.
+ * @param to Phone number without +
+ * @param bodyText Message body text
+ * @returns WhatsApp message ID
+ */
+export async function sendLocationRequest(
+  to: string,
+  bodyText: string
+): Promise<string> {
+  console.log(`[WhatsApp Client] Sending location request to ${to}`);
+
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'location_request_message',
+      body: { text: bodyText },
+      action: { name: 'send_location' },
+    },
+  });
+}
+
+/**
  * Mark a message as read (sends blue checkmarks).
  * @param messageId The WhatsApp message ID (wamid.xxx)
  */
