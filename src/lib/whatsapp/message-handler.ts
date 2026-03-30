@@ -53,22 +53,23 @@ function checkRateLimit(phoneNumber: string): boolean {
 // Main message handler
 // ============================================================================
 
+/** Extra data from webhook (media, location) */
+interface MessageExtras {
+  mediaId?: string | null;
+  location?: { latitude: number; longitude: number; name?: string; address?: string } | null;
+}
+
 /**
  * Handle an incoming WhatsApp message.
  * This is the main entry point called from the webhook route.
- *
- * @param phoneNumber Sender's phone number (Meta format, without +)
- * @param messageText Text content (null for non-text messages)
- * @param buttonReplyId Button reply ID (null for non-interactive messages)
- * @param waMessageId WhatsApp message ID for dedup
- * @param messageType The type of message received
  */
 export async function handleIncomingMessage(
   phoneNumber: string,
   messageText: string | null,
   buttonReplyId: string | null,
   waMessageId: string,
-  messageType: string = 'text'
+  messageType: string = 'text',
+  extras?: MessageExtras
 ): Promise<void> {
   const e164Phone = addPlus(phoneNumber);
   const metaPhone = stripPlus(phoneNumber);
@@ -107,10 +108,24 @@ export async function handleIncomingMessage(
       return;
     }
 
-    // --- D. Handle image messages → save as field note ---
+    // --- D. Handle image messages → save as field note with photo ---
     if (messageType === 'image') {
       const noteContent = messageText || '📸 Foto-notitie';
-      await processFieldNote(userId, e164Phone, noteContent, waMessageId, { isPhoto: true });
+      await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
+        mediaId: extras?.mediaId || undefined,
+      });
+      return;
+    }
+
+    // --- D2. Handle location messages → save as field note with GPS ---
+    if (messageType === 'location' && extras?.location) {
+      const loc = extras.location;
+      const noteContent = loc.name || loc.address || '📍 Locatie-notitie';
+      await processFieldNote(userId, e164Phone, noteContent, waMessageId, {
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        locationName: loc.name || loc.address || undefined,
+      });
       return;
     }
 

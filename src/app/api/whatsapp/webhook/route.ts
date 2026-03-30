@@ -75,6 +75,10 @@ export async function POST(request: Request) {
           || msg.interactive?.list_reply?.id
           || null;
 
+        // Extract media/location data for field notes
+        const mediaId = msg.image?.id || null;
+        const location = msg.location || null;
+
         console.log(`[WhatsApp Webhook] Processing message from ${msg.from}: "${messageText?.substring(0, 50) || buttonReplyId || msg.type}"`);
 
         await handleIncomingMessage(
@@ -82,7 +86,8 @@ export async function POST(request: Request) {
           messageText,
           buttonReplyId,
           msg.id,
-          msg.type
+          msg.type,
+          { mediaId, location }
         );
 
         console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);

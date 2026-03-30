@@ -109,6 +109,7 @@ export interface WhatsAppInboundMessage {
   };
   image?: { id: string; mime_type: string; sha256: string; caption?: string };
   audio?: { id: string; mime_type: string };
+  location?: { latitude: number; longitude: number; name?: string; address?: string };
 }
 
 // ============================================================================

@@ -2,7 +2,12 @@
  * WhatsApp Field Note Processor.
  * Handles field note (veldnotitie) messages via WhatsApp.
  * Saves notes directly to the field_notes table using the admin client.
- * Triggers async AI classification for better tagging + parcel matching.
+ *
+ * Supports:
+ * - Text notes (with auto-tag detection)
+ * - Photo notes (download from WhatsApp → Supabase Storage + EXIF GPS extraction)
+ * - Location notes (WhatsApp location pin → latitude/longitude)
+ * - Async AI classification for better tagging + parcel matching
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-client';
@@ -89,7 +94,7 @@ function detectAutoTag(text: string): 'bespuiting' | 'bemesting' | 'taak' | 'waa
   if (/bladluis|spint|meeldauw|aantasting|plaag|ziek|schade|schurft/.test(lower)) {
     return 'waarneming';
   }
-  if (/snoei|snoeien|dun|dunnen|maaien|onderhoud|repareer/.test(lower)) {
+  if (/snoei|snoeien|dun|dunnen|maaien|onderhoud|repareer|bellen|bestellen|checken/.test(lower)) {
     return 'taak';
   }
   if (/bemest|bemesting|mest|kunstmest/.test(lower)) {
@@ -106,13 +111,19 @@ function detectAutoTag(text: string): 'bespuiting' | 'bemesting' | 'taak' | 'waa
 // Field note processor
 // ============================================================================
 
-interface FieldNoteOptions {
-  isPhoto?: boolean;
+export interface FieldNoteOptions {
+  /** WhatsApp media ID for photo download */
+  mediaId?: string;
+  /** GPS coordinates (from WhatsApp location message) */
+  latitude?: number;
+  longitude?: number;
+  /** Location name/address (from WhatsApp location pin) */
+  locationName?: string;
 }
 
 /**
  * Save a field note from WhatsApp to the field_notes table.
- * Optionally handles photo messages (saves caption, no photo upload yet).
+ * Handles text, photos (with EXIF GPS extraction), and location messages.
  */
 export async function processFieldNote(
   userId: string,
@@ -122,19 +133,60 @@ export async function processFieldNote(
   options?: FieldNoteOptions
 ): Promise<void> {
   const metaPhone = stripPlus(phoneNumber);
-  const isPhoto = options?.isPhoto ?? false;
+  const hasMedia = !!options?.mediaId;
+  const hasLocation = options?.latitude != null && options?.longitude != null;
 
   try {
     // Log inbound
+    const logPrefix = hasMedia ? '[foto]' : hasLocation ? '[locatie]' : '';
     await logMessage({
       phoneNumber,
       direction: 'inbound',
-      messageText: isPhoto ? `[foto] ${inputText}` : inputText,
+      messageText: logPrefix ? `${logPrefix} ${inputText}` : inputText,
       waMessageId,
     });
 
     const content = cleanNoteContent(inputText);
     const autoTag = detectAutoTag(content);
+
+    // Prepare the insert data
+    const insertData: Record<string, unknown> = {
+      user_id: userId,
+      content,
+      source: 'whatsapp',
+      status: 'open',
+      auto_tag: autoTag,
+      is_pinned: false,
+    };
+
+    // GPS from location message
+    if (hasLocation) {
+      insertData.latitude = options!.latitude;
+      insertData.longitude = options!.longitude;
+    }
+
+    // Photo: download from WhatsApp → upload to Supabase Storage
+    let photoUrl: string | null = null;
+    if (hasMedia) {
+      try {
+        const { processWhatsAppMedia, extractExifGps } = await import('./media');
+        const result = await processWhatsAppMedia(options!.mediaId!, userId);
+        photoUrl = result.publicUrl;
+        insertData.photo_url = photoUrl;
+
+        // Extract EXIF GPS if no location was explicitly provided
+        if (!hasLocation && result.buffer) {
+          const exifGps = await extractExifGps(Buffer.from(result.buffer));
+          if (exifGps) {
+            insertData.latitude = exifGps.latitude;
+            insertData.longitude = exifGps.longitude;
+          }
+        }
+      } catch (mediaErr) {
+        console.error('[processFieldNote] Media download/upload failed (non-fatal):', mediaErr);
+        // Continue without photo — the note text is still saved
+      }
+    }
 
     // Save to field_notes using admin client (bypasses RLS)
     const admin = getSupabaseAdmin();
@@ -142,20 +194,13 @@ export async function processFieldNote(
 
     const { data: inserted, error } = await (admin as any)
       .from('field_notes')
-      .insert({
-        user_id: userId,
-        content,
-        source: isPhoto ? 'whatsapp' : 'whatsapp',
-        status: 'open',
-        auto_tag: autoTag,
-        is_pinned: false,
-      })
+      .insert(insertData)
       .select('id')
       .single();
 
     if (error) throw new Error(error.message);
 
-    // Send confirmation
+    // Build confirmation message
     const tagEmoji: Record<string, string> = {
       waarneming: '👁️',
       taak: '✅',
@@ -164,8 +209,25 @@ export async function processFieldNote(
       overig: '📝',
     };
 
-    const emoji = isPhoto ? '📸' : (tagEmoji[autoTag] || '📝');
-    const photoNote = isPhoto ? '\n\n📎 _Foto-bijlage wordt binnenkort ondersteund._' : '';
+    let emoji = tagEmoji[autoTag] || '📝';
+    const extras: string[] = [];
+
+    if (hasMedia) {
+      emoji = '📸';
+      if (photoUrl) {
+        extras.push('📎 Foto opgeslagen');
+      } else {
+        extras.push('📎 _Foto kon niet worden opgeslagen_');
+      }
+    }
+
+    if (insertData.latitude != null) {
+      extras.push('📍 GPS-locatie vastgelegd');
+    }
+
+    if (hasLocation && options?.locationName) {
+      extras.push(`📍 ${options.locationName}`);
+    }
 
     const msg = [
       `${emoji} *Veldnotitie opgeslagen*`,
@@ -173,16 +235,17 @@ export async function processFieldNote(
       `💬 ${content}`,
       '',
       `🏷️ _${autoTag}_`,
-      photoNote,
+      ...(extras.length > 0 ? ['', ...extras] : []),
+      '',
       '✅ Zichtbaar in je Veldnotities.',
-    ].filter(Boolean).join('\n');
+    ].join('\n');
 
     await sendTextMessage(metaPhone, msg);
     await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
 
     // Fire-and-forget: AI classification for better tagging + parcel matching
     if (inserted?.id) {
-      classifyFieldNoteAsync(inserted.id, content, userId).catch(err => {
+      classifyFieldNoteAsync(inserted.id, content, userId, photoUrl).catch(err => {
         console.error('[processFieldNote] AI classification failed (non-fatal):', err);
       });
     }
@@ -211,7 +274,8 @@ export async function processFieldNote(
 async function classifyFieldNoteAsync(
   noteId: string,
   content: string,
-  userId: string
+  userId: string,
+  photoUrl?: string | null
 ): Promise<void> {
   try {
     const { getOrLoadContext } = await import('@/lib/registration-pipeline');
