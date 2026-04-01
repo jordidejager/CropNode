@@ -22,6 +22,7 @@ export type ConversationState =
   | 'idle'
   | 'awaiting_product_selection'
   | 'awaiting_confirmation'
+  | 'awaiting_send_choice'
   | 'awaiting_edit_choice'
   | 'awaiting_edit_input'
   | 'awaiting_gps'

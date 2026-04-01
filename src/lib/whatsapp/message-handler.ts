@@ -201,14 +201,15 @@ export async function handleIncomingMessage(
     }
 
     if (state === 'awaiting_confirmation' && conversation) {
-      // Handle button replies
-      if (buttonReplyId === 'confirm') {
-        await handleConfirmation(userId, e164Phone, conversation);
-        return;
-      }
-
-      if (buttonReplyId === 'save_note') {
-        await handleSaveAsNote(userId, e164Phone, conversation);
+      // "Verzenden" → show send-type choice (Notitie / Spuitschrift + Notitie)
+      if (buttonReplyId === 'send') {
+        await updateConversationState(conversation.id, 'awaiting_send_choice');
+        const { sendInteractiveButtons } = await import('./client');
+        await sendInteractiveButtons(metaPhone, 'Waar wil je het opslaan?', [
+          { id: 'send_note', title: '📝 Veldnotitie' },
+          { id: 'send_both', title: '📋 Spuitschrift + Notitie' },
+        ]);
+        await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: 'Waar wil je het opslaan?' });
         return;
       }
 
@@ -217,8 +218,37 @@ export async function handleIncomingMessage(
         return;
       }
 
+      if (buttonReplyId === 'cancel') {
+        await updateConversationState(conversation.id, 'cancelled');
+        const { formatCancellationMessage } = await import('./format');
+        const msg = formatCancellationMessage();
+        await sendTextMessage(metaPhone, msg);
+        await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: msg });
+        return;
+      }
+
       // If user sends a NEW text message while awaiting confirmation,
       // treat it as a new registration (reset + process)
+      if (messageText) {
+        await updateConversationState(conversation.id, 'cancelled');
+        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        return;
+      }
+    }
+
+    // State: awaiting_send_choice — user picks where to save
+    if (state === 'awaiting_send_choice' && conversation) {
+      if (buttonReplyId === 'send_note') {
+        await handleSaveAsNote(userId, e164Phone, conversation);
+        return;
+      }
+      if (buttonReplyId === 'send_both') {
+        // Save as field note first (uses pending registration), then confirm to spuitschrift
+        await handleSaveAsNote(userId, e164Phone, conversation, true); // silent = true
+        await handleConfirmation(userId, e164Phone, conversation);
+        return;
+      }
+      // Text message → new registration
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
         await processNewRegistration(userId, e164Phone, messageText, waMessageId);
@@ -289,7 +319,8 @@ export async function handleIncomingMessage(
 async function handleSaveAsNote(
   userId: string,
   phoneNumber: string,
-  conversation: WhatsAppConversation
+  conversation: WhatsAppConversation,
+  silent: boolean = false
 ): Promise<void> {
   const metaPhone = stripPlus(phoneNumber);
   const reg = conversation.pendingRegistration as SprayRegistrationGroup | null;
@@ -346,12 +377,14 @@ async function handleSaveAsNote(
         parcel_ids: parcelIds.length > 0 ? parcelIds : null,
       });
 
-    // Update conversation
-    await updateConversationState(conversation.id, 'cancelled');
-
-    const msg = `📝 *Opgeslagen als notitie*\n\n${noteContent}\n\nJe kunt deze later officieel registreren via Veldnotities op CropNode.`;
-    await sendTextMessage(metaPhone, msg);
-    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    if (!silent) {
+      // Update conversation + send confirmation
+      await updateConversationState(conversation.id, 'cancelled');
+      const msg = `📝 *Opgeslagen als veldnotitie*\n\n${noteContent}\n\nJe kunt deze later officieel registreren via Veldnotities op CropNode.`;
+      await sendTextMessage(metaPhone, msg);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    }
+    // When silent=true: no message, no state change (caller handles that)
 
   } catch (err) {
     console.error('[handleSaveAsNote] Error:', err);
