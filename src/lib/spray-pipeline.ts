@@ -92,6 +92,7 @@ export function getDefaultUnitForProduct(
         nameLower.includes(' wp') ||  // Wettable Powder (space before to avoid false matches)
         nameLower.includes(' wg') ||  // Water dispersible Granule
         nameLower.includes(' wdg') || // Water Dispersible Granule
+        nameLower.includes(' df') ||  // Dry Flowable (e.g., Delan DF)
         nameLower.includes(' sg') ||  // Soluble Granule
         nameLower.includes(' sp')) {  // Soluble Powder
         console.log(`[getDefaultUnitForProduct] "${productName}" → kg/ha (name contains solid indicator)`);

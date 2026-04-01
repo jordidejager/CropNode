@@ -175,7 +175,10 @@ function tryPatternParcelenMetProduct(
   if (metIndex === -1) return null;
 
   const parcelPart = input.substring(0, metIndex).trim();
-  const productPart = input.substring(metIndex + 5).trim();
+  // Strip trailing filler verbs from product text (e.g., "1,25 liter borium gespoten" → "1,25 liter borium")
+  const productPart = input.substring(metIndex + 5).trim()
+    .replace(/\s+(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden)\s*$/i, '')
+    .trim();
 
   if (!parcelPart || !productPart) return null;
 
@@ -292,7 +295,10 @@ function tryPatternParcelenProductNoPrep(
   if (!match || match.index === undefined || match.index < 3) return null;
 
   const parcelPart = input.substring(0, match.index).trim();
-  const productPart = input.substring(match.index).trim();
+  // Strip trailing filler verbs from product text
+  const productPart = input.substring(match.index).trim()
+    .replace(/\s+(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden)\s*$/i, '')
+    .trim();
 
   if (!parcelPart || !productPart) return null;
 
@@ -923,7 +929,8 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
   }
 
   // Pattern 4: "dosage productName" WITHOUT unit (e.g., "0,75 Pyrus 400 SC", "3 ACS-Koper 500")
-  // Common in Dutch farming where unit is implied (defaults to L for liquids, kg for solids)
+  // Common in Dutch farming where unit is implied
+  // Return empty unit so resolveProducts can look up the correct unit from CTGB data
   const matchD = s.match(/^(\d+[.,]?\d*)\s+([a-zà-ü][\w\s®*-]+)$/i);
   if (matchD) {
     const name = matchD[2].trim();
@@ -931,7 +938,7 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
       return {
         product: name,
         dosage: parseFloat(matchD[1].replace(',', '.')),
-        unit: 'L', // Default to L when no unit specified
+        unit: '', // Empty: let resolveProducts determine unit from CTGB data
       };
     }
   }
@@ -939,7 +946,7 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
   // Pattern 5: Product name only (no dosage) - e.g., "Surround"
   const nameOnly = s.replace(/\s+/g, ' ').trim();
   if (nameOnly.length >= 3 && !CROP_STOP_WORDS.has(nameOnly.toLowerCase()) && !/^\d/.test(nameOnly)) {
-    return { product: nameOnly, dosage: 0, unit: 'L' };
+    return { product: nameOnly, dosage: 0, unit: '' };
   }
 
   return null;
