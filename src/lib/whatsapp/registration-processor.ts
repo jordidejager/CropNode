@@ -132,8 +132,8 @@ export async function processNewRegistration(
     // 10. Send interactive buttons
     await sendInteractiveButtons(metaPhone, summaryText, [
       { id: 'confirm', title: '✓ Bevestig' },
+      { id: 'save_note', title: '📝 Notitie' },
       { id: 'edit', title: '✏ Wijzig' },
-      { id: 'cancel', title: '✗ Annuleer' },
     ]);
 
     // 11. Log outbound
@@ -141,7 +141,7 @@ export async function processNewRegistration(
       phoneNumber,
       direction: 'outbound',
       messageText: summaryText,
-      metadata: { buttons: ['confirm', 'edit', 'cancel'] },
+      metadata: { buttons: ['confirm', 'save_note', 'edit'] },
     });
 
   } catch (error) {

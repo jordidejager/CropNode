@@ -10,7 +10,9 @@ import {
   updateConversationState,
   isMessageProcessed,
   logMessage,
+  getSprayableParcelsForUser,
 } from './store';
+import type { WhatsAppConversation } from './types';
 import { processNewRegistration } from './registration-processor';
 import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
@@ -25,6 +27,7 @@ import {
   formatRateLimitMessage,
 } from './format';
 import { addPlus, stripPlus } from './phone-utils';
+import type { SprayRegistrationGroup } from '@/lib/types';
 
 // ============================================================================
 // Rate limiting (in-memory, per phone number)
@@ -204,11 +207,8 @@ export async function handleIncomingMessage(
         return;
       }
 
-      if (buttonReplyId === 'cancel') {
-        await updateConversationState(conversation.id, 'cancelled');
-        const msg = formatCancellationMessage();
-        await sendTextMessage(metaPhone, msg);
-        await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: msg });
+      if (buttonReplyId === 'save_note') {
+        await handleSaveAsNote(userId, e164Phone, conversation);
         return;
       }
 
@@ -279,5 +279,84 @@ export async function handleIncomingMessage(
   } catch (error) {
     console.error(`[WhatsApp Handler] Unhandled error for ${e164Phone}:`, error);
     // Don't throw — the webhook must always return 200
+  }
+}
+
+// ============================================================================
+// Save pending registration as field note (user tapped "📝 Notitie")
+// ============================================================================
+
+async function handleSaveAsNote(
+  userId: string,
+  phoneNumber: string,
+  conversation: WhatsAppConversation
+): Promise<void> {
+  const metaPhone = stripPlus(phoneNumber);
+  const reg = conversation.pendingRegistration as SprayRegistrationGroup | null;
+
+  if (!reg) {
+    await sendTextMessage(metaPhone, '❌ Geen registratie gevonden.');
+    return;
+  }
+
+  try {
+    // Build readable note content from the registration
+    const products = reg.units.flatMap(u => u.products)
+      .map(p => `${p.product}${p.dosage ? ` ${p.dosage} ${p.unit || ''}/ha` : ''}`)
+      .join(', ');
+
+    const parcels = await getSprayableParcelsForUser(userId);
+    const parcelNameMap = new Map(parcels.map(p => [p.id, p.name]));
+    const plotNames = reg.units.flatMap(u => u.plots)
+      .map(id => parcelNameMap.get(id) || id.substring(0, 8))
+      .join(', ');
+
+    const dateStr = reg.date
+      ? new Date(reg.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'onbekend';
+
+    const noteContent = `Bespuiting: ${products} — ${plotNames} — ${dateStr}`;
+
+    // Get parcel IDs for linking
+    const parcelIds = reg.units.flatMap(u => u.plots);
+
+    // Save as field note
+    const { getSupabaseAdmin } = await import('@/lib/supabase-client');
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error('Admin client niet beschikbaar');
+
+    // Get farm_id from user
+    const { data: userData } = await (admin as any)
+      .from('whatsapp_linked_numbers')
+      .select('farm_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle();
+
+    await (admin as any)
+      .from('field_notes')
+      .insert({
+        user_id: userId,
+        farm_id: userData?.farm_id || null,
+        content: noteContent,
+        source: 'whatsapp',
+        status: 'open',
+        auto_tag: reg.registrationType === 'spreading' ? 'bemesting' : 'bespuiting',
+        is_pinned: false,
+        parcel_ids: parcelIds.length > 0 ? parcelIds : null,
+      });
+
+    // Update conversation
+    await updateConversationState(conversation.id, 'cancelled');
+
+    const msg = `📝 *Opgeslagen als notitie*\n\n${noteContent}\n\nJe kunt deze later officieel registreren via Veldnotities op CropNode.`;
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+
+  } catch (err) {
+    console.error('[handleSaveAsNote] Error:', err);
+    const msg = '❗ Kon notitie niet opslaan. Probeer het opnieuw.';
+    await sendTextMessage(metaPhone, msg);
+    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
   }
 }
