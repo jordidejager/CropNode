@@ -137,9 +137,12 @@ export const PRODUCT_ALIASES: Record<string, string> = {
     'amistar top': 'Amistar Top',
     'azoxystrobin': 'Amistar',
     // NB: Amistar (solo azoxystrobin) en Amistar Top (+difenoconazool) zijn VERSCHILLENDE producten
-    'kumulus': 'KUMULUS',
-    'zwavel': 'KUMULUS',
-    'spuitzwavel': 'KUMULUS',
+    // NB: "KUMULUS" in CTGB is alleen voor graan. "Kumulus S" is voor fruitteelt (appel, peer, pitvruchten).
+    // Fruitboeren bedoelen altijd Kumulus S als ze "kumulus" of "zwavel" zeggen.
+    'kumulus': 'Kumulus S',
+    'kumulus s': 'Kumulus S',
+    'zwavel': 'Kumulus S',
+    'spuitzwavel': 'Kumulus S',
 
     // ============================================
     // Common Typos / Fuzzy Matching

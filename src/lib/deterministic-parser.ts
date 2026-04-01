@@ -78,7 +78,8 @@ const PARCEL_SEARCH_STOP_WORDS = new Set([
   'maar', 'niet', 'behalve', 'zonder', 'uitgezonderd',
   'gespoten', 'gespuit', 'bespoten', 'behandeld', 'gedaan',
   'gestrooid', 'bemest', 'uitgereden',
-  'vandaag', 'gisteren', 'eergisteren', 'vorige', 'week', 'afgelopen',
+  'vandaag', 'gisteren', 'gisteravond', 'eergisteren', 'vorige', 'week', 'afgelopen',
+  'vanavond', 'vanochtend', 'vanmiddag', 'vannacht', 'vanmorgen',
   'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag',
   'avond', 'ochtend', 'middag', 'nacht', 'avonds', 'ochtends', 'middags',
 ]);
@@ -146,6 +147,13 @@ export function deterministicParse(
   const patternC = tryPatternProductPercelen(cleanLower, parcels, parcelGroups);
   if (patternC && patternC.success) {
     return { ...patternC, date: date ?? new Date() };
+  }
+
+  // Pattern D: "[percelen] [dosering product, dosering product, ...]" (no preposition)
+  // "alle appels 0,5 delan, 0,25 gazelle, 5 kg ureum en 1,25 liter borium"
+  const patternD = tryPatternParcelenProductNoPrep(cleanLower, parcels, parcelGroups);
+  if (patternD && patternD.success) {
+    return { ...patternD, date: date ?? new Date() };
   }
 
   // No pattern matched
@@ -263,6 +271,59 @@ function tryPatternProductPercelen(
     rawParcelText: parcelPart,
     rawProductText: `${productName} ${dosage} ${unit}`,
     parsePath: 'pattern_c_no_prep',
+  };
+}
+
+// ============================================================================
+// Pattern D: "[percelen] [dosering product, ...]" (no preposition)
+// "alle appels 0,5 delan, 0,25 gazelle, 5 kg ureum en 1,25 liter borium"
+// "greenstar en tessa 0,5 delan, 0,25 gazelle"
+// ============================================================================
+
+function tryPatternParcelenProductNoPrep(
+  input: string,
+  parcels: SprayableParcel[],
+  parcelGroups?: ParcelGroup[]
+): DeterministicParseResult | null {
+  // Find where the product list starts: first dosage number not part of a parcel name
+  // Dosage pattern: a number (possibly decimal with comma/period), optionally followed by a unit
+  const dosePattern = /\b(\d+(?:[.,]\d+)?)\s*(?:(kg|l|liter|g|gram|gr|ml)(?:\/ha)?\s+)?([a-zà-ü])/i;
+  const match = input.match(dosePattern);
+  if (!match || match.index === undefined || match.index < 3) return null;
+
+  const parcelPart = input.substring(0, match.index).trim();
+  const productPart = input.substring(match.index).trim();
+
+  if (!parcelPart || !productPart) return null;
+
+  // Strip filler words from parcel part (e.g., "gespoten", "bespoten")
+  const cleanParcelPart = parcelPart
+    .replace(/\b(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleanParcelPart) return null;
+
+  const resolvedParcels = resolveParcelsByText(cleanParcelPart, parcels, parcelGroups);
+  const products = extractProducts(productPart);
+
+  // Only accept if BOTH parcels and products resolve — this is a weak pattern (no preposition)
+  // so we need strong evidence from both sides
+  if (resolvedParcels.ids.length === 0 || products.length === 0) return null;
+
+  // Require at least one product with a dosage for confidence
+  const hasDosage = products.some(p => p.dosage > 0);
+  const confidence = hasDosage ? 0.88 : 0.5;
+
+  return {
+    success: confidence >= 0.85,
+    confidence,
+    parcelIds: resolvedParcels.ids,
+    products,
+    isGrouped: false,
+    rawParcelText: cleanParcelPart,
+    rawProductText: productPart,
+    parsePath: 'pattern_d_no_preposition',
   };
 }
 

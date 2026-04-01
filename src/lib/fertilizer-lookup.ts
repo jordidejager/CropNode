@@ -27,7 +27,7 @@ export const COMMON_FERTILIZERS_CACHE: CachedFertilizer[] = [
   // === BLADMESTSTOFFEN (bij spuiten) ===
   { name: "Chelal Omnical", aliases: ["omnical", "chelal calcium"], type: "bladmeststof", element: "Ca" },
   { name: "Chelal AZ", aliases: ["chelal az", "chelal sporenelementen"], type: "bladmeststof", element: "mix" },
-  { name: "Chelal B", aliases: ["chelal borium"], type: "bladmeststof", element: "B" },
+  { name: "Chelal B", aliases: ["chelal borium", "borium", "boor"], type: "bladmeststof", element: "B" },
   { name: "Chelal BZn", aliases: ["chelal boor zink"], type: "bladmeststof", element: "B+Zn" },
   { name: "Chelal Fe", aliases: ["chelal ijzer"], type: "bladmeststof", element: "Fe" },
   { name: "Chelal Mn", aliases: ["chelal mangaan"], type: "bladmeststof", element: "Mn" },

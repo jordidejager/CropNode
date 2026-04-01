@@ -349,10 +349,10 @@ function getCropVariants(crop: string): string[] {
 
   // Add common variants
   const mappings: Record<string, string[]> = {
-    'appel': ['appel', 'appels', 'pitvruchten', 'pitfruit'],
-    'peer': ['peer', 'peren', 'pitvruchten', 'pitfruit'],
-    'kers': ['kers', 'kersen', 'steenvruchten', 'steenfruit'],
-    'pruim': ['pruim', 'pruimen', 'steenvruchten', 'steenfruit'],
+    'appel': ['appel', 'appels', 'pitvruchten', 'pitfruit', 'overige pitvruchten', 'vruchtbomen', 'fruitgewassen', 'fruitteelt'],
+    'peer': ['peer', 'peren', 'pitvruchten', 'pitfruit', 'overige pitvruchten', 'vruchtbomen', 'fruitgewassen', 'fruitteelt'],
+    'kers': ['kers', 'kersen', 'steenvruchten', 'steenfruit', 'zoete kers', 'zure kers', 'vruchtbomen', 'fruitgewassen'],
+    'pruim': ['pruim', 'pruimen', 'steenvruchten', 'steenfruit', 'vruchtbomen', 'fruitgewassen'],
   };
 
   for (const [key, vals] of Object.entries(mappings)) {
