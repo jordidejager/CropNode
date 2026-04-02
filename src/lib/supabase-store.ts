@@ -1628,15 +1628,17 @@ export async function addParcelHistoryEntries({
   if (historyEntries.length > 0) {
     const { error } = await dbClient.from('parcel_history').insert(historyEntries);
     if (error) {
-      // If registration_type column doesn't exist, retry without it
-      if (error.message?.includes('registration_type')) {
-        console.warn('[saveRelatedData] registration_type column not found on parcel_history, retrying without it');
-        const cleanedEntries = historyEntries.map(({ registration_type, ...rest }: any) => rest);
-        const { error: retryError } = await dbClient.from('parcel_history').insert(cleanedEntries);
-        if (retryError) console.error('Error inserting parcel history (retry):', retryError);
+      // Retry without columns that may not exist yet (before migrations are run)
+      console.warn('[saveRelatedData] parcel_history insert failed, retrying with minimal columns:', error.message);
+      const cleanedEntries = historyEntries.map(({ registration_type, log_id, spuitschrift_id, ...rest }: any) => rest);
+      const { error: retryError } = await dbClient.from('parcel_history').insert(cleanedEntries);
+      if (retryError) {
+        console.error('[saveRelatedData] parcel_history insert failed even with minimal columns:', retryError.message);
       } else {
-        console.error('Error inserting parcel history:', error);
+        console.log(`[saveRelatedData] Inserted ${cleanedEntries.length} parcel_history entries (without optional columns)`);
       }
+    } else {
+      console.log(`[saveRelatedData] Inserted ${historyEntries.length} parcel_history entries`);
     }
   }
 
@@ -2135,6 +2137,101 @@ export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
     applicationTiming: item.application_timing,
     compositionForms: item.composition_forms || undefined,
   }));
+}
+
+// ============================================
+// Unified Products Functions
+// ============================================
+
+export async function getAllProducts(): Promise<import('./types').UnifiedProduct[]> {
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const all: import('./types').UnifiedProduct[] = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    const { data, error } = await client
+      .from('products')
+      .select('*')
+      .eq('status', 'active')
+      .order('name')
+      .range(from, from + batchSize - 1);
+
+    if (error || !data || data.length === 0) break;
+
+    all.push(...data.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      productType: row.product_type,
+      source: row.source,
+      sourceId: row.source_id,
+      status: row.status,
+      searchKeywords: row.search_keywords || [],
+    })));
+
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  return all;
+}
+
+export async function getProductAliasesUnified(): Promise<import('./types').ProductAlias[]> {
+  const isServer = typeof window === 'undefined';
+  const client = isServer ? getSupabaseAdmin() : supabase;
+
+  const { data, error } = await client
+    .from('product_aliases_unified')
+    .select('*')
+    .order('alias');
+
+  if (error || !data) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    productId: row.product_id,
+    alias: row.alias,
+    aliasType: row.alias_type,
+    source: row.source,
+    confidence: Number(row.confidence),
+    usageCount: row.usage_count,
+  }));
+}
+
+export async function logSync(entry: Partial<import('./types').SyncLogEntry>): Promise<string | null> {
+  const client = getSupabaseAdmin();
+  const { data, error } = await client
+    .from('sync_log')
+    .insert({
+      source: entry.source,
+      started_at: entry.startedAt || new Date().toISOString(),
+      status: entry.status || 'running',
+      triggered_by: entry.triggeredBy || 'manual',
+    })
+    .select('id')
+    .single();
+
+  if (error) { console.error('Error creating sync log:', error); return null; }
+  return data?.id || null;
+}
+
+export async function updateSyncLog(id: string, updates: Partial<import('./types').SyncLogEntry>): Promise<void> {
+  const client = getSupabaseAdmin();
+  await client
+    .from('sync_log')
+    .update({
+      completed_at: updates.completedAt,
+      status: updates.status,
+      products_added: updates.productsAdded,
+      products_updated: updates.productsUpdated,
+      products_withdrawn: updates.productsWithdrawn,
+      aliases_added: updates.aliasesAdded,
+      errors: updates.errors,
+      summary: updates.summary,
+    })
+    .eq('id', id);
 }
 
 // ============================================

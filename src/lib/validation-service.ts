@@ -1037,6 +1037,24 @@ export async function validateParsedSprayData(
       continue;
     }
 
+    // Duplicate detection: exact same product + parcel + date already in history
+    for (const parcel of selectedParcels) {
+      const existingDuplicate = parcelHistory.find(h =>
+        h.parcelId === parcel.id &&
+        h.product?.toLowerCase() === matchingProduct.naam.toLowerCase() &&
+        h.date && applicationDate &&
+        new Date(h.date).toDateString() === applicationDate.toDateString()
+      );
+      if (existingDuplicate) {
+        const dateStr = applicationDate.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' });
+        const key = `dup-${matchingProduct.naam}-${parcel.id}`;
+        if (!intervalErrors.has(key)) {
+          intervalErrors.set(key, `${parcel.name}: ${matchingProduct.naam} is al geregistreerd op ${dateStr}.`);
+          errorCount++;
+        }
+      }
+    }
+
     for (const parcel of selectedParcels) {
       const history = parcelHistory.filter(h => h.parcelId === parcel.id);
       const crop = getParcelCrop(parcel) || 'Onbekend';

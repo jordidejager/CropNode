@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   StickyNote, Search, Pin, Trash2, Check, ChevronDown, ChevronUp,
   NotebookPen, Send, Droplets, Leaf, ListTodo, Eye, Tag, MapPin,
@@ -14,6 +15,7 @@ import {
 } from '@/hooks/use-field-notes';
 import { useParcels } from '@/hooks/use-data';
 import { PhotoLightbox } from '@/components/field-notes/PhotoLightbox';
+import { WhatsAppIcon } from '@/components/icons/whatsapp-icon';
 import dynamic from 'next/dynamic';
 
 const FieldNotesMap = dynamic(
@@ -464,6 +466,94 @@ function ObservationIcon({ category }: { category: string | null }) {
 }
 
 // ============================================================================
+// PRODUCT LOCK ROW (for transferred spuitschrift notes)
+// ============================================================================
+
+function ProductLockRow({ spuitschriftId, products, hiddenProducts }: {
+  spuitschriftId: string;
+  products: { product: string; dosage: number; unit: string }[];
+  hiddenProducts: { product: string; dosage: number; unit: string }[];
+}) {
+  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const toggleProduct = async (productName: string, hide: boolean) => {
+    setLoading(productName);
+    try {
+      const res = await fetch('/api/spuitschrift/hide-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spuitschriftId, productName, hide }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        console.error('[ProductLock] Error:', json.error);
+      }
+      // Refresh notes to get updated products
+      queryClient.invalidateQueries({ queryKey: ['field-notes'] });
+    } catch (err) {
+      console.error('[ProductLock] fetch failed:', err);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Read showLocked setting from localStorage
+  const showHidden = typeof window !== 'undefined' && localStorage.getItem('cropnode:showLockedNotes') === 'true';
+
+  const allProducts = [
+    ...products.map(p => ({ ...p, hidden: false })),
+    ...(showHidden ? hiddenProducts.map(p => ({ ...p, hidden: true })) : []),
+  ];
+
+  if (allProducts.length === 0) return null;
+
+  return (
+    <div className="mt-2.5 space-y-1 border-t border-white/[0.04] pt-2">
+      <span className="text-[9px] text-white/20 uppercase tracking-wider font-semibold">Middelen</span>
+      {allProducts.map(p => (
+        <div
+          key={p.product}
+          className={cn(
+            'flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border transition-all',
+            p.hidden
+              ? 'border-amber-500/15 bg-amber-500/[0.04]'
+              : 'border-white/[0.06] bg-white/[0.02]'
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Droplets className={cn('h-3 w-3 flex-shrink-0', p.hidden ? 'text-amber-400/40' : 'text-blue-400/50')} />
+            <span className={cn(
+              'text-[11px] font-medium truncate',
+              p.hidden ? 'text-amber-400/50 line-through' : 'text-white/60'
+            )}>
+              {p.product}
+            </span>
+            <span className={cn('text-[10px] flex-shrink-0', p.hidden ? 'text-amber-400/30' : 'text-white/20')}>
+              {p.dosage} {p.unit}
+            </span>
+          </div>
+          <button
+            onClick={() => toggleProduct(p.product, !p.hidden)}
+            disabled={loading === p.product}
+            className={cn(
+              'h-6 w-6 flex items-center justify-center rounded-md transition-all flex-shrink-0',
+              p.hidden
+                ? 'text-amber-400 hover:bg-amber-500/15'
+                : 'text-white/20 hover:text-amber-400 hover:bg-amber-500/10',
+              loading === p.product && 'opacity-40 animate-pulse'
+            )}
+            title={p.hidden ? 'Zichtbaar maken' : 'Verbergen van platform'}
+          >
+            {p.hidden ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
 // NOTE CARD
 // ============================================================================
 
@@ -486,7 +576,28 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
   const editRef = useRef<HTMLTextAreaElement>(null);
   const isDone = note.status === 'done';
   const isTransferred = note.status === 'transferred';
-  const isLong = note.content.length > 200;
+
+  // Strip hidden product mentions from display text
+  const showHidden = typeof window !== 'undefined' && localStorage.getItem('cropnode:showLockedNotes') === 'true';
+  const displayContent = useMemo(() => {
+    if (showHidden || !note.spuitschrift_hidden_products?.length) return note.content;
+    let text = note.content;
+    for (const hp of note.spuitschrift_hidden_products) {
+      // Remove patterns like "0,5 kg delan", "0,10 pyrus", "en 0,14 teppeki", "0.75 L/ha pyrus 400 sc"
+      const escaped = hp.product.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Match: optional "en "/"," + dosage number + optional unit + product name
+      const pattern = new RegExp(
+        `(?:,?\\s*(?:en\\s+)?)?[\\d.,]+\\s*(?:kg|l|ml|g|L)?(?:\\/ha)?\\s*${escaped}`,
+        'gi'
+      );
+      text = text.replace(pattern, '');
+    }
+    // Clean up leftover artifacts: double spaces, trailing commas, leading "en"
+    text = text.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').replace(/^\s*en\s+/i, '').trim();
+    return text;
+  }, [note.content, note.spuitschrift_hidden_products, showHidden]);
+
+  const isLong = displayContent.length > 200;
   const showTransferBtn = (note.auto_tag === 'bespuiting' || note.auto_tag === 'bemesting') && !isTransferred;
 
   useEffect(() => {
@@ -571,7 +682,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
               isDone && 'line-through',
               isLong && !isExpanded ? 'line-clamp-3' : ''
             )}>
-              {note.content}
+              {displayContent}
             </p>
             {isLong && (
               <button
@@ -602,7 +713,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
         {/* Badges row: timestamp + tags + perceel */}
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
           <span className={cn('text-[11px] tabular-nums inline-flex items-center gap-1', isDone || isTransferred ? 'text-white/15' : 'text-white/25')}>
-            {note.source === 'whatsapp' && <span title="Via WhatsApp" className="text-[10px]">💬</span>}
+            {note.source === 'whatsapp' && <WhatsAppIcon className="h-3 w-3 text-[#25D366]" />}
             {formatRelativeTime(note.created_at)}
           </span>
 
@@ -662,6 +773,15 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
             Verwerk via Slimme Invoer
           </button>
         )}
+
+        {/* Linked spuitschrift products with hide/unhide toggle */}
+        {note.spuitschrift_id && (note.spuitschrift_products?.length || note.spuitschrift_hidden_products?.length) ? (
+          <ProductLockRow
+            spuitschriftId={note.spuitschrift_id}
+            products={note.spuitschrift_products ?? []}
+            hiddenProducts={note.spuitschrift_hidden_products ?? []}
+          />
+        ) : null}
       </div>
 
       {/* Actions */}
@@ -844,6 +964,7 @@ function NotesSkeleton() {
 // ============================================================================
 
 export function VeldnotitiesClient() {
+  const queryClient = useQueryClient();
   const { data: notes, isLoading } = useFieldNotes();
   const { data: parcels = [] } = useParcels();
   const createMutation = useCreateFieldNote();
@@ -861,7 +982,24 @@ export function VeldnotitiesClient() {
   const [viewMode, setViewMode] = useState<'invoer' | 'kaart' | 'archief'>('invoer');
   const [dateFilter, setDateFilter] = useState<'week' | 'month' | 'season' | 'all'>('all');
   const [archiveCategory, setArchiveCategory] = useState<Tag | null>(null);
-  const [showLocked, setShowLocked] = useState(false);
+  const [showLocked, setShowLocked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('cropnode:showLockedNotes') === 'true';
+  });
+
+  // Sync showLocked from localStorage (changed on settings page)
+  useEffect(() => {
+    const handler = () => {
+      setShowLocked(localStorage.getItem('cropnode:showLockedNotes') === 'true');
+    };
+    window.addEventListener('storage', handler);
+    // Also check on focus (same-tab changes)
+    window.addEventListener('focus', handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, []);
 
   const transferNote = transferNoteId ? notes?.find(n => n.id === transferNoteId) : null;
 
@@ -901,6 +1039,7 @@ export function VeldnotitiesClient() {
       content: data.content,
       ...(photo_url ? { photo_url } : {}),
       ...(latitude != null ? { latitude, longitude } : {}),
+      ...(data.is_locked ? { is_locked: true } : {}),
     }, {
       onError: (err) => {
         toast({ title: 'Fout', description: err.message, variant: 'destructive' });
@@ -942,6 +1081,28 @@ export function VeldnotitiesClient() {
       : [];
     updateMutation.mutate({ id: note.id, updates: { parcel_ids } });
   }, [updateMutation]);
+
+  const handleDirectTransfer = useCallback(async (note: FieldNote) => {
+    toast({ title: '⏳ Verwerken...', duration: 10000 });
+    try {
+      const res = await fetch('/api/field-notes/transfer-direct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ noteId: note.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: 'Fout', description: data.error || 'Verwerking mislukt', variant: 'destructive', duration: 5000 });
+        return;
+      }
+      toast({ title: '✅ Verwerkt naar spuitschrift', duration: 3000 });
+      queryClient.invalidateQueries({ queryKey: ['field-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['spuitschrift'] });
+      queryClient.invalidateQueries({ queryKey: ['parcel-history'] });
+    } catch (err) {
+      toast({ title: 'Fout', description: 'Verwerking mislukt', variant: 'destructive' });
+    }
+  }, [toast, queryClient]);
 
   const handleTagToggle = useCallback((tag: Tag) => {
     setActiveTags(prev =>
@@ -1073,21 +1234,6 @@ export function VeldnotitiesClient() {
               />
             </div>
 
-            {/* Vergrendelde toggle */}
-            <button
-              onClick={() => setShowLocked(!showLocked)}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl text-xs font-medium border transition-colors whitespace-nowrap',
-                showLocked
-                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                  : 'bg-white/[0.03] border-white/[0.08] text-white/30 hover:text-white/50'
-              )}
-              title={showLocked ? 'Vergrendelde notities worden getoond' : 'Vergrendelde notities zijn verborgen'}
-            >
-              {showLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
-              <span className="hidden sm:inline">{showLocked ? 'Verborgen aan' : 'Verborgen'}</span>
-            </button>
-
             {/* Perceel filter */}
             {parcels.length > 0 && (
               <select
@@ -1168,10 +1314,11 @@ export function VeldnotitiesClient() {
                       note={note}
                       onToggleStatus={() => handleToggleStatus(note)}
                       onTogglePin={() => handleTogglePin(note)}
+                      onToggleLock={() => handleToggleLock(note)}
                       onDelete={() => handleDelete(note)}
                       onEdit={(content) => handleEdit(note, content)}
                       onUpdateParcel={(parcelId) => handleUpdateParcel(note, parcelId)}
-                      onTransfer={() => setTransferNoteId(note.id)}
+                      onTransfer={() => handleDirectTransfer(note)}
                       onPhotoClick={(url) => setLightboxUrl(url)}
                       onObservationFilter={(subject) => setActiveObservation(subject)}
                     />
