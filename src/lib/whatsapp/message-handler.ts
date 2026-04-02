@@ -201,7 +201,13 @@ export async function handleIncomingMessage(
     }
 
     if (state === 'awaiting_confirmation' && conversation) {
-      // "Verzenden" → show send-type choice (Notitie / Spuitschrift + Notitie)
+      // "Opslaan als notitie" (direct, from blocking-error view)
+      if (buttonReplyId === 'save_note_direct') {
+        await handleSaveAsNote(userId, e164Phone, conversation);
+        return;
+      }
+
+      // "Verzenden" → show send-type choice (Notitie / Spuitschrift)
       if (buttonReplyId === 'send') {
         await updateConversationState(conversation.id, 'awaiting_send_choice');
         const { sendInteractiveButtons } = await import('./client');

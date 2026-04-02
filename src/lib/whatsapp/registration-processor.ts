@@ -114,22 +114,26 @@ export async function processNewRegistration(
     // 7. Format the summary
     const summaryText = formatRegistrationSummary(result, parcelNameMap);
 
-    // 8. Check for blocking errors — if any, send text only (no confirm button)
-    const hasBlockingErrors = (result.validationFlags || []).some(f => f.type === 'error');
-    if (hasBlockingErrors) {
-      await sendTextMessage(metaPhone, summaryText);
-      await logMessage({ phoneNumber, direction: 'outbound', messageText: summaryText });
-      return;
-    }
-
-    // 9. Store pending registration in conversation
+    // 8. Store pending registration in conversation
     await updateConversationState(
       conversation.id,
       'awaiting_confirmation',
       result.registration
     );
 
-    // 10. Send interactive buttons
+    // 9. Check for blocking errors — offer Notitie + Wijzigen (no Spuitschrift)
+    const hasBlockingErrors = (result.validationFlags || []).some(f => f.type === 'error');
+    if (hasBlockingErrors) {
+      await sendInteractiveButtons(metaPhone, summaryText, [
+        { id: 'save_note_direct', title: '📝 Opslaan als notitie' },
+        { id: 'edit', title: '✏ Wijzigen' },
+        { id: 'cancel', title: '✗ Annuleren' },
+      ]);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: summaryText, metadata: { buttons: ['save_note_direct', 'edit', 'cancel'] } });
+      return;
+    }
+
+    // 10. Send interactive buttons (no blocking errors)
     await sendInteractiveButtons(metaPhone, summaryText, [
       { id: 'send', title: '📤 Verzenden' },
       { id: 'edit', title: '✏ Wijzigen' },
