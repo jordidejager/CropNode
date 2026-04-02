@@ -206,8 +206,8 @@ export async function handleIncomingMessage(
         await updateConversationState(conversation.id, 'awaiting_send_choice');
         const { sendInteractiveButtons } = await import('./client');
         await sendInteractiveButtons(metaPhone, 'Waar wil je het opslaan?', [
-          { id: 'send_note', title: '📝 Veldnotitie' },
-          { id: 'send_both', title: '📋 Spuitschrift + Notitie' },
+          { id: 'send_note', title: '📝 Alleen notitie' },
+          { id: 'send_both', title: '📋 Spuitschrift' },
         ]);
         await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: 'Waar wil je het opslaan?' });
         return;
@@ -356,19 +356,10 @@ async function handleSaveAsNote(
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error('Admin client niet beschikbaar');
 
-    // Get farm_id from user
-    const { data: userData } = await (admin as any)
-      .from('whatsapp_linked_numbers')
-      .select('farm_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-
-    await (admin as any)
+    const { error: insertError } = await (admin as any)
       .from('field_notes')
       .insert({
         user_id: userId,
-        farm_id: userData?.farm_id || null,
         content: noteContent,
         source: 'whatsapp',
         status: 'open',
@@ -376,6 +367,8 @@ async function handleSaveAsNote(
         is_pinned: false,
         parcel_ids: parcelIds.length > 0 ? parcelIds : null,
       });
+
+    if (insertError) throw new Error(insertError.message);
 
     if (!silent) {
       // Update conversation + send confirmation

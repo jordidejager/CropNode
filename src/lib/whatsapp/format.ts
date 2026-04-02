@@ -104,7 +104,7 @@ export function formatRegistrationSummary(
 
   // Call to action
   lines.push('');
-  lines.push('Klopt dit? _(Annuleren? Stuur een nieuw bericht.)_');
+  lines.push('Klopt dit?');
 
   let text = lines.join('\n');
 
