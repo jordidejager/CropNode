@@ -8,6 +8,7 @@ import {
     ErrorCodes,
     safeGet
 } from '@/lib/api-utils';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 
 /**
  * Validate API - Deterministic CTGB Validation
@@ -73,6 +74,13 @@ export async function POST(req: Request) {
     const context = 'Validate API';
 
     try {
+        // Step 0: Authenticate user
+        const supabase = await createServerClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+            return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
+        }
+
         // Step 1: Parse JSON body safely
         let body: unknown;
         try {
