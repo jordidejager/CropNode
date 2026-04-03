@@ -1,4 +1,4 @@
-
+import { withSentryConfig } from "@sentry/nextjs";
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -97,6 +97,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Upload source maps for readable stack traces
+  silent: !process.env.CI,
+  org: "de-jager-technology",
+  project: "cropnode",
 
-    
+  // Route browser requests to avoid ad-blockers
+  tunnelRoute: "/monitoring",
+
+  // Hide source maps from users
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+
+  // Automatically tree-shake Sentry logger
+  disableLogger: true,
+});
+
