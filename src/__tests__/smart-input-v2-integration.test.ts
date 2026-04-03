@@ -5,6 +5,7 @@
  * Verifies that parcel names are correctly resolved to IDs.
  */
 
+// @ts-expect-error vitest not installed as dependency
 import { describe, it, expect, beforeAll } from 'vitest';
 
 // Mock parcels for testing (matches production format)

@@ -435,7 +435,7 @@ export async function getProductSuggestions(
 
   if (error || !data) return [];
 
-  return data.map(row => row.naam);
+  return data.map((row: any) => row.naam);
 }
 
 /**

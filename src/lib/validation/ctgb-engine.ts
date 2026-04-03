@@ -578,7 +578,7 @@ function checkSubstanceCumulation(
 
   const maxDoseringPerCyclus = relevantVoorschrift?.maxDoseringPerTeeltcyclus;
   const maxKgPerSeason = maxDoseringPerCyclus ?
-    parseDosering(maxDoseringPerCyclus)?.value : null;
+    (parseDosering(maxDoseringPerCyclus)?.value ?? null) : null;
 
   // For each active substance in the new product
   for (const substance of product.werkzameStoffen) {

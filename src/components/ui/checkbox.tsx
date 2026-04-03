@@ -11,7 +11,7 @@ const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
 >(({ className, ...props }, ref) => {
-  const { checked, indeterminate, ...rest } = props;
+  const { checked, ...rest } = props;
 
   return (
     <CheckboxPrimitive.Root

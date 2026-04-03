@@ -86,7 +86,7 @@ async function fetchSpuitschrift(
 
   // Filter by parcel names if needed (plots contain sub-parcel names)
   if (parcelIds.length > 0) {
-    registrations = registrations.filter((r) =>
+    registrations = registrations.filter((r: any) =>
       r.plots.some((p: string) => parcelIds.includes(p))
     );
   }

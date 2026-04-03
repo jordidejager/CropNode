@@ -129,18 +129,18 @@ async function validateSprayData(
                 return {
                     id: sprayable.id, // Use sprayable parcel ID for history matching
                     name: sprayable.name,
-                    area: sprayable.area,
+                    area: sprayable.area ?? 0,
                     crop: sprayable.crop,
                     variety: sprayable.variety,
-                    location: sprayable.location || null,
+                    location: sprayable.location || undefined,
                     geometry: sprayable.geometry,
-                    source: sprayable.source,
-                    rvoId: sprayable.rvoId,
+                    source: sprayable.source ?? undefined,
+                    rvoId: sprayable.rvoId ?? undefined,
                     subParcels: [{
                         id: sprayable.id,
                         crop: sprayable.crop,
-                        variety: sprayable.variety,
-                        area: sprayable.area,
+                        variety: sprayable.variety ?? '',
+                        area: sprayable.area ?? 0,
                     }]
                 } as Parcel;
             }

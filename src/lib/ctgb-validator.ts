@@ -521,18 +521,20 @@ export async function validateCtgbRulesSimple(input: SimpleValidationInput): Pro
             const parcelForValidation: Parcel = {
                 id: activeParcel.id, // Use sprayable parcel ID for history matching!
                 name: activeParcel.name,
-                area: activeParcel.area,
+                area: activeParcel.area ?? 0,
                 crop: activeParcel.crop,
-                variety: activeParcel.variety,
-                location: activeParcel.location || null,
+                variety: activeParcel.variety ?? undefined,
+                location: activeParcel.location ? { lat: 0, lng: 0 } : undefined,
                 geometry: activeParcel.geometry,
-                source: activeParcel.source,
-                rvoId: activeParcel.rvoId,
+                source: (activeParcel.source as Parcel['source']) ?? undefined,
+                rvoId: activeParcel.rvoId ?? undefined,
                 subParcels: [{
                     id: activeParcel.id,
+                    parcelId: activeParcel.parcelId,
                     crop: activeParcel.crop,
-                    variety: activeParcel.variety,
-                    area: activeParcel.area,
+                    variety: activeParcel.variety ?? '',
+                    area: activeParcel.area ?? 0,
+                    irrigationType: '',
                 }]
             };
 
@@ -570,7 +572,7 @@ export async function validateCtgbRulesSimple(input: SimpleValidationInput): Pro
             }
 
             // Store matched target if found
-            for (const [productName, target] of validationResult.matchedTargets) {
+            for (const [productName, target] of validationResult.matchedTargets ?? []) {
                 if (target.targetOrganism) {
                     matchedTargets[productName] = target.targetOrganism;
                 }

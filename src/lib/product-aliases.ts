@@ -426,7 +426,7 @@ export async function resolveProductAlias(
     // Niveau 2: Statische alias mapping (in-memory object)
     const checkStaticAlias = (): ResolvedProduct | null => {
         // Try exact match first, then stripped version
-        let aliasTarget = PRODUCT_ALIASES[normalizedInput] || PRODUCT_ALIASES[strippedInput];
+        let aliasTarget: string | undefined = PRODUCT_ALIASES[normalizedInput] || PRODUCT_ALIASES[strippedInput];
 
         // If no exact match, try normalized match by iterating through all aliases
         if (!aliasTarget) {
@@ -443,7 +443,7 @@ export async function resolveProductAlias(
 
         // If still no match, try Levenshtein fuzzy match (typo tolerance)
         if (!aliasTarget) {
-            aliasTarget = fuzzyMatchProductAlias(normalizedInput) ?? undefined;
+            aliasTarget = fuzzyMatchProductAlias(normalizedInput) || undefined;
         }
 
         if (aliasTarget) {

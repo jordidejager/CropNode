@@ -288,7 +288,7 @@ export async function applyLocationFilterDb(
     };
   }
 
-  let result: SprayableParcel[] = (data || []).map(item => ({
+  let result: SprayableParcel[] = (data || []).map((item: any): SprayableParcel => ({
     id: item.id,
     name: item.name,
     area: item.area,
@@ -300,6 +300,7 @@ export async function applyLocationFilterDb(
     geometry: item.geometry,
     source: item.source,
     rvoId: item.rvo_id,
+    synonyms: item.synonyms || [],
   }));
 
   // Apply exclude filters client-side

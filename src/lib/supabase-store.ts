@@ -341,7 +341,7 @@ export async function updateSpuitschriftEntry(
     // Update the spuitschrift entry
     const { data, error } = await adminClient
       .from('spuitschrift')
-      .update(updatePayload)
+      .update(updatePayload as any)
       .eq('id', entryId)
       .select()
       .single();
@@ -652,7 +652,7 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
       geometry: null,
       source: null,
       rvoId: null,
-    }));
+    })) as SprayableParcel[];
   });
 }
 
@@ -800,10 +800,10 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
       parcelId: sp.parcel_id || sp.id,
       parcelName: sp.name || sp.crop || 'Onbekend',
       location: null,
-      geometry: null,
+      geometry: null as any,
       source: null,
       rvoId: null,
-    }));
+    })) as SprayableParcel[];
   });
 }
 
@@ -1412,7 +1412,7 @@ export async function getParcelHistoryEntries(): Promise<ParcelHistoryEntry[]> {
       ...recursiveToCamelCase(item) as any,
       date: new Date(item.date),
     })) as ParcelHistoryEntry[];
-  }, 5);
+  }, { maxRetries: 5 });
 }
 
 /**
@@ -2053,7 +2053,7 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
 
     console.log(`[getCtgbProductsByNames] Found ${uniqueProducts.size} products for ${names.length} names`);
     return Array.from(uniqueProducts.values()).map(item => recursiveToCamelCase(item) as CtgbProduct);
-  }, 5);
+  }, { maxRetries: 5 });
 }
 
 export async function getCtgbSyncStats(): Promise<CtgbSyncStats> {

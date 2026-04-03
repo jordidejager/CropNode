@@ -20,7 +20,6 @@ import { EnsemblePlumeChart } from './EnsemblePlumeChart';
 import { SprayWindowForecastBand } from './SprayWindowForecastBand';
 import { WeatherEmptyState } from '@/components/weather/WeatherEmptyState';
 import { StationLocationBanner } from '@/components/weather/StationLocationBanner';
-import { SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type MultiModelView = 'combined' | 'single';
@@ -141,9 +140,7 @@ export function ExpertForecast() {
   // No stations — show initialization UI
   if (!stations || stations.length === 0) {
     return (
-      <WeatherEmptyState
-        icon={<SlidersHorizontal className="h-12 w-12 text-purple-400/40" />}
-      />
+      <WeatherEmptyState />
     );
   }
 

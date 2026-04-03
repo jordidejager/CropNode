@@ -19,8 +19,8 @@ async function main() {
     try {
         const response = await fetch(url, {
             headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'apikey': SUPABASE_KEY!,
+                'Authorization': `Bearer ${SUPABASE_KEY!}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -30,7 +30,7 @@ async function main() {
             const text = await response.text();
             console.error('Response body:', text);
         } else {
-            const data = await response.json();
+            const data = await response.json() as any[];
             console.log(`Success! Found ${data.length} items.`);
             if (data.length > 0) console.log(JSON.stringify(data[0], null, 2));
         }

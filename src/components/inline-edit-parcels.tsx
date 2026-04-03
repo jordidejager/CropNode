@@ -55,8 +55,8 @@ export function InlineEditParcels({
     allParcels.filter(
       (parcel) =>
         parcel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        parcel.crop.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        parcel.variety.toLowerCase().includes(searchTerm.toLowerCase())
+        (parcel.crop ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (parcel.variety ?? '').toLowerCase().includes(searchTerm.toLowerCase())
     ), [allParcels, searchTerm]
   );
 

@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       .select('product_toelatingsnummer');
 
     const existingSet = new Set(
-      existingProducts?.map((p) => p.product_toelatingsnummer) || []
+      existingProducts?.map((p: any) => p.product_toelatingsnummer) || []
     );
 
     results.push(`Existing embeddings for ${existingSet.size} products.`);
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Filter new products
     const productsToProcess = (products || []).filter(
-      (p) => !existingSet.has(p.toelatingsnummer)
+      (p: any) => !existingSet.has(p.toelatingsnummer)
     );
 
     results.push(`Processing ${productsToProcess.length} new products.`);

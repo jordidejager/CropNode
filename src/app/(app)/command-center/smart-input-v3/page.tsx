@@ -163,7 +163,7 @@ export default function SmartInputV3Page() {
                     })) as SprayableParcel[]);
                 }
                 if (context.parcelGroups) {
-                    setParcelGroups(context.parcelGroups.map(g => ({ name: g.name })));
+                    setParcelGroups(context.parcelGroups.map((g: { name: string }) => ({ name: g.name })));
                 }
             } catch (error) {
                 console.error('Failed to load context:', error);

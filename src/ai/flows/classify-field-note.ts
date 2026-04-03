@@ -41,8 +41,9 @@ export interface ParcelGroupForClassification {
 export interface ClassifyFieldNoteResult {
   tag: 'bespuiting' | 'bemesting' | 'taak' | 'waarneming' | 'overig' | null;
   parcel_ids: string[];
-  observation_subject: string | null;  // e.g., "Perenknopkever", "Bloedluis"
+  observation_subject: string | null;
   observation_category: 'insect' | 'schimmel' | 'ziekte' | 'fysiologisch' | 'overig' | null;
+  due_date: string | null; // ISO date YYYY-MM-DD (for taak only)
 }
 
 // ============================================
@@ -67,6 +68,9 @@ const ClassifyFieldNoteOutputSchema = z.object({
   ),
   observation_category: z.enum(['insect', 'schimmel', 'ziekte', 'fysiologisch', 'overig']).nullable().describe(
     'For waarneming only: category of the observation. Null for other tags.'
+  ),
+  due_date: z.string().nullable().describe(
+    'For taak only: ISO date string (YYYY-MM-DD) if a deadline/date is mentioned ("morgen", "vrijdag", "volgende week", "voor 1 april"). Null if no date mentioned or for other tags.'
   ),
   confidence: z.number().describe('Confidence score 0.0–1.0'),
 });
@@ -117,13 +121,23 @@ Doe ${hasPhoto ? 'vier' : 'drie'} dingen:
      * "fysiologisch" — fysieke beschadiging of fysiologische problemen (hagel, vorst, zonnebrand, stip, droogval, glazigheid)
      * "overig" — overige waarnemingen (bloei, vruchtzetting, kleur, groei)
    - Als tag NIET "waarneming" is → geef null voor beide
-${hasPhoto ? `
-4. FOTOANALYSE — Bekijk de bijgevoegde foto en gebruik deze om:
+
+${hasPhoto ? `4. FOTOANALYSE — Bekijk de bijgevoegde foto en gebruik deze om:
    - De categorie nauwkeuriger te bepalen (zichtbare ziekte/plaag → waarneming)
    - Het onderwerp van de waarneming te identificeren (specifieke plaag of ziekte op het blad/vrucht)
    - Als de tekst vaag is maar de foto duidelijk een ziekte/plaag toont, gebruik de foto als primaire bron
    - Dit is een AI-suggestie, geen diagnose
 ` : ''}
+${hasPhoto ? '5' : '4'}. DEADLINE (alleen als tag="taak") — als de tekst een datum of tijdsaanduiding bevat:
+   - "morgen" → datum van morgen (YYYY-MM-DD)
+   - "vrijdag" → eerstvolgende vrijdag
+   - "volgende week" → maandag van volgende week
+   - "voor 1 april" → 2026-04-01
+   - "over 3 dagen" → vandaag + 3 dagen
+   - Als GEEN datum herkenbaar → null
+   - Als tag NIET "taak" is → null
+   - Vandaag is: ${new Date().toISOString().split('T')[0]}
+
 Notitie: "${sanitizeForPrompt(input.content)}"
 
 Antwoord ALLEEN met JSON:
@@ -132,6 +146,7 @@ Antwoord ALLEEN met JSON:
   "parcel_mentions": ["..."],
   "observation_subject": "..." | null,
   "observation_category": "..." | null,
+  "due_date": "YYYY-MM-DD" | null,
   "confidence": 0.0
 }`;
 
@@ -157,6 +172,7 @@ Antwoord ALLEEN met JSON:
         parcel_mentions: [],
         observation_subject: null,
         observation_category: null,
+        due_date: null,
         confidence: 0,
       };
     }
@@ -286,14 +302,16 @@ export async function classifyFieldNote(
     });
     const parcel_ids = resolveParcelIds(result.parcel_mentions ?? [], parcels, groups);
 
+    const tag = result.confidence >= 0.6 ? result.tag : null;
     return {
-      tag: result.confidence >= 0.6 ? result.tag : null,
+      tag,
       parcel_ids,
       observation_subject: result.observation_subject ?? null,
       observation_category: result.observation_category ?? null,
+      due_date: tag === 'taak' && result.due_date ? result.due_date : null,
     };
   } catch (error) {
     console.error('[classifyFieldNote] failed:', error);
-    return { tag: null, parcel_ids: [], observation_subject: null, observation_category: null };
+    return { tag: null, parcel_ids: [], observation_subject: null, observation_category: null, due_date: null };
   }
 }

@@ -775,7 +775,8 @@ function parseFactsheet(filePath: string, isTeelt: boolean): ParsedFactsheet {
 // DATABASE OPERATIONS
 // ============================================
 
-async function supabaseOp<T>(label: string, fn: () => Promise<{ data: T; error: any }>): Promise<T | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function supabaseOp<T>(label: string, fn: () => any): Promise<T | null> {
   const result = await withRetry(async () => {
     const { data, error } = await fn();
     if (error) {
@@ -800,7 +801,7 @@ async function importFactsheet(factsheet: ParsedFactsheet): Promise<void> {
 
   // 1. Check for existing topic
   await delay(200);
-  const existingTopic = await supabaseOp('check existing', () =>
+  const existingTopic = await supabaseOp<{ id: string }>('check existing', () =>
     supabase.from('kb_topics').select('id').eq('slug', factsheet.slug).maybeSingle()
   );
 
@@ -824,7 +825,7 @@ async function importFactsheet(factsheet: ParsedFactsheet): Promise<void> {
   const keywords = generateKeywords(factsheet.slug, factsheet.title, factsheet.products, factsheet.varieties);
 
   await delay(200);
-  const topic = await supabaseOp('insert topic', () =>
+  const topic = await supabaseOp<{ id: string }>('insert topic', () =>
     supabase
       .from('kb_topics')
       .insert({

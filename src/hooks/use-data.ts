@@ -1050,12 +1050,19 @@ export function useUpdatePositionContent() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, updates }: { id: string; updates: Partial<PositionContentInput> }) =>
+        mutationFn: ({ id, updates }: { id: string; cellId?: string; updates: Partial<PositionContentInput> }) =>
             updatePositionContent(id, updates),
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(data.cellId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(data.cellId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(data.cellId) });
+        onSuccess: (_, { cellId }) => {
+            if (cellId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
+                queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
+                queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
+            } else {
+                // Broad invalidation when cellId is not provided
+                queryClient.invalidateQueries({ queryKey: ['positionContents'] });
+                queryClient.invalidateQueries({ queryKey: ['positionStacks'] });
+                queryClient.invalidateQueries({ queryKey: ['cellSubParcels'] });
+            }
         },
     });
 }
@@ -1143,7 +1150,7 @@ export function useFillRowWithSubParcel() {
             rowIndex: number;
             stackCount: number;
             cell: StorageCell;
-        }) => fillRowWithSubParcel(cellId, cellSubParcelId, rowIndex, stackCount, cell),
+        }) => fillRowWithSubParcel(cellId, cell, rowIndex, cellSubParcelId),
         onSuccess: (_, { cellId }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
@@ -1172,7 +1179,7 @@ export function useFillColumnWithSubParcel() {
             colIndex: number;
             stackCount: number;
             cell: StorageCell;
-        }) => fillColumnWithSubParcel(cellId, cellSubParcelId, colIndex, stackCount, cell),
+        }) => fillColumnWithSubParcel(cellId, cell, colIndex, cellSubParcelId),
         onSuccess: (_, { cellId }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });
@@ -1199,7 +1206,7 @@ export function useFillAllEmptyPositions() {
             cellSubParcelId: string;
             stackCount: number;
             cell: StorageCell;
-        }) => fillAllEmptyPositions(cellId, cellSubParcelId, stackCount, cell),
+        }) => fillAllEmptyPositions(cellId, cell, cellSubParcelId),
         onSuccess: (_, { cellId }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.positionContents(cellId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.positionStacks(cellId) });

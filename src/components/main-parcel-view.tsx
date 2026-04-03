@@ -140,7 +140,7 @@ export function MainParcelView({
                 totalTrees,
                 avgAge: totalArea > 0 ? Math.round(weightedAgeSum / totalArea) : 0,
                 density: totalArea > 0 ? Math.round(totalTrees / totalArea) : 0,
-                latestSoilSample
+                latestSoilSample: latestSoilSample as SoilSample | null
             },
             composition,
             mutantComposition

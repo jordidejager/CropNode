@@ -72,8 +72,8 @@ export function voorschriftToText(
   if (voorschrift.toepassingsmethode) {
     parts.push(`Toepassingsmethode: ${voorschrift.toepassingsmethode}`);
   }
-  if (voorschrift.werking?.length) {
-    parts.push(`Werking: ${voorschrift.werking.join(', ')}`);
+  if ((voorschrift as any).werking?.length) {
+    parts.push(`Werking: ${(voorschrift as any).werking.join(', ')}`);
   }
   if (voorschrift.opmerkingen?.length) {
     parts.push(`Opmerkingen: ${voorschrift.opmerkingen.join('. ')}`);
@@ -298,7 +298,7 @@ export async function getEmbeddingStats(): Promise<{
     .limit(10000);
 
   const uniqueProducts = new Set(
-    productData?.map((r) => r.product_toelatingsnummer) || []
+    productData?.map((r: any) => r.product_toelatingsnummer) || []
   ).size;
 
   const { data: lastUpdatedData } = await supabase

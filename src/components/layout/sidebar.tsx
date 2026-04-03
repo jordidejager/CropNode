@@ -112,7 +112,7 @@ const menuItems: FlatNavItem[] = [
     { label: 'Analytics', href: '/analytics', icon: BarChart3, dividerAfter: true },
     { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
     { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
-    { label: 'Instellingen', href: '/instellingen/whatsapp', icon: Settings },
+    { label: 'Instellingen', href: '/instellingen', icon: Settings },
 ];
 
 // ============================================================================
@@ -141,7 +141,7 @@ function SidebarContent() {
     // Load user on mount
     React.useEffect(() => {
         const supabase = createClient();
-        supabase.auth.getUser().then(({ data: { user } }) => {
+        supabase.auth.getUser().then(({ data: { user } }: { data: { user: { email?: string | null } | null } }) => {
             if (user?.email) {
                 setUserEmail(user.email);
                 const initials = user.email

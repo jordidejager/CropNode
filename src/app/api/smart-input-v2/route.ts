@@ -34,7 +34,9 @@ import type { SprayRegistrationGroup, SprayRegistrationUnit, ProductEntry, CtgbP
 import { detectRegistrationType, resolveProductSources, resolveFertilizerProduct } from '@/lib/fertilizer-lookup';
 
 // Shared pipeline (extracted from this file)
-import { analyzeSprayInput, resolveParcelNamesToIds, type AnalysisResult } from '@/lib/spray-pipeline';
+import { analyzeSprayInput, type AnalysisResult } from '@/lib/spray-pipeline';
+import { validateParsedSprayData } from '@/lib/validation-service';
+import { validateDraft, formatValidationResult } from '@/lib/draft-validator';
 
 // ============================================================================
 // AUTH HELPER

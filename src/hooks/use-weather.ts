@@ -490,7 +490,7 @@ export function useKnmiCumulatives(
       // Compute cumulatives client-side
       let cumGdd5 = 0, cumGdd10 = 0, cumPrecip = 0, cumEt0 = 0, cumSunshine = 0;
 
-      return dailyData.map(d => {
+      return dailyData.map((d: KnmiDailyData) => {
         if (d.gddBase5 !== null) cumGdd5 += d.gddBase5;
         if (d.gddBase10 !== null) cumGdd10 += d.gddBase10;
         if (d.precipitationSum !== null) cumPrecip += d.precipitationSum;

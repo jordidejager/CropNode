@@ -3,11 +3,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { useParcels, useParcelGroups, useInvalidateQueries, useSpuitschriftEntries } from "@/hooks/use-data";
 import { addParcel, updateParcel, deleteParcel, addSubParcel, addParcelGroup, deleteParcelGroup, setParcelGroupMembers } from "@/lib/supabase-store";
-import type { SubParcel, RvoParcel } from "@/lib/types";
+import type { Parcel, SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2 } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge } from "lucide-react";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton, ErrorState, EmptyState } from "@/components/ui/data-states";
@@ -18,6 +18,7 @@ import { MainParcelView } from "@/components/main-parcel-view";
 import { CompanyStatsHeader } from "@/components/company-stats-header";
 import { ParcelCard } from "@/components/parcel-card";
 import { ParcelGroupDialog } from "@/components/parcel-group-dialog";
+import { ParcelReorganizeDialog } from "@/components/domain/parcel-reorganize-dialog";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { RvoParcelSheet } from "@/components/rvo-map/rvo-parcel-sheet";
@@ -48,14 +49,14 @@ interface GroupedParcel {
 
 export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map' }) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>(forcedView || 'list');
-  const [groupByMainParcel, setGroupByMainParcel] = useState(false);
-  const [selectedMainParcel, setSelectedMainParcel] = useState<SprayableParcel | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedMainParcel, setSelectedMainParcel] = useState<Parcel | SprayableParcel | null>(null);
   const [selectedGroupedParcel, setSelectedGroupedParcel] = useState<GroupedParcel | null>(null);
   const [selectedSubParcel, setSelectedSubParcel] = useState<SubParcel | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
-  const [activeParcelForComposer, setActiveParcelForComposer] = useState<SprayableParcel | null>(null);
+  const [activeParcelForComposer, setActiveParcelForComposer] = useState<Parcel | SprayableParcel | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCrops, setSelectedCrops] = useState<Set<string>>(new Set());
   const [selectedVarieties, setSelectedVarieties] = useState<Set<string>>(new Set());
@@ -74,6 +75,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
 
   // Groups
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [isReorganizeOpen, setIsReorganizeOpen] = useState(false);
   const [activeGroupFilter, setActiveGroupFilter] = useState<string | null>(null);
   const [groupInitialSelectedIds, setGroupInitialSelectedIds] = useState<Set<string> | undefined>(undefined);
 
@@ -288,6 +290,29 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     });
   }, []);
 
+  const toggleGroupExpand = useCallback((groupId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
+
+  const toggleGroupSelection = useCallback((group: GroupedParcel) => {
+    const groupIds = group.subParcels.map(p => p.id);
+    const allSelected = groupIds.every(id => selectedParcelIds.has(id));
+    setSelectedParcelIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id));
+      } else {
+        groupIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [selectedParcelIds]);
+
   const getSortIcon = (column: string) => {
     if (sortColumn !== column) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
     return sortDirection === 'asc'
@@ -485,7 +510,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   if (selectedMainParcel) {
     return (
       <MainParcelView
-        parcel={selectedMainParcel}
+        parcel={selectedMainParcel as Parcel}
         onBack={() => setSelectedMainParcel(null)}
         onSubParcelClick={(sub) => setSelectedSubParcel(sub)}
         lastSpray={lastSprayForParcel}
@@ -561,29 +586,6 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         </div>
 
         <div className="flex gap-2 w-full md:w-auto">
-          {viewMode === 'list' && (
-            <Button
-              variant="outline"
-              onClick={() => setGroupByMainParcel(!groupByMainParcel)}
-              className={`flex-1 md:flex-none border-white/10 font-bold gap-2 h-12 rounded-full transition-colors ${
-                groupByMainParcel
-                  ? 'bg-primary/20 border-primary/50 text-primary hover:bg-primary/30'
-                  : 'bg-white/5 hover:bg-white/10'
-              }`}
-            >
-              {groupByMainParcel ? (
-                <>
-                  <Grid3X3 className="h-4 w-4" />
-                  Subpercelen
-                </>
-              ) : (
-                <>
-                  <Layers className="h-4 w-4" />
-                  Hoofdpercelen
-                </>
-              )}
-            </Button>
-          )}
           <Button
             variant="outline"
             onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
@@ -600,6 +602,14 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                 Lijst
               </>
             )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsReorganizeOpen(true)}
+            className="flex-1 md:flex-none border-white/10 font-bold gap-2 h-12 rounded-full bg-white/5 hover:bg-white/10"
+          >
+            <Merge className="h-4 w-4" />
+            <span className="hidden md:inline">Reorganiseren</span>
           </Button>
           <Button
             onClick={handleAdd}
@@ -734,228 +744,188 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                     <div key={i} className="h-12 rounded-lg bg-white/5 animate-pulse" />
                   ))}
                 </div>
-              ) : groupByMainParcel && groupedParcels.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pr-2">
+              ) : groupedParcels.length > 0 ? (
+                <div className="space-y-3">
                   <AnimatePresence mode="popLayout">
-                    {groupedParcels.map((group, index) => (
+                  {groupedParcels.map((group, groupIndex) => {
+                    const isExpanded = expandedGroups.has(group.id);
+                    const groupAllSelected = group.subParcels.every(p => selectedParcelIds.has(p.id));
+                    const groupSomeSelected = !groupAllSelected && group.subParcels.some(p => selectedParcelIds.has(p.id));
+                    const isSingleParcel = group.subParcels.length === 1;
+                    const primaryCrop = group.crops[0] || 'Onbekend';
+                    const borderColor = primaryCrop === 'Appel' ? 'border-l-rose-500/50' : primaryCrop === 'Peer' ? 'border-l-emerald-500/50' : 'border-l-amber-500/50';
+                    const glowColor = primaryCrop === 'Appel' ? 'hover:shadow-rose-500/5' : primaryCrop === 'Peer' ? 'hover:shadow-emerald-500/5' : 'hover:shadow-amber-500/5';
+
+                    return (
                       <motion.div
                         key={group.id}
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        onClick={() => {
-                          if (group.subParcels.length === 1) {
-                            setSelectedMainParcel(group.subParcels[0]);
-                          } else {
-                            setSelectedGroupedParcel(group);
-                          }
-                        }}
-                        className="group relative bg-white/5 backdrop-blur-sm border-l-4 border-primary/50 hover:border-primary rounded-xl p-6 cursor-pointer transition-all duration-300 hover:bg-white/[0.08] hover:-translate-y-1"
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        transition={{ delay: groupIndex * 0.03, duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                        className={`group/card relative rounded-2xl border-l-[3px] ${borderColor} border border-white/[0.06] bg-gradient-to-r from-white/[0.03] to-transparent overflow-hidden transition-all duration-300 hover:shadow-xl ${glowColor} hover:border-white/[0.1] ${
+                          groupAllSelected ? 'ring-1 ring-primary/20 bg-primary/[0.03]' : ''
+                        }`}
                       >
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="space-y-1">
-                            <h3 className="text-xl font-black text-white group-hover:text-primary transition-colors">
-                              {group.name}
-                            </h3>
-                            <div className="flex flex-wrap gap-2">
-                              {group.crops.map(crop => {
-                                const colors = getCropColor(crop);
-                                return (
-                                  <span key={crop} className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${colors.bg} ${colors.text}`}>
-                                    {crop}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span className="text-sm font-black text-primary">{group.subParcels.length}</span>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white/5 rounded-lg">
-                              <MapIcon className="h-4 w-4 text-white/40" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-lg font-black text-white">{group.totalArea.toFixed(2)}</span>
-                              <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Hectares</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white/5 rounded-lg">
-                              <Layers className="h-4 w-4 text-white/40" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-lg font-black text-white">{group.subParcels.length}</span>
-                              <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Blokken</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-white/20">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {group.varieties.slice(0, 3).map(v => (
-                              <span key={v}>{v}</span>
-                            ))}
-                            {group.varieties.length > 3 && <span>+{group.varieties.length - 3}</span>}
-                          </div>
-                          <span className="group-hover:text-primary transition-colors">Bekijk blokken</span>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              ) : !groupByMainParcel && sortedParcels.length > 0 ? (
-                <div className="space-y-1.5">
-                  {/* Sticky Header */}
-                  <div className="sticky top-0 z-10 backdrop-blur-xl bg-[#0A0A0A]/80 rounded-2xl border border-white/[0.06] px-2 py-1 mb-2">
-                    <div className="flex items-center gap-3 px-2">
-                      <div className="w-9 flex items-center justify-center shrink-0">
-                        <button
-                          onClick={toggleSelectAll}
-                          className={`h-5 w-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
-                            allVisibleSelected
-                              ? 'bg-primary border-primary shadow-lg shadow-primary/30'
-                              : 'border-white/15 hover:border-white/30 bg-white/[0.03]'
-                          }`}
+                        {/* Group Header */}
+                        <div
+                          className="flex items-center gap-4 px-5 py-4 cursor-pointer"
+                          onClick={() => {
+                            if (isSingleParcel) {
+                              setSelectedMainParcel(group.subParcels[0]);
+                            } else {
+                              toggleGroupExpand(group.id);
+                            }
+                          }}
                         >
-                          {allVisibleSelected && (
-                            <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          )}
-                        </button>
-                      </div>
-                      <button onClick={() => handleSort('name')} className="flex-1 min-w-0 flex items-center gap-1.5 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none">
-                        Perceelnaam {getSortIcon('name')}
-                      </button>
-                      <button onClick={() => handleSort('crop')} className="w-24 flex items-center justify-center gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0">
-                        Gewas {getSortIcon('crop')}
-                      </button>
-                      <button onClick={() => handleSort('variety')} className="w-40 flex items-center gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0 hidden lg:flex">
-                        Ras {getSortIcon('variety')}
-                      </button>
-                      <button onClick={() => handleSort('area')} className="w-28 flex items-center justify-end gap-1 py-2.5 text-[10px] font-bold text-white/30 uppercase tracking-[0.15em] hover:text-white/50 transition-colors select-none shrink-0">
-                        Opp. {getSortIcon('area')}
-                      </button>
-                      <div className="w-10 shrink-0" />
-                    </div>
-                  </div>
-
-                  {/* Rows */}
-                  <AnimatePresence mode="popLayout">
-                    {sortedParcels.map((parcel, index) => {
-                      const crop = parcel.crop || 'Onbekend';
-                      const colors = getCropColor(crop);
-                      const isSelected = selectedParcelIds.has(parcel.id);
-                      const maxArea = Math.max(...sortedParcels.map(p => p.area || 0), 1);
-                      const areaPercent = ((parcel.area || 0) / maxArea) * 100;
-
-                      return (
-                        <motion.div
-                          key={parcel.id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.98 }}
-                          transition={{ delay: index * 0.02, duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-                          onClick={() => setSelectedMainParcel(parcel)}
-                          className={`group relative flex items-center gap-3 px-2 py-1 rounded-2xl cursor-pointer transition-all duration-300 ${
-                            isSelected
-                              ? 'bg-primary/[0.08] ring-1 ring-primary/20'
-                              : 'hover:bg-white/[0.04]'
-                          }`}
-                        >
-                          {/* Crop accent line */}
-                          <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-full transition-all duration-300 ${
-                            isSelected ? 'h-8 bg-primary shadow-lg shadow-primary/50' :
-                            crop === 'Appel' ? 'h-5 bg-rose-500/40 group-hover:h-8 group-hover:bg-rose-500/70' :
-                            crop === 'Peer' ? 'h-5 bg-emerald-500/40 group-hover:h-8 group-hover:bg-emerald-500/70' :
-                            'h-5 bg-amber-500/40 group-hover:h-8 group-hover:bg-amber-500/70'
-                          }`} />
-
                           {/* Checkbox */}
-                          <div className="w-9 flex items-center justify-center shrink-0">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleParcelSelection(parcel.id); }}
-                              className={`h-5 w-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
-                                isSelected
-                                  ? 'bg-primary border-primary shadow-lg shadow-primary/30'
-                                  : 'border-white/10 hover:border-white/25 bg-white/[0.03] group-hover:border-white/20'
-                              }`}
-                            >
-                              {isSelected && (
-                                <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              )}
-                            </button>
-                          </div>
-
-                          {/* Name + synonyms */}
-                          <div className="flex-1 min-w-0 py-2.5">
-                            <span className="font-bold text-[15px] text-white group-hover:text-primary transition-colors duration-200 truncate block">
-                              {parcel.name}
-                            </span>
-                            {parcel.synonyms && parcel.synonyms.length > 0 && (
-                              <span className="text-[10px] text-white/15 italic truncate block mt-0.5">
-                                aka {parcel.synonyms.join(', ')}
-                              </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleGroupSelection(group); }}
+                            className={`h-5 w-5 rounded-lg border-2 transition-all duration-300 flex items-center justify-center shrink-0 ${
+                              groupAllSelected
+                                ? 'bg-primary border-primary shadow-lg shadow-primary/30 scale-110'
+                                : groupSomeSelected
+                                ? 'border-primary/50 bg-primary/20'
+                                : 'border-white/10 hover:border-white/30 bg-white/[0.02]'
+                            }`}
+                          >
+                            {groupAllSelected && (
+                              <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             )}
-                          </div>
+                            {groupSomeSelected && !groupAllSelected && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                            )}
+                          </button>
 
-                          {/* Crop badge */}
-                          <div className="w-24 flex items-center justify-center shrink-0">
-                            <span className={`inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${colors.bg} ${colors.text} group-hover:shadow-lg ${
-                              crop === 'Appel' ? 'group-hover:shadow-rose-500/10' :
-                              crop === 'Peer' ? 'group-hover:shadow-emerald-500/10' :
-                              'group-hover:shadow-amber-500/10'
-                            }`}>
-                              <span className={`flex items-center justify-center h-4 w-4 rounded-full ${
-                                crop === 'Appel' ? 'bg-rose-500/20' :
-                                crop === 'Peer' ? 'bg-emerald-500/20' :
-                                'bg-amber-500/20'
-                              }`}>
-                                {crop === 'Appel' ? <Apple className="h-2.5 w-2.5" /> : <Leaf className="h-2.5 w-2.5" />}
-                              </span>
-                              {crop}
-                            </span>
-                          </div>
+                          {/* Expand indicator */}
+                          {!isSingleParcel && (
+                            <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}>
+                              <ChevronRight className="h-4 w-4 text-white/20" />
+                            </div>
+                          )}
 
-                          {/* Variety */}
-                          <div className="w-40 shrink-0 hidden lg:block">
-                            <span className="text-sm text-white/50 group-hover:text-white/70 transition-colors truncate block">
-                              {parcel.variety || '—'}
-                            </span>
-                          </div>
-
-                          {/* Area with micro bar */}
-                          <div className="w-28 shrink-0 text-right">
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="text-sm font-mono font-bold text-white/70 tabular-nums group-hover:text-white transition-colors">
-                                {(parcel.area || 0).toFixed(2)} <span className="text-[10px] font-sans text-white/30">ha</span>
-                              </span>
-                              <div className="w-full h-[2px] rounded-full bg-white/[0.06] overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    crop === 'Appel' ? 'bg-rose-500/40' :
-                                    crop === 'Peer' ? 'bg-emerald-500/40' :
-                                    'bg-amber-500/40'
-                                  }`}
-                                  style={{ width: `${areaPercent}%` }}
-                                />
-                              </div>
+                          {/* Name + meta */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3">
+                              <h3 className="font-black text-[17px] text-white truncate group-hover/card:text-primary transition-colors duration-300">
+                                {group.name}
+                              </h3>
+                              {!isSingleParcel && (
+                                <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-2 rounded-full bg-white/[0.06] text-[11px] font-bold text-white/40 tabular-nums">
+                                  {group.subParcels.length}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {group.varieties.slice(0, 4).map((v, i) => (
+                                <span key={v} className="text-[11px] text-white/25">
+                                  {i > 0 && <span className="mr-1.5">&middot;</span>}{v}
+                                </span>
+                              ))}
+                              {group.varieties.length > 4 && (
+                                <span className="text-[11px] text-white/15">+{group.varieties.length - 4}</span>
+                              )}
                             </div>
                           </div>
 
-                          {/* Action */}
-                          <div className="w-10 flex items-center justify-center shrink-0">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedMainParcel(parcel); }}
-                              className="p-2 rounded-xl opacity-0 group-hover:opacity-100 bg-white/[0.04] hover:bg-primary/20 text-white/30 hover:text-primary transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
-                              title="Bekijk details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
+                          {/* Crop badges */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {group.crops.map(crop => {
+                              const colors = getCropColor(crop);
+                              return (
+                                <span key={crop} className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${colors.bg} ${colors.text} backdrop-blur-sm`}>
+                                  {crop === 'Appel' ? <Apple className="h-3 w-3" /> : <Leaf className="h-3 w-3" />}
+                                  {crop}
+                                </span>
+                              );
+                            })}
                           </div>
-                        </motion.div>
-                      );
-                    })}
+
+                          {/* Area */}
+                          <div className="text-right shrink-0 w-24">
+                            <span className="text-lg font-black text-white/80 tabular-nums tracking-tight">
+                              {group.totalArea.toFixed(2)}
+                            </span>
+                            <span className="text-[10px] text-white/25 ml-1">ha</span>
+                          </div>
+                        </div>
+
+                        {/* Expanded Sub-parcels with tree connectors */}
+                        {isExpanded && !isSingleParcel && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+                            className="border-t border-white/[0.04] bg-black/20"
+                          >
+                            {group.subParcels.map((parcel, i) => {
+                              const crop = parcel.crop || 'Onbekend';
+                              const isSelected = selectedParcelIds.has(parcel.id);
+                              const displayName = parcel.name.startsWith(group.name)
+                                ? parcel.name.slice(group.name.length).trim() || parcel.name
+                                : parcel.name;
+                              const accentColor = crop === 'Appel' ? 'bg-rose-500' : crop === 'Peer' ? 'bg-emerald-500' : 'bg-amber-500';
+
+                              return (
+                                <motion.div
+                                  key={parcel.id}
+                                  initial={{ opacity: 0, x: -8 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: i * 0.04, duration: 0.2 }}
+                                  onClick={() => setSelectedMainParcel(parcel)}
+                                  className={`group/row relative flex items-center gap-4 pl-10 pr-5 py-3 cursor-pointer transition-all duration-200 ${
+                                    isSelected ? 'bg-primary/[0.08]' : 'hover:bg-white/[0.03]'
+                                  } ${i > 0 ? 'border-t border-white/[0.03]' : ''}`}
+                                >
+                                  {/* Tree connector */}
+                                  <div className="absolute left-[1.85rem] top-0 bottom-0 w-px bg-white/[0.06]" />
+                                  <div className={`absolute left-[1.85rem] top-1/2 w-3 h-px ${isSelected ? 'bg-primary/40' : 'bg-white/[0.06]'}`} />
+                                  <div className={`absolute left-[2.85rem] top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full ${isSelected ? accentColor : 'bg-white/10'} transition-colors`} />
+
+                                  {/* Checkbox */}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleParcelSelection(parcel.id); }}
+                                    className={`h-4 w-4 rounded border-[1.5px] transition-all duration-200 flex items-center justify-center shrink-0 ml-4 ${
+                                      isSelected ? 'bg-primary border-primary shadow-sm shadow-primary/20' : 'border-white/10 hover:border-white/25 bg-transparent'
+                                    }`}
+                                  >
+                                    {isSelected && (
+                                      <svg className="h-2.5 w-2.5 text-primary-foreground" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                    )}
+                                  </button>
+
+                                  {/* Name */}
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-[13px] font-medium text-white/60 group-hover/row:text-white transition-colors duration-200 truncate block">
+                                      {displayName}
+                                    </span>
+                                  </div>
+
+                                  {/* Variety pill */}
+                                  <div className="shrink-0 hidden lg:block">
+                                    <span className="text-[11px] text-white/30 bg-white/[0.04] px-2.5 py-1 rounded-lg group-hover/row:text-white/50 transition-colors">
+                                      {parcel.variety || '\u2014'}
+                                    </span>
+                                  </div>
+
+                                  {/* Area */}
+                                  <div className="w-20 text-right shrink-0">
+                                    <span className="text-[13px] font-mono font-semibold text-white/40 tabular-nums group-hover/row:text-white/70 transition-colors">
+                                      {(parcel.area || 0).toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] text-white/15 ml-0.5">ha</span>
+                                  </div>
+
+                                  {/* Arrow */}
+                                  <ChevronRight className="h-3.5 w-3.5 text-white/0 group-hover/row:text-white/30 transition-all duration-200 shrink-0" />
+                                </motion.div>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
                   </AnimatePresence>
                 </div>
               ) : (
@@ -982,7 +952,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
 
             {/* Floating selection bar */}
             <AnimatePresence>
-              {!isLoading && !groupByMainParcel && selectedParcelIds.size > 0 && (
+              {!isLoading && selectedParcelIds.size > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1038,7 +1008,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
               selectedParcel={selectedRvoParcels[0] || null}
               selectedParcels={selectedRvoParcels}
               selectionMode="multi"
-              userParcels={parcels}
+              userParcels={parcels as unknown as Parcel[]}
               onUserParcelClick={(p) => setSelectedMainParcel(p)}
               isDrawingEnabled={isDrawingMode}
               onGeometryChange={handleDrawnGeometry}
@@ -1099,14 +1069,14 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         parcel={null}
         rvoData={rvoDataForForm}
         onSubmit={handleFormSubmit}
-        userParcels={parcels}
+        userParcels={parcels as unknown as Parcel[]}
       />
 
       {activeParcelForComposer && (
         <ParcelComposer
           isOpen={isComposerOpen}
           onOpenChange={setIsComposerOpen}
-          totalArea={activeParcelForComposer.area}
+          totalArea={activeParcelForComposer.area ?? 0}
           parcelName={activeParcelForComposer.name}
           initialItems={pendingSubParcels.length > 0 ? (pendingSubParcels as any) : undefined}
           onSave={handleComposerSave}
@@ -1128,6 +1098,15 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
           } catch (e: any) {
             toast({ variant: 'destructive', title: 'Fout', description: e.message?.includes('duplicate') ? 'Er bestaat al een groep met deze naam' : 'Kon groep niet aanmaken' });
           }
+        }}
+      />
+
+      <ParcelReorganizeDialog
+        open={isReorganizeOpen}
+        onOpenChange={setIsReorganizeOpen}
+        onSuccess={() => {
+          invalidateParcels();
+          toast({ title: 'Percelen samengevoegd', description: 'De percelenlijst is bijgewerkt.' });
         }}
       />
     </div>

@@ -79,7 +79,7 @@ export function createServiceRoleClient() {
  * Uses getter to ensure env vars are available at runtime (not build time)
  * On client-side, silently falls back to anon client.
  */
-let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let _supabaseAdmin: ReturnType<typeof createServiceRoleClient> | null = null;
 
 export function getSupabaseAdmin() {
   if (!_supabaseAdmin) {

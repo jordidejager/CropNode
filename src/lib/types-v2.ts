@@ -104,6 +104,7 @@ export interface SmartInputUserContext {
   products: CtgbProductSlim[];
   recentHistory: ParcelHistorySlim[];
   productAliases: ProductAlias[];
+  parcelGroups?: Array<{ name: string }>;
   loadedAt: string;
 }
 

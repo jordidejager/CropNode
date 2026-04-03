@@ -109,7 +109,7 @@ export async function processNewRegistration(
     // 6. Build parcel name map for formatting
     const parcels = await getSprayableParcelsForUser(userId);
     const parcelNameMap = new Map(
-      parcels.map(p => [p.id, { name: p.name, area: p.area, crop: p.crop, variety: p.variety }])
+      parcels.map(p => [p.id, { name: p.name, area: p.area ?? undefined, crop: p.crop, variety: p.variety ?? undefined }])
     );
 
     // 7. Format summaries

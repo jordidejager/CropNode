@@ -61,6 +61,7 @@ export function PrecipForecastMap({ timeRange }: PrecipForecastMapProps) {
     async function initMap() {
       try {
         const maptilersdk = await import('@maptiler/sdk');
+        // @ts-expect-error -- CSS module import has no type declarations
         await import('@maptiler/sdk/dist/maptiler-sdk.css');
         const { PrecipitationLayer } = await import('@maptiler/weather');
 

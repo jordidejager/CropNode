@@ -487,7 +487,7 @@ async function main() {
       // Check dosage for relevant crop
       const voorschriften = matched.gebruiksvoorschriften || [];
       const relevantVoorschriften = voorschriften.filter(v => {
-        return (kbProd.applies_to || []).some(crop => isCropAllowed(v.gewas, crop));
+        return (kbProd.applies_to || []).some((crop: string) => isCropAllowed(v.gewas, crop));
       });
 
       if (relevantVoorschriften.length > 0) {
