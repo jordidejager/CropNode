@@ -45,6 +45,8 @@ export function consumePendingGps(phoneNumber: string): string | null {
 const FIELD_NOTE_PREFIXES = [
   'notitie:', 'noteer:', 'onthoud:', 'memo:', 'note:', 'notitie ',
   'veldnotitie:', 'noteer ', 'onthoud ',
+  'herinnering:', 'herinnering ', 'herrinering:', 'herrinering ',
+  'reminder:', 'reminder ',
 ];
 
 // Observation keywords (without spray/fertilizer context → field note)
@@ -54,6 +56,13 @@ const OBSERVATION_KEYWORDS = [
   'schade', 'aantasting', 'plaag', 'ziek', 'ziekte',
   'bloei', 'knop', 'groei', 'oogst', 'rijp',
   'haag', 'snoei', 'dun', 'dunning',
+];
+
+// Reminder/planning keywords → field note (intent = plan, not registration)
+const REMINDER_KEYWORDS = [
+  'herinnering', 'herrinering', 'reminder', 'niet vergeten',
+  'onthouden', 'binnenkort', 'bellen', 'bestellen', 'checken',
+  'controleren', 'afspreken', 'plannen', 'inplannen', 'regelen',
 ];
 
 // Words that indicate it's NOT a field note (it's a spray/fertilizer)
@@ -87,6 +96,20 @@ export function isFieldNoteIntent(text: string): boolean {
 
   // Contains observation keywords without spray context → field note
   if (OBSERVATION_KEYWORDS.some(keyword => lower.includes(keyword))) {
+    return true;
+  }
+
+  // Contains reminder/planning keywords → field note
+  if (REMINDER_KEYWORDS.some(keyword => lower.includes(keyword))) {
+    return true;
+  }
+
+  // Future date reference WITHOUT dosage → planning note, not registration
+  // "volgende week amidthin op jonagold" = plan (no dosage)
+  // "gisteren amidthin 0,5 op jonagold" = registration (has dosage, past tense)
+  const hasFutureRef = /\b(volgende\s+week|over\s+\d+\s+dag|binnenkort|straks|morgen|overmorgen|komende\s+week)\b/i.test(lower);
+  const hasDosage = /\d+[,.]?\d*\s*(l|kg|ml|g)(\/ha)?/i.test(lower);
+  if (hasFutureRef && !hasDosage) {
     return true;
   }
 

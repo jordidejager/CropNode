@@ -446,15 +446,15 @@ async function finishEdit(
   const summaryText = formatRegistrationSummary(fakeResult as any, parcelNameMap);
 
   await sendInteractiveButtons(metaPhone, summaryText, [
-    { id: 'confirm', title: '✓ Bevestig' },
-    { id: 'edit', title: '✏ Wijzig' },
-    { id: 'cancel', title: '✗ Annuleer' },
+    { id: 'send', title: '📤 Verzenden' },
+    { id: 'edit', title: '✏ Wijzigen' },
+    { id: 'cancel', title: '✗ Annuleren' },
   ]);
   await logMessage({
     phoneNumber,
     direction: 'outbound',
     messageText: summaryText,
-    metadata: { buttons: ['confirm', 'edit', 'cancel'] },
+    metadata: { buttons: ['send', 'edit', 'cancel'] },
   });
 }
 

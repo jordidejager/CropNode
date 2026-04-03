@@ -14,6 +14,7 @@ import {
 } from './store';
 import {
   formatRegistrationSummary,
+  formatRegistrationDetail,
   formatErrorMessage,
 } from './format';
 import { processFieldNote } from './field-note-processor';
@@ -111,8 +112,9 @@ export async function processNewRegistration(
       parcels.map(p => [p.id, { name: p.name, area: p.area, crop: p.crop, variety: p.variety }])
     );
 
-    // 7. Format the summary
+    // 7. Format summaries
     const summaryText = formatRegistrationSummary(result, parcelNameMap);
+    const detailText = formatRegistrationDetail(result, parcelNameMap);
 
     // 8. Store pending registration in conversation
     await updateConversationState(
@@ -121,7 +123,13 @@ export async function processNewRegistration(
       result.registration
     );
 
-    // 9. Check for blocking errors — offer Notitie + Wijzigen (no Spuitschrift)
+    // 9. Send detail message first (if the registration is complex enough)
+    if (detailText) {
+      await sendTextMessage(metaPhone, detailText);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: detailText });
+    }
+
+    // 10. Check for blocking errors — offer Notitie + Wijzigen (no Spuitschrift)
     const hasBlockingErrors = (result.validationFlags || []).some(f => f.type === 'error');
     if (hasBlockingErrors) {
       await sendInteractiveButtons(metaPhone, summaryText, [
@@ -133,14 +141,14 @@ export async function processNewRegistration(
       return;
     }
 
-    // 10. Send interactive buttons (no blocking errors)
+    // 11. Send interactive buttons (no blocking errors)
     await sendInteractiveButtons(metaPhone, summaryText, [
       { id: 'send', title: '📤 Verzenden' },
       { id: 'edit', title: '✏ Wijzigen' },
       { id: 'cancel', title: '✗ Annuleren' },
     ]);
 
-    // 11. Log outbound
+    // 12. Log outbound
     await logMessage({
       phoneNumber,
       direction: 'outbound',

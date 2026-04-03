@@ -13,6 +13,8 @@ const MAX_INTERACTIVE_BODY_LENGTH = 1020;
 
 /**
  * Format a registration analysis result for WhatsApp display.
+ * Returns a compact summary (< 1024 chars for interactive buttons).
+ * Use formatRegistrationDetail() for the full breakdown.
  */
 export function formatRegistrationSummary(
   result: AnalysisResult,
@@ -24,76 +26,41 @@ export function formatRegistrationSummary(
 
   const group = result.registration;
   const lines: string[] = [];
-
-  // Title
   const isSpray = group.registrationType !== 'spreading';
+
+  // Compact header
+  const allProducts = group.units.flatMap(u => u.products);
+  const allPlots = group.units.flatMap(u => u.plots);
+  const totalArea = allPlots.reduce((sum, id) => sum + (parcelNameMap.get(id)?.area || 0), 0);
+  const dateStr = formatDate(group.date);
+
   lines.push(isSpray ? '📋 *Bespuiting*' : '📋 *Bemesting*');
   lines.push('');
 
-  // Format each unit
-  for (let i = 0; i < group.units.length; i++) {
-    const unit = group.units[i];
+  // Products — compact: "Product (dosering)" per line
+  for (const prod of allProducts) {
+    const ctgb = prod.resolved !== false ? ' ✓' : ' ⚠️';
+    const dose = prod.dosage > 0 ? ` — ${prod.dosage} ${prod.unit}/ha` : '';
+    lines.push(`🌿 *${prod.product}*${ctgb}${dose}`);
+  }
 
-    // Unit label for multi-unit registrations
-    if (group.units.length > 1 && unit.label) {
-      lines.push(`*${unit.label}*`);
-    }
-
-    // Products
-    for (const prod of unit.products) {
-      const ctgbMark = prod.source === 'fertilizer' ? '' : ' (CTGB ✓)';
-      const resolved = prod.resolved !== false ? ctgbMark : ' ⚠️';
-      lines.push(`🌿 *${prod.product}*${resolved}`);
-      if (prod.dosage > 0) {
-        lines.push(`   Dosering: ${prod.dosage} ${prod.unit}/ha`);
-      } else {
-        lines.push(`   Dosering: _nog invullen_`);
-      }
-    }
-
-    // Parcels
-    const parcelNames: string[] = [];
-    let totalArea = 0;
-    for (const plotId of unit.plots) {
-      const parcel = parcelNameMap.get(plotId);
-      if (parcel) {
-        parcelNames.push(parcel.name);
-        totalArea += parcel.area || 0;
-      }
-    }
-
-    if (parcelNames.length > 0) {
-      lines.push('');
-      lines.push('📍 *Percelen:*');
-      // Show up to 8 parcels, then summarize
-      const showCount = Math.min(parcelNames.length, 8);
-      for (let j = 0; j < showCount; j++) {
-        const plotId = unit.plots[j];
-        const parcel = parcelNameMap.get(plotId);
-        const areaStr = parcel?.area ? ` — ${parcel.area.toFixed(2)} ha` : '';
-        lines.push(`• ${parcelNames[j]}${areaStr}`);
-      }
-      if (parcelNames.length > 8) {
-        lines.push(`• _en ${parcelNames.length - 8} andere..._`);
-      }
-      if (totalArea > 0) {
-        lines.push(`Totaal: ${totalArea.toFixed(2)} ha`);
-      }
-    }
-
-    // Separator between units
-    if (i < group.units.length - 1) {
-      lines.push('');
-      lines.push('─────────────');
-    }
+  // Parcels — compact summary
+  lines.push('');
+  const parcelNames = allPlots.map(id => parcelNameMap.get(id)?.name).filter(Boolean);
+  if (parcelNames.length <= 3) {
+    lines.push(`📍 ${parcelNames.join(', ')}`);
+  } else {
+    lines.push(`📍 ${parcelNames.slice(0, 2).join(', ')} _+${parcelNames.length - 2} andere_`);
+  }
+  if (totalArea > 0) {
+    lines.push(`   Totaal: ${totalArea.toFixed(2)} ha`);
   }
 
   // Date
   lines.push('');
-  const dateStr = formatDate(group.date);
-  lines.push(`📅 Datum: ${dateStr}`);
+  lines.push(`📅 ${dateStr}`);
 
-  // Only show blocking errors (not interval warnings or info)
+  // Blocking errors only
   const blockingErrors = (result.validationFlags || []).filter(f => f.type === 'error');
   if (blockingErrors.length > 0) {
     lines.push('');
@@ -102,17 +69,74 @@ export function formatRegistrationSummary(
     }
   }
 
-  // Call to action
   lines.push('');
   lines.push('Klopt dit?');
 
   let text = lines.join('\n');
-
-  // Interactive button messages are limited to 1024 chars — truncate firmly
   if (text.length > MAX_INTERACTIVE_BODY_LENGTH) {
     text = text.substring(0, MAX_INTERACTIVE_BODY_LENGTH - 20) + '\n\n_...ingekort_';
   }
+  return text;
+}
 
+/**
+ * Format the full detailed breakdown (sent as separate text message).
+ * No length limit — regular text messages support 4096 chars.
+ */
+export function formatRegistrationDetail(
+  result: AnalysisResult,
+  parcelNameMap: Map<string, { name: string; area?: number; crop?: string; variety?: string }>
+): string | null {
+  if (!result.registration) return null;
+
+  const group = result.registration;
+  const allProducts = group.units.flatMap(u => u.products);
+  const allPlots = group.units.flatMap(u => u.plots);
+
+  // Only generate detail if the summary would be significantly shortened
+  // (4+ products or 4+ parcels)
+  if (allProducts.length < 4 && allPlots.length < 4) return null;
+
+  const lines: string[] = [];
+  const isSpray = group.registrationType !== 'spreading';
+  lines.push(isSpray ? '📋 *Details bespuiting*' : '📋 *Details bemesting*');
+  lines.push('');
+
+  // Full product list
+  lines.push('*Middelen:*');
+  for (const prod of allProducts) {
+    const ctgb = prod.resolved !== false ? ' (CTGB ✓)' : ' ⚠️';
+    lines.push(`🌿 *${prod.product}*${ctgb}`);
+    if (prod.dosage > 0) {
+      lines.push(`   Dosering: ${prod.dosage} ${prod.unit}/ha`);
+    }
+  }
+
+  // Full parcel list
+  lines.push('');
+  lines.push('*Percelen:*');
+  let totalArea = 0;
+  for (const plotId of allPlots) {
+    const parcel = parcelNameMap.get(plotId);
+    if (parcel) {
+      const areaStr = parcel.area ? ` — ${parcel.area.toFixed(2)} ha` : '';
+      const variety = parcel.variety ? ` (${parcel.variety})` : '';
+      lines.push(`• ${parcel.name}${variety}${areaStr}`);
+      totalArea += parcel.area || 0;
+    }
+  }
+  if (totalArea > 0) {
+    lines.push(`Totaal: ${totalArea.toFixed(2)} ha`);
+  }
+
+  // Date
+  lines.push('');
+  lines.push(`📅 Datum: ${formatDate(group.date)}`);
+
+  let text = lines.join('\n');
+  if (text.length > MAX_WHATSAPP_LENGTH) {
+    text = text.substring(0, MAX_WHATSAPP_LENGTH - 20) + '\n\n_...ingekort_';
+  }
   return text;
 }
 
