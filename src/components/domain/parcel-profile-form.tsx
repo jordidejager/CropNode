@@ -25,7 +25,8 @@ import {
 } from "@/lib/parcel-profile-constants";
 
 interface ParcelProfileFormProps {
-  subParcelId: string;
+  parcelId?: string;
+  subParcelId?: string;
 }
 
 type FormData = Record<string, unknown>;
@@ -212,8 +213,8 @@ function ComboboxField({
 // ============================================
 
 export function ParcelProfileForm({ subParcelId }: ParcelProfileFormProps) {
-  const { data: profileData, isLoading } = useParcelProfile(subParcelId);
-  const updateProfile = useUpdateParcelProfile(subParcelId);
+  const { data: profileData, isLoading } = useParcelProfile(subParcelId ?? '');
+  const updateProfile = useUpdateParcelProfile(subParcelId ?? '');
   const { toast } = useToast();
 
   const profile = profileData?.profile;

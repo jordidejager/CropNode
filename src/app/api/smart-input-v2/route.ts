@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server';
 import { z as zod } from 'zod';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { rateLimit, rateLimitHeaders } from '@/lib/rate-limiter';
 import { requestContext } from '@/lib/request-context';
 import { classifyAndParseSpray } from '@/ai/flows/classify-and-parse-spray';
 import { registrationAgent, registrationAgentStream, type AgentOutput } from '@/ai/flows/registration-agent';
@@ -713,6 +714,15 @@ export async function POST(req: Request) {
         const userId = await getServerUserId();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Step 2b: Rate limit (10 requests per minute per user)
+        const rl = rateLimit(`smart-input:${userId}`, 10, 60_000);
+        if (!rl.success) {
+            return NextResponse.json(
+                { error: 'Te veel verzoeken. Probeer het over een minuut opnieuw.' },
+                { status: 429, headers: rateLimitHeaders(rl) }
+            );
         }
 
         // Step 3: Create streaming response

@@ -9,6 +9,7 @@ import {
     safeGet
 } from '@/lib/api-utils';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { rateLimit, rateLimitHeaders } from '@/lib/rate-limiter';
 
 /**
  * Validate API - Deterministic CTGB Validation
@@ -79,6 +80,15 @@ export async function POST(req: Request) {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) {
             return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
+        }
+
+        // Step 0b: Rate limit (20 requests per minute per user)
+        const rl = rateLimit(`validate:${user.id}`, 20, 60_000);
+        if (!rl.success) {
+            return NextResponse.json(
+                createFallbackResponse('Te veel validatieverzoeken. Probeer het over een minuut opnieuw.'),
+                { status: 429, headers: rateLimitHeaders(rl) }
+            );
         }
 
         // Step 1: Parse JSON body safely

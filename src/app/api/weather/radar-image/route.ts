@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { rateLimit } from '@/lib/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,13 @@ export const dynamic = 'force-dynamic';
  * - type=single: single frame, optional time parameter
  */
 export async function GET(request: NextRequest) {
+  // Rate limit: 30 requests per minute per IP
+  const ip = request.headers.get('x-forwarded-for') || 'unknown';
+  const rl = rateLimit(`radar:${ip}`, 30, 60_000);
+  if (!rl.success) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+  }
+
   try {
     const { searchParams } = request.nextUrl;
     const type = searchParams.get('type') ?? 'single';

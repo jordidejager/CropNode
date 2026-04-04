@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { rateLimit, rateLimitHeaders } from '@/lib/rate-limiter';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
@@ -89,6 +90,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { type: 'error', message: 'Niet ingelogd.' } as ChatResponse,
         { status: 401 }
+      );
+    }
+
+    // Rate limit: 10 requests per minute per user
+    const rl = rateLimit(`chat:${user.id}`, 10, 60_000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { type: 'error', message: 'Te veel verzoeken. Probeer het over een minuut opnieuw.' } as ChatResponse,
+        { status: 429, headers: rateLimitHeaders(rl) }
       );
     }
 
