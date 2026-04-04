@@ -18,7 +18,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:api": "playwright test src/__tests__/smart-input-scenarios.test.ts --config playwright.api.config.ts",
     "test:api:headed": "playwright test src/__tests__/smart-input-scenarios.test.ts --config playwright.api.config.ts --headed",
-    "test:weather": "tsx src/__tests__/weather-calculations.test.ts"
+    "test:weather": "tsx src/__tests__/weather-calculations.test.ts",
+    "test:validation": "tsx src/__tests__/validation-service.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
