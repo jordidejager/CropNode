@@ -1,5 +1,3 @@
-'use client';
-
 import { CloudSun } from 'lucide-react';
 
 export default function DiseasePressurePage() {

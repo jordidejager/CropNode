@@ -28,6 +28,9 @@ import {
     CheckCircle2
 } from "lucide-react"
 import { GewasrotatieTimeline } from "@/components/domain/gewas-rotatie-timeline"
+import { ParcelProfileForm } from "@/components/domain/parcel-profile-form"
+import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     BarChart,
     Bar,
@@ -344,7 +347,62 @@ export function MainParcelView({
             {/* 4.5 Gewasrotatie Timeline */}
             <GewasrotatieTimeline parcelId={parcel.id} parcelName={parcel.name} />
 
-            {/* 5. Sub-parcels Grid */}
+            {/* 5. Perceelprofiel & Grondmonsters */}
+            <div className="space-y-4">
+                <h3 className="text-xl font-black text-white">Perceelprofiel & Bodemanalyses</h3>
+                {subParcels.length <= 1 ? (
+                    /* Geen of 1 subperceel → toon profiel direct op hoofdperceel-niveau */
+                    <Tabs defaultValue="profile" className="w-full">
+                        <TabsList className="bg-white/5 border border-white/10 p-1 rounded-xl">
+                            <TabsTrigger value="profile" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                Profiel
+                            </TabsTrigger>
+                            <TabsTrigger value="analyses" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                Grondmonsters
+                            </TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="profile" className="mt-4">
+                            <ParcelProfileForm parcelId={parcel.id} />
+                        </TabsContent>
+                        <TabsContent value="analyses" className="mt-4">
+                            <SoilAnalysisPanel parcelId={parcel.id} />
+                        </TabsContent>
+                    </Tabs>
+                ) : (
+                    /* Meerdere subpercelen → tab per blok */
+                    <Tabs defaultValue={subParcels[0].id} className="w-full">
+                        <TabsList className="bg-white/5 border border-white/10 p-1 rounded-xl flex-wrap h-auto gap-1">
+                            {subParcels.map((sub) => (
+                                <TabsTrigger key={sub.id} value={sub.id} className="rounded-lg font-bold px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                    {sub.name || sub.variety || sub.crop}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                        {subParcels.map((sub) => (
+                            <TabsContent key={sub.id} value={sub.id} className="mt-4">
+                                <Tabs defaultValue="profile" className="w-full">
+                                    <TabsList className="bg-white/5 border border-white/10 p-1 rounded-xl">
+                                        <TabsTrigger value="profile" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                            Profiel
+                                        </TabsTrigger>
+                                        <TabsTrigger value="analyses" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                            Grondmonsters
+                                        </TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="profile" className="mt-4">
+                                        <ParcelProfileForm subParcelId={sub.id} />
+                                    </TabsContent>
+                                    <TabsContent value="analyses" className="mt-4">
+                                        <SoilAnalysisPanel subParcelId={sub.id} />
+                                    </TabsContent>
+                                </Tabs>
+                            </TabsContent>
+                        ))}
+                    </Tabs>
+                )}
+            </div>
+
+            {/* 6. Sub-parcels Grid */}
             <div className="space-y-4">
                 <h3 className="text-xl font-black text-white">Sub-percelen (Blokken)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

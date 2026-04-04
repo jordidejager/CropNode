@@ -42,7 +42,7 @@ let _productsCache: UnifiedProduct[] | null = null;
 let _productsCacheTime = 0;
 let _aliasesCache: ProductAlias[] | null = null;
 let _aliasesCacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes (products change rarely)
 
 function isCacheValid(cacheTime: number): boolean {
   return Date.now() - cacheTime < CACHE_TTL;

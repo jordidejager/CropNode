@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
     const data = await getMultiModelForecast(stationId);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, { headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=900' } });
   } catch (error) {
     console.error('[Weather API] multimodel error:', error);
     return NextResponse.json(

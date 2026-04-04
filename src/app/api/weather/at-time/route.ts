@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 
     const data = await getWeatherAtTime(stationId, parsedTimestamp);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, { headers: { 'Cache-Control': 'public, s-maxage=3600' } });
   } catch (error) {
     console.error('[Weather API] at-time error:', error);
     return NextResponse.json(

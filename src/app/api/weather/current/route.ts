@@ -35,7 +35,9 @@ export async function GET(request: Request) {
 
     const data = await getCurrentAndForecast(stationId);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, {
+      headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' },
+    });
   } catch (error) {
     console.error('[Weather API] current error:', error);
     return NextResponse.json(

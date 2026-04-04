@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
     const data = await getHourlyRange(stationId, start, end);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, { headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' } });
   } catch (error) {
     console.error('[Weather API] hourly error:', error);
     return NextResponse.json(

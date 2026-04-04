@@ -1,5 +1,3 @@
-'use client';
-
 import { PercelenClientPage } from '@/app/(app)/parcels/list/client-page';
 
 export default function ParcelsMapPage() {

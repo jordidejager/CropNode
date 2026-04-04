@@ -2,6 +2,15 @@
 // supabaseAdmin bypasses RLS for server-side operations
 import { supabase, getSupabaseAdmin } from './supabase-client';
 import { withRetry } from './retry-utils';
+// Cache invalidation - lazy import to avoid pulling server-only code into client bundle
+async function invalidateParcelCacheSafe() {
+  try {
+    const { revalidateTag } = await import('next/cache');
+    revalidateTag('parcels');
+  } catch {
+    // Silently skip in client context
+  }
+}
 import type {
   LogbookEntry,
   Parcel,
@@ -857,9 +866,11 @@ export async function getParcels(): Promise<Parcel[]> {
   if (parcelsMissingSubs.length > 0) {
     console.log(`[getParcels] ${parcelsMissingSubs.length} parcels missing sub_parcels, fetching separately...`);
 
+    const missingParcelIds = parcelsMissingSubs.map(p => p.id);
     let subQuery = supabase
       .from('sub_parcels')
-      .select('*');
+      .select('*')
+      .in('parcel_id', missingParcelIds);
 
     if (userId) {
       subQuery = subQuery.eq('user_id', userId);
@@ -1064,6 +1075,7 @@ export async function addParcel(parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
 
   if (error) throw new Error(error.message);
 
+  invalidateParcelCacheSafe();
   return recursiveToCamelCase(data) as Parcel;
 }
 
@@ -1089,6 +1101,7 @@ export async function updateParcel(parcel: Parcel): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+  invalidateParcelCacheSafe();
 }
 
 export async function deleteParcel(parcelId: string): Promise<void> {
@@ -1098,6 +1111,7 @@ export async function deleteParcel(parcelId: string): Promise<void> {
     .eq('id', parcelId);
 
   if (error) throw new Error(error.message);
+  invalidateParcelCacheSafe();
 }
 
 /**
@@ -1393,8 +1407,9 @@ export async function getParcelHistoryEntries(): Promise<ParcelHistoryEntry[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('parcel_history')
-      .select('*')
-      .order('date', { ascending: false });
+      .select('id, log_id, spuitschrift_id, parcel_id, parcel_name, crop, variety, product, dosage, unit, date, harvest_year, unit_price, user_id')
+      .order('date', { ascending: false })
+      .limit(1000);
 
     if (error) {
       // Throw on fetch errors so withRetry can handle them
@@ -1407,7 +1422,7 @@ export async function getParcelHistoryEntries(): Promise<ParcelHistoryEntry[]> {
 
     if (!data) return [];
 
-    console.log(`[getParcelHistoryEntries] Found ${data.length} entries`);
+    console.log(`[getParcelHistoryEntries] Found ${data.length} entries (limited to 1000)`);
     return data.map(item => ({
       ...recursiveToCamelCase(item) as any,
       date: new Date(item.date),

@@ -34,7 +34,9 @@ export async function GET(request: Request) {
 
     const data = await getForecastDaily(stationId);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
+    });
   } catch (error) {
     console.error('[Weather API] forecast error:', error);
     return NextResponse.json(

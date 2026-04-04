@@ -1,5 +1,3 @@
-'use client';
-
 import { PercelenClientPage } from './client-page';
 
 export default function ParcelsListPage() {
