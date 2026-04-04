@@ -12,7 +12,7 @@
  * - Eén vraag per bericht
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, withTimeout, AI_AGENT_TIMEOUT_MS } from '@/ai/genkit';
 import { z } from 'genkit';
 import { registrationAgentTools } from '@/ai/tools/registration-agent-tools';
 import { sanitizeForPrompt } from '@/lib/ai-sanitizer';
@@ -461,12 +461,16 @@ ${input.parcelContext ? JSON.stringify(input.parcelContext, null, 2) : 'Gebruik 
             });
 
             // Call the model with tools
-            const response = await ai.generate({
-                system: SYSTEM_PROMPT,
-                messages,
-                tools: registrationAgentTools,
-                returnToolRequests: true,
-            });
+            const response = await withTimeout(
+                ai.generate({
+                    system: SYSTEM_PROMPT,
+                    messages,
+                    tools: registrationAgentTools,
+                    returnToolRequests: true,
+                }),
+                AI_AGENT_TIMEOUT_MS,
+                'registrationAgent'
+            );
 
             // Process tool calls if any
             let toolResults: Record<string, unknown> = {};

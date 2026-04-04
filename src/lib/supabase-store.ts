@@ -1901,7 +1901,7 @@ export async function getDoelorganismenForProduct(
             interval: v.interval,
             maxToepassingen: v.maxToepassingen,
             veiligheidstermijn: v.veiligheidstermijn,
-            opmerkingen: v.opmerkingen || v.wCodes,
+            opmerkingen: ((v.opmerkingen || v.wCodes) as string[] | undefined),
             gewas: v.gewas || gewas || 'Algemeen',
           });
         }

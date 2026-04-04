@@ -15,7 +15,7 @@
  * - Handles crop patterns: "alle appels", "alle peren", "alles"
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, DEFAULT_MODEL, withTimeout, AI_TIMEOUT_MS } from '@/ai/genkit';
 import { z } from 'genkit';
 import { sanitizeForPrompt } from '@/lib/ai-sanitizer';
 
@@ -158,13 +158,17 @@ Antwoord ALLEEN met JSON:
         ]
       : promptText;
 
-    const { output } = await ai.generate({
-      model: 'googleai/gemini-2.5-flash-lite',
-      prompt,
-      output: {
-        schema: ClassifyFieldNoteOutputSchema,
-      },
-    });
+    const { output } = await withTimeout(
+      ai.generate({
+        model: DEFAULT_MODEL,
+        prompt,
+        output: {
+          schema: ClassifyFieldNoteOutputSchema,
+        },
+      }),
+      AI_TIMEOUT_MS,
+      'classifyFieldNote'
+    );
 
     if (!output) {
       return {

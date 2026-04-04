@@ -176,7 +176,7 @@ function UsageCard({ usage, index }: { usage: CtgbGebruiksvoorschrift; index: nu
                             <p className="text-xs text-white/50 mb-1">Opmerkingen:</p>
                             <ul className="space-y-1">
                                 {usage.opmerkingen.map((note, i) => (
-                                    <li key={i} className="text-xs text-white/70">• {note}</li>
+                                    <li key={i} className="text-xs text-white/70">• {typeof note === "string" ? note : JSON.stringify(note)}</li>
                                 ))}
                             </ul>
                         </div>

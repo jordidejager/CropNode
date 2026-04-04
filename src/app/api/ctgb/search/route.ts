@@ -27,7 +27,7 @@ function transformToLegacySearchResult(product: CtgbProduct) {
  * Search for plant protection products in the Supabase database.
  * Uses server-side caching for improved performance.
  */
-export async function GET(request: Request): Promise<NextResponse<CtgbSearchResponse>> {
+export async function GET(request: Request) {
     try {
         // Auth check: require authentication for product search
         const supabase = await createServerClient();

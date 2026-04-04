@@ -445,9 +445,19 @@ export type CtgbGebruiksvoorschrift = {
   maxToepassingen?: number;
   maxToepassingenPerTeeltcyclus?: number;
   maxDoseringPerTeeltcyclus?: string;
+  maxDoseringPerSeizoen?: string;
   veiligheidstermijn?: string;
   interval?: string;
-  opmerkingen?: string[];
+  // Enriched fields (from MST API re-sync)
+  bbchVan?: string;          // BBCH groeistadium start (bijv. "51")
+  bbchTot?: string;          // BBCH groeistadium einde (bijv. "85")
+  seizoenVan?: number;       // Startmaand (1-12)
+  seizoenTot?: number;       // Eindmaand (1-12)
+  spuitvolumeMin?: number;   // Min spuitvolume L/ha
+  spuitvolumeMax?: number;   // Max spuitvolume L/ha
+  intervalDagen?: number;    // Interval in dagen (numeriek, naast string 'interval')
+  phiDagen?: number;         // PHI in dagen (numeriek, naast string 'veiligheidstermijn')
+  opmerkingen?: (string | Record<string, unknown>)[];
   wCodes?: string[];
 };
 

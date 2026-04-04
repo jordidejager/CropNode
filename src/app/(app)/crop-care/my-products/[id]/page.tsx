@@ -448,7 +448,7 @@ function GebruiksvoorschriftCard({ voorschrift, highlight = false }: { voorschri
                         <Info className="h-3.5 w-3.5 text-white/30 mt-0.5 shrink-0" />
                         <div className="text-sm text-white/50 space-y-1">
                             {voorschrift.opmerkingen.map((opmerking, i) => (
-                                <p key={i}>{opmerking}</p>
+                                <p key={i}>{typeof opmerking === "string" ? opmerking : JSON.stringify(opmerking)}</p>
                             ))}
                         </div>
                     </div>

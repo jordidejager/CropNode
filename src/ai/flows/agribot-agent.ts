@@ -10,7 +10,7 @@
  * - "Wat is de dosering van Decis en wanneer heb ik het laatst gebruikt?"
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, withTimeout, AI_AGENT_TIMEOUT_MS } from '@/ai/genkit';
 import { z } from 'genkit';
 import { agribotTools } from '@/ai/tools/agribot-tools';
 
@@ -138,12 +138,16 @@ export const agribotAgent = ai.defineFlow(
             });
 
             // Call the model with tools
-            const response = await ai.generate({
-                system: SYSTEM_PROMPT,
-                messages,
-                tools: agribotTools,
-                returnToolRequests: true,
-            });
+            const response = await withTimeout(
+                ai.generate({
+                    system: SYSTEM_PROMPT,
+                    messages,
+                    tools: agribotTools,
+                    returnToolRequests: true,
+                }),
+                AI_AGENT_TIMEOUT_MS,
+                'agribotAgent'
+            );
 
             // Process tool calls if any
             let finalAnswer = '';
