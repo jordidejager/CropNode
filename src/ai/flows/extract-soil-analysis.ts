@@ -151,7 +151,7 @@ export const extractSoilAnalysis = ai.defineFlow(
       output: { schema: ExtractOutputSchema },
     });
 
-    return response.output;
+    return response.output!;
   }
 );
 
