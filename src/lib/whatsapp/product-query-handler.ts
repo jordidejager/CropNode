@@ -118,7 +118,7 @@ async function handleSingleProductQuery(
   let cropInfo: any = null;
   const targetCrop = crop || 'appel';
   const { data: cropData } = await admin.rpc('fn_get_product_for_crop', {
-    p_product: bestMatch.name,
+    p_product_name: bestMatch.name,
     p_gewas: targetCrop,
   });
   if (cropData?.length > 0) {
@@ -191,37 +191,39 @@ function formatProductCard(
 ): string {
   const lines: string[] = [];
   const isCTGB = match.source === 'ctgb';
+  // v_product_card nests details in a JSONB `details` column
+  const d = card?.details || card || {};
 
   // Header
   const typeLabel = match.product_type || (isCTGB ? 'Gewasbescherming' : 'Meststof');
   const emoji = isCTGB ? '🌿' : '🌱';
   lines.push(`${emoji} *${match.name}*`);
 
-  if (isCTGB && card) {
-    const statusIcon = card.status === 'Toegelaten' ? '✓' : '⚠️';
-    lines.push(`📋 ${typeLabel} — CTGB ${statusIcon} (${card.toelatingsnummer || ''})`);
-    if (card.toelatingshouder) {
-      lines.push(`🏢 ${card.toelatingshouder}`);
+  if (isCTGB) {
+    const statusIcon = d.status === 'Toegelaten' ? '✓' : '⚠️';
+    lines.push(`📋 ${typeLabel} — CTGB ${statusIcon} (${d.toelatingsnummer || ''})`);
+    if (d.toelatingshouder) {
+      lines.push(`🏢 ${d.toelatingshouder}`);
     }
   } else {
     lines.push(`📋 ${typeLabel}`);
-    if (card?.manufacturer) {
-      lines.push(`🏢 ${card.manufacturer}`);
+    if (d.manufacturer) {
+      lines.push(`🏢 ${d.manufacturer}`);
     }
   }
 
   // Werkzame stoffen (CTGB)
-  if (isCTGB && card?.werkzame_stoffen) {
+  if (isCTGB && d.werkzame_stoffen) {
     lines.push('');
     lines.push('💊 *Werkzame stoffen:*');
     try {
-      const stoffen = typeof card.werkzame_stoffen === 'string'
-        ? JSON.parse(card.werkzame_stoffen)
-        : card.werkzame_stoffen;
+      const stoffen = typeof d.werkzame_stoffen === 'string'
+        ? JSON.parse(d.werkzame_stoffen)
+        : d.werkzame_stoffen;
       if (Array.isArray(stoffen)) {
         for (const stof of stoffen.slice(0, 5)) {
           const conc = stof.concentratie ? ` (${stof.concentratie})` : '';
-          const frac = stof.frac_code ? ` — ${stof.frac_code}` : '';
+          const frac = stof.frac_irac ? ` — ${stof.frac_irac}` : '';
           lines.push(`• ${stof.naam || stof.name}${conc}${frac}`);
         }
       }
@@ -229,19 +231,20 @@ function formatProductCard(
   }
 
   // Samenstelling (meststof)
-  if (!isCTGB && card) {
+  if (!isCTGB) {
+    const comp = d.composition || {};
     const npk: string[] = [];
-    if (card.n_total) npk.push(`N: ${card.n_total}%`);
-    if (card.p2o5) npk.push(`P₂O₅: ${card.p2o5}%`);
-    if (card.k2o) npk.push(`K₂O: ${card.k2o}%`);
+    if (comp.n_total) npk.push(`N: ${comp.n_total}%`);
+    if (comp.p2o5) npk.push(`P₂O₅: ${comp.p2o5}%`);
+    if (comp.k2o) npk.push(`K₂O: ${comp.k2o}%`);
     if (npk.length > 0) {
       lines.push('');
       lines.push('🧪 *Samenstelling:*');
       npk.forEach(n => lines.push(`• ${n}`));
     }
-    if (card.dosage_fruit) {
+    if (d.dosage_fruit) {
       lines.push('');
-      lines.push(`📍 *Dosering fruitteelt:* ${card.dosage_fruit}`);
+      lines.push(`📍 *Dosering fruitteelt:* ${d.dosage_fruit}`);
     }
   }
 
@@ -272,13 +275,13 @@ function formatProductCard(
   }
 
   // Status
-  if (isCTGB && card) {
+  if (isCTGB) {
     lines.push('');
-    if (card.status === 'Toegelaten' && card.vervaldatum) {
-      const expDate = new Date(card.vervaldatum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (d.status === 'Toegelaten' && d.vervaldatum) {
+      const expDate = new Date(d.vervaldatum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
       lines.push(`✅ Toegelaten t/m ${expDate}`);
-    } else if (card.status) {
-      lines.push(`⚠️ Status: ${card.status}`);
+    } else if (d.status) {
+      lines.push(`⚠️ Status: ${d.status}`);
     }
   }
 
