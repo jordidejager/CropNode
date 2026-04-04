@@ -58,7 +58,15 @@ export async function processNewRegistration(
 
     // 4. Handle different results
     if (result.action === 'answer_query' || !result.registration) {
-      // Not a spray registration — save as field note instead
+      // Try product query fallback before saving as note
+      const { detectProductQuery, handleProductQuery } = await import('./product-query-handler');
+      const pq = detectProductQuery(inputText);
+      if (pq) {
+        await handleProductQuery(userId, phoneNumber, inputText, pq);
+        return;
+      }
+
+      // Not a spray registration or product query — save as field note
       await processFieldNote(userId, phoneNumber, inputText, waMessageId);
       return;
     }

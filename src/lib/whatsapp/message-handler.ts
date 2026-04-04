@@ -18,6 +18,7 @@ import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
+import { detectProductQuery, handleProductQuery } from './product-query-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
@@ -305,6 +306,14 @@ export async function handleIncomingMessage(
         await processFieldNote(userId, e164Phone, messageText, waMessageId);
         return;
       }
+
+      // Product info query: "wat is delan", "info captan", "dosering pyrus op appel"
+      const productQueryParams = detectProductQuery(messageText);
+      if (productQueryParams) {
+        await handleProductQuery(userId, e164Phone, messageText, productQueryParams);
+        return;
+      }
+
       await processNewRegistration(userId, e164Phone, messageText, waMessageId);
       return;
     }
