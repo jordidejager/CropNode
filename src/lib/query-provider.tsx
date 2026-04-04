@@ -1,7 +1,8 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
+import { getSprayableParcels } from '@/lib/supabase-store';
 
 export function QueryProvider({ children }: { children: ReactNode }) {
     const [queryClient] = useState(
@@ -9,23 +10,25 @@ export function QueryProvider({ children }: { children: ReactNode }) {
             new QueryClient({
                 defaultOptions: {
                     queries: {
-                        // Stale time: data is considered fresh for 1 minute
-                        // This means cached data is shown immediately while refetching in background
-                        staleTime: 60 * 1000, // 1 minute
-                        // Cache time: data stays in cache for 30 minutes
+                        staleTime: 60 * 1000,
                         gcTime: 30 * 60 * 1000,
-                        // Retry failed requests 2 times
                         retry: 2,
-                        // Don't refetch on window focus (prevents jarring updates)
                         refetchOnWindowFocus: false,
-                        // Refetch on reconnect for fresh data after offline
                         refetchOnReconnect: true,
-                        // Don't refetch on mount if data is still fresh
                         refetchOnMount: false,
                     },
                 },
             })
     );
+
+    // Prefetch commonly needed data on app mount
+    useEffect(() => {
+        queryClient.prefetchQuery({
+            queryKey: ['sprayable-parcels'],
+            queryFn: () => getSprayableParcels(),
+            staleTime: 10 * 60 * 1000, // 10 min
+        });
+    }, [queryClient]);
 
     return (
         <QueryClientProvider client={queryClient}>

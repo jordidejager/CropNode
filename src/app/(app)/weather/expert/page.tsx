@@ -1,5 +1,3 @@
-'use client';
-
 import { Suspense } from 'react';
 import { ExpertForecast } from '@/components/weather/expert/ExpertForecast';
 import { Skeleton } from '@/components/ui/data-states';

@@ -1,5 +1,3 @@
-'use client';
-
 import { Suspense } from 'react';
 import { WeatherDashboard } from '@/components/weather/WeatherDashboard';
 import { WeatherDashboardSkeleton } from '@/components/weather/WeatherDashboardSkeleton';

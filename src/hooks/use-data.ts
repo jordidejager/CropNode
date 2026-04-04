@@ -274,7 +274,7 @@ export function useParcelProfile(id: string | undefined, type: 'parcel' | 'sub_p
             if (!id) return null;
             const res = await fetch(`/api/parcels/${id}/profile?type=${type}`);
             const json = await res.json();
-            return json.data;
+            return json.data ?? null;
         },
         enabled: !!id,
         staleTime: 5 * 60 * 1000,

@@ -520,7 +520,7 @@ export async function addInventoryMovement(movement: Omit<InventoryMovement, 'id
 export async function getUserPreferences(): Promise<UserPreference[]> {
   const { data, error } = await supabase
     .from('user_preferences')
-    .select('*');
+    .select('id, alias, preferred');
 
   if (error || !data) return [];
 
@@ -752,7 +752,7 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
     // First try the view
     let query = client
       .from('v_sprayable_parcels')
-      .select('*')
+      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id')
       .in('id', ids);
 
     if (userId) {
@@ -779,7 +779,7 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
 
     let subQuery = client
       .from('sub_parcels')
-      .select('*')
+      .select('id, name, area, crop, variety, parcel_id, user_id')
       .in('id', ids);
 
     if (userId) {
@@ -870,7 +870,7 @@ export async function getParcels(): Promise<Parcel[]> {
     const missingParcelIds = parcelsMissingSubs.map(p => p.id);
     let subQuery = supabase
       .from('sub_parcels')
-      .select('*')
+      .select('id, parcel_id, crop, variety, area, created_at, updated_at')
       .in('parcel_id', missingParcelIds);
 
     if (userId) {
@@ -944,7 +944,7 @@ export async function getParcels(): Promise<Parcel[]> {
 export async function getSubParcel(id: string): Promise<SubParcel | null> {
   const { data, error } = await supabase
     .from('sub_parcels')
-    .select('*')
+    .select('id, parcel_id, name, synonyms, crop, variety, variety_mutant, rootstock, planting_year, mutants, rootstocks, interstocks, planting_years, planting_distances, planting_distance_row, planting_distance_tree, area, irrigation_type, irrigation_percentage, frost_protection_type, frost_protection_percentage, created_at, updated_at')
     .eq('id', id)
     .single();
 
@@ -996,7 +996,7 @@ export async function updateSubParcel(subParcel: Partial<SubParcel> & { id: stri
 export async function getSoilSamples(subParcelId: string): Promise<SoilSample[]> {
   const { data, error } = await supabase
     .from('soil_samples')
-    .select('*')
+    .select('id, sub_parcel_id, sample_date, n_total, p_available, k_value, organic_matter, ph, pdf_url, raw_data, created_at')
     .eq('sub_parcel_id', subParcelId)
     .order('sample_date', { ascending: false });
 
@@ -1029,7 +1029,7 @@ export async function addSoilSample(sample: Omit<SoilSample, 'id' | 'createdAt'>
 export async function getProductionHistory(subParcelId: string): Promise<ProductionHistory[]> {
   const { data, error } = await supabase
     .from('production_history')
-    .select('*')
+    .select('id, sub_parcel_id, year, tonnage, size_distribution, created_at')
     .eq('sub_parcel_id', subParcelId)
     .order('year', { ascending: false });
 
@@ -1157,7 +1157,7 @@ export async function getParcelsByIds(ids: string[]): Promise<Parcel[]> {
 
     const { data: subParcelsData, error: subError } = await supabase
       .from('sub_parcels')
-      .select('*')
+      .select('id, parcel_id, crop, variety, area, name, created_at, updated_at')
       .in('parcel_id', ids);
 
     if (subError) {
@@ -1249,7 +1249,7 @@ export async function getParcelsByIds(ids: string[]): Promise<Parcel[]> {
 export async function getLogbookEntry(id: string): Promise<LogbookEntry | null> {
   const { data, error } = await supabase
     .from('logbook')
-    .select('*')
+    .select('id, raw_input, status, date, created_at, parsed_data, registration_type, validation_message, original_logbook_id')
     .eq('id', id)
     .single();
 
@@ -1268,7 +1268,7 @@ export async function getLogbookEntries(): Promise<LogbookEntry[]> {
     const userId = await getCurrentUserId();
     let query = supabase
       .from('logbook')
-      .select('*');
+      .select('id, raw_input, status, date, created_at, parsed_data, registration_type, validation_message, original_logbook_id, user_id');
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -1695,7 +1695,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // First try exact/partial match on naam
     const { data: nameData, error: nameError } = await client
       .from('ctgb_products')
-      .select('*')
+      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
       .ilike('naam', searchPattern)
       .order('naam')
       .limit(20);
@@ -1715,7 +1715,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // Fallback: search in werkzame_stoffen or toelatingsnummer
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
       .or(`werkzame_stoffen.cs.{${normalizedSearch}},toelatingsnummer.ilike.${searchPattern}`)
       .order('naam')
       .limit(20);
@@ -1739,7 +1739,7 @@ export async function getCtgbProductByNumber(toelatingsnummer: string): Promise<
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('*')
+    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .eq('toelatingsnummer', toelatingsnummer)
     .limit(1);
 
@@ -1757,7 +1757,7 @@ export async function getCtgbProductByName(naam: string): Promise<CtgbProduct | 
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('*')
+    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .eq('naam', naam)
     .single();
 
@@ -1988,7 +1988,7 @@ export async function getCtgbProductsBySubstance(substance: string): Promise<Ctg
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('*')
+    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .contains('werkzame_stoffen', [substance]);
 
   if (error || !data) return [];
@@ -2107,7 +2107,7 @@ export async function getCtgbSyncStats(): Promise<CtgbSyncStats> {
 export async function getFertilizers(): Promise<FertilizerProduct[]> {
   const { data, error } = await supabase
     .from('fertilizers')
-    .select('*')
+    .select('id, name, manufacturer, category, unit, composition, search_keywords, description, formulation, density, dosage_fruit, application_timing, composition_forms')
     .order('name');
 
   if (error || !data) return [];
@@ -2173,7 +2173,7 @@ export async function getAllProducts(): Promise<import('./types').UnifiedProduct
   while (true) {
     const { data, error } = await client
       .from('products')
-      .select('*')
+      .select('id, name, product_type, source, source_id, status, search_keywords')
       .eq('status', 'active')
       .order('name')
       .range(from, from + batchSize - 1);
@@ -2203,7 +2203,7 @@ export async function getProductAliasesUnified(): Promise<import('./types').Prod
 
   const { data, error } = await client
     .from('product_aliases_unified')
-    .select('*')
+    .select('id, product_id, alias, alias_type, source, confidence, usage_count')
     .order('alias');
 
   if (error || !data) return [];
@@ -2334,7 +2334,7 @@ export async function getTaskTypes(): Promise<TaskType[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('task_types')
-      .select('*')
+      .select('id, name, default_hourly_rate, created_at, updated_at')
       .order('name');
 
     if (error) {
@@ -2381,7 +2381,7 @@ export async function getTaskLogs(): Promise<TaskLogEnriched[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_task_logs_enriched')
-      .select('*')
+      .select('id, start_date, end_date, days, sub_parcel_id, sub_parcel_name, task_type_id, task_type_name, default_hourly_rate, people_count, hours_per_person, total_hours, estimated_cost, notes, created_at, updated_at')
       .order('start_date', { ascending: false })
       .limit(100);
 
@@ -2511,7 +2511,7 @@ export async function getActiveTaskSessions(): Promise<ActiveTaskSession[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_active_task_sessions_enriched')
-      .select('*')
+      .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, start_time, people_count, notes, created_at')
       .order('start_time', { ascending: false });
 
     if (error) {
@@ -2562,7 +2562,7 @@ export async function startTaskSession(session: {
   // Fetch enriched data
   const { data: enriched } = await supabase
     .from('v_active_task_sessions_enriched')
-    .select('*')
+    .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, start_time, people_count, notes, created_at')
     .eq('id', data.id)
     .single();
 
@@ -2638,7 +2638,7 @@ export async function stopTaskSession(
   // 1. Haal de actieve sessie op
   const { data: session, error: fetchError } = await supabase
     .from('v_active_task_sessions_enriched')
-    .select('*')
+    .select('id, task_type_id, sub_parcel_id, start_time, people_count, notes')
     .eq('id', sessionId)
     .single();
 
@@ -2698,7 +2698,7 @@ export async function getStorageCells(): Promise<StorageCellSummary[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_storage_cells_summary')
-      .select('*')
+      .select('id, name, width, depth, blocked_positions, status, max_stack_height, door_positions, evaporator_positions, position_height_overrides, complex_id, complex_position, total_positions, filled_positions, fill_percentage, dominant_variety, total_crates, variety_counts, total_capacity, created_at, updated_at')
       .order('name');
 
     if (error) {
@@ -2740,7 +2740,7 @@ export async function getStorageCells(): Promise<StorageCellSummary[]> {
 export async function getStorageCell(id: string): Promise<StorageCell | null> {
   const { data, error } = await supabase
     .from('storage_cells')
-    .select('*')
+    .select('id, name, width, depth, blocked_positions, status, max_stack_height, door_positions, evaporator_positions, position_height_overrides, complex_id, complex_position, created_at, updated_at')
     .eq('id', id)
     .single();
 
@@ -2963,7 +2963,7 @@ export async function clearStoragePosition(
 export async function getStorageComplexes(): Promise<StorageComplex[]> {
   const { data, error } = await supabase
     .from('storage_complex')
-    .select('*')
+    .select('id, name, grid_width, grid_height, created_at, updated_at')
     .order('name');
 
   if (error) throw new Error(error.message);
@@ -2985,7 +2985,7 @@ export async function getStorageComplexes(): Promise<StorageComplex[]> {
 export async function getStorageComplex(id: string): Promise<StorageComplex | null> {
   const { data, error } = await supabase
     .from('storage_complex')
-    .select('*')
+    .select('id, name, grid_width, grid_height, created_at, updated_at')
     .eq('id', id)
     .single();
 
@@ -3096,7 +3096,7 @@ export async function deleteStorageComplex(id: string): Promise<void> {
 export async function getStorageCellsByComplex(complexId: string): Promise<StorageCellSummary[]> {
   const { data, error } = await supabase
     .from('v_storage_cells_summary')
-    .select('*')
+    .select('id, name, width, depth, blocked_positions, status, max_stack_height, door_positions, evaporator_positions, position_height_overrides, complex_id, complex_position, total_positions, filled_positions, fill_percentage, dominant_variety, total_crates, variety_counts, total_capacity, created_at, updated_at')
     .eq('complex_id', complexId)
     .order('name');
 
@@ -3138,7 +3138,7 @@ export async function getStorageCellsByComplex(complexId: string): Promise<Stora
 export async function getCellSubParcels(cellId: string): Promise<CellSubParcel[]> {
   const { data, error } = await supabase
     .from('v_cell_sub_parcel_totals')
-    .select('*')
+    .select('id, cell_id, parcel_id, sub_parcel_id, variety, color, pick_date, pick_number, notes, harvest_registration_id, created_at, updated_at, total_crates, positions_used, parcel_name, sub_parcel_name')
     .eq('cell_id', cellId)
     .order('pick_date', { ascending: false });
 
@@ -3665,7 +3665,7 @@ export async function getHarvestRegistrations(options?: {
 }): Promise<HarvestRegistration[]> {
   let query = supabase
     .from('v_harvest_registration_totals')
-    .select('*')
+    .select('id, parcel_id, sub_parcel_id, variety, harvest_date, pick_number, total_crates, quality_class, weight_per_crate, season, notes, created_at, updated_at, parcel_name, sub_parcel_name, stored_crates, remaining_crates, storage_status, cell_names')
     .order('harvest_date', { ascending: false });
 
   if (options?.season) {
@@ -3717,7 +3717,7 @@ export async function getHarvestsForDate(date: Date): Promise<HarvestRegistratio
 
   const { data, error } = await supabase
     .from('v_harvest_registration_totals')
-    .select('*')
+    .select('id, parcel_id, sub_parcel_id, variety, harvest_date, pick_number, total_crates, quality_class, weight_per_crate, season, notes, created_at, updated_at, parcel_name, sub_parcel_name, stored_crates, remaining_crates, storage_status, cell_names')
     .eq('harvest_date', dateStr)
     .order('variety');
 
@@ -3756,7 +3756,7 @@ export async function getAvailableHarvestsForStorage(options?: {
 }): Promise<HarvestRegistration[]> {
   let query = supabase
     .from('v_harvest_registration_totals')
-    .select('*')
+    .select('id, parcel_id, sub_parcel_id, variety, harvest_date, pick_number, total_crates, quality_class, weight_per_crate, season, notes, created_at, updated_at, parcel_name, sub_parcel_name, stored_crates, remaining_crates, storage_status, cell_names')
     .gt('remaining_crates', 0) // Only harvests with remaining crates
     .order('harvest_date', { ascending: false });
 

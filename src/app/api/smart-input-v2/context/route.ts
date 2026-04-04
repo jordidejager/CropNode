@@ -129,19 +129,34 @@ async function getUserProductAliases(userId: string): Promise<ProductAlias[]> {
 /**
  * Convert full CTGB product to slim version for client
  */
-function toSlimProduct(product: CtgbProduct): CtgbProductSlim {
+function toSlimProduct(product: CtgbProduct, userCrops?: Set<string>): CtgbProductSlim {
+    let voorschriften = (product.gebruiksvoorschriften || []).map((v: { gewas?: string; doelorganisme?: string; dosering?: string; maxToepassingen?: number }) => ({
+        gewas: v.gewas || '',
+        doelorganisme: v.doelorganisme,
+        dosering: v.dosering,
+        maxToepassingen: v.maxToepassingen,
+    }));
+
+    // Filter to only user's crops if available (reduces payload significantly)
+    if (userCrops && userCrops.size > 0) {
+        const relevant = voorschriften.filter(v => {
+            const gewasLower = v.gewas.toLowerCase();
+            return userCrops.has(gewasLower) ||
+                gewasLower.includes('pitvruchten') ||
+                gewasLower.includes('fruitgewassen') ||
+                gewasLower.includes('alle');
+        });
+        // Keep at least some voorschriften (fallback to all if nothing matches)
+        if (relevant.length > 0) voorschriften = relevant;
+    }
+
     return {
         id: product.id,
         naam: product.naam,
         toelatingsnummer: product.toelatingsnummer,
         categorie: product.categorie || null,
         werkzameStoffen: product.werkzameStoffen || [],
-        gebruiksvoorschriften: (product.gebruiksvoorschriften || []).map((v: { gewas?: string; doelorganisme?: string; dosering?: string; maxToepassingen?: number }) => ({
-            gewas: v.gewas || '',
-            doelorganisme: v.doelorganisme,
-            dosering: v.dosering,
-            maxToepassingen: v.maxToepassingen,
-        })),
+        gebruiksvoorschriften: voorschriften,
     };
 }
 
@@ -190,8 +205,9 @@ export async function GET() {
 
         console.log(`[${context}] Fetched: ${parcels.length} parcels, ${allProducts.length} products, ${history.length} history entries, ${parcelGroupsRaw.length} parcel groups`);
 
-        // Step 3: Convert to slim versions
-        const slimProducts = allProducts.map(toSlimProduct);
+        // Step 3: Convert to slim versions, filtering voorschriften to user's crops
+        const userCrops = new Set(parcels.map(p => (p.crop || '').toLowerCase()).filter(Boolean));
+        const slimProducts = allProducts.map(p => toSlimProduct(p, userCrops));
 
         // Only include history from last 90 days
         const ninetyDaysAgo = new Date();

@@ -1,6 +1,10 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type {NextConfig} from 'next';
 
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
@@ -97,7 +101,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   // Upload source maps for readable stack traces
   silent: !process.env.CI,
   org: "de-jager-technology",
