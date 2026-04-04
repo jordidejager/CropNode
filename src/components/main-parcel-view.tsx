@@ -221,10 +221,10 @@ export function MainParcelView({
                     </TabsTrigger>
                 </TabsList>
                 <TabsContent value="profile" className="mt-4">
-                    <ParcelProfileForm parcelId={parcel.id} />
+                    <ParcelProfileForm subParcelId={parcel.id} />
                 </TabsContent>
                 <TabsContent value="analyses" className="mt-4">
-                    <SoilAnalysisPanel parcelId={parcel.id} />
+                    <SoilAnalysisPanel subParcelId={parcel.id} />
                 </TabsContent>
                 <TabsContent value="overview" className="mt-4 space-y-6">
 

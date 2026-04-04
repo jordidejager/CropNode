@@ -5,15 +5,12 @@ import { createInitialSprayEntry, type InitialState } from '@/app/actions';
 import { useActionState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { InvoerForm } from './invoer-form';
-// import { useFirestore } from '@/firebase';
 import { Loader2 } from 'lucide-react';
 
 export function InvoerInterface({ onNewEntry }: { onNewEntry: () => void }) {
   const [state, formAction, isProcessing] = useActionState(createInitialSprayEntry, { message: '', errors: {} });
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
-  // const db = useFirestore();
-
   useEffect(() => {
     if (state.message && !isProcessing) {
       if (state.errors) {

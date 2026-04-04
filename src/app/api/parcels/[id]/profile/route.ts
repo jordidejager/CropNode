@@ -101,7 +101,7 @@ export async function PUT(
       plantjaar: body.plantjaar ?? null,
       gewas: body.gewas ?? null,
       ras: body.ras ?? null,
-      onderstam: body.onderstam ?? null,
+      onderstammen: body.onderstammen ?? [],
       bestuiversras: body.bestuiversras ?? null,
       kloon_selectie: body.kloon_selectie ?? null,
       rijafstand_m: body.rijafstand_m ?? null,

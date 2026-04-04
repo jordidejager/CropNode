@@ -209,6 +209,114 @@ function ComboboxField({
 }
 
 // ============================================
+// Weighted multi-value field (e.g. 70% Kwee MC + 30% Kwee Adams)
+// ============================================
+
+type WeightedEntry = { value: string; percentage: number };
+
+function WeightedComboboxField({
+  value = [],
+  onChange,
+  suggestions,
+  placeholder = "Typ of selecteer...",
+}: {
+  value: WeightedEntry[];
+  onChange: (v: WeightedEntry[]) => void;
+  suggestions: string[];
+  placeholder?: string;
+}) {
+  const addEntry = () => {
+    const remaining = 100 - value.reduce((sum, e) => sum + e.percentage, 0);
+    onChange([...value, { value: '', percentage: Math.max(0, remaining) }]);
+  };
+
+  const updateEntry = (index: number, field: 'value' | 'percentage', val: string | number) => {
+    const updated = [...value];
+    if (field === 'percentage') {
+      updated[index] = { ...updated[index], percentage: Math.min(100, Math.max(0, Number(val))) };
+    } else {
+      updated[index] = { ...updated[index], value: val as string };
+    }
+    onChange(updated);
+  };
+
+  const removeEntry = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+  };
+
+  const total = value.reduce((sum, e) => sum + e.percentage, 0);
+
+  // Als er nog geen entries zijn, toon een simpel "toevoegen" button
+  if (value.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={addEntry}
+        className="w-full h-10 rounded-lg border border-dashed border-white/10 text-xs text-white/30 hover:border-white/20 hover:text-white/50 transition-all flex items-center justify-center gap-1.5"
+      >
+        <span className="text-lg leading-none">+</span> Onderstam toevoegen
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {value.map((entry, i) => (
+        <div key={i} className="flex items-center gap-2">
+          {/* Percentage */}
+          <div className="w-20 shrink-0">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={entry.percentage}
+              onChange={(e) => updateEntry(i, 'percentage', e.target.value)}
+              className="bg-white/[0.03] border-white/[0.08] h-9 text-center text-sm font-mono"
+            />
+          </div>
+          <span className="text-xs text-white/30 shrink-0">%</span>
+
+          {/* Combobox */}
+          <div className="flex-1">
+            <ComboboxField
+              value={entry.value}
+              onChange={(v) => updateEntry(i, 'value', v)}
+              suggestions={suggestions}
+              placeholder={placeholder}
+            />
+          </div>
+
+          {/* Remove */}
+          <button
+            type="button"
+            onClick={() => removeEntry(i)}
+            className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+
+      {/* Footer: totaal + toevoegen */}
+      <div className="flex items-center justify-between pt-1">
+        <span className={`text-[11px] font-mono font-bold ${
+          total === 100 ? 'text-emerald-400' : total > 100 ? 'text-red-400' : 'text-amber-400'
+        }`}>
+          Totaal: {total}%
+        </span>
+        <button
+          type="button"
+          onClick={addEntry}
+          className="text-[11px] text-primary/60 hover:text-primary font-bold transition-colors"
+        >
+          + Nog een onderstam
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // Main Component
 // ============================================
 
@@ -275,7 +383,7 @@ export function ParcelProfileForm({ parcelId, subParcelId }: ParcelProfileFormPr
       <ProfileSection
         title="Aanplantgegevens"
         icon={Sprout}
-        fields={['plantjaar', 'gewas', 'ras', 'onderstam', 'bestuiversras', 'kloon_selectie']}
+        fields={['plantjaar', 'gewas', 'ras', 'onderstammen', 'bestuiversras', 'kloon_selectie']}
         values={values}
       >
         <Field label="Plantjaar">
@@ -291,9 +399,14 @@ export function ParcelProfileForm({ parcelId, subParcelId }: ParcelProfileFormPr
             <ComboboxField value={field.value as string} onChange={field.onChange} suggestions={rasSuggesties} placeholder="Typ of selecteer ras" />
           )} />
         </Field>
-        <Field label="Onderstam">
-          <Controller name="onderstam" control={control} render={({ field }) => (
-            <ComboboxField value={field.value as string} onChange={field.onChange} suggestions={onderstamSuggesties} placeholder="Typ of selecteer onderstam" />
+        <Field label="Onderstam(men)" className="col-span-full">
+          <Controller name="onderstammen" control={control} render={({ field }) => (
+            <WeightedComboboxField
+              value={(field.value as WeightedEntry[]) || []}
+              onChange={field.onChange}
+              suggestions={onderstamSuggesties}
+              placeholder="Typ of selecteer onderstam"
+            />
           )} />
         </Field>
         <Field label="Bestuiversras">

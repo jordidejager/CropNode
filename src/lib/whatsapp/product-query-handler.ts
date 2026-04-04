@@ -94,8 +94,8 @@ async function handleSingleProductQuery(
 ): Promise<void> {
   // Search for product
   const { data: searchResults, error: searchErr } = await admin.rpc('fn_search_products', {
-    p_query: productQuery,
-    p_source: null,
+    search_query: productQuery,
+    filter_source: null,
   });
 
   if (searchErr || !searchResults?.length) {

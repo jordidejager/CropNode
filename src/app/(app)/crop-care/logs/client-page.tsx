@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import { Timestamp } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,8 +18,8 @@ import { deleteSpuitschriftEntry, moveSpuitschriftEntryToLogbook } from '@/app/a
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
-const formatDate = (date: Date | Timestamp) => {
-    const d = date instanceof Timestamp ? date.toDate() : date;
+const formatDate = (date: Date | string) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
     return format(d, 'dd MMMM yyyy HH:mm', { locale: nl });
 };
 
@@ -203,7 +202,7 @@ function ParcelHistoryView({ allParcels, initialEntries }: { allParcels: Parcel[
                     unit: product.unit,
                 }))
             )
-            .sort((a, b) => (b.date instanceof Timestamp ? b.date.toMillis() : new Date(b.date).getTime()) - (a.date instanceof Timestamp ? a.date.toMillis() : new Date(a.date).getTime()));
+            .sort((a, b) => (new Date(b.date).getTime()) - (new Date(a.date).getTime()));
 
     }, [selectedParcelId, initialEntries]);
 
@@ -247,7 +246,7 @@ function ParcelHistoryView({ allParcels, initialEntries }: { allParcels: Parcel[
                         <TableBody>
                             {history.map(item => (
                                 <TableRow key={item.id}>
-                                    <TableCell>{format(item.date instanceof Timestamp ? item.date.toDate() : item.date, 'dd-MM-yyyy')}</TableCell>
+                                    <TableCell>{format(new Date(item.date), 'dd-MM-yyyy')}</TableCell>
                                     <TableCell className="font-medium">{item.product}</TableCell>
                                     <TableCell className="text-right">{item.dosage} {item.unit}/ha</TableCell>
                                 </TableRow>
