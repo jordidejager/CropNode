@@ -1,14 +1,17 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { ProductieHeader } from '@/components/analytics/productie/ProductieHeader';
 import { ProductieKPIs } from '@/components/analytics/productie/ProductieKPIs';
-import { YearTrendChart } from '@/components/analytics/productie/YearTrendChart';
-import { VarietyBreakdownChart } from '@/components/analytics/productie/VarietyBreakdownChart';
-import { ParcelProductionChart } from '@/components/analytics/productie/ParcelProductionChart';
-import { VarietyRankingChart } from '@/components/analytics/productie/VarietyRankingChart';
-import { HistoricalDataForm } from '@/components/analytics/productie/HistoricalDataForm';
-import { ProductionDataTable } from '@/components/analytics/productie/ProductionDataTable';
+
+// Lazy-load chart components
+const YearTrendChart = dynamic(() => import('@/components/analytics/productie/YearTrendChart').then(m => ({ default: m.YearTrendChart })), { ssr: false });
+const VarietyBreakdownChart = dynamic(() => import('@/components/analytics/productie/VarietyBreakdownChart').then(m => ({ default: m.VarietyBreakdownChart })), { ssr: false });
+const ParcelProductionChart = dynamic(() => import('@/components/analytics/productie/ParcelProductionChart').then(m => ({ default: m.ParcelProductionChart })), { ssr: false });
+const VarietyRankingChart = dynamic(() => import('@/components/analytics/productie/VarietyRankingChart').then(m => ({ default: m.VarietyRankingChart })), { ssr: false });
+const HistoricalDataForm = dynamic(() => import('@/components/analytics/productie/HistoricalDataForm').then(m => ({ default: m.HistoricalDataForm })), { ssr: false });
+const ProductionDataTable = dynamic(() => import('@/components/analytics/productie/ProductionDataTable').then(m => ({ default: m.ProductionDataTable })), { ssr: false });
 import { getCurrentHarvestYear } from '@/lib/analytics/harvest-year-utils';
 import { fetchAvailableHarvestYears } from '@/lib/analytics/queries';
 import {

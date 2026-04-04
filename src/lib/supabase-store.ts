@@ -2135,7 +2135,7 @@ export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
 
   const { data, error } = await dbClient
     .from('fertilizers')
-    .select('id, name, manufacturer, category, unit, composition, search_keywords')
+    .select('id, name, manufacturer, category, unit, composition, search_keywords, description, formulation, density, dosage_fruit, application_timing, composition_forms')
     .order('name')
     .limit(2000);
 

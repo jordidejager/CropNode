@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { AnalyticsHero } from '@/components/analytics/AnalyticsHero';
 import { AnalyticsFilterBar } from '@/components/analytics/AnalyticsFilterBar';
-import { SeasonDashboard } from '@/components/analytics/SeasonDashboard';
-import { CropProtectionAnalysis } from '@/components/analytics/CropProtectionAnalysis';
-import { FertilizerAnalysis } from '@/components/analytics/FertilizerAnalysis';
-import { HarvestYieldAnalysis } from '@/components/analytics/HarvestYieldAnalysis';
-import { ParcelComparison } from '@/components/analytics/ParcelComparison';
-import { WeatherImpact } from '@/components/analytics/WeatherImpact';
-import { ReportsExport } from '@/components/analytics/ReportsExport';
+
+// Lazy-load chart-heavy components (Recharts) — only loaded when data is ready
+const SeasonDashboard = dynamic(() => import('@/components/analytics/SeasonDashboard').then(m => ({ default: m.SeasonDashboard })), { ssr: false });
+const CropProtectionAnalysis = dynamic(() => import('@/components/analytics/CropProtectionAnalysis').then(m => ({ default: m.CropProtectionAnalysis })), { ssr: false });
+const FertilizerAnalysis = dynamic(() => import('@/components/analytics/FertilizerAnalysis').then(m => ({ default: m.FertilizerAnalysis })), { ssr: false });
+const HarvestYieldAnalysis = dynamic(() => import('@/components/analytics/HarvestYieldAnalysis').then(m => ({ default: m.HarvestYieldAnalysis })), { ssr: false });
+const ParcelComparison = dynamic(() => import('@/components/analytics/ParcelComparison').then(m => ({ default: m.ParcelComparison })), { ssr: false });
+const WeatherImpact = dynamic(() => import('@/components/analytics/WeatherImpact').then(m => ({ default: m.WeatherImpact })), { ssr: false });
+const ReportsExport = dynamic(() => import('@/components/analytics/ReportsExport').then(m => ({ default: m.ReportsExport })), { ssr: false });
 import { getCurrentHarvestYear } from '@/lib/analytics/harvest-year-utils';
 import { fetchAnalyticsData, fetchAvailableHarvestYears, fetchWeatherData } from '@/lib/analytics/queries';
 import { calculateKPIComparison } from '@/lib/analytics/calculations';
@@ -27,9 +30,6 @@ function SectionSkeleton() {
   );
 }
 
-function LazySection({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
-}
 
 export default function AnalyticsPage() {
   const [filters, setFilters] = useState<AnalyticsFilters>({
@@ -100,12 +100,12 @@ export default function AnalyticsPage() {
         <div className="px-4 md:px-6 pb-8 space-y-12">
           {kpiComparison && <SeasonDashboard data={data} kpiComparison={kpiComparison} />}
 
-          <LazySection><CropProtectionAnalysis data={data} /></LazySection>
-          <LazySection><FertilizerAnalysis data={data} /></LazySection>
-          <LazySection><HarvestYieldAnalysis data={data} /></LazySection>
-          <LazySection><ParcelComparison data={data} /></LazySection>
-          <LazySection><WeatherImpact data={data} weatherData={weatherData} /></LazySection>
-          <LazySection><ReportsExport data={data} harvestYear={filters.harvestYear} /></LazySection>
+          <CropProtectionAnalysis data={data} />
+          <FertilizerAnalysis data={data} />
+          <HarvestYieldAnalysis data={data} />
+          <ParcelComparison data={data} />
+          <WeatherImpact data={data} weatherData={weatherData} />
+          <ReportsExport data={data} harvestYear={filters.harvestYear} />
         </div>
       )}
     </div>
