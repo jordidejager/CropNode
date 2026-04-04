@@ -141,7 +141,7 @@ export function FieldNotesMap({ notes, onNoteClick, onViewInList }: FieldNotesMa
         ? `<div style="font-size:10px;color:${color};margin-top:2px">${note.observation_subject}</div>`
         : '';
       const sourceIcon = note.source === 'whatsapp'
-        ? '<span style="font-size:10px;margin-left:4px">💬</span>'
+        ? '<span style="font-size:8px;margin-left:4px;background:#25D366;color:white;padding:1px 4px;border-radius:4px;font-weight:600">WA</span>'
         : '';
 
       const popupContent = `<div style="max-width:220px;font-size:12px;line-height:1.4" class="fn-popup-inner">

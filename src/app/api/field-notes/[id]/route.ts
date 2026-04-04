@@ -17,6 +17,8 @@ const UpdateNoteSchema = z.object({
   is_pinned: z.boolean().optional(),
   is_locked: z.boolean().optional(),
   parcel_ids: z.array(z.string()).optional(),
+  due_date: z.string().nullable().optional(),
+  reminder_at: z.string().nullable().optional(),
 });
 
 /**

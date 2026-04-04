@@ -1,12 +1,13 @@
+'use client';
+
 import { PageTabs } from '@/components/layout/page-tabs';
+import { FileText, Sprout, Package, Database } from 'lucide-react';
 
 const tabs = [
-    { label: 'Spuitschrift', href: '/gewasbescherming' },
-    { label: 'Bemesting', href: '/gewasbescherming/bemesting' },
-    { label: 'Voorraad', href: '/gewasbescherming/voorraad' },
-    { label: 'Mijn Producten', href: '/gewasbescherming/producten' },
-    { label: 'Database', href: '/gewasbescherming/database' },
-    { label: 'Db Meststoffen', href: '/gewasbescherming/database-meststoffen' },
+    { label: 'Spuitschrift', href: '/gewasbescherming', icon: FileText },
+    { label: 'Bemesting', href: '/gewasbescherming/bemesting', icon: Sprout },
+    { label: 'Database', href: '/gewasbescherming/database', icon: Database },
+    { label: 'Voorraad', href: '/gewasbescherming/voorraad', icon: Package },
 ];
 
 export default function GewasbeschermingLayout({ children }: { children: React.ReactNode }) {

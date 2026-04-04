@@ -1,0 +1,64 @@
+import { NextRequest } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
+import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
+
+/**
+ * POST /api/parcels/[id]/soil-analyses/[analysisId]/apply-to-profile
+ * Kopieer relevante waarden uit de grondmonsteranalyse naar het parcel_profiles record.
+ */
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; analysisId: string }> }
+) {
+  try {
+    const { id: subParcelId, analysisId } = await params;
+    const supabase = await createServerClient();
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
+    }
+
+    // Haal analyse op
+    const { data: analysis, error: fetchError } = await supabase
+      .from('soil_analyses')
+      .select('grondsoort_rapport, organische_stof_pct, klei_percentage')
+      .eq('id', analysisId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (fetchError || !analysis) {
+      return apiError('Analyse niet gevonden', ErrorCodes.NOT_FOUND, 404);
+    }
+
+    // Bouw update object — alleen niet-null waarden overnemen
+    const profileUpdate: Record<string, unknown> = {
+      bodem_bron_analyse_id: analysisId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (analysis.grondsoort_rapport) profileUpdate.grondsoort = analysis.grondsoort_rapport;
+    if (analysis.organische_stof_pct != null) profileUpdate.organische_stof_pct = analysis.organische_stof_pct;
+    if (analysis.klei_percentage != null) profileUpdate.klei_percentage = analysis.klei_percentage;
+
+    // Upsert profiel
+    const { data: profile, error: upsertError } = await supabase
+      .from('parcel_profiles')
+      .upsert({
+        sub_parcel_id: subParcelId,
+        user_id: user.id,
+        ...profileUpdate,
+      }, { onConflict: 'sub_parcel_id' })
+      .select()
+      .single();
+
+    if (upsertError) {
+      return apiError(`Fout bij updaten profiel: ${upsertError.message}`, ErrorCodes.INTERNAL_ERROR, 500);
+    }
+
+    return apiSuccess(profile);
+
+  } catch (error) {
+    return handleUnknownError(error, 'soil-analyses/apply-to-profile POST');
+  }
+}

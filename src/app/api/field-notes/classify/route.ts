@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       supabase
         .from('v_sprayable_parcels')
         .select('id, name, crop, variety, synonyms, parcel_name')
+        .eq('user_id', user.id)
         .limit(100),
       supabase
         .from('parcel_groups')
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
     if (result.parcel_ids.length > 0) update.parcel_ids = result.parcel_ids;
     if (result.observation_subject) update.observation_subject = result.observation_subject;
     if (result.observation_category) update.observation_category = result.observation_category;
+    if (result.due_date) update.due_date = result.due_date;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabase

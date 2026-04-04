@@ -6,7 +6,7 @@ import { Sparkles, Leaf, Timer, Zap } from 'lucide-react';
 import { CommandBar } from '@/components/command-bar';
 import { DashboardGreeting } from '@/components/dashboard/DashboardGreeting';
 import { WeatherSprayStrip } from '@/components/dashboard/WeatherSprayStrip';
-import { FieldNotesCard } from '@/components/dashboard/FieldNotesCard';
+import { FieldNotesCard, TasksCard } from '@/components/dashboard/FieldNotesCard';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { DashboardShortcuts } from '@/components/dashboard/DashboardShortcuts';
 import type { InputMode } from '@/components/mode-selector';
@@ -137,9 +137,10 @@ export function DashboardClient() {
                     <WeatherSprayStrip />
                 </div>
 
-                {/* Field Notes */}
-                <div className="dashboard-fade-in dashboard-fade-in-4">
+                {/* Field Notes + Tasks */}
+                <div className="dashboard-fade-in dashboard-fade-in-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <FieldNotesCard />
+                    <TasksCard />
                 </div>
 
                 {/* Recent Activity + Shortcuts */}

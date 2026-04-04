@@ -98,6 +98,132 @@ export type ProductionHistory = {
   createdAt: Date;
 };
 
+// === Perceelprofiel Types ===
+
+export type ParcelProfile = {
+  id: string;
+  subParcelId: string;
+  // Aanplantgegevens
+  plantjaar?: number;
+  gewas?: string;
+  ras?: string;
+  onderstam?: string;
+  bestuiversras?: string;
+  kloonSelectie?: string;
+  // Plantverband
+  rijafstandM?: number;
+  plantafstandM?: number;
+  plantdichtheidPerHa?: number;
+  aantalBomen?: number;
+  // Teeltsysteem
+  teeltsysteem?: string;
+  boomhoogteM?: number;
+  rijrichting?: string;
+  // Infrastructuur
+  hagelnet?: string;
+  regenkap?: string;
+  insectennet?: string;
+  windscherm?: string;
+  steunconstructie?: string;
+  // Waterhuishouding
+  irrigatiesysteem?: string;
+  fertigatieAansluiting?: string;
+  nachtvorstberegening?: string;
+  koelberegening?: string;
+  waterbron?: string;
+  drainage?: string;
+  // Bodemkenmerken
+  grondsoort?: string;
+  bodemPh?: number;
+  organischeStofPct?: number;
+  kleiPercentage?: number;
+  grondwaterniveau?: string;
+  // Certificering
+  certificeringen?: string[];
+  duurzaamheidsprogrammas?: string[];
+  // Perceelhistorie
+  voorgaandGewas?: string;
+  herinplant?: string;
+  verwachteRooidatum?: number;
+  // Meta
+  notities?: string;
+  bodemBronAnalyseId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+export type SoilAnalysisWaardering = {
+  waardering: string;
+  streeftraject: string;
+};
+
+export type BemestingsAdviesBodem = {
+  nutrient: string;
+  giftKgHa: number;
+  periodiciteit: string;
+};
+
+export type BemestingsAdviesGewas = {
+  nutrient: string;
+  gewas: string;
+  giftKgHa: number;
+};
+
+export type SoilAnalysis = {
+  id: string;
+  subParcelId: string;
+  // Rapport metadata
+  rapportIdentificatie?: string;
+  lab: string;
+  datumMonstername: Date;
+  datumVerslag?: Date;
+  geldigTot?: number;
+  bemonsterdeLaagCm?: string;
+  bemonsteringsmethode?: string;
+  grondsoortRapport?: string;
+  // Analyseresultaten
+  nTotaalBodemvoorraadKgHa?: number;
+  nTotaalMgKg?: number;
+  cnRatio?: number;
+  nLeverendVermogenKgHa?: number;
+  pPlantbeschikbaarKgHa?: number;
+  pPlantbeschikbaarMgKg?: number;
+  pBodemvoorraadKgHa?: number;
+  pBodemvoorraadPAl?: number;
+  pBodemvoorraadP100g?: number;
+  pwGetal?: number;
+  cOrganischPct?: number;
+  organischeStofPct?: number;
+  kleiPercentage?: number;
+  bulkdichtheidKgM3?: number;
+  // Waarderingen
+  waarderingen?: Record<string, SoilAnalysisWaardering>;
+  // Bemestingsadviezen
+  bemestingsadviezen?: {
+    bodemgericht?: BemestingsAdviesBodem[];
+    gewasgericht?: BemestingsAdviesGewas[];
+    opbrengstAannameTonHa?: Record<string, number>;
+  };
+  // RVO
+  rvoPAlMgP2o5?: number;
+  rvoPCacl2MgKg?: number;
+  // Ruimtelijk
+  hoekpuntenRd?: number[][];
+  monsternamepuntenRd?: number[][];
+  oppervlakteRapportHa?: number;
+  // Bestanden
+  pdfStoragePath?: string;
+  pdfFilename?: string;
+  // Extractie
+  extractieStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'manual';
+  extractieConfidence?: number;
+  extractieRuweOutput?: any;
+  handmatigGecorrigeerd: boolean;
+  // Meta
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
 // === RVO/PDOK Types ===
 
 export type RvoParcelProperties = {
@@ -406,6 +532,59 @@ export interface FertilizerProduct {
   /** Chemische vorm per element, bijv. {"Cu": "koperoxychloride", "Fe": "EDDHA-chelaat"} */
   compositionForms?: Record<string, string>;
 }
+
+// ============================================
+// Unified Product Types (from products table)
+// ============================================
+
+export type UnifiedProductType =
+  | 'fungicide' | 'insecticide' | 'herbicide' | 'acaricide'
+  | 'groeiregulator' | 'kiemremmingsmiddel' | 'molluscicide' | 'rodenticide'
+  | 'gewasbescherming'  // catch-all for CTGB without specific type
+  | 'bladmeststof' | 'strooimeststof' | 'fertigatiemeststof' | 'meststof'
+  | 'biostimulant' | 'uitvloeier';
+
+export type UnifiedProductSource = 'ctgb' | 'fertilizer' | 'manual';
+
+export interface UnifiedProduct {
+  id: string;             // UUID from products table
+  name: string;
+  productType: UnifiedProductType | string;
+  source: UnifiedProductSource;
+  sourceId: string;       // toelatingsnummer for ctgb, fertilizer.id for fertilizers
+  status: 'active' | 'expired' | 'withdrawn';
+  searchKeywords: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Product alias from product_aliases_unified table */
+export interface ProductAlias {
+  id: string;
+  productId: string;
+  alias: string;
+  aliasType: 'name' | 'werkzame_stof' | 'typo' | 'abbreviation' | 'merknaam';
+  source: 'system' | 'manual' | 'user_correction' | 'migrated';
+  confidence: number;
+  usageCount: number;
+}
+
+/** Sync log entry */
+export interface SyncLogEntry {
+  id: string;
+  source: 'ctgb' | 'fertilizer' | 'all';
+  startedAt: string;
+  completedAt?: string;
+  status: 'running' | 'success' | 'partial' | 'failed';
+  productsAdded: number;
+  productsUpdated: number;
+  productsWithdrawn: number;
+  aliasesAdded: number;
+  errors: Array<{ message: string; productId?: string }>;
+  summary?: string;
+  triggeredBy: 'manual' | 'cron' | 'webhook';
+}
+
 // ============================================
 // Research Hub Types
 // ============================================

@@ -674,16 +674,30 @@ export async function getMultiModelForecast(
 }> {
   const supabase = db ?? await getDefaultClient();
 
-  const { data } = await supabase
-    .from('weather_data_hourly')
-    .select('timestamp, model_name, temperature_c, precipitation_mm, wind_speed_ms, humidity_pct')
-    .eq('station_id', stationId)
-    .eq('is_forecast', true)
-    .neq('model_name', 'best_match')
-    .order('timestamp')
-    .limit(3000);
+  // Filter from start of today to reduce rows, then paginate to beat PostgREST 1000-row server limit
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayISO = todayStart.toISOString();
 
-  if (!data || data.length === 0) {
+  const baseQuery = () =>
+    supabase
+      .from('weather_data_hourly')
+      .select('timestamp, model_name, temperature_c, precipitation_mm, wind_speed_ms, humidity_pct')
+      .eq('station_id', stationId)
+      .eq('is_forecast', true)
+      .neq('model_name', 'best_match')
+      .gte('timestamp', todayISO)
+      .order('timestamp');
+
+  // Fetch in two pages (PostgREST max_rows = 1000)
+  const [page1, page2] = await Promise.all([
+    baseQuery().range(0, 999),
+    baseQuery().range(1000, 2499),
+  ]);
+
+  const data = [...(page1.data ?? []), ...(page2.data ?? [])];
+
+  if (data.length === 0) {
     return { models: {}, last_updated: new Date().toISOString() };
   }
 

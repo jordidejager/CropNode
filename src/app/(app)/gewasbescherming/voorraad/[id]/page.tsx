@@ -14,7 +14,7 @@ import { TableSkeleton, ErrorState, EmptyState } from '@/components/ui/data-stat
 import { useParams } from 'next/navigation';
 
 const formatDate = (date: Date) => {
-    return format(date, 'dd-MM-yyyy HH:mm', { locale: nl });
+    return format(date, 'dd MMMM yyyy', { locale: nl });
 };
 
 export default function VoorraadMutatiePage() {

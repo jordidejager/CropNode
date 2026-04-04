@@ -17,6 +17,8 @@ const CreateNoteSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
   is_locked: z.boolean().optional(),
+  due_date: z.string().nullable().optional(),
+  reminder_at: z.string().nullable().optional(),
 });
 
 /**
@@ -64,6 +66,7 @@ export async function GET(request: Request) {
       const { data: parcels } = await supabase
         .from('v_sprayable_parcels')
         .select('id, name, parcel_name, crop, variety')
+        .eq('user_id', user.id)
         .in('id', allParcelIds);
       parcelMap = Object.fromEntries(
         (parcels ?? []).map((p: any) => [p.id, {
@@ -76,10 +79,65 @@ export async function GET(request: Request) {
       );
     }
 
-    const data = (notes ?? []).map(note => ({
-      ...note,
-      sub_parcels: (note.parcel_ids ?? []).map((id: string) => parcelMap[id]).filter(Boolean),
-    }));
+    // Fetch linked spuitschrift products for transferred notes
+    // Also try to auto-link transferred notes that lack spuitschrift_id (created before migration 032)
+    const transferredNotes = (notes ?? []).filter(n =>
+      n.status === 'transferred' && (n.auto_tag === 'bespuiting' || n.auto_tag === 'bemesting')
+    );
+    const linkedIds = [...new Set(transferredNotes.filter(n => n.spuitschrift_id).map(n => n.spuitschrift_id))];
+    const unlinkedNotes = transferredNotes.filter(n => !n.spuitschrift_id);
+
+    // For unlinked notes, try to find matching spuitschrift by original_raw_input
+    let allSpuitschrift: any[] = [];
+    if (linkedIds.length > 0 || unlinkedNotes.length > 0) {
+      const { data: entries } = await supabase
+        .from('spuitschrift')
+        .select('id, products, hidden_products, original_raw_input')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(200);
+      allSpuitschrift = entries ?? [];
+    }
+
+    // Build map: spuitschrift_id → products
+    const spuitschriftMap: Record<string, { products: any[]; hidden_products: any[] }> = {};
+    for (const e of allSpuitschrift) {
+      spuitschriftMap[e.id] = {
+        products: (e.products ?? []).map((p: any) => ({ product: p.product, dosage: p.dosage, unit: p.unit })),
+        hidden_products: (e.hidden_products ?? []).map((p: any) => ({ product: p.product, dosage: p.dosage, unit: p.unit })),
+      };
+    }
+
+    // Auto-link unlinked transferred notes by matching content to original_raw_input
+    const autoLinked: Record<string, string> = {}; // noteId → spuitschriftId
+    for (const note of unlinkedNotes) {
+      const content = note.content?.trim().toLowerCase();
+      if (!content) continue;
+      const match = allSpuitschrift.find((e: any) =>
+        e.original_raw_input?.trim().toLowerCase() === content
+      );
+      if (match) {
+        autoLinked[note.id] = match.id;
+        // Persist the link so we don't have to do this again
+        supabase.from('field_notes').update({ spuitschrift_id: match.id }).eq('id', note.id).then(() => {});
+      }
+    }
+
+    const data = (notes ?? []).map(note => {
+      const sid = note.spuitschrift_id || autoLinked[note.id];
+      return {
+        ...note,
+        spuitschrift_id: sid || note.spuitschrift_id,
+        sub_parcels: (note.parcel_ids ?? []).map((id: string) => parcelMap[id]).filter(Boolean),
+        ...(sid && spuitschriftMap[sid]
+          ? {
+              spuitschrift_products: spuitschriftMap[sid].products,
+              spuitschrift_hidden_products: spuitschriftMap[sid].hidden_products,
+            }
+          : {}
+        ),
+      };
+    });
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
@@ -122,6 +180,8 @@ export async function POST(request: Request) {
     if (result.data.latitude != null) insertPayload.latitude = result.data.latitude;
     if (result.data.longitude != null) insertPayload.longitude = result.data.longitude;
     if (result.data.is_locked) insertPayload.is_locked = true;
+    if (result.data.due_date) insertPayload.due_date = result.data.due_date;
+    if (result.data.reminder_at) insertPayload.reminder_at = result.data.reminder_at;
 
     // Try with all fields first; if it fails (e.g. migration not run), retry with just content
     let note: any;

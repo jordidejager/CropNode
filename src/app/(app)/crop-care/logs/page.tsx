@@ -29,6 +29,7 @@ import { SpuitschriftSkeleton, ErrorState, EmptyState } from '@/components/ui/da
 import { cn } from '@/lib/utils';
 import { CropIcon } from '@/components/ui/crop-icon';
 import { NewSprayDialog } from '@/components/spuitschrift';
+import { DosageField } from '@/components/spuitschrift/dosage-field';
 
 const formatDate = (date: Date) => {
     return format(date, 'dd MMMM yyyy HH:mm', { locale: nl });
@@ -57,15 +58,11 @@ function EditableProduct({ product, allProducts, onUpdate, onRemove }: EditableP
                     placeholder="Selecteer middel"
                 />
             </div>
-            <div className="w-24">
+            <div className="w-28">
                 <Label className="text-xs text-muted-foreground">Dosering</Label>
-                <Input
-                    type="number"
+                <DosageField
                     value={product.dosage}
-                    onChange={(e) => onUpdate({ ...product, dosage: parseFloat(e.target.value) || 0 })}
-                    step="0.1"
-                    min="0"
-                    className="h-9"
+                    onChange={(dosage) => onUpdate({ ...product, dosage })}
                 />
             </div>
             <div className="w-24">

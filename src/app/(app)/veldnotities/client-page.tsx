@@ -6,7 +6,8 @@ import {
   StickyNote, Search, Pin, Trash2, Check, ChevronDown, ChevronUp,
   NotebookPen, Send, Droplets, Leaf, ListTodo, Eye, Tag, MapPin,
   MapPinPlus, ArrowRight, CheckCircle2, Bug, Shrub, Activity, Wind, Info,
-  Camera, X, Loader2, List, MapIcon, Lock, Unlock
+  Camera, X, Loader2, List, MapIcon, Lock, Unlock,
+  CalendarDays, Bell, AlertTriangle, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -963,6 +964,352 @@ function NotesSkeleton() {
 // MAIN PAGE
 // ============================================================================
 
+// ============================================================================
+// TASKS TAB
+// ============================================================================
+
+function formatDueDate(dateStr: string): { label: string; isOverdue: boolean; isToday: boolean } {
+  const due = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.floor((dueDay.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays < 0) return { label: `${Math.abs(diffDays)} dag${Math.abs(diffDays) > 1 ? 'en' : ''} te laat`, isOverdue: true, isToday: false };
+  if (diffDays === 0) return { label: 'Vandaag', isOverdue: false, isToday: true };
+  if (diffDays === 1) return { label: 'Morgen', isOverdue: false, isToday: false };
+  if (diffDays < 7) return { label: due.toLocaleDateString('nl-NL', { weekday: 'long' }), isOverdue: false, isToday: false };
+  return { label: due.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }), isOverdue: false, isToday: false };
+}
+
+function getWeekGroup(dateStr: string): string {
+  const due = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.floor((due.getTime() - today.getTime()) / 86400000);
+  const dayOfWeek = today.getDay() || 7; // Mon=1, Sun=7
+  const daysUntilEndOfWeek = 7 - dayOfWeek;
+
+  if (diffDays <= daysUntilEndOfWeek) return 'Deze week';
+  if (diffDays <= daysUntilEndOfWeek + 7) return 'Volgende week';
+  return 'Later';
+}
+
+const REMINDER_OPTIONS = [
+  { value: 'morning', label: 'Ochtend (08:00)' },
+  { value: 'day-before', label: 'Dag van tevoren' },
+  { value: 'hour-before', label: '1 uur van tevoren' },
+  { value: 'none', label: 'Geen herinnering' },
+] as const;
+
+function calcReminderAt(dueDate: string, option: string): string | null {
+  if (option === 'none' || !dueDate) return null;
+  const d = new Date(dueDate + 'T00:00:00');
+  switch (option) {
+    case 'morning': d.setHours(8, 0, 0); return d.toISOString();
+    case 'day-before': d.setDate(d.getDate() - 1); d.setHours(8, 0, 0); return d.toISOString();
+    case 'hour-before': d.setHours(d.getHours() - 1); return d.toISOString();
+    default: return null;
+  }
+}
+
+function TasksTab({ notes, showLocked, onToggleStatus, onUpdateDueDate, onUpdateReminder, onCreateTask, onDelete, onViewNote }: {
+  notes: FieldNote[];
+  showLocked: boolean;
+  onToggleStatus: (note: FieldNote) => void;
+  onUpdateDueDate: (noteId: string, dueDate: string | null) => void;
+  onUpdateReminder: (noteId: string, reminderAt: string | null) => void;
+  onCreateTask: (content: string, dueDate: string | null, reminderAt: string | null) => void;
+  onDelete: (note: FieldNote) => void;
+  onViewNote: (noteId: string) => void;
+}) {
+  const [newTask, setNewTask] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newReminder, setNewReminder] = useState<string>('morning');
+  const [showDone, setShowDone] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDueDate, setEditDueDate] = useState('');
+
+  // Filter to tasks only
+  const tasks = notes.filter(n =>
+    n.auto_tag === 'taak' && (showLocked || !n.is_locked)
+  );
+
+  const openTasks = tasks.filter(n => n.status === 'open');
+  const doneTasks = tasks.filter(n => n.status === 'done');
+
+  // Group open tasks
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  const overdueAndToday = openTasks.filter(n =>
+    n.due_date && n.due_date <= todayStr
+  ).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
+
+  const upcoming = openTasks.filter(n =>
+    n.due_date && n.due_date > todayStr
+  ).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
+
+  const noDeadline = openTasks.filter(n => !n.due_date);
+
+  // Group upcoming by week
+  const upcomingGroups = new Map<string, FieldNote[]>();
+  for (const n of upcoming) {
+    const group = getWeekGroup(n.due_date!);
+    if (!upcomingGroups.has(group)) upcomingGroups.set(group, []);
+    upcomingGroups.get(group)!.push(n);
+  }
+
+  const handleCreateTask = () => {
+    const trimmed = newTask.trim();
+    if (!trimmed) return;
+    const reminderAt = newDueDate ? calcReminderAt(newDueDate, newReminder) : null;
+    onCreateTask(trimmed, newDueDate || null, reminderAt);
+    setNewTask('');
+    setNewDueDate('');
+    setNewReminder('morning');
+  };
+
+  const TaskRow = ({ note }: { note: FieldNote }) => {
+    const isDone = note.status === 'done';
+    const dueDateInfo = note.due_date ? formatDueDate(note.due_date) : null;
+    const isEditing = editingId === note.id;
+
+    return (
+      <div className={cn(
+        'flex items-start gap-3 px-4 py-3 transition-colors',
+        'hover:bg-white/[0.02] border-b border-white/[0.04] last:border-b-0',
+        isDone && 'opacity-50'
+      )}>
+        <button
+          onClick={() => onToggleStatus(note)}
+          className={cn(
+            'mt-0.5 flex-shrink-0 h-5 w-5 rounded-md border-2 transition-all flex items-center justify-center',
+            isDone
+              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+              : 'border-white/20 hover:border-emerald-500/40'
+          )}
+        >
+          {isDone && <Check className="h-3 w-3" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            'text-sm',
+            isDone ? 'text-white/30 line-through' : 'text-white/75'
+          )}>
+            {note.content}
+          </p>
+
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {dueDateInfo && (
+              <span className={cn(
+                'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md',
+                dueDateInfo.isOverdue && !isDone
+                  ? 'bg-red-500/15 text-red-400 border border-red-500/20'
+                  : dueDateInfo.isToday && !isDone
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                    : 'bg-white/[0.04] text-white/30 border border-white/[0.06]'
+              )}>
+                <CalendarDays className="h-2.5 w-2.5" />
+                {dueDateInfo.label}
+              </span>
+            )}
+            {note.reminder_at && !note.is_reminder_sent && (
+              <span className="text-[10px] text-blue-400/50">
+                <Bell className="h-2.5 w-2.5 inline" />
+              </span>
+            )}
+            {(note.sub_parcels ?? []).slice(0, 2).map(sp => (
+              <span key={sp.id} className="text-[9px] text-white/20">
+                📍 {sp.parcel_name || sp.name}
+              </span>
+            ))}
+          </div>
+
+          {/* Inline date editor */}
+          {isEditing && (
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="date"
+                value={editDueDate}
+                onChange={(e) => setEditDueDate(e.target.value)}
+                className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white/60 outline-none"
+              />
+              <button
+                onClick={() => {
+                  onUpdateDueDate(note.id, editDueDate || null);
+                  if (editDueDate) {
+                    onUpdateReminder(note.id, calcReminderAt(editDueDate, 'morning'));
+                  }
+                  setEditingId(null);
+                }}
+                className="text-[10px] text-emerald-400 hover:underline"
+              >
+                Opslaan
+              </button>
+              <button
+                onClick={() => setEditingId(null)}
+                className="text-[10px] text-white/30 hover:text-white/50"
+              >
+                Annuleer
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-40 hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => {
+              setEditDueDate(note.due_date ?? '');
+              setEditingId(isEditing ? null : note.id);
+            }}
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-white/30 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+            title="Deadline wijzigen"
+          >
+            <CalendarDays className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => onDelete(note)}
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            title="Verwijderen"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Quick-add task */}
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <ListTodo className="h-4 w-4 text-amber-400/60" />
+          <span className="text-xs font-semibold text-white/40">Nieuwe taak</span>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={newTask}
+            onChange={(e) => setNewTask(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCreateTask(); } }}
+            placeholder="Bijv. 'Snoeiploeg regelen blok 3'"
+            maxLength={2000}
+            className="flex-1 bg-transparent text-sm text-white/90 placeholder:text-white/20 outline-none"
+          />
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(e) => setNewDueDate(e.target.value)}
+              className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-white/50 outline-none"
+            />
+            {newDueDate && (
+              <select
+                value={newReminder}
+                onChange={(e) => setNewReminder(e.target.value)}
+                className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white/50 outline-none appearance-none"
+              >
+                {REMINDER_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={handleCreateTask}
+              disabled={!newTask.trim()}
+              className="h-8 w-8 flex items-center justify-center rounded-xl text-emerald-400/40 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 transition-all"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Vandaag & te laat */}
+      {overdueAndToday.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">
+              Vandaag & te laat
+            </h3>
+            <span className="text-[10px] text-red-400/60 bg-red-500/10 px-1.5 py-0.5 rounded-full font-semibold">
+              {overdueAndToday.length}
+            </span>
+          </div>
+          <div className="rounded-2xl border border-red-500/10 bg-white/[0.02] overflow-hidden">
+            {overdueAndToday.map(n => <TaskRow key={n.id} note={n} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Aankomend (per week-groep) */}
+      {upcomingGroups.size > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <Clock className="h-3.5 w-3.5 text-white/30" />
+            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Aankomend</h3>
+          </div>
+          <div className="space-y-3">
+            {[...upcomingGroups.entries()].map(([group, groupNotes]) => (
+              <div key={group}>
+                <p className="text-[10px] text-white/20 font-semibold uppercase tracking-wider mb-1 px-1">{group}</p>
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                  {groupNotes.map(n => <TaskRow key={n.id} note={n} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Zonder deadline */}
+      {noDeadline.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 px-1">
+            Zonder deadline
+          </h3>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+            {noDeadline.map(n => <TaskRow key={n.id} note={n} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Lege staat */}
+      {openTasks.length === 0 && doneTasks.length === 0 && (
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-12 text-center">
+          <ListTodo className="h-8 w-8 text-white/10 mx-auto mb-3" />
+          <p className="text-sm text-white/30">Nog geen taken</p>
+          <p className="text-xs text-white/15 mt-1">Maak een taak hierboven of typ er eentje op de Invoer-tab</p>
+        </div>
+      )}
+
+      {/* Afgerond (expandable) */}
+      {doneTasks.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowDone(!showDone)}
+            className="flex items-center gap-2 mb-2 px-1 text-xs font-semibold text-white/25 hover:text-white/40 transition-colors"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>Afgerond ({doneTasks.length})</span>
+            {showDone ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          {showDone && (
+            <div className="rounded-2xl border border-white/[0.04] bg-white/[0.01] overflow-hidden">
+              {doneTasks.map(n => <TaskRow key={n.id} note={n} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function VeldnotitiesClient() {
   const queryClient = useQueryClient();
   const { data: notes, isLoading } = useFieldNotes();
@@ -979,7 +1326,7 @@ export function VeldnotitiesClient() {
   const [activeObservation, setActiveObservation] = useState<string | null>(null);
   const [transferNoteId, setTransferNoteId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'invoer' | 'kaart' | 'archief'>('invoer');
+  const [viewMode, setViewMode] = useState<'invoer' | 'kaart' | 'archief' | 'taken'>('invoer');
   const [dateFilter, setDateFilter] = useState<'week' | 'month' | 'season' | 'all'>('all');
   const [archiveCategory, setArchiveCategory] = useState<Tag | null>(null);
   const [showLocked, setShowLocked] = useState(() => {
@@ -1191,6 +1538,7 @@ export function VeldnotitiesClient() {
               { key: 'invoer' as const, label: 'Invoer', icon: List, badge: (notes ?? []).filter(n => n.status === 'open').length },
               { key: 'kaart' as const, label: 'Kaart', icon: MapIcon, badge: (notes ?? []).filter(n => n.latitude != null).length },
               { key: 'archief' as const, label: 'Archief', icon: StickyNote, badge: null },
+              { key: 'taken' as const, label: 'Taken', icon: ListTodo, badge: (notes ?? []).filter(n => n.auto_tag === 'taak' && n.status === 'open').length || null },
             ]).map(tab => (
               <button
                 key={tab.key}
@@ -1523,6 +1871,38 @@ export function VeldnotitiesClient() {
               })()}
             </div>
           </div>
+        )}
+
+        {/* ── TAKEN TAB ── */}
+        {viewMode === 'taken' && (
+          <TasksTab
+            notes={notes ?? []}
+            showLocked={showLocked}
+            onToggleStatus={(note) => {
+              const newStatus = note.status === 'done' ? 'open' : 'done';
+              updateMutation.mutate({ id: note.id, updates: { status: newStatus } });
+            }}
+            onUpdateDueDate={(noteId, dueDate) => {
+              updateMutation.mutate({ id: noteId, updates: { due_date: dueDate } });
+            }}
+            onUpdateReminder={(noteId, reminderAt) => {
+              updateMutation.mutate({ id: noteId, updates: { reminder_at: reminderAt } });
+            }}
+            onCreateTask={(content, dueDate, reminderAt) => {
+              createMutation.mutate({
+                content,
+                ...(dueDate ? { due_date: dueDate } : {}),
+                ...(reminderAt ? { reminder_at: reminderAt } : {}),
+              } as any);
+            }}
+            onDelete={(note) => handleDelete(note)}
+            onViewNote={(noteId) => {
+              setViewMode('invoer');
+              setTimeout(() => {
+                document.getElementById(`note-${noteId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 100);
+            }}
+          />
         )}
       </div>
 

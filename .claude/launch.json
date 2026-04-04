@@ -2,10 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "next-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "3003"],
-      "port": 3003
+      "name": "dev",
+      "runtimeExecutable": "/opt/homebrew/Cellar/node/25.8.0/bin/node",
+      "runtimeArgs": ["/Users/jordidejager/studio/studio/node_modules/.bin/next", "dev", "--port", "3005", "--turbopack"],
+      "env": {"PATH": "/opt/homebrew/Cellar/node/25.8.0/bin:/usr/local/bin:/usr/bin:/bin"},
+      "port": 3005
     }
   ]
 }

@@ -3,7 +3,7 @@
 import { useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { StickyNote, ArrowRight, Check, Inbox } from 'lucide-react';
+import { StickyNote, ArrowRight, Check, Inbox, ListTodo, CalendarDays, AlertTriangle } from 'lucide-react';
 import { useFieldNotes, useCreateFieldNote, type FieldNote } from '@/hooks/use-field-notes';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -129,7 +129,8 @@ export function FieldNotesCard() {
     });
   }, [createMutation, toast]);
 
-  const recentNotes = (notes ?? []).slice(0, 3);
+  const showLocked = typeof window !== 'undefined' && localStorage.getItem('cropnode:showLockedNotes') === 'true';
+  const recentNotes = (notes ?? []).filter(n => showLocked || !n.is_locked).slice(0, 3);
 
   return (
     <div>
@@ -174,6 +175,103 @@ export function FieldNotesCard() {
             {recentNotes.map((note) => (
               <CompactNoteRow key={note.id} note={note} />
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// TASKS WIDGET
+// ============================================================================
+
+function formatTaskDate(dateStr: string): { label: string; isOverdue: boolean } {
+  const due = new Date(dateStr + 'T00:00:00');
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = Math.floor((due.getTime() - todayStart.getTime()) / 86400000);
+  if (diffDays < 0) return { label: `${Math.abs(diffDays)}d te laat`, isOverdue: true };
+  if (diffDays === 0) return { label: 'Vandaag', isOverdue: false };
+  if (diffDays === 1) return { label: 'Morgen', isOverdue: false };
+  return { label: due.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }), isOverdue: false };
+}
+
+export function TasksCard() {
+  const { data: notes } = useFieldNotes();
+  const router = useRouter();
+
+  const showLocked = typeof window !== 'undefined' && localStorage.getItem('cropnode:showLockedNotes') === 'true';
+  const openTasks = (notes ?? [])
+    .filter(n => n.auto_tag === 'taak' && n.status === 'open' && (showLocked || !n.is_locked))
+    .sort((a, b) => {
+      // Overdue first, then by due_date, then no deadline last
+      if (a.due_date && !b.due_date) return -1;
+      if (!a.due_date && b.due_date) return 1;
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+      return 0;
+    })
+    .slice(0, 5);
+
+  const overdueCount = openTasks.filter(n => {
+    if (!n.due_date) return false;
+    return n.due_date < new Date().toISOString().split('T')[0];
+  }).length;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[11px] font-semibold text-white/30 uppercase tracking-widest flex items-center gap-2">
+          <ListTodo className="h-3.5 w-3.5" />
+          Taken
+          {overdueCount > 0 && (
+            <span className="text-[9px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded-full font-bold">
+              {overdueCount} te laat
+            </span>
+          )}
+        </h2>
+        <Link
+          href="/veldnotities"
+          className="text-xs text-white/25 hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
+        >
+          Alles
+          <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+      </div>
+
+      <div className="dashboard-card dashboard-shimmer rounded-2xl overflow-hidden">
+        {openTasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+            <Check className="h-5 w-5 text-emerald-400/30 mb-2" />
+            <p className="text-xs text-white/25">Geen openstaande taken</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/[0.04]">
+            {openTasks.map(task => {
+              const dateInfo = task.due_date ? formatTaskDate(task.due_date) : null;
+              return (
+                <button
+                  key={task.id}
+                  onClick={() => router.push('/veldnotities')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-all text-left"
+                >
+                  <div className="flex-shrink-0 h-4 w-4 rounded border-[1.5px] border-white/20 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white/60 truncate">{task.content}</p>
+                    {dateInfo && (
+                      <span className={cn(
+                        'text-[9px] font-medium inline-flex items-center gap-1 mt-0.5',
+                        dateInfo.isOverdue ? 'text-red-400' : 'text-white/25'
+                      )}>
+                        {dateInfo.isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
+                        <CalendarDays className="h-2.5 w-2.5" />
+                        {dateInfo.label}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

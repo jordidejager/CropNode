@@ -79,6 +79,7 @@ export async function handleConfirmation(
     }
 
     // 4. Mirror to field_notes as transferred note (complete logbook)
+    // Link to spuitschrift so products can be individually hidden
     try {
       const admin = getSupabaseAdmin();
       const rawInput = reg.rawInput || conversation.lastInput || 'WhatsApp registratie';
@@ -87,8 +88,9 @@ export async function handleConfirmation(
         content: rawInput,
         source: 'whatsapp',
         status: 'transferred',
-        auto_tag: reg.registrationType === 'fertilization' ? 'bemesting' : 'bespuiting',
+        auto_tag: reg.registrationType === 'spreading' ? 'bemesting' : 'bespuiting',
         is_pinned: false,
+        spuitschrift_id: result.spuitschriftId || null,
       });
     } catch (mirrorErr) {
       // Mirror failure must never block the registration

@@ -25,11 +25,18 @@ export interface FieldNote {
   photo_url: string | null;
   latitude: number | null;
   longitude: number | null;
+  due_date: string | null;       // ISO date string (YYYY-MM-DD)
+  reminder_at: string | null;    // ISO datetime string
+  is_reminder_sent: boolean;
+  spuitschrift_id: string | null;
   source: 'web' | 'whatsapp' | 'voice';
   created_at: string;
   updated_at: string;
   // Resolved parcel info (joined by API)
   sub_parcels?: SubParcelInfo[];
+  // Linked spuitschrift products (for transferred notes)
+  spuitschrift_products?: { product: string; dosage: number; unit: string }[];
+  spuitschrift_hidden_products?: { product: string; dosage: number; unit: string }[];
 }
 
 const QUERY_KEY = ['field-notes'];
@@ -47,6 +54,8 @@ interface CreateFieldNoteInput {
   latitude?: number | null;
   longitude?: number | null;
   is_locked?: boolean;
+  due_date?: string | null;
+  reminder_at?: string | null;
 }
 
 async function createFieldNote(input: CreateFieldNoteInput): Promise<FieldNote> {
@@ -75,7 +84,7 @@ async function fetchWithRetry(url: string, init: RequestInit, fallbackError: str
 
 async function updateFieldNote(
   id: string,
-  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids'>>
+  updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids' | 'due_date' | 'reminder_at'>>
 ): Promise<FieldNote> {
   return fetchWithRetry(`/api/field-notes/${id}`, {
     method: 'PATCH',
@@ -123,6 +132,10 @@ export function useCreateFieldNote() {
         photo_url: input.photo_url ?? null,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
+        due_date: null,
+        reminder_at: null,
+        is_reminder_sent: false,
+        spuitschrift_id: null,
         source: 'web',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -169,7 +182,7 @@ export function useUpdateFieldNote() {
   return useMutation({
     mutationFn: ({ id, updates }: {
       id: string;
-      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids'>>;
+      updates: Partial<Pick<FieldNote, 'content' | 'status' | 'is_pinned' | 'is_locked' | 'parcel_ids' | 'due_date' | 'reminder_at'>>;
     }) => updateFieldNote(id, updates),
     onMutate: async ({ id, updates }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEY });

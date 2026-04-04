@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 
 export interface Tab {
     label: string;
     href: string;
+    icon?: LucideIcon;
 }
 
 interface PageTabsProps {
@@ -17,30 +19,33 @@ export function PageTabs({ tabs }: PageTabsProps) {
     const pathname = usePathname();
 
     const isActive = (href: string) => {
-        // Exact match for the default tab (e.g., /gewasbescherming)
         if (pathname === href) return true;
-        // For non-root tabs, match prefix (e.g., /gewasbescherming/voorraad/123)
         if (href !== tabs[0]?.href && pathname.startsWith(href + '/')) return true;
         return false;
     };
 
     return (
-        <div className="border-b border-white/[0.06] overflow-x-auto scrollbar-hide -mx-4 md:-mx-6 px-4 md:px-6">
-            <nav className="flex gap-0 min-w-max" aria-label="Tabs">
-                {tabs.map((tab) => (
-                    <Link
-                        key={tab.href}
-                        href={tab.href}
-                        className={cn(
-                            'px-4 py-2.5 text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors duration-150',
-                            isActive(tab.href)
-                                ? 'text-emerald-400 border-emerald-400'
-                                : 'text-white/40 border-transparent hover:text-white/60'
-                        )}
-                    >
-                        {tab.label}
-                    </Link>
-                ))}
+        <div className="overflow-x-auto scrollbar-hide -mx-4 md:-mx-6 px-4 md:px-6 border-b border-white/[0.06]">
+            <nav className="flex gap-1 min-w-max" aria-label="Tabs">
+                {tabs.map((tab) => {
+                    const active = isActive(tab.href);
+                    const Icon = tab.icon;
+                    return (
+                        <Link
+                            key={tab.href}
+                            href={tab.href}
+                            className={cn(
+                                'flex items-center gap-2.5 px-5 py-3.5 text-[15px] font-semibold whitespace-nowrap rounded-t-xl border-b-[3px] transition-all duration-150',
+                                active
+                                    ? 'text-emerald-400 border-emerald-400 bg-emerald-500/[0.07]'
+                                    : 'text-white/40 border-transparent hover:text-white/70 hover:bg-white/[0.04]'
+                            )}
+                        >
+                            {Icon && <Icon className={cn('h-[18px] w-[18px]', active ? 'text-emerald-400' : 'text-white/30')} />}
+                            {tab.label}
+                        </Link>
+                    );
+                })}
             </nav>
         </div>
     );
