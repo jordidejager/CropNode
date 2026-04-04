@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
+import type { ExtractionResult } from '@/ai/flows/extract-soil-analysis';
 
 /**
  * POST /api/parcels/[id]/soil-analyses/upload
@@ -107,8 +108,8 @@ async function startExtraction(
     const base64 = Buffer.from(buffer).toString('base64');
 
     // Call Genkit flow
-    const { extractSoilAnalysis } = await import('@/ai/flows/extract-soil-analysis');
-    const result = await extractSoilAnalysis({ pdfBase64: base64, filename: storagePath });
+    const { runSoilExtraction } = await import('@/ai/flows/extract-soil-analysis');
+    const result: ExtractionResult = await runSoilExtraction({ pdfBase64: base64, filename: storagePath });
 
     // Update het record met geëxtraheerde data
     const updateData: Record<string, unknown> = {
