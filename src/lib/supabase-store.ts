@@ -1782,9 +1782,10 @@ export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
   return withRetry(async () => {
     // NOTE: Increased limit from 1000 to 2000 because we have 1047+ products
     // Products starting with W-Z were being cut off (including WOPRO Luisweg)
+    // Using select('*') because CtgbProduct type needs all columns (including etikettering, search_keywords, etc.)
     const { data, error } = await client
       .from('ctgb_products')
-      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, werkzame_stoffen, gebruiksvoorschriften, samenstelling')
+      .select('*')
       .order('naam')
       .limit(2000);
 
@@ -2052,7 +2053,7 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
 
     const { data, error } = await client
       .from('ctgb_products')
-      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, werkzame_stoffen, gebruiksvoorschriften, samenstelling')
+      .select('*')
       .or(orConditions);
 
     if (error) {
