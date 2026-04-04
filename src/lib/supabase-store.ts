@@ -157,7 +157,7 @@ export async function getSpuitschriftEntry(id: string, userId?: string | null): 
   };
 }
 
-export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
+export async function getSpuitschriftEntries(options?: { limit?: number; harvestYear?: number }): Promise<SpuitschriftEntry[]> {
   // Use retry for network resilience
   return withRetry(async () => {
     const userId = await getCurrentUserId();
@@ -169,7 +169,13 @@ export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
       query = query.eq('user_id', userId);
     }
 
-    const { data, error } = await query.order('date', { ascending: false });
+    if (options?.harvestYear) {
+      query = query.eq('harvest_year', options.harvestYear);
+    }
+
+    const { data, error } = await query
+      .order('date', { ascending: false })
+      .limit(options?.limit ?? 500);
 
     if (error) {
       console.error("Supabase Error (getSpuitschriftEntries):", error.message || error);
@@ -1262,7 +1268,7 @@ export async function getLogbookEntry(id: string): Promise<LogbookEntry | null> 
   } as LogbookEntry;
 }
 
-export async function getLogbookEntries(): Promise<LogbookEntry[]> {
+export async function getLogbookEntries(options?: { limit?: number }): Promise<LogbookEntry[]> {
   // Use retry for network resilience
   return withRetry(async () => {
     const userId = await getCurrentUserId();
@@ -1274,7 +1280,9 @@ export async function getLogbookEntries(): Promise<LogbookEntry[]> {
       query = query.eq('user_id', userId);
     }
 
-    const { data, error } = await query.order('date', { ascending: false });
+    const { data, error } = await query
+      .order('date', { ascending: false })
+      .limit(options?.limit ?? 500);
 
     if (error) throw new Error(error.message);
     if (!data) return [];

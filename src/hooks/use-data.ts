@@ -359,7 +359,7 @@ export function useApplyAnalysisToProfile(id: string, type: 'parcel' | 'sub_parc
 export function useLogbookEntries() {
     return useQuery({
         queryKey: queryKeys.logbookEntries,
-        queryFn: getLogbookEntries,
+        queryFn: () => getLogbookEntries(),
         staleTime: 30 * 1000, // 30 seconds - logbook changes frequently
     });
 }
@@ -371,7 +371,7 @@ export function useLogbookEntries() {
 export function useSpuitschriftEntries() {
     return useQuery({
         queryKey: queryKeys.spuitschriftEntries,
-        queryFn: getSpuitschriftEntries,
+        queryFn: () => getSpuitschriftEntries(),
         staleTime: 2 * 60 * 1000, // 2 minutes
     });
 }

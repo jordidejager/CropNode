@@ -1,0 +1,24 @@
+{
+  "name": "CropNode",
+  "short_name": "CropNode",
+  "description": "Agriculture Intelligence Platform voor de moderne fruitteelt",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#10b981",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo/cropnode-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo/cropnode-icon-on-dark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
