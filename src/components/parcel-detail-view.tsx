@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ParcelProfileForm } from "@/components/domain/parcel-profile-form"
+import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel"
 import {
     Parcel,
     SubParcel,
@@ -512,13 +514,27 @@ export function ParcelDetailView({
                 <div className="lg:col-span-2 space-y-6">
                     <Tabs defaultValue="soil" className="w-full">
                         <TabsList className="bg-white/5 border border-white/10 p-1 rounded-xl">
+                            <TabsTrigger value="profile" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                Profiel
+                            </TabsTrigger>
                             <TabsTrigger value="soil" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                                 Bodemgezondheid
                             </TabsTrigger>
+                            <TabsTrigger value="analyses" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                                Grondmonsters
+                            </TabsTrigger>
                             <TabsTrigger value="production" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                                Productie Historie
+                                Productie
                             </TabsTrigger>
                         </TabsList>
+
+                        <TabsContent value="profile" className="mt-6">
+                            <ParcelProfileForm subParcelId={subParcel.id} />
+                        </TabsContent>
+
+                        <TabsContent value="analyses" className="mt-6">
+                            <SoilAnalysisPanel subParcelId={subParcel.id} />
+                        </TabsContent>
 
                         <TabsContent value="soil" className="mt-6 space-y-6">
                             <Card className="bg-card/30 backdrop-blur-md border-white/5">

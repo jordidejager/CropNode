@@ -457,20 +457,51 @@ async function fetchProductDetails(product: SearchResult): Promise<CtgbProduct> 
         if (usage.remarks) opmerkingen.push(usage.remarks);
         if (usage.restrictions) opmerkingen.push(...usage.restrictions);
 
-        gebruiksvoorschriften.push({
+        // MaxToepassingen: try perCropSeason first, then perUse as fallback
+        let maxToepassingen: number | undefined = usage.amountOfApplications?.perCropSeason;
+        if (maxToepassingen === undefined && usage.amountOfApplications?.perUse !== undefined) {
+          maxToepassingen = usage.amountOfApplications.perUse;
+        }
+
+        const gv: any = {
           gewas: gewassen.join(', ') || 'Algemeen',
           doelorganisme: doelorganismen.length > 0 ? doelorganismen.join(', ') : undefined,
           locatie: locaties.length > 0 ? locaties.join(', ') : undefined,
           toepassingsmethode: methodes.length > 0 ? methodes.join(', ') : undefined,
           dosering,
-          maxToepassingen: usage.amountOfApplications?.perCropSeason,
+          maxToepassingen,
           veiligheidstermijn: usage.phiDays !== undefined ? `${usage.phiDays} dagen` : undefined,
           interval: usage.minimumIntervalBetweenApplications
             ? `min. ${usage.minimumIntervalBetweenApplications} dagen`
             : undefined,
           opmerkingen: opmerkingen.length > 0 ? opmerkingen : undefined,
           wCodes: wCodes.length > 0 ? wCodes : undefined,
-        });
+        };
+
+        // Enriched fields
+        if (usage.growthStage) {
+          gv.bbchVan = usage.growthStage.from;
+          gv.bbchTot = usage.growthStage.to;
+        }
+        if (usage.applicationTiming) {
+          gv.seizoenVan = usage.applicationTiming.fromMonth;
+          gv.seizoenTot = usage.applicationTiming.toMonth;
+        }
+        if (usage.watervolumeScale) {
+          gv.spuitvolumeMin = usage.watervolumeScale.min;
+          gv.spuitvolumeMax = usage.watervolumeScale.max;
+        }
+        if (usage.maximumProductDosePerCropSeason) {
+          gv.maxDoseringPerSeizoen = `${usage.maximumProductDosePerCropSeason.ratio} ${usage.maximumProductDosePerCropSeason.measure?.unit || ''}`.trim();
+        }
+        if (usage.minimumIntervalBetweenApplications !== undefined) {
+          gv.intervalDagen = usage.minimumIntervalBetweenApplications;
+        }
+        if (usage.phiDays !== undefined) {
+          gv.phiDagen = usage.phiDays;
+        }
+
+        gebruiksvoorschriften.push(gv);
       }
     }
 

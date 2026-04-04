@@ -3,15 +3,17 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
- * GET /api/parcels/[id]/soil-analyses
- * Alle grondmonsters voor dit subperceel, gesorteerd op datum DESC.
+ * GET /api/parcels/[id]/soil-analyses?type=parcel|sub_parcel
+ * Alle grondmonsters voor dit perceel, gesorteerd op datum DESC.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: subParcelId } = await params;
+    const { id } = await params;
+    const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
+    const idColumn = type === 'parcel' ? 'parcel_id' : 'sub_parcel_id';
     const supabase = await createServerClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -22,7 +24,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('soil_analyses')
       .select('*')
-      .eq('sub_parcel_id', subParcelId)
+      .eq(idColumn, id)
       .eq('user_id', user.id)
       .order('datum_monstername', { ascending: false });
 

@@ -212,9 +212,11 @@ function ComboboxField({
 // Main Component
 // ============================================
 
-export function ParcelProfileForm({ subParcelId }: ParcelProfileFormProps) {
-  const { data: profileData, isLoading } = useParcelProfile(subParcelId ?? '');
-  const updateProfile = useUpdateParcelProfile(subParcelId ?? '');
+export function ParcelProfileForm({ parcelId, subParcelId }: ParcelProfileFormProps) {
+  const id = subParcelId || parcelId || '';
+  const type = subParcelId ? 'sub_parcel' : 'parcel';
+  const { data: profileData, isLoading } = useParcelProfile(id || undefined, type as 'parcel' | 'sub_parcel');
+  const updateProfile = useUpdateParcelProfile(id, type as 'parcel' | 'sub_parcel');
   const { toast } = useToast();
 
   const profile = profileData?.profile;

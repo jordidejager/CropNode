@@ -12,7 +12,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: subParcelId } = await params;
+    const { id } = await params;
+    const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
     const supabase = await createServerClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -39,7 +40,7 @@ export async function POST(
 
     // Upload to Supabase Storage
     const timestamp = Date.now();
-    const storagePath = `${user.id}/${subParcelId}/${timestamp}_${file.name}`;
+    const storagePath = `${user.id}/${id}/${timestamp}_${file.name}`;
 
     const fileBuffer = await file.arrayBuffer();
     const { error: uploadError } = await supabase.storage
@@ -57,7 +58,7 @@ export async function POST(
     const { data: analysis, error: insertError } = await supabase
       .from('soil_analyses')
       .insert({
-        sub_parcel_id: subParcelId,
+        ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),
         user_id: user.id,
         datum_monstername: new Date().toISOString().split('T')[0], // Placeholder, wordt bijgewerkt na extractie
         pdf_storage_path: storagePath,

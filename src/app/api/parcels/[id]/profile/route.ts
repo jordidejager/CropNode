@@ -3,16 +3,19 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
- * GET /api/parcels/[id]/profile
- * Haal het perceelprofiel op voor een sub_parcel.
- * Retourneert null als er nog geen profiel is.
+ * GET /api/parcels/[id]/profile?type=parcel|sub_parcel
+ * Haal het perceelprofiel op voor een parcel of sub_parcel.
+ * type=parcel → zoek op parcel_id (hoofdperceel)
+ * type=sub_parcel (default) → zoek op sub_parcel_id
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: subParcelId } = await params;
+    const { id } = await params;
+    const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
+    const idColumn = type === 'parcel' ? 'parcel_id' : 'sub_parcel_id';
     const supabase = await createServerClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -24,7 +27,7 @@ export async function GET(
     const { data: profile, error } = await supabase
       .from('parcel_profiles')
       .select('*')
-      .eq('sub_parcel_id', subParcelId)
+      .eq(idColumn, id)
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -36,7 +39,7 @@ export async function GET(
     const { data: latestAnalysis } = await supabase
       .from('soil_analyses')
       .select('id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, extractie_status')
-      .eq('sub_parcel_id', subParcelId)
+      .eq(idColumn, id)
       .eq('user_id', user.id)
       .order('datum_monstername', { ascending: false })
       .limit(1)
@@ -53,7 +56,7 @@ export async function GET(
 }
 
 /**
- * PUT /api/parcels/[id]/profile
+ * PUT /api/parcels/[id]/profile?type=parcel|sub_parcel
  * Upsert (insert of update) het volledige profiel.
  */
 export async function PUT(
@@ -61,7 +64,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: subParcelId } = await params;
+    const { id } = await params;
+    const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
     const supabase = await createServerClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -92,7 +96,7 @@ export async function PUT(
     }
 
     const profileData = {
-      sub_parcel_id: subParcelId,
+      ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),
       user_id: user.id,
       plantjaar: body.plantjaar ?? null,
       gewas: body.gewas ?? null,
@@ -135,7 +139,7 @@ export async function PUT(
 
     const { data, error } = await supabase
       .from('parcel_profiles')
-      .upsert(profileData, { onConflict: 'sub_parcel_id' })
+      .upsert(profileData, { onConflict: type === 'parcel' ? 'parcel_id' : 'sub_parcel_id' })
       .select()
       .single();
 

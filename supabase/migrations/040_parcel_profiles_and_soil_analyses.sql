@@ -2,13 +2,19 @@
 -- Twee nieuwe tabellen voor uitgebreide perceeldata en Eurofins rapport-extractie
 
 -- ============================================
--- 1. parcel_profiles — Eén record per sub_parcel
+-- 1. parcel_profiles — Eén record per perceel (hoofd of sub)
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS parcel_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sub_parcel_id TEXT NOT NULL REFERENCES sub_parcels(id) ON DELETE CASCADE,
+    parcel_id TEXT REFERENCES parcels(id) ON DELETE CASCADE,
+    sub_parcel_id TEXT REFERENCES sub_parcels(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id),
+    -- Precies één van parcel_id of sub_parcel_id moet ingevuld zijn
+    CONSTRAINT profile_has_parent CHECK (
+        (parcel_id IS NOT NULL AND sub_parcel_id IS NULL) OR
+        (parcel_id IS NULL AND sub_parcel_id IS NOT NULL)
+    ),
 
     -- Aanplantgegevens
     plantjaar INTEGER,
@@ -66,9 +72,11 @@ CREATE TABLE IF NOT EXISTS parcel_profiles (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
+    CONSTRAINT unique_profile_per_parcel UNIQUE (parcel_id),
     CONSTRAINT unique_profile_per_sub_parcel UNIQUE (sub_parcel_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_parcel_profiles_parcel ON parcel_profiles(parcel_id);
 CREATE INDEX IF NOT EXISTS idx_parcel_profiles_sub_parcel ON parcel_profiles(sub_parcel_id);
 CREATE INDEX IF NOT EXISTS idx_parcel_profiles_user ON parcel_profiles(user_id);
 
@@ -90,8 +98,14 @@ CREATE POLICY "Users can delete own parcel_profiles"
 
 CREATE TABLE IF NOT EXISTS soil_analyses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sub_parcel_id TEXT NOT NULL REFERENCES sub_parcels(id) ON DELETE CASCADE,
+    parcel_id TEXT REFERENCES parcels(id) ON DELETE CASCADE,
+    sub_parcel_id TEXT REFERENCES sub_parcels(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id),
+    -- Precies één van parcel_id of sub_parcel_id moet ingevuld zijn
+    CONSTRAINT analysis_has_parent CHECK (
+        (parcel_id IS NOT NULL AND sub_parcel_id IS NULL) OR
+        (parcel_id IS NULL AND sub_parcel_id IS NOT NULL)
+    ),
 
     -- Rapport metadata
     rapport_identificatie TEXT,
@@ -149,6 +163,7 @@ CREATE TABLE IF NOT EXISTS soil_analyses (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_soil_analyses_parcel_date ON soil_analyses(parcel_id, datum_monstername DESC);
 CREATE INDEX IF NOT EXISTS idx_soil_analyses_sub_parcel_date ON soil_analyses(sub_parcel_id, datum_monstername DESC);
 CREATE INDEX IF NOT EXISTS idx_soil_analyses_user ON soil_analyses(user_id);
 

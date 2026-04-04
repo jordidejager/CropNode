@@ -175,6 +175,10 @@ export const queryKeys = {
     // BRP Gewashistorie (migration 016)
     gewasHistorie: (parcelId: string) => ['gewas-historie', parcelId] as const,
 
+    // Perceelprofiel & Grondmonsters (migration 040)
+    parcelProfile: (subParcelId: string) => ['parcel-profile', subParcelId] as const,
+    soilAnalyses: (subParcelId: string) => ['soil-analyses', subParcelId] as const,
+
     // Harvest Registrations (new in migration 009)
     harvestRegistrations: ['harvest-registrations'] as const,
     harvestRegistrationsBySeason: (season: string) => ['harvest-registrations', 'season', season] as const,
@@ -255,6 +259,95 @@ export function useRefreshGewasHistorie(parcelId: string | undefined) {
             if (parcelId) {
                 queryClient.setQueryData(queryKeys.gewasHistorie(parcelId), data?.data || data || []);
             }
+        },
+    });
+}
+
+// ============================================
+// Perceelprofiel & Grondmonster Hooks
+// ============================================
+
+export function useParcelProfile(id: string | undefined, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    return useQuery({
+        queryKey: queryKeys.parcelProfile(id || ''),
+        queryFn: async () => {
+            if (!id) return null;
+            const res = await fetch(`/api/parcels/${id}/profile?type=${type}`);
+            const json = await res.json();
+            return json.data;
+        },
+        enabled: !!id,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useUpdateParcelProfile(id: string, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (profileData: Record<string, unknown>) => {
+            const res = await fetch(`/api/parcels/${id}/profile?type=${type}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profileData),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Fout bij opslaan');
+            return json.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.parcelProfile(id) });
+        },
+    });
+}
+
+export function useSoilAnalyses(id: string | undefined, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    return useQuery({
+        queryKey: queryKeys.soilAnalyses(id || ''),
+        queryFn: async () => {
+            if (!id) return [];
+            const res = await fetch(`/api/parcels/${id}/soil-analyses?type=${type}`);
+            const json = await res.json();
+            return json.data || [];
+        },
+        enabled: !!id,
+        staleTime: 60 * 1000,
+    });
+}
+
+export function useUploadSoilAnalysis(id: string, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (file: File) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(`/api/parcels/${id}/soil-analyses/upload?type=${type}`, {
+                method: 'POST',
+                body: formData,
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Upload mislukt');
+            return json.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.soilAnalyses(id) });
+        },
+    });
+}
+
+export function useApplyAnalysisToProfile(id: string, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (analysisId: string) => {
+            const res = await fetch(`/api/parcels/${id}/soil-analyses/${analysisId}/apply-to-profile?type=${type}`, {
+                method: 'POST',
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Toepassen mislukt');
+            return json.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.parcelProfile(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.soilAnalyses(id) });
         },
     });
 }

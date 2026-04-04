@@ -7,11 +7,12 @@ import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-
  * Kopieer relevante waarden uit de grondmonsteranalyse naar het parcel_profiles record.
  */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; analysisId: string }> }
 ) {
   try {
-    const { id: subParcelId, analysisId } = await params;
+    const { id, analysisId } = await params;
+    const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
     const supabase = await createServerClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -45,10 +46,10 @@ export async function POST(
     const { data: profile, error: upsertError } = await supabase
       .from('parcel_profiles')
       .upsert({
-        sub_parcel_id: subParcelId,
+        ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),
         user_id: user.id,
         ...profileUpdate,
-      }, { onConflict: 'sub_parcel_id' })
+      }, { onConflict: type === 'parcel' ? 'parcel_id' : 'sub_parcel_id' })
       .select()
       .single();
 

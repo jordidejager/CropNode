@@ -20,12 +20,53 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 config({ path: resolve(__dirname, '../.env.local') });
 
-import { createClient } from '@supabase/supabase-js';
+import { execSync } from 'child_process';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Use curl for Supabase queries since Node's fetch has DNS issues
+function supabaseQuery(path: string): any {
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const result = execSync(`curl -s "${url}" -H "apikey: ${SUPABASE_KEY}" -H "Authorization: Bearer ${SUPABASE_KEY}"`, {
+    encoding: 'utf-8',
+    timeout: 30000,
+  });
+  return JSON.parse(result);
+}
+
+import { writeFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+function supabaseUpdate(table: string, match: Record<string, string>, data: Record<string, any>): boolean {
+  const filters = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${filters}`;
+  const tmpFile = join(tmpdir(), `supabase-update-${Date.now()}.json`);
+  writeFileSync(tmpFile, JSON.stringify(data));
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = execSync(`curl -s --max-time 45 -X PATCH "${url}" -H "apikey: ${SUPABASE_KEY}" -H "Authorization: Bearer ${SUPABASE_KEY}" -H "Content-Type: application/json" -H "Prefer: return=minimal" -d @${tmpFile}`, {
+          encoding: 'utf-8',
+          timeout: 60000,
+        });
+        if (result.includes('"code"') && result.includes('"message"')) {
+          if (attempt < 3) continue;
+          return false;
+        }
+        return true;
+      } catch (err: any) {
+        if (attempt === 3) throw err;
+        // Wait before retry
+        execSync('sleep 2');
+      }
+    }
+    return false;
+  } finally {
+    try { unlinkSync(tmpFile); } catch {}
+  }
+}
 
 const MST_API_BASE = 'https://public.mst.ctgb.nl/public-api/1.0';
 
@@ -92,7 +133,9 @@ async function enrichProduct(dbProduct: any): Promise<{ updated: boolean; gvCoun
   const { id: mstApiId, toelatingsnummer, naam } = dbProduct;
 
   // Step 1: Find the MST API ID via registration number search
-  const searchUrl = `${MST_API_BASE}/authorisations?filter[registrationNumber]=${toelatingsnummer}&filter[locale]=nl`;
+  // Note: Node fetch requires %5B%5D for brackets, unlike curl
+  const regNr = toelatingsnummer.trim();
+  const searchUrl = `${MST_API_BASE}/authorisations?filter%5BregistrationNumber%5D=${regNr}&filter%5Blocale%5D=nl`;
   let apiId: string;
 
   try {
@@ -109,7 +152,7 @@ async function enrichProduct(dbProduct: any): Promise<{ updated: boolean; gvCoun
   }
 
   // Step 2: Fetch full details
-  const detailUrl = `${MST_API_BASE}/authorisations/${apiId}?filter[locale]=nl`;
+  const detailUrl = `${MST_API_BASE}/authorisations/${apiId}?filter%5Blocale%5D=nl`;
   let data: any;
 
   try {
@@ -232,16 +275,13 @@ async function enrichProduct(dbProduct: any): Promise<{ updated: boolean; gvCoun
 
   // Step 4: Update database
   if (!isDryRun && gebruiksvoorschriften.length > 0) {
-    const { error } = await supabase
-      .from('ctgb_products')
-      .update({
+    try {
+      supabaseUpdate('ctgb_products', { toelatingsnummer }, {
         gebruiksvoorschriften,
         last_synced_at: new Date().toISOString(),
-      })
-      .eq('toelatingsnummer', toelatingsnummer);
-
-    if (error) {
-      console.error(`  ❌ ${naam}: DB update fout: ${error.message}`);
+      });
+    } catch (err: any) {
+      console.error(`  ❌ ${naam}: DB update fout: ${err.message}`);
       return { updated: false, gvCount: gebruiksvoorschriften.length, enrichedFields };
     }
   }
@@ -255,24 +295,33 @@ async function main() {
   console.log(`   Limit: ${limit === Infinity ? 'all' : limit}`);
   console.log(`   Time: ${new Date().toISOString()}\n`);
 
-  // Get all products from DB
+  // Get all products from DB via curl (Node fetch has DNS issues)
   const allProducts: any[] = [];
   let from = 0;
+  const batchSize = 500;
   while (true) {
-    const { data, error } = await supabase
-      .from('ctgb_products')
-      .select('id, toelatingsnummer, naam')
-      .order('naam')
-      .range(from, from + 499);
-    if (error || !data || data.length === 0) break;
-    allProducts.push(...data);
-    if (data.length < 500) break;
-    from += 500;
+    try {
+      const data = supabaseQuery(`ctgb_products?select=id,toelatingsnummer,naam&order=naam&offset=${from}&limit=${batchSize}`);
+      if (!data || data.length === 0) break;
+      allProducts.push(...data);
+      if (data.length < batchSize) break;
+      from += batchSize;
+    } catch (err: any) {
+      console.error(`  ❌ DB fetch error at offset ${from}: ${err.message}`);
+      break;
+    }
   }
 
-  console.log(`📦 Found ${allProducts.length} products in database\n`);
+  // Deduplicate by toelatingsnummer (some products appear multiple times)
+  const seen = new Set<string>();
+  const uniqueProducts = allProducts.filter(p => {
+    if (seen.has(p.toelatingsnummer)) return false;
+    seen.add(p.toelatingsnummer);
+    return true;
+  });
+  console.log(`📦 Found ${allProducts.length} products (${uniqueProducts.length} unique) in database\n`);
 
-  const toProcess = allProducts.slice(0, limit);
+  const toProcess = uniqueProducts.slice(0, limit);
   let updated = 0;
   let failed = 0;
   let totalGV = 0;
