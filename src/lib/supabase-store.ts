@@ -135,7 +135,7 @@ export async function getSpuitschriftEntry(id: string, userId?: string | null): 
 
   let query = client
     .from('spuitschrift')
-    .select('*')
+    .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source')
     .eq('id', id);
 
   // When using admin client, also filter by user_id for multi-user safety
@@ -163,7 +163,7 @@ export async function getSpuitschriftEntries(): Promise<SpuitschriftEntry[]> {
     const userId = await getCurrentUserId();
     let query = supabase
       .from('spuitschrift')
-      .select('*');
+      .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source');
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -378,13 +378,14 @@ export async function updateSpuitschriftEntry(
 
       // Fetch sprayable parcels for the new plots
       const sprayableParcels = await getSprayableParcelsById(finalPlots);
+      const sprayableParcelMap = new Map(sprayableParcels.map(p => [p.id, p]));
 
       const historyEntries: any[] = [];
       const inventoryEntries: any[] = [];
       const productUsage: Record<string, { totalAmount: number; unit: string; parcelIds: Set<string> }> = {};
 
       for (const subParcelId of finalPlots) {
-        const sprayableParcel = sprayableParcels.find(p => p.id === subParcelId);
+        const sprayableParcel = sprayableParcelMap.get(subParcelId);
         if (!sprayableParcel) continue;
 
         for (const productEntry of finalProducts) {
@@ -466,7 +467,7 @@ export async function getInventoryMovements(): Promise<InventoryMovement[]> {
     const userId = await getCurrentUserId();
     let query = supabase
       .from('inventory_movements')
-      .select('*');
+      .select('id, product_name, quantity, unit, type, date, description, reference_id, user_id, created_at');
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -598,7 +599,7 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
     // First try the view
     let query = client
       .from('v_sprayable_parcels')
-      .select('*');
+      .select('id, name, area, crop, variety, parcel_id, user_id');
 
     // Explicitly filter by user_id for data isolation
     if (userId) {
@@ -627,7 +628,7 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
 
     let subQuery = client
       .from('sub_parcels')
-      .select('*');
+      .select('id, name, area, crop, variety, parcel_id, user_id');
 
     if (userId) {
       subQuery = subQuery.eq('user_id', userId);
@@ -1541,8 +1542,9 @@ export async function addParcelHistoryEntries({
 
   // Prefer SprayableParcel[] (new system with sub-parcels)
   if (sprayableParcels && sprayableParcels.length > 0) {
+    const sprayableMap = new Map(sprayableParcels.map(p => [p.id, p]));
     plots.forEach(subParcelId => {
-      const sprayableParcel = sprayableParcels.find(p => p.id === subParcelId);
+      const sprayableParcel = sprayableMap.get(subParcelId);
       if (!sprayableParcel) {
         console.warn(`[addParcelHistoryEntries] Sub-parcel not found: ${subParcelId}`);
         return;
@@ -1579,8 +1581,9 @@ export async function addParcelHistoryEntries({
   }
   // Fallback to legacy Parcel[] (backward compatibility)
   else if (parcels && parcels.length > 0) {
+    const parcelMap = new Map(parcels.map(p => [p.id, p]));
     plots.forEach(parcelId => {
-      const parcel = parcels.find(p => p.id === parcelId);
+      const parcel = parcelMap.get(parcelId);
       if (!parcel) return;
 
       // Use sub-parcels if available, otherwise fallback to parcel level (legacy or simple)
@@ -1773,7 +1776,7 @@ export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
     // Products starting with W-Z were being cut off (including WOPRO Luisweg)
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, werkzame_stoffen, gebruiksvoorschriften, samenstelling')
       .order('naam')
       .limit(2000);
 
@@ -2041,7 +2044,7 @@ export async function getCtgbProductsByNames(names: string[]): Promise<CtgbProdu
 
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, werkzame_stoffen, gebruiksvoorschriften, samenstelling')
       .or(orConditions);
 
     if (error) {
@@ -2132,8 +2135,9 @@ export async function getAllFertilizers(): Promise<FertilizerProduct[]> {
 
   const { data, error } = await dbClient
     .from('fertilizers')
-    .select('*')
-    .order('name');
+    .select('id, name, manufacturer, category, unit, composition, search_keywords')
+    .order('name')
+    .limit(2000);
 
   if (error || !data) return [];
 
