@@ -1781,11 +1781,11 @@ export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
 
   return withRetry(async () => {
     // NOTE: Increased limit from 1000 to 2000 because we have 1047+ products
-    // Products starting with W-Z were being cut off (including WOPRO Luisweg)
-    // Using select('*') because CtgbProduct type needs all columns (including etikettering, search_keywords, etc.)
+    // Explicitly select needed columns — excluding 'embedding' (768-dim vector, ~3MB)
+    // to keep payload size manageable for production
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
       .order('naam')
       .limit(2000);
 
