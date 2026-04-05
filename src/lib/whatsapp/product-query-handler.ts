@@ -248,40 +248,62 @@ function formatProductCard(
     }
   }
 
-  // Crop-specific info (hardfruit)
+  // Crop-specific gebruiksvoorschriften — grouped by dosering
   if (cropInfo && cropInfo.length > 0) {
     lines.push('');
     const cropEmoji = crop.includes('peer') ? '🍐' : '🍎';
-    lines.push(`${cropEmoji} *${crop.charAt(0).toUpperCase() + crop.slice(1)}:*`);
+    lines.push(`${cropEmoji} *Gebruik op ${crop}:*`);
 
-    // Group by doelorganisme, show top 3
-    const shown = cropInfo.slice(0, 3);
-    for (const ci of shown) {
-      if (ci.doelorganisme) {
-        lines.push(`  _${ci.doelorganisme}_`);
+    // Group by dosering+max+interval+PHI (same practical prescription)
+    const groups = new Map<string, { dosering: string; max: string; interval: string; phi: string; organisms: string[] }>();
+    for (const ci of cropInfo) {
+      const key = `${ci.dosering || '?'}|${ci.max_toepassingen || ''}|${ci.interval || ''}|${ci.veiligheidstermijn || ''}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          dosering: ci.dosering || '',
+          max: ci.max_toepassingen ? `${ci.max_toepassingen}×` : '',
+          interval: ci.interval || '',
+          phi: ci.veiligheidstermijn || '',
+          organisms: [],
+        });
       }
-      const details: string[] = [];
-      if (ci.dosering) details.push(`Dosering: ${ci.dosering}`);
-      if (ci.max_toepassingen) details.push(`Max: ${ci.max_toepassingen}×`);
-      if (ci.interval) details.push(`Interval: ${ci.interval}`);
-      if (ci.veiligheidstermijn) details.push(`PHI: ${ci.veiligheidstermijn}`);
-      if (details.length > 0) {
-        lines.push(`  ${details.join(' · ')}`);
+      if (ci.doelorganisme) {
+        // Split compound organisms and add individually
+        const parts = ci.doelorganisme.split(/,\s*/);
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (trimmed && !groups.get(key)!.organisms.includes(trimmed)) {
+            groups.get(key)!.organisms.push(trimmed);
+          }
+        }
       }
     }
-    if (cropInfo.length > 3) {
-      lines.push(`  _+${cropInfo.length - 3} andere toepassingen_`);
+
+    for (const [, g] of groups) {
+      lines.push('');
+      // Show max 3 organisms, summarize rest
+      if (g.organisms.length > 0) {
+        const shown = g.organisms.slice(0, 3).join(', ');
+        const extra = g.organisms.length > 3 ? ` _+${g.organisms.length - 3} andere_` : '';
+        lines.push(`▸ ${shown}${extra}`);
+      }
+      if (g.dosering) lines.push(`  *Dosering: ${g.dosering}*`);
+      if (g.max) lines.push(`  *Max: ${g.max} per seizoen*`);
+      if (g.interval) lines.push(`  Interval: ${g.interval}`);
+      if (g.phi) lines.push(`  Veiligheidstermijn: ${g.phi}`);
     }
   }
 
-  // Status
+  // Status + vervaldatum
   if (isCTGB) {
     lines.push('');
     if (d.status === 'Toegelaten' && d.vervaldatum) {
       const expDate = new Date(d.vervaldatum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
-      lines.push(`✅ Toegelaten t/m ${expDate}`);
+      lines.push(`✅ *Toegelaten* t/m ${expDate}`);
+    } else if (d.status === 'Toegelaten') {
+      lines.push('✅ *Toegelaten*');
     } else if (d.status) {
-      lines.push(`⚠️ Status: ${d.status}`);
+      lines.push(`⚠️ Status: *${d.status}*`);
     }
   }
 
