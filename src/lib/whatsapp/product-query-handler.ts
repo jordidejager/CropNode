@@ -114,9 +114,11 @@ async function handleSingleProductQuery(
     .eq('product_id', bestMatch.product_id)
     .maybeSingle();
 
-  // Get crop-specific info if crop provided or default to hardfruit
+  // Get crop-specific info for both appel and peer (unless user specified a crop)
   let cropInfo: any = null;
+  let peerInfo: any = null;
   const targetCrop = crop || 'appel';
+
   const { data: cropData } = await admin.rpc('fn_get_product_for_crop', {
     p_product_name: bestMatch.name,
     p_gewas: targetCrop,
@@ -125,8 +127,19 @@ async function handleSingleProductQuery(
     cropInfo = cropData;
   }
 
+  // Also fetch peer info if no specific crop was requested
+  if (!crop) {
+    const { data: peerData } = await admin.rpc('fn_get_product_for_crop', {
+      p_product_name: bestMatch.name,
+      p_gewas: 'peer',
+    });
+    if (peerData?.length > 0) {
+      peerInfo = peerData;
+    }
+  }
+
   // Format response
-  const msg = formatProductCard(bestMatch, card, cropInfo, targetCrop);
+  const msg = formatProductCard(bestMatch, card, cropInfo, peerInfo, targetCrop);
   await sendTextMessage(metaPhone, msg);
   await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
 }
@@ -187,6 +200,7 @@ function formatProductCard(
   match: any,
   card: any | null,
   cropInfo: any[] | null,
+  peerInfo: any[] | null,
   crop: string
 ): string {
   const lines: string[] = [];
@@ -248,49 +262,30 @@ function formatProductCard(
     }
   }
 
-  // Crop-specific gebruiksvoorschriften — grouped by dosering
-  if (cropInfo && cropInfo.length > 0) {
+  // Crop-specific gebruiksvoorschriften — appel + peer
+  const appelGroups = cropInfo ? buildCropGroups(cropInfo) : null;
+  const peerGroups = peerInfo ? buildCropGroups(peerInfo) : null;
+
+  // Check if appel and peer data are identical
+  const appelKey = appelGroups ? serializeGroups(appelGroups) : '';
+  const peerKey = peerGroups ? serializeGroups(peerGroups) : '';
+  const identical = appelKey && peerKey && appelKey === peerKey;
+
+  if (identical && appelGroups) {
+    // Same info for both — show as combined
     lines.push('');
-    const cropEmoji = crop.includes('peer') ? '🍐' : '🍎';
-    lines.push(`${cropEmoji} *Gebruik op ${crop}:*`);
-
-    // Group by dosering+max+interval+PHI (same practical prescription)
-    const groups = new Map<string, { dosering: string; max: string; interval: string; phi: string; organisms: string[] }>();
-    for (const ci of cropInfo) {
-      const key = `${ci.dosering || '?'}|${ci.max_toepassingen || ''}|${ci.interval || ''}|${ci.veiligheidstermijn || ''}`;
-      if (!groups.has(key)) {
-        groups.set(key, {
-          dosering: ci.dosering || '',
-          max: ci.max_toepassingen ? `${ci.max_toepassingen}×` : '',
-          interval: ci.interval || '',
-          phi: ci.veiligheidstermijn || '',
-          organisms: [],
-        });
-      }
-      if (ci.doelorganisme) {
-        // Split compound organisms and add individually
-        const parts = ci.doelorganisme.split(/,\s*/);
-        for (const part of parts) {
-          const trimmed = part.trim();
-          if (trimmed && !groups.get(key)!.organisms.includes(trimmed)) {
-            groups.get(key)!.organisms.push(trimmed);
-          }
-        }
-      }
-    }
-
-    for (const [, g] of groups) {
+    lines.push('🍎🍐 *Gebruik op appel/peer:*');
+    renderCropGroups(lines, appelGroups);
+  } else {
+    if (appelGroups) {
       lines.push('');
-      // Show max 3 organisms, summarize rest
-      if (g.organisms.length > 0) {
-        const shown = g.organisms.slice(0, 3).join(', ');
-        const extra = g.organisms.length > 3 ? ` _+${g.organisms.length - 3} andere_` : '';
-        lines.push(`▸ ${shown}${extra}`);
-      }
-      if (g.dosering) lines.push(`  *Dosering: ${g.dosering}*`);
-      if (g.max) lines.push(`  *Max: ${g.max} per seizoen*`);
-      if (g.interval) lines.push(`  Interval: ${g.interval}`);
-      if (g.phi) lines.push(`  Veiligheidstermijn: ${g.phi}`);
+      lines.push('🍎 *Gebruik op appel:*');
+      renderCropGroups(lines, appelGroups);
+    }
+    if (peerGroups) {
+      lines.push('');
+      lines.push('🍐 *Gebruik op peer:*');
+      renderCropGroups(lines, peerGroups);
     }
   }
 
@@ -313,4 +308,54 @@ function formatProductCard(
     text = text.substring(0, 3980) + '\n\n_...ingekort_';
   }
   return text;
+}
+
+// ============================================================================
+// Crop group helpers
+// ============================================================================
+
+type CropGroup = { dosering: string; max: string; interval: string; phi: string; organisms: string[] };
+
+function buildCropGroups(data: any[]): CropGroup[] {
+  const map = new Map<string, CropGroup>();
+  for (const ci of data) {
+    const key = `${ci.dosering || '?'}|${ci.max_toepassingen || ''}|${ci.interval || ''}|${ci.veiligheidstermijn || ''}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        dosering: ci.dosering || '',
+        max: ci.max_toepassingen ? `${ci.max_toepassingen}×` : '',
+        interval: ci.interval || '',
+        phi: ci.veiligheidstermijn || '',
+        organisms: [],
+      });
+    }
+    if (ci.doelorganisme) {
+      for (const part of ci.doelorganisme.split(/,\s*/)) {
+        const t = part.trim();
+        if (t && !map.get(key)!.organisms.includes(t)) {
+          map.get(key)!.organisms.push(t);
+        }
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+function serializeGroups(groups: CropGroup[]): string {
+  return groups.map(g => `${g.dosering}|${g.max}|${g.interval}|${g.phi}`).sort().join(';;');
+}
+
+function renderCropGroups(lines: string[], groups: CropGroup[]): void {
+  for (const g of groups) {
+    lines.push('');
+    if (g.organisms.length > 0) {
+      const shown = g.organisms.slice(0, 3).join(', ');
+      const extra = g.organisms.length > 3 ? ` _+${g.organisms.length - 3} andere_` : '';
+      lines.push(`▸ ${shown}${extra}`);
+    }
+    if (g.dosering) lines.push(`  *Dosering: ${g.dosering}*`);
+    if (g.max) lines.push(`  *Max: ${g.max} per seizoen*`);
+    if (g.interval) lines.push(`  Interval: ${g.interval}`);
+    if (g.phi) lines.push(`  Veiligheidstermijn: ${g.phi}`);
+  }
 }
