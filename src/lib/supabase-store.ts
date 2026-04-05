@@ -1703,7 +1703,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // First try exact/partial match on naam
     const { data: nameData, error: nameError } = await client
       .from('ctgb_products')
-      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
+      .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
       .ilike('naam', searchPattern)
       .order('naam')
       .limit(20);
@@ -1723,7 +1723,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // Fallback: search in werkzame_stoffen or toelatingsnummer
     const { data, error } = await client
       .from('ctgb_products')
-      .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
+      .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
       .or(`werkzame_stoffen.cs.{${normalizedSearch}},toelatingsnummer.ilike.${searchPattern}`)
       .order('naam')
       .limit(20);
@@ -1747,7 +1747,7 @@ export async function getCtgbProductByNumber(toelatingsnummer: string): Promise<
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
+    .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .eq('toelatingsnummer', toelatingsnummer)
     .limit(1);
 
@@ -1765,7 +1765,7 @@ export async function getCtgbProductByName(naam: string): Promise<CtgbProduct | 
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
+    .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .eq('naam', naam)
     .single();
 
@@ -1997,7 +1997,7 @@ export async function getCtgbProductsBySubstance(substance: string): Promise<Ctg
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('id, naam, toelatingsnummer, type, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
+    .select('id, naam, toelatingsnummer, product_types, categorie, status, vervaldatum, toelatingshouder, werkzame_stoffen, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at')
     .contains('werkzame_stoffen', [substance]);
 
   if (error || !data) return [];
