@@ -28,8 +28,8 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, {
               ...options,
-              // Sessie cookies 30 dagen geldig houden
-              maxAge: options?.maxAge ?? 60 * 60 * 24 * 30, // 30 dagen
+              // Sessie cookies 1 jaar geldig houden (telers willen permanent ingelogd blijven)
+              maxAge: options?.maxAge ?? 60 * 60 * 24 * 365, // 365 dagen
             })
           )
         },
@@ -37,13 +37,23 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Use getSession() (reads JWT from cookies, no external fetch) for fast auth check.
-  // getUser() makes an external fetch to Supabase which fails with Node.js ECONNRESET bug,
-  // causing 120s+ delays (30s timeout × 4 attempts). RLS on the database still protects data.
+  // Try getSession() first (fast, reads JWT from cookie, no external fetch).
+  // If the access token is expired, fall back to getUser() which triggers a token refresh.
+  // This prevents users from being logged out when their 1-hour access token expires.
   let user = null
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    user = session?.user ?? null
+    if (session?.user) {
+      user = session.user
+    } else {
+      // Access token expired — try refresh via getUser()
+      try {
+        const { data: { user: refreshedUser } } = await supabase.auth.getUser()
+        user = refreshedUser
+      } catch {
+        // Refresh failed — user must re-login
+      }
+    }
   } catch (error) {
     console.warn('[Middleware] Session check failed:', error instanceof Error ? error.message : 'Unknown')
   }
