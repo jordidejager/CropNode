@@ -92,56 +92,51 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   RETURN QUERY
+  SELECT * FROM (
+    -- 1. Exact name match
+    SELECT p.id, p.name, p.product_type, p.source, p.status,
+      'exact'::TEXT AS match_type, 1.0::NUMERIC AS match_score
+    FROM products p
+    WHERE lower(p.name) = lower(search_query)
+      AND (filter_source IS NULL OR p.source = filter_source)
+      AND p.status = 'active'
 
-  -- 1. Exact name match
-  SELECT p.id, p.name, p.product_type, p.source, p.status,
-    'exact'::TEXT, 1.0::NUMERIC
-  FROM products p
-  WHERE lower(p.name) = lower(search_query)
-    AND (filter_source IS NULL OR p.source = filter_source)
-    AND p.status = 'active'
+    UNION ALL
 
-  UNION ALL
+    -- 2. Alias match
+    SELECT p.id, p.name, p.product_type, p.source, p.status,
+      'alias'::TEXT, pau.confidence
+    FROM product_aliases_unified pau
+    JOIN products p ON p.id = pau.product_id
+    WHERE lower(pau.alias) = lower(search_query)
+      AND (filter_source IS NULL OR p.source = filter_source)
+      AND p.status = 'active'
 
-  -- 2. Alias match
-  SELECT p.id, p.name, p.product_type, p.source, p.status,
-    'alias'::TEXT, pau.confidence
-  FROM product_aliases_unified pau
-  JOIN products p ON p.id = pau.product_id
-  WHERE lower(pau.alias) = lower(search_query)
-    AND (filter_source IS NULL OR p.source = filter_source)
-    AND p.status = 'active'
+    UNION ALL
 
-  UNION ALL
+    -- 3. ILIKE partial match
+    SELECT p.id, p.name, p.product_type, p.source, p.status,
+      'partial'::TEXT, 0.6::NUMERIC
+    FROM products p
+    WHERE p.name ILIKE '%' || search_query || '%'
+      AND lower(p.name) != lower(search_query)
+      AND (filter_source IS NULL OR p.source = filter_source)
+      AND p.status = 'active'
 
-  -- 3. Trigram fuzzy match (similarity > 0.3)
-  SELECT p.id, p.name, p.product_type, p.source, p.status,
-    'fuzzy'::TEXT, similarity(p.name, search_query)::NUMERIC
-  FROM products p
-  WHERE similarity(p.name, search_query) > 0.3
-    AND (filter_source IS NULL OR p.source = filter_source)
-    AND p.status = 'active'
-    AND NOT EXISTS (
-      -- Skip if already matched exactly or via alias
-      SELECT 1 FROM products p2 WHERE lower(p2.name) = lower(search_query) AND p2.id = p.id
-    )
+    UNION ALL
 
-  UNION ALL
-
-  -- 4. Keyword match
-  SELECT p.id, p.name, p.product_type, p.source, p.status,
-    'keyword'::TEXT, 0.7::NUMERIC
-  FROM products p
-  WHERE lower(search_query) = ANY(
-    SELECT lower(unnest(p.search_keywords))
-  )
-    AND (filter_source IS NULL OR p.source = filter_source)
-    AND p.status = 'active'
-    AND NOT EXISTS (
-      SELECT 1 FROM products p2 WHERE lower(p2.name) = lower(search_query) AND p2.id = p.id
-    )
-
-  ORDER BY match_score DESC
+    -- 4. Keyword match
+    SELECT p.id, p.name, p.product_type, p.source, p.status,
+      'keyword'::TEXT, 0.7::NUMERIC
+    FROM products p
+    WHERE p.search_keywords IS NOT NULL
+      AND lower(search_query) = ANY(
+        SELECT lower(unnest(p.search_keywords))
+      )
+      AND (filter_source IS NULL OR p.source = filter_source)
+      AND p.status = 'active'
+  ) results
+  ORDER BY results.match_score DESC
   LIMIT max_results;
 END;
 $$;
