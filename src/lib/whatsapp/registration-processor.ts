@@ -5,6 +5,7 @@
  */
 
 import { analyzeSprayInput } from '@/lib/spray-pipeline';
+import { deterministicParse } from '@/lib/deterministic-parser';
 import { sendInteractiveButtons, sendTextMessage } from './client';
 import {
   createConversation,
@@ -45,9 +46,30 @@ export async function processNewRegistration(
     // 2. Create conversation record
     const conversation = await createConversation(userId, phoneNumber, waMessageId, inputText);
 
-    // 3. Run the shared analysis pipeline
-    console.log(`[processNewRegistration] Running analyzeSprayInput for user ${userId}...`);
+    // 3. Try deterministic pre-check to decide if we need AI (for "processing" message)
     let result;
+    let needsAI = true;
+
+    try {
+      const parcels = await getSprayableParcelsForUser(userId);
+      const deterministicResult = deterministicParse(inputText, parcels as any);
+      if (deterministicResult.success && deterministicResult.confidence >= 0.85) {
+        needsAI = false;
+        console.log(`[processNewRegistration] FAST PATH likely (deterministic confidence=${deterministicResult.confidence.toFixed(2)})`);
+      } else {
+        console.log(`[processNewRegistration] SLOW PATH: AI needed (deterministic confidence=${deterministicResult.confidence.toFixed(2)})`);
+      }
+    } catch (err) {
+      console.warn('[processNewRegistration] Deterministic pre-check failed:', err);
+    }
+
+    // Fix 2: Send "processing" message BEFORE slow AI call (perceived latency: 8s → <1s)
+    if (needsAI) {
+      await sendTextMessage(metaPhone, '⏳ Bezig met verwerken...');
+    }
+
+    // 4. Run the shared analysis pipeline (uses deterministic-first internally in V3)
+    console.log(`[processNewRegistration] Running analyzeSprayInput for user ${userId}...`);
     try {
       result = await analyzeSprayInput(inputText, userId);
       console.log(`[processNewRegistration] Pipeline result: action=${result.action}, hasRegistration=${!!result.registration}`);
