@@ -67,11 +67,13 @@ export async function handleWeatherQuery(
     }
 
     // 2. Fetch multi-model forecast (paginated query)
+    console.log(`[handleWeatherQuery] Fetching multimodel for station ${resolved.stationId} (${resolved.stationName})`);
     const forecast = await getMultiModelForecast(resolved.stationId);
     const modelNames = Object.keys(forecast.models);
+    console.log(`[handleWeatherQuery] Got ${modelNames.length} models:`, modelNames);
 
     if (modelNames.length === 0) {
-      const msg = '🌦️ Geen weerverwachting beschikbaar voor jouw station. Probeer het later nog eens.';
+      const msg = `🌦️ Er is nog geen weerdata voor station *${resolved.stationName}*. Open Weather Hub in de app — dat initialiseert automatisch de 14-daagse verwachting — en probeer het daarna opnieuw.`;
       await sendTextMessage(metaPhone, msg);
       await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
       return;
@@ -79,6 +81,7 @@ export async function handleWeatherQuery(
 
     // 3. Aggregate per day across models
     const dailyAgg = aggregatePerDay(forecast.models);
+    console.log(`[handleWeatherQuery] Aggregated ${dailyAgg.length} days from ${modelNames.length} models`);
     if (dailyAgg.length === 0) {
       const msg = '🌦️ Niet genoeg weerdata beschikbaar voor een 14-daagse verwachting.';
       await sendTextMessage(metaPhone, msg);
@@ -149,26 +152,91 @@ async function resolveStationForUser(userId: string): Promise<ResolvedStation | 
   const admin = getSupabaseAdmin();
   if (!admin) throw new Error('Admin client niet beschikbaar');
 
-  // Strategy: prefer an already-linked station via parcel_weather_stations
-  // (these are stations the user has already actively used in Weather Hub).
-  const { data: linked } = await (admin as any)
-    .from('parcel_weather_stations')
-    .select('station_id, parcels!inner(user_id, name)')
-    .eq('parcels.user_id', userId)
-    .limit(1)
-    .maybeSingle();
+  // ------------------------------------------------------------------
+  // Strategy 1 (best): find a station owned by this user that actually
+  // has a successful multi-model forecast fetch logged. This guarantees
+  // we pick a station with real forecast data (not a freshly created empty one).
+  // ------------------------------------------------------------------
+  try {
+    const { data: userStations } = await (admin as any)
+      .from('weather_stations')
+      .select('id, name')
+      .eq('user_id', userId);
 
-  if (linked?.station_id) {
-    const station = await getStationFromAdmin(linked.station_id);
-    if (station) {
-      return {
-        stationId: linked.station_id,
-        stationName: station.name || linked.parcels?.name || 'jouw locatie',
-      };
+    const stationIds: string[] = (userStations || []).map((s: any) => s.id);
+    console.log(`[resolveStationForUser] User ${userId} owns ${stationIds.length} station(s):`, stationIds);
+
+    if (stationIds.length > 0) {
+      // Find the station with the most recent successful multi-model fetch
+      const { data: log } = await (admin as any)
+        .from('weather_fetch_log')
+        .select('station_id, fetched_at')
+        .in('station_id', stationIds)
+        .eq('fetch_type', 'forecast_multimodel')
+        .eq('status', 'success')
+        .order('fetched_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (log?.station_id) {
+        const stationName = (userStations || []).find((s: any) => s.id === log.station_id)?.name;
+        console.log(`[resolveStationForUser] ✅ Picked station ${log.station_id} via fetch_log`);
+        return {
+          stationId: log.station_id,
+          stationName: stationName || 'jouw locatie',
+        };
+      }
+
+      // Strategy 1b: no fetch_log, but maybe there's raw forecast data anyway.
+      // Query weather_data_hourly for ANY station of this user with is_forecast data.
+      const { data: anyForecast } = await (admin as any)
+        .from('weather_data_hourly')
+        .select('station_id')
+        .in('station_id', stationIds)
+        .eq('is_forecast', true)
+        .neq('model_name', 'best_match')
+        .limit(1)
+        .maybeSingle();
+
+      if (anyForecast?.station_id) {
+        const stationName = (userStations || []).find((s: any) => s.id === anyForecast.station_id)?.name;
+        console.log(`[resolveStationForUser] ✅ Picked station ${anyForecast.station_id} via weather_data_hourly`);
+        return {
+          stationId: anyForecast.station_id,
+          stationName: stationName || 'jouw locatie',
+        };
+      }
     }
+  } catch (err) {
+    console.warn('[resolveStationForUser] Strategy 1 lookup failed, falling through:', err);
   }
 
-  // Fallback: find first parcel with a location and ensure a station for it
+  // ------------------------------------------------------------------
+  // Strategy 2: an already-linked station via parcel_weather_stations
+  // ------------------------------------------------------------------
+  try {
+    const { data: linked } = await (admin as any)
+      .from('parcel_weather_stations')
+      .select('station_id, parcels!inner(user_id, name)')
+      .eq('parcels.user_id', userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (linked?.station_id) {
+      const station = await getStationFromAdmin(linked.station_id);
+      console.log(`[resolveStationForUser] ⚠️  Fallback to parcel_weather_stations: ${linked.station_id}`);
+      return {
+        stationId: linked.station_id,
+        stationName: station?.name || linked.parcels?.name || 'jouw locatie',
+      };
+    }
+  } catch (err) {
+    console.warn('[resolveStationForUser] Strategy 2 lookup failed, falling through:', err);
+  }
+
+  // ------------------------------------------------------------------
+  // Strategy 3: find first parcel with a location and ensure a station for it
+  // ------------------------------------------------------------------
   const { data: parcels } = await (admin as any)
     .from('parcels')
     .select('id, name, location')
@@ -178,11 +246,15 @@ async function resolveStationForUser(userId: string): Promise<ResolvedStation | 
     .limit(1);
 
   const parcel = parcels?.[0];
-  if (!parcel?.location) return null;
+  if (!parcel?.location) {
+    console.log(`[resolveStationForUser] ❌ No parcels with location for user ${userId}`);
+    return null;
+  }
 
   try {
     const stationId = await ensureWeatherStation(userId, parcel.id);
     const station = await getStationFromAdmin(stationId);
+    console.log(`[resolveStationForUser] 🆕 Created/linked station ${stationId} for parcel ${parcel.id}`);
     return {
       stationId,
       stationName: station?.name || parcel.name || 'jouw locatie',
