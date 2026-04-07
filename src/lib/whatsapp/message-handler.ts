@@ -19,6 +19,7 @@ import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
 import { detectProductQuery, handleProductQuery } from './product-query-handler';
+import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
@@ -301,6 +302,13 @@ export async function handleIncomingMessage(
 
     // STATE: idle (or no active conversation) + text message
     if (messageText) {
+      // Weather forecast query: "weersverwachting", "14 daagse", "wat wordt het weer"
+      // Check first — these phrases shouldn't be misread as field notes or spray input.
+      if (isWeatherQueryIntent(messageText)) {
+        await handleWeatherQuery(userId, e164Phone, messageText);
+        return;
+      }
+
       // Quick check: if message looks like a field note, skip spray pipeline
       if (isFieldNoteIntent(messageText)) {
         await processFieldNote(userId, e164Phone, messageText, waMessageId);
