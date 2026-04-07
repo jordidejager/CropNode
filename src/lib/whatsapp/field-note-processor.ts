@@ -11,7 +11,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-client';
-import { sendTextMessage, sendLocationRequest } from './client';
+import { sendTextMessage, sendLocationRequest, sendImageMessage } from './client';
 import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 
@@ -299,8 +299,22 @@ export async function processFieldNote(
       '✅ Zichtbaar in je Veldnotities.',
     ].join('\n');
 
-    await sendTextMessage(metaPhone, msg);
-    await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    // If we have a public photo URL, send the photo back as confirmation (Meta requires HTTPS)
+    let sentAsImage = false;
+    if (photoUrl && photoUrl.startsWith('https://')) {
+      try {
+        await sendImageMessage(metaPhone, { link: photoUrl }, msg);
+        sentAsImage = true;
+        await logMessage({ phoneNumber, direction: 'outbound', messageText: `[image] ${msg}` });
+      } catch (imgErr) {
+        console.warn('[processFieldNote] Image confirmation failed, falling back to text:', imgErr);
+      }
+    }
+
+    if (!sentAsImage) {
+      await sendTextMessage(metaPhone, msg);
+      await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
+    }
 
     // Notes without GPS: send location request (one-tap GPS sharing)
     const hasGps = insertData.latitude != null;

@@ -166,6 +166,115 @@ export async function sendLocationRequest(
 }
 
 /**
+ * Send an image message.
+ * Images must be JPG or PNG, max 5 MB, via a publicly accessible HTTPS URL
+ * or a pre-uploaded Meta media_id.
+ *
+ * @param to Phone number without + (e.g., "31612345678")
+ * @param source Either { link: 'https://...' } or { id: 'media-id' }
+ * @param caption Optional caption text (max 1024 chars)
+ * @returns WhatsApp message ID
+ */
+export async function sendImageMessage(
+  to: string,
+  source: { link: string } | { id: string },
+  caption?: string
+): Promise<string> {
+  console.log(`[WhatsApp Client] Sending image to ${to}${caption ? ` with caption: "${caption.substring(0, 60)}..."` : ''}`);
+
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'image',
+    image: {
+      ...source,
+      ...(caption && { caption: caption.substring(0, 1024) }),
+    },
+  });
+}
+
+/**
+ * Send a document (PDF, XLSX, etc.).
+ * Documents max 100 MB via publicly accessible HTTPS URL or media_id.
+ *
+ * @param to Phone number without +
+ * @param source Either { link: 'https://...' } or { id: 'media-id' }
+ * @param filename Filename shown to the user (e.g., "spuitschrift-2026.pdf")
+ * @param caption Optional caption (max 1024 chars)
+ * @returns WhatsApp message ID
+ */
+export async function sendDocumentMessage(
+  to: string,
+  source: { link: string } | { id: string },
+  filename: string,
+  caption?: string
+): Promise<string> {
+  console.log(`[WhatsApp Client] Sending document "${filename}" to ${to}`);
+
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'document',
+    document: {
+      ...source,
+      filename: filename.substring(0, 240),
+      ...(caption && { caption: caption.substring(0, 1024) }),
+    },
+  });
+}
+
+/**
+ * Upload a media file to Meta's servers and get a media_id.
+ * Use this when you have a local file (not a public URL).
+ * The resulting media_id can be passed to sendImageMessage/sendDocumentMessage.
+ *
+ * @param file Buffer or Blob containing the file data
+ * @param mimeType MIME type (e.g., "image/jpeg", "application/pdf")
+ * @param filename Filename for the upload
+ * @returns Meta media_id (valid for 30 days)
+ */
+export async function uploadMedia(
+  file: Buffer | Blob,
+  mimeType: string,
+  filename: string
+): Promise<string> {
+  const { phoneNumberId, accessToken } = getConfig();
+  const url = `${WHATSAPP_API_URL}/${phoneNumberId}/media`;
+
+  const formData = new FormData();
+  formData.append('messaging_product', 'whatsapp');
+  formData.append('type', mimeType);
+
+  // Convert Buffer to Blob if needed (FormData requires Blob, not Buffer)
+  const blob: Blob = Buffer.isBuffer(file)
+    ? new Blob([new Uint8Array(file)], { type: mimeType })
+    : file;
+  formData.append('file', blob, filename);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error(`[WhatsApp Client] Media upload error ${response.status}:`, errorBody);
+    throw new Error(`Media upload fout: ${response.status} — ${errorBody}`);
+  }
+
+  const data = await response.json();
+  const mediaId = data.id;
+  if (!mediaId) {
+    throw new Error('Media upload returned no id');
+  }
+  console.log(`[WhatsApp Client] Uploaded media: ${mediaId}`);
+  return mediaId;
+}
+
+/**
  * Mark a message as read (sends blue checkmarks).
  * @param messageId The WhatsApp message ID (wamid.xxx)
  */
