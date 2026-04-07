@@ -66,9 +66,14 @@ export async function handleWeatherQuery(
       return;
     }
 
-    // 2. Fetch multi-model forecast (paginated query)
+    // 2. Fetch multi-model forecast (paginated query).
+    // CRITICAL: pass the admin client — getMultiModelForecast defaults to a
+    // cookie-based client which has no auth in the WhatsApp webhook context,
+    // so RLS on weather_data_hourly silently returns zero rows.
     console.log(`[handleWeatherQuery] Fetching multimodel for station ${resolved.stationId} (${resolved.stationName})`);
-    const forecast = await getMultiModelForecast(resolved.stationId);
+    const admin2 = getSupabaseAdmin();
+    if (!admin2) throw new Error('Admin client niet beschikbaar voor weather fetch');
+    const forecast = await getMultiModelForecast(resolved.stationId, admin2 as any);
     const modelNames = Object.keys(forecast.models);
     console.log(`[handleWeatherQuery] Got ${modelNames.length} models:`, modelNames);
 
