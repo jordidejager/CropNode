@@ -669,7 +669,7 @@ export async function getMultiModelForecast(
   stationId: string,
   db?: SupabaseClient
 ): Promise<{
-  models: Record<string, { time: string[]; temperature_c: (number | null)[]; precipitation_mm: (number | null)[]; wind_speed_ms: (number | null)[]; humidity_pct: (number | null)[] }>;
+  models: Record<string, { time: string[]; temperature_c: (number | null)[]; precipitation_mm: (number | null)[]; wind_speed_ms: (number | null)[]; wind_direction_deg: (number | null)[]; humidity_pct: (number | null)[] }>;
   last_updated: string;
 }> {
   const supabase = db ?? await getDefaultClient();
@@ -682,7 +682,7 @@ export async function getMultiModelForecast(
   const baseQuery = () =>
     supabase
       .from('weather_data_hourly')
-      .select('timestamp, model_name, temperature_c, precipitation_mm, wind_speed_ms, humidity_pct')
+      .select('timestamp, model_name, temperature_c, precipitation_mm, wind_speed_ms, wind_direction, humidity_pct')
       .eq('station_id', stationId)
       .eq('is_forecast', true)
       .neq('model_name', 'best_match')
@@ -702,17 +702,18 @@ export async function getMultiModelForecast(
   }
 
   // Group by model
-  const models: Record<string, { time: string[]; temperature_c: (number | null)[]; precipitation_mm: (number | null)[]; wind_speed_ms: (number | null)[]; humidity_pct: (number | null)[] }> = {};
+  const models: Record<string, { time: string[]; temperature_c: (number | null)[]; precipitation_mm: (number | null)[]; wind_speed_ms: (number | null)[]; wind_direction_deg: (number | null)[]; humidity_pct: (number | null)[] }> = {};
 
   for (const row of data) {
     const model = row.model_name as string;
     if (!models[model]) {
-      models[model] = { time: [], temperature_c: [], precipitation_mm: [], wind_speed_ms: [], humidity_pct: [] };
+      models[model] = { time: [], temperature_c: [], precipitation_mm: [], wind_speed_ms: [], wind_direction_deg: [], humidity_pct: [] };
     }
     models[model].time.push(row.timestamp);
     models[model].temperature_c.push(row.temperature_c);
     models[model].precipitation_mm.push(row.precipitation_mm);
     models[model].wind_speed_ms.push(row.wind_speed_ms);
+    models[model].wind_direction_deg.push(row.wind_direction);
     models[model].humidity_pct.push(row.humidity_pct);
   }
 

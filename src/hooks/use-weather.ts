@@ -258,6 +258,7 @@ export type MultiModelData = {
       temperature_c: (number | null)[];
       precipitation_mm: (number | null)[];
       wind_speed_ms: (number | null)[];
+      wind_direction_deg?: (number | null)[];
       humidity_pct: (number | null)[];
     }
   >;

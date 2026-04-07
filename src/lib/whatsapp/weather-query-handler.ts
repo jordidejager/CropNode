@@ -103,6 +103,8 @@ export async function handleWeatherQuery(
       tmin: d.tmin,
       tmax: d.tmax,
       precipMm: d.precipMm,
+      windSpeedMs: d.windMeanMs,
+      windDirectionDeg: d.windDirectionDeg,
     }));
 
     const summaryDays: DaySummaryInput[] = days.map(d => ({
@@ -112,7 +114,7 @@ export async function handleWeatherQuery(
       tmax: d.tmax,
       precipMm: d.precipMm,
       precipModelStdev: d.precipStdev,
-      windMaxMs: d.windMaxMs,
+      windMaxMs: d.windMeanMs,
     }));
 
     const metrics = computeMetrics(summaryDays);
@@ -294,7 +296,8 @@ interface AggregatedDay {
   tmax: number;
   precipMm: number;
   precipStdev: number;
-  windMaxMs: number;
+  windMeanMs: number;
+  windDirectionDeg: number; // circular mean of hourly directions
 }
 
 type ModelData = {
@@ -302,25 +305,51 @@ type ModelData = {
   temperature_c: (number | null)[];
   precipitation_mm: (number | null)[];
   wind_speed_ms: (number | null)[];
+  wind_direction_deg?: (number | null)[];
 };
+
+interface DayBucket {
+  temps: number[];
+  precips: number[];
+  winds: number[];
+  windDirSinSum: number; // sum of sin(deg)
+  windDirCosSum: number; // sum of cos(deg)
+  windDirCount: number;
+}
 
 function aggregatePerDay(models: Record<string, ModelData>): AggregatedDay[] {
   // Per (date, model) collect arrays, then average across models for each day.
   // Step 1: per model, group rows by date.
-  const perModelDaily = new Map<string, Map<string, { temps: number[]; precips: number[]; winds: number[] }>>();
+  const perModelDaily = new Map<string, Map<string, DayBucket>>();
 
   for (const [modelName, m] of Object.entries(models)) {
-    const dayMap = new Map<string, { temps: number[]; precips: number[]; winds: number[] }>();
+    const dayMap = new Map<string, DayBucket>();
     for (let i = 0; i < m.time.length; i++) {
       const date = m.time[i].slice(0, 10); // YYYY-MM-DD
-      if (!dayMap.has(date)) dayMap.set(date, { temps: [], precips: [], winds: [] });
+      if (!dayMap.has(date)) {
+        dayMap.set(date, {
+          temps: [],
+          precips: [],
+          winds: [],
+          windDirSinSum: 0,
+          windDirCosSum: 0,
+          windDirCount: 0,
+        });
+      }
       const bucket = dayMap.get(date)!;
       const t = m.temperature_c[i];
       const p = m.precipitation_mm[i];
       const w = m.wind_speed_ms[i];
+      const wd = m.wind_direction_deg?.[i];
       if (t !== null && t !== undefined) bucket.temps.push(t);
       if (p !== null && p !== undefined) bucket.precips.push(p);
       if (w !== null && w !== undefined) bucket.winds.push(w);
+      if (wd !== null && wd !== undefined) {
+        const rad = (wd * Math.PI) / 180;
+        bucket.windDirSinSum += Math.sin(rad);
+        bucket.windDirCosSum += Math.cos(rad);
+        bucket.windDirCount++;
+      }
     }
     perModelDaily.set(modelName, dayMap);
   }
@@ -338,6 +367,9 @@ function aggregatePerDay(models: Record<string, ModelData>): AggregatedDay[] {
     const tmaxs: number[] = [];
     const precipTotals: number[] = []; // one total per model — used for stdev
     const winds: number[] = [];
+    let sinSum = 0;
+    let cosSum = 0;
+    let dirCount = 0;
 
     for (const dayMap of perModelDaily.values()) {
       const bucket = dayMap.get(date);
@@ -350,12 +382,22 @@ function aggregatePerDay(models: Record<string, ModelData>): AggregatedDay[] {
         precipTotals.push(bucket.precips.reduce((a, b) => a + b, 0));
       }
       if (bucket.winds.length > 0) {
-        winds.push(Math.max(...bucket.winds));
+        winds.push(avg(bucket.winds));
       }
+      sinSum += bucket.windDirSinSum;
+      cosSum += bucket.windDirCosSum;
+      dirCount += bucket.windDirCount;
     }
 
     // Need at least one model with temperature data; otherwise skip
     if (tmins.length === 0) continue;
+
+    // Circular mean for wind direction
+    let dirDeg = 0;
+    if (dirCount > 0) {
+      const meanRad = Math.atan2(sinSum / dirCount, cosSum / dirCount);
+      dirDeg = ((meanRad * 180) / Math.PI + 360) % 360;
+    }
 
     result.push({
       date,
@@ -363,7 +405,8 @@ function aggregatePerDay(models: Record<string, ModelData>): AggregatedDay[] {
       tmax: avg(tmaxs),
       precipMm: precipTotals.length > 0 ? avg(precipTotals) : 0,
       precipStdev: precipTotals.length > 1 ? stdev(precipTotals) : 0,
-      windMaxMs: winds.length > 0 ? avg(winds) : 0,
+      windMeanMs: winds.length > 0 ? avg(winds) : 0,
+      windDirectionDeg: dirDeg,
     });
   }
 
