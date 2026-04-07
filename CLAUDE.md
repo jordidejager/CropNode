@@ -2,6 +2,20 @@
 
 Intelligent crop protection management app for Dutch fruit farming (apples & pears).
 
+## ⚠️ Git Remotes — Read Before Pushing
+
+This submodule has TWO remotes. **Only `cropnode` is deployed.**
+
+- `cropnode` → `github.com/jordidejager/CropNode.git` — **the live repo, deployed by Vercel**
+- `origin` → `github.com/jordidejager/AgrisprayerPro.git` — legacy/parallel mirror, NOT deployed
+
+```bash
+# Always push to cropnode for the live app
+git push cropnode main
+```
+
+Pushing only to `origin` silently leaves Vercel out of date. If you must push to both, push `cropnode` last so the deploy reflects your latest commit. The parent repo (`/Users/jordidejager/studio`) tracks the submodule pointer — push that to its own `origin` as usual after updating the submodule.
+
 ## Tech Stack
 
 | Layer | Technology |
