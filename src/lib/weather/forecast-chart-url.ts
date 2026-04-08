@@ -65,20 +65,27 @@ function msToBeaufort(ms: number): number {
  * - Background: slate-950 (#020617) to match the darkest CropNode panels
  * - Emerald (#10b981) on bars + right axis as the primary accent
  * - Vivid orange / sky lines for tmax / tmin
- * - Multiline x-axis labels: date / Beaufort / compass direction
- *   (no annotation plugin on this chart anymore, so multiline works again)
- * - Big top padding so the composited logo has room to breathe
+ * - Multiline x-axis labels per day:
+ *     line 1: date        (di 8/4)
+ *     line 2: beaufort    (2 Bft)  — combined with compass on the same line
+ *     line 3: precip mm   (4.9 mm)  or em-dash if dry
+ *   We put the mm text in the label itself because chartjs-plugin-datalabels
+ *   reproducibly hangs QuickChart on 14-bar multi-axis charts.
  */
 function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
   if (days.length === 0) {
     throw new Error('buildChartConfig: days is empty');
   }
 
-  const labels: string[][] = days.map((d) => [
-    dayLabel(d.date),
-    `${msToBeaufort(d.windSpeedMs)} Bft`,
-    compassFromDeg(d.windDirectionDeg),
-  ]);
+  const labels: string[][] = days.map((d) => {
+    const rounded = Math.round(d.precipMm * 10) / 10;
+    const precipLine = rounded > 0.1 ? `${rounded.toFixed(1)} mm` : '—';
+    return [
+      dayLabel(d.date),
+      `${msToBeaufort(d.windSpeedMs)} Bft ${compassFromDeg(d.windDirectionDeg)}`,
+      precipLine,
+    ];
+  });
 
   const tmin = days.map((d) => Math.round(d.tmin * 10) / 10);
   const tmax = days.map((d) => Math.round(d.tmax * 10) / 10);
@@ -145,7 +152,10 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
     options: {
       responsive: false,
       layout: {
-        padding: { top: 110, right: 36, bottom: 18, left: 20 },
+        // Single number — QuickChart's chartjs-node-canvas occasionally hangs
+        // on object-form padding in larger charts (~14 multiline labels +
+        // datalabels + multi-axis). Stay simple here.
+        padding: 24,
       },
       plugins: {
         title: {
@@ -153,8 +163,7 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
           text: `14-daagse weersverwachting · ${stationName}`,
           color: TEXT_PRIMARY,
           font: { size: 18, weight: 'normal', family: 'sans-serif' },
-          align: 'start',
-          padding: { top: 0, bottom: 24 },
+          padding: 24,
         },
         legend: {
           position: 'bottom',
@@ -223,7 +232,7 @@ async function fetchChartPng(
   const body = {
     chart,
     width: 1200,
-    height: 700,
+    height: 600,
     backgroundColor: '#020617', // slate-950
     format: 'png',
     version: '4',
@@ -295,16 +304,32 @@ async function getLogoPng(targetWidth: number): Promise<Buffer> {
 }
 
 /**
- * Composite the CropNode logo on top of the chart PNG in the top-left corner.
+ * Add a slate-950 brand header above the chart with the CropNode wordmark
+ * on the left. We `extend` the canvas instead of compositing on top so we
+ * never have to worry about Chart.js layout colliding with the logo.
  */
 async function overlayLogo(chartPng: Buffer): Promise<Buffer> {
+  const HEADER_HEIGHT = 110;
   const LOGO_WIDTH = 260;
-  const LOGO_OFFSET_LEFT = 36;
+  const LOGO_OFFSET_LEFT = 40;
   const LOGO_OFFSET_TOP = 34;
 
   const logoPng = await getLogoPng(LOGO_WIDTH);
 
-  return sharp(chartPng)
+  // Step 1: extend the chart with a 110px header at the top, slate-950 fill
+  const extended = await sharp(chartPng)
+    .extend({
+      top: HEADER_HEIGHT,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      background: { r: 2, g: 6, b: 23, alpha: 1 }, // #020617
+    })
+    .png()
+    .toBuffer();
+
+  // Step 2: composite the logo into that header
+  return sharp(extended)
     .composite([
       {
         input: logoPng,

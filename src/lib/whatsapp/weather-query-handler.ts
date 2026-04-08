@@ -66,36 +66,36 @@ export async function handleWeatherQuery(
       return;
     }
 
-    // 2. Fetch multi-model forecast (paginated query).
-    // CRITICAL: pass the admin client — getMultiModelForecast defaults to a
-    // cookie-based client which has no auth in the WhatsApp webhook context,
-    // so RLS on weather_data_hourly silently returns zero rows.
-    console.log(`[handleWeatherQuery] Fetching multimodel for station ${resolved.stationId} (${resolved.stationName})`);
+    // 2. Fetch best_match hourly forecast (the SAME source the Weather Hub
+    // 7-daagse and dashboard cards use). This guarantees the WhatsApp chart
+    // shows identical numbers to the rest of the app — no more multi-model
+    // averaging that drifts from the dashboard.
+    //
+    // We also fetch the multi-model data in parallel for the Gemini summary
+    // because the model-spread tells us how confident the forecast is.
     const admin2 = getSupabaseAdmin();
     if (!admin2) throw new Error('Admin client niet beschikbaar voor weather fetch');
-    const forecast = await getMultiModelForecast(resolved.stationId, admin2 as any);
-    const modelNames = Object.keys(forecast.models);
-    console.log(`[handleWeatherQuery] Got ${modelNames.length} models:`, modelNames);
 
-    if (modelNames.length === 0) {
+    console.log(`[handleWeatherQuery] Fetching forecast for station ${resolved.stationId} (${resolved.stationName})`);
+    const [bestMatchDays, multiModel] = await Promise.all([
+      fetchBestMatchDailyAggregates(resolved.stationId, admin2 as any),
+      getMultiModelForecast(resolved.stationId, admin2 as any),
+    ]);
+
+    if (bestMatchDays.length === 0) {
       const msg = `🌦️ Er is nog geen weerdata voor station *${resolved.stationName}*. Open Weather Hub in de app — dat initialiseert automatisch de 14-daagse verwachting — en probeer het daarna opnieuw.`;
       await sendTextMessage(metaPhone, msg);
       await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
       return;
     }
-
-    // 3. Aggregate per day across models
-    const dailyAgg = aggregatePerDay(forecast.models);
-    console.log(`[handleWeatherQuery] Aggregated ${dailyAgg.length} days from ${modelNames.length} models`);
-    if (dailyAgg.length === 0) {
-      const msg = '🌦️ Niet genoeg weerdata beschikbaar voor een 14-daagse verwachting.';
-      await sendTextMessage(metaPhone, msg);
-      await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
-      return;
-    }
+    console.log(`[handleWeatherQuery] best_match days: ${bestMatchDays.length}, multi-model models: ${Object.keys(multiModel.models).length}`);
 
     // Cap at 14 days
-    const days = dailyAgg.slice(0, 14);
+    const days = bestMatchDays.slice(0, 14);
+
+    // For the Gemini summary, blend best_match values with multi-model
+    // standard deviation so it can talk about uncertainty.
+    const multiModelStdevByDate = computeMultiModelStdev(multiModel.models);
 
     // 4. Run chart + summary in parallel
     const chartDays: DailyForecastPoint[] = days.map(d => ({
@@ -113,7 +113,7 @@ export async function handleWeatherQuery(
       tmin: d.tmin,
       tmax: d.tmax,
       precipMm: d.precipMm,
-      precipModelStdev: d.precipStdev,
+      precipModelStdev: multiModelStdevByDate.get(d.date) ?? 0,
       windMaxMs: d.windMeanMs,
     }));
 
@@ -287,7 +287,7 @@ async function getStationFromAdmin(stationId: string): Promise<{ name: string | 
 }
 
 // ============================================================================
-// Day aggregation across models
+// Best-match daily aggregation (matches Weather Hub 7-daagse exactly)
 // ============================================================================
 
 interface AggregatedDay {
@@ -295,121 +295,145 @@ interface AggregatedDay {
   tmin: number;
   tmax: number;
   precipMm: number;
-  precipStdev: number;
   windMeanMs: number;
   windDirectionDeg: number; // circular mean of hourly directions
 }
 
-type ModelData = {
-  time: string[];
-  temperature_c: (number | null)[];
-  precipitation_mm: (number | null)[];
-  wind_speed_ms: (number | null)[];
-  wind_direction_deg?: (number | null)[];
-};
-
-interface DayBucket {
-  temps: number[];
-  precips: number[];
-  winds: number[];
-  windDirSinSum: number; // sum of sin(deg)
-  windDirCosSum: number; // sum of cos(deg)
-  windDirCount: number;
+interface BestMatchHourlyRow {
+  timestamp: string;
+  temperature_c: number | null;
+  precipitation_mm: number | null;
+  wind_speed_ms: number | null;
+  wind_direction: number | null;
 }
 
-function aggregatePerDay(models: Record<string, ModelData>): AggregatedDay[] {
-  // Per (date, model) collect arrays, then average across models for each day.
-  // Step 1: per model, group rows by date.
-  const perModelDaily = new Map<string, Map<string, DayBucket>>();
+/**
+ * Fetch best_match hourly forecast and aggregate per day, exactly like the
+ * Weather Hub 7-daagse / dashboard cards. This is the SINGLE source of truth
+ * for what the user sees in the app, so the WhatsApp chart should use it too.
+ *
+ * Days are bucketed by the YYYY-MM-DD prefix of the timestamp, which already
+ * matches the local-time dates Weather Hub displays (Open-Meteo returns its
+ * timestamps with timezone=Europe/Amsterdam applied).
+ */
+async function fetchBestMatchDailyAggregates(
+  stationId: string,
+  admin: any
+): Promise<AggregatedDay[]> {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayISO = todayStart.toISOString();
 
-  for (const [modelName, m] of Object.entries(models)) {
-    const dayMap = new Map<string, DayBucket>();
-    for (let i = 0; i < m.time.length; i++) {
-      const date = m.time[i].slice(0, 10); // YYYY-MM-DD
-      if (!dayMap.has(date)) {
-        dayMap.set(date, {
-          temps: [],
-          precips: [],
-          winds: [],
-          windDirSinSum: 0,
-          windDirCosSum: 0,
-          windDirCount: 0,
-        });
-      }
-      const bucket = dayMap.get(date)!;
-      const t = m.temperature_c[i];
-      const p = m.precipitation_mm[i];
-      const w = m.wind_speed_ms[i];
-      const wd = m.wind_direction_deg?.[i];
-      if (t !== null && t !== undefined) bucket.temps.push(t);
-      if (p !== null && p !== undefined) bucket.precips.push(p);
-      if (w !== null && w !== undefined) bucket.winds.push(w);
-      if (wd !== null && wd !== undefined) {
-        const rad = (wd * Math.PI) / 180;
-        bucket.windDirSinSum += Math.sin(rad);
-        bucket.windDirCosSum += Math.cos(rad);
-        bucket.windDirCount++;
-      }
-    }
-    perModelDaily.set(modelName, dayMap);
+  // Single page is fine — best_match is one row per hour, ~16 days × 24h = 384 rows.
+  const { data, error } = await admin
+    .from('weather_data_hourly')
+    .select('timestamp, temperature_c, precipitation_mm, wind_speed_ms, wind_direction')
+    .eq('station_id', stationId)
+    .eq('is_forecast', true)
+    .eq('model_name', 'best_match')
+    .gte('timestamp', todayISO)
+    .order('timestamp')
+    .limit(1000);
+
+  if (error) {
+    console.warn('[fetchBestMatchDailyAggregates] query error:', error.message);
+    return [];
   }
 
-  // Step 2: collect all unique dates (sorted) and aggregate across models per day.
-  const allDates = new Set<string>();
-  for (const dayMap of perModelDaily.values()) {
-    for (const date of dayMap.keys()) allDates.add(date);
+  const rows = (data ?? []) as BestMatchHourlyRow[];
+  if (rows.length === 0) return [];
+
+  // Group rows by date (slice prefix — Open-Meteo timestamps already in local time)
+  const byDate = new Map<string, BestMatchHourlyRow[]>();
+  for (const row of rows) {
+    const date = row.timestamp.slice(0, 10);
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date)!.push(row);
   }
-  const sortedDates = Array.from(allDates).sort();
 
   const result: AggregatedDay[] = [];
-  for (const date of sortedDates) {
-    const tmins: number[] = [];
-    const tmaxs: number[] = [];
-    const precipTotals: number[] = []; // one total per model — used for stdev
-    const winds: number[] = [];
-    let sinSum = 0;
-    let cosSum = 0;
-    let dirCount = 0;
+  for (const date of Array.from(byDate.keys()).sort()) {
+    const dayRows = byDate.get(date)!;
+    const temps = dayRows.map(r => r.temperature_c).filter((v): v is number => v !== null);
+    const precips = dayRows.map(r => r.precipitation_mm).filter((v): v is number => v !== null);
+    const winds = dayRows.map(r => r.wind_speed_ms).filter((v): v is number => v !== null);
+    const dirs = dayRows.map(r => r.wind_direction).filter((v): v is number => v !== null);
 
-    for (const dayMap of perModelDaily.values()) {
-      const bucket = dayMap.get(date);
-      if (!bucket) continue;
-      if (bucket.temps.length > 0) {
-        tmins.push(Math.min(...bucket.temps));
-        tmaxs.push(Math.max(...bucket.temps));
-      }
-      if (bucket.precips.length > 0) {
-        precipTotals.push(bucket.precips.reduce((a, b) => a + b, 0));
-      }
-      if (bucket.winds.length > 0) {
-        winds.push(avg(bucket.winds));
-      }
-      sinSum += bucket.windDirSinSum;
-      cosSum += bucket.windDirCosSum;
-      dirCount += bucket.windDirCount;
-    }
-
-    // Need at least one model with temperature data; otherwise skip
-    if (tmins.length === 0) continue;
+    if (temps.length === 0) continue;
 
     // Circular mean for wind direction
     let dirDeg = 0;
-    if (dirCount > 0) {
-      const meanRad = Math.atan2(sinSum / dirCount, cosSum / dirCount);
+    if (dirs.length > 0) {
+      let sin = 0;
+      let cos = 0;
+      for (const d of dirs) {
+        const rad = (d * Math.PI) / 180;
+        sin += Math.sin(rad);
+        cos += Math.cos(rad);
+      }
+      const meanRad = Math.atan2(sin / dirs.length, cos / dirs.length);
       dirDeg = ((meanRad * 180) / Math.PI + 360) % 360;
     }
 
     result.push({
       date,
-      tmin: avg(tmins),
-      tmax: avg(tmaxs),
-      precipMm: precipTotals.length > 0 ? avg(precipTotals) : 0,
-      precipStdev: precipTotals.length > 1 ? stdev(precipTotals) : 0,
+      tmin: Math.min(...temps),
+      tmax: Math.max(...temps),
+      precipMm: precips.reduce((a, b) => a + b, 0), // SUM, like Weather Hub daily
       windMeanMs: winds.length > 0 ? avg(winds) : 0,
       windDirectionDeg: dirDeg,
     });
   }
 
+  return result;
+}
+
+// ============================================================================
+// Multi-model uncertainty (only used by the Gemini summary)
+// ============================================================================
+
+type ModelData = {
+  time: string[];
+  precipitation_mm: (number | null)[];
+};
+
+/**
+ * For each day, compute the standard deviation of daily precipitation totals
+ * across all models. Lets the Gemini summary mention model disagreement
+ * without showing it in the chart.
+ */
+function computeMultiModelStdev(
+  models: Record<string, ModelData>
+): Map<string, number> {
+  // model → date → daily precip total
+  const perModelDaily = new Map<string, Map<string, number>>();
+  for (const [modelName, m] of Object.entries(models)) {
+    const dayMap = new Map<string, number>();
+    for (let i = 0; i < m.time.length; i++) {
+      const date = m.time[i].slice(0, 10);
+      const p = m.precipitation_mm[i];
+      if (p !== null && p !== undefined) {
+        dayMap.set(date, (dayMap.get(date) ?? 0) + p);
+      }
+    }
+    perModelDaily.set(modelName, dayMap);
+  }
+
+  const allDates = new Set<string>();
+  for (const dayMap of perModelDaily.values()) {
+    for (const d of dayMap.keys()) allDates.add(d);
+  }
+
+  const result = new Map<string, number>();
+  for (const date of allDates) {
+    const totals: number[] = [];
+    for (const dayMap of perModelDaily.values()) {
+      if (dayMap.has(date)) totals.push(dayMap.get(date)!);
+    }
+    if (totals.length > 1) {
+      result.set(date, stdev(totals));
+    }
+  }
   return result;
 }
 
