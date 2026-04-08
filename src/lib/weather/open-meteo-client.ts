@@ -30,6 +30,9 @@ export async function fetchForecastData(
     timezone: DEFAULT_TIMEZONE,
     forecast_days: FORECAST_DAYS.toString(),
     past_days: PAST_DAYS.toString(),
+    // Ask Open-Meteo for m/s explicitly — default is km/h, which would silently
+    // mislabel our `wind_speed_ms` / `wind_gusts_ms` columns (factor 3.6 too high).
+    wind_speed_unit: 'ms',
   });
 
   const url = `${OPEN_METEO_FORECAST_URL}?${params}`;
@@ -61,6 +64,7 @@ export async function fetchHistoricalData(
     timezone: DEFAULT_TIMEZONE,
     start_date: startDate,
     end_date: endDate,
+    wind_speed_unit: 'ms',
   });
 
   const url = `${OPEN_METEO_ARCHIVE_URL}?${params}`;
@@ -170,6 +174,7 @@ export async function fetchMultiModelData(
     forecast_days: FORECAST_DAYS.toString(),
     past_days: '2',
     timezone: DEFAULT_TIMEZONE,
+    wind_speed_unit: 'ms',
   });
 
   const url = `${OPEN_METEO_FORECAST_URL}?${params}`;
@@ -298,6 +303,7 @@ export async function fetchEnsembleData(
     hourly: ENSEMBLE_HOURLY_PARAMS.join(','),
     forecast_days: FORECAST_DAYS.toString(),
     timezone: DEFAULT_TIMEZONE,
+    wind_speed_unit: 'ms',
   });
 
   const url = `${ENSEMBLE_API_URL}?${params}`;

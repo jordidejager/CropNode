@@ -1,15 +1,21 @@
 /**
- * Forecast Chart URL Builder.
+ * Forecast Chart Image Builder.
  *
- * Generates a QuickChart.io URL that returns a PNG of a 14-day forecast chart
- * styled to match the CropNode dark/emerald brand. Used by the WhatsApp
- * weather query handler to deliver a visual forecast.
+ * Generates a CropNode-branded 14-day forecast chart as a PNG:
+ *   1. QuickChart.io renders the Chart.js config as a PNG buffer
+ *   2. `sharp` composites the CropNode wordmark (from public/logo) on top
+ *   3. The final PNG is uploaded to Supabase Storage
+ *   4. Returns the public URL so WhatsApp (Meta) can fetch it
  *
- * Why QuickChart:
- * - No install / no native deps / no rendering setup on Vercel
- * - POST /chart/create returns a short permanent PNG URL that Meta can fetch
- * - Free tier is plenty for our usage
+ * We moved away from QuickChart's annotation plugin for the logo — it
+ * reproducibly stretches SVG path strokes across the whole canvas which
+ * looked like a stray diagonal line in the chart.
  */
+
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import sharp from 'sharp';
+import { createClient } from '@supabase/supabase-js';
 
 export interface DailyForecastPoint {
   date: string;            // YYYY-MM-DD
@@ -20,15 +26,15 @@ export interface DailyForecastPoint {
   windDirectionDeg: number;// degrees (0-360), daily circular mean
 }
 
-const QUICKCHART_BASE = 'https://quickchart.io/chart';
-
-// CropNode logo as a PNG (weserv.nl converts the SVG hosted on Vercel to PNG).
-// Used as an annotation overlay in the chart's top-left corner.
-const LOGO_URL =
-  'https://images.weserv.nl/?url=cropnode.vercel.app/logo/cropnode-h-mono-white.svg&w=400&output=png';
+const QUICKCHART_URL = 'https://quickchart.io/chart';
+const STORAGE_BUCKET = 'field-note-photos'; // reuse existing public bucket
 
 const DAY_NAMES_NL = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
 const COMPASS_NL = ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW'];
+
+// ============================================================================
+// Label helpers
+// ============================================================================
 
 function dayLabel(dateISO: string): string {
   const d = new Date(dateISO + 'T12:00:00');
@@ -36,13 +42,11 @@ function dayLabel(dateISO: string): string {
 }
 
 function compassFromDeg(deg: number): string {
-  // 0=N, 45=NE, ... 315=NW
   const idx = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
   return COMPASS_NL[idx];
 }
 
 function msToBeaufort(ms: number): number {
-  // Standard Beaufort thresholds
   const thresholds = [0.3, 1.5, 3.3, 5.5, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6];
   for (let i = 0; i < thresholds.length; i++) {
     if (ms < thresholds[i]) return i;
@@ -50,48 +54,45 @@ function msToBeaufort(ms: number): number {
   return 12;
 }
 
+// ============================================================================
+// Chart.js config
+// ============================================================================
+
 /**
- * Build a Chart.js v4 config object for a 14-day forecast.
- * Posted to QuickChart's /chart/create endpoint to get a short URL.
+ * Build a modern, CropNode-branded Chart.js v4 config.
  *
- * Branding & style:
- * - CropNode logo (PNG via weserv.nl proxy) overlaid as image annotation
- *   (note: annotation plugin doesn't play well with multiline array labels
- *   on QuickChart, so we use single-line compact labels and rotate them)
- * - Slate-900 background to match the dashboard dark theme
- * - Emerald accent on bars + right Y-axis
- * - X-axis labels: "di 7/4 · 2Bft ZW" — one line per day, rotated 35°
- * - Default legend (no usePointStyle) so colored markers render reliably
+ * Branding / visual decisions:
+ * - Background: slate-950 (#020617) to match the darkest CropNode panels
+ * - Emerald (#10b981) on bars + right axis as the primary accent
+ * - Vivid orange / sky lines for tmax / tmin
+ * - Multiline x-axis labels: date / Beaufort / compass direction
+ *   (no annotation plugin on this chart anymore, so multiline works again)
+ * - Big top padding so the composited logo has room to breathe
  */
 function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
   if (days.length === 0) {
-    throw new Error('buildForecastChartUrl: days is empty');
+    throw new Error('buildChartConfig: days is empty');
   }
 
-  // Single-line compact labels so the annotation plugin (for the logo) works:
-  // "di 7/4 · 2Bft ZW"
-  const labels: string[] = days.map(
-    (d) =>
-      `${dayLabel(d.date)}  ·  ${msToBeaufort(d.windSpeedMs)}Bft ${compassFromDeg(d.windDirectionDeg)}`
-  );
+  const labels: string[][] = days.map((d) => [
+    dayLabel(d.date),
+    `${msToBeaufort(d.windSpeedMs)} Bft`,
+    compassFromDeg(d.windDirectionDeg),
+  ]);
 
   const tmin = days.map((d) => Math.round(d.tmin * 10) / 10);
   const tmax = days.map((d) => Math.round(d.tmax * 10) / 10);
   const precip = days.map((d) => Math.round(d.precipMm * 10) / 10);
 
-  // CropNode brand colors
+  // Brand colors
   const EMERALD = '#10b981';
-  const EMERALD_VIVID = 'rgba(16, 185, 129, 0.55)';
+  const EMERALD_FILL = 'rgba(16, 185, 129, 0.7)';
   const EMERALD_LIGHT = '#34d399';
-  const ORANGE = '#fb923c'; // tmax (warm)
-  const SKY = '#60a5fa';    // tmin (cool)
-  const TEXT_PRIMARY = '#e2e8f0';
+  const ORANGE = '#fb923c';
+  const SKY = '#60a5fa';
+  const TEXT_PRIMARY = '#f1f5f9';
   const TEXT_MUTED = '#94a3b8';
-  const GRID = 'rgba(148, 163, 184, 0.1)';
-
-  // Anchor point for the logo annotation. Annotation plugin positions
-  // by data coordinates, so we anchor at the first label.
-  const firstLabel = labels[0];
+  const GRID = 'rgba(148, 163, 184, 0.08)';
 
   return {
     type: 'bar',
@@ -102,10 +103,10 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
           type: 'bar',
           label: 'Neerslag (mm)',
           data: precip,
-          backgroundColor: EMERALD_VIVID,
+          backgroundColor: EMERALD_FILL,
           borderColor: EMERALD,
           borderWidth: 1.5,
-          borderRadius: 6,
+          borderRadius: 8,
           yAxisID: 'yPrecip',
           order: 3,
         },
@@ -114,12 +115,12 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
           label: 'Max temp (°C)',
           data: tmax,
           borderColor: ORANGE,
-          backgroundColor: ORANGE, // legend fill (since we don't usePointStyle)
-          borderWidth: 3,
-          pointRadius: 4,
-          pointBorderColor: '#0f172a',
-          pointBorderWidth: 1.5,
-          tension: 0.4,
+          backgroundColor: ORANGE,
+          borderWidth: 3.5,
+          pointRadius: 5,
+          pointBorderColor: '#020617',
+          pointBorderWidth: 2,
+          tension: 0.45,
           fill: false,
           yAxisID: 'yTemp',
           order: 1,
@@ -129,12 +130,12 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
           label: 'Min temp (°C)',
           data: tmin,
           borderColor: SKY,
-          backgroundColor: SKY, // legend fill
-          borderWidth: 3,
-          pointRadius: 4,
-          pointBorderColor: '#0f172a',
-          pointBorderWidth: 1.5,
-          tension: 0.4,
+          backgroundColor: SKY,
+          borderWidth: 3.5,
+          pointRadius: 5,
+          pointBorderColor: '#020617',
+          pointBorderWidth: 2,
+          tension: 0.45,
           fill: false,
           yAxisID: 'yTemp',
           order: 2,
@@ -144,43 +145,26 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
     options: {
       responsive: false,
       layout: {
-        // Top padding leaves room for the logo overlay
-        padding: { top: 70, right: 28, bottom: 16, left: 16 },
+        padding: { top: 110, right: 36, bottom: 18, left: 20 },
       },
       plugins: {
         title: {
           display: true,
           text: `14-daagse weersverwachting · ${stationName}`,
           color: TEXT_PRIMARY,
-          font: { size: 16, weight: 'normal', family: 'sans-serif' },
+          font: { size: 18, weight: 'normal', family: 'sans-serif' },
           align: 'start',
-          padding: { top: 0, bottom: 18 },
+          padding: { top: 0, bottom: 24 },
         },
         legend: {
           position: 'bottom',
           align: 'center',
           labels: {
             color: TEXT_MUTED,
-            font: { size: 12 },
-            padding: 16,
-            boxWidth: 14,
-            boxHeight: 14,
-          },
-        },
-        annotation: {
-          annotations: {
-            cropnodeLogo: {
-              type: 'image',
-              xValue: firstLabel,
-              yValue: 18, // top of yTemp scale (our Y goes ~0-20)
-              yScaleID: 'yTemp',
-              xAdjust: -20,
-              yAdjust: -50,
-              src: LOGO_URL,
-              width: 180,
-              height: 48,
-              position: { x: 'start', y: 'center' },
-            },
+            font: { size: 13 },
+            padding: 18,
+            boxWidth: 16,
+            boxHeight: 16,
           },
         },
       },
@@ -188,10 +172,8 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
         x: {
           ticks: {
             color: TEXT_PRIMARY,
-            font: { size: 11 },
-            padding: 6,
-            maxRotation: 35,
-            minRotation: 35,
+            font: { size: 12 },
+            padding: 8,
           },
           grid: { color: GRID, drawTicks: false },
           border: { display: false },
@@ -203,9 +185,9 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
             display: true,
             text: 'Temperatuur (°C)',
             color: TEXT_MUTED,
-            font: { size: 11 },
+            font: { size: 12 },
           },
-          ticks: { color: TEXT_MUTED, font: { size: 11 } },
+          ticks: { color: TEXT_MUTED, font: { size: 12 } },
           grid: { color: GRID },
           border: { display: false },
         },
@@ -216,9 +198,9 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
             display: true,
             text: 'Neerslag (mm)',
             color: EMERALD_LIGHT,
-            font: { size: 11 },
+            font: { size: 12 },
           },
-          ticks: { color: EMERALD_LIGHT, font: { size: 11 } },
+          ticks: { color: EMERALD_LIGHT, font: { size: 12 } },
           grid: { display: false },
           border: { display: false },
           beginAtZero: true,
@@ -228,29 +210,21 @@ function buildChartConfig(stationName: string, days: DailyForecastPoint[]) {
   };
 }
 
-/**
- * Create a short, public chart URL via QuickChart's /chart/create endpoint.
- * Returns a permanent URL like https://quickchart.io/chart/render/zf-abc123
- * which Meta fetches when delivering the WhatsApp image message.
- *
- * QuickChart's free tier is occasionally flaky on larger payloads — we retry
- * once on timeout or non-200 to make the WhatsApp UX more reliable.
- */
-export async function createForecastChartUrl(
+// ============================================================================
+// QuickChart → PNG buffer
+// ============================================================================
+
+async function fetchChartPng(
   stationName: string,
   days: DailyForecastPoint[]
-): Promise<string> {
-  if (days.length === 0) {
-    throw new Error('createForecastChartUrl: days is empty');
-  }
-
+): Promise<Buffer> {
   const chart = buildChartConfig(stationName, days);
 
   const body = {
     chart,
     width: 1200,
-    height: 660,
-    backgroundColor: '#0f172a', // slate-900 — matches CropNode dark theme
+    height: 700,
+    backgroundColor: '#020617', // slate-950
     format: 'png',
     version: '4',
   };
@@ -263,7 +237,9 @@ export async function createForecastChartUrl(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
 
-      const response = await fetch(`${QUICKCHART_BASE}/create`, {
+      // POST directly to /chart (not /chart/create) — we want the PNG bytes,
+      // not a short URL, so we can composite server-side.
+      const response = await fetch(QUICKCHART_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -273,24 +249,123 @@ export async function createForecastChartUrl(
 
       if (!response.ok) {
         const errBody = await response.text().catch(() => '<no body>');
-        throw new Error(`QuickChart create failed (${response.status}): ${errBody}`);
+        throw new Error(`QuickChart render failed (${response.status}): ${errBody}`);
       }
 
-      const data = (await response.json()) as { success?: boolean; url?: string };
-      if (!data.success || !data.url) {
-        throw new Error(`QuickChart returned unexpected payload: ${JSON.stringify(data)}`);
-      }
-      return data.url;
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
       console.warn(
-        `[createForecastChartUrl] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastErr.message}`
+        `[fetchChartPng] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastErr.message}`
       );
       if (attempt < MAX_ATTEMPTS) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1000));
       }
     }
   }
 
-  throw lastErr ?? new Error('createForecastChartUrl: unknown failure');
+  throw lastErr ?? new Error('fetchChartPng: unknown failure');
+}
+
+// ============================================================================
+// Logo compositing
+// ============================================================================
+
+let cachedLogoPng: Buffer | null = null;
+
+/**
+ * Read the CropNode wordmark SVG from public/logo and rasterize it to PNG
+ * at a target width with sharp. Result is cached for the process lifetime.
+ */
+async function getLogoPng(targetWidth: number): Promise<Buffer> {
+  if (cachedLogoPng) return cachedLogoPng;
+
+  // Resolve from the Next.js project root — this works on Vercel because
+  // the `public` directory is packaged into the serverless function bundle.
+  const logoPath = path.join(process.cwd(), 'public', 'logo', 'cropnode-h-mono-white.svg');
+  const svgBuffer = await readFile(logoPath);
+
+  cachedLogoPng = await sharp(svgBuffer, { density: 300 })
+    .resize({ width: targetWidth })
+    .png()
+    .toBuffer();
+
+  return cachedLogoPng;
+}
+
+/**
+ * Composite the CropNode logo on top of the chart PNG in the top-left corner.
+ */
+async function overlayLogo(chartPng: Buffer): Promise<Buffer> {
+  const LOGO_WIDTH = 260;
+  const LOGO_OFFSET_LEFT = 36;
+  const LOGO_OFFSET_TOP = 34;
+
+  const logoPng = await getLogoPng(LOGO_WIDTH);
+
+  return sharp(chartPng)
+    .composite([
+      {
+        input: logoPng,
+        top: LOGO_OFFSET_TOP,
+        left: LOGO_OFFSET_LEFT,
+      },
+    ])
+    .png()
+    .toBuffer();
+}
+
+// ============================================================================
+// Supabase upload
+// ============================================================================
+
+async function uploadToSupabase(png: Buffer, stationId: string): Promise<string> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Supabase configuratie ontbreekt voor chart upload');
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  // Path: weather-charts/<stationId>/<timestamp>.png
+  const path = `weather-charts/${stationId}/${Date.now()}.png`;
+
+  const { error } = await admin.storage.from(STORAGE_BUCKET).upload(path, png, {
+    contentType: 'image/png',
+    upsert: false,
+  });
+
+  if (error) {
+    throw new Error(`Chart upload mislukt: ${error.message}`);
+  }
+
+  const { data: urlData } = admin.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return urlData.publicUrl;
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Build the full branded 14-day forecast chart and return a public URL that
+ * Meta can fetch when delivering the WhatsApp image message.
+ */
+export async function createForecastChartUrl(
+  stationName: string,
+  stationId: string,
+  days: DailyForecastPoint[]
+): Promise<string> {
+  if (days.length === 0) {
+    throw new Error('createForecastChartUrl: days is empty');
+  }
+
+  const chartPng = await fetchChartPng(stationName, days);
+  const composited = await overlayLogo(chartPng);
+  return uploadToSupabase(composited, stationId);
 }

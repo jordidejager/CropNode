@@ -120,7 +120,7 @@ export async function handleWeatherQuery(
     const metrics = computeMetrics(summaryDays);
 
     const [chartUrl, summary] = await Promise.all([
-      createForecastChartUrl(resolved.stationName, chartDays),
+      createForecastChartUrl(resolved.stationName, resolved.stationId, chartDays),
       summarizeWeatherForecast({
         stationName: resolved.stationName,
         days: summaryDays,

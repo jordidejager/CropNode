@@ -20,6 +20,9 @@
     "test:api:headed": "playwright test src/__tests__/smart-input-scenarios.test.ts --config playwright.api.config.ts --headed",
     "test:weather": "tsx src/__tests__/weather-calculations.test.ts",
     "test:validation": "tsx src/__tests__/validation-service.test.ts",
+    "knowledge:backfill": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/migrate-fruitconsult-history.ts",
+    "knowledge:inspect": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/inspect-knowledge-base.ts",
+    "knowledge:cleanup": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/cleanup-deprecated-kb.ts",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
@@ -60,6 +63,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "browser-image-compression": "^2.0.2",
+    "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -83,8 +87,10 @@
     "react-dom": "^19.2.1",
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.1",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "tough-cookie": "^6.0.1",
     "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
