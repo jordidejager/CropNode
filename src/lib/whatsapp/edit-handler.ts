@@ -382,44 +382,52 @@ async function sendParcelList(
   const currentPlots = pending.units.flatMap(u => u.plots);
   const allParcels = await getSprayableParcelsForUser(userId);
 
-  const rows: Array<{ id: string; title: string; description?: string }> = [];
-
-  // Current parcels — option to remove (only if 2+ selected)
+  // WhatsApp list messages: max 10 sections, each with max 10 rows — so up to 100 items total
+  // But practically we keep it readable: up to 2 sections
   const selectedParcels = allParcels.filter(p => currentPlots.includes(p.id));
+  const otherParcels = allParcels.filter(p => !currentPlots.includes(p.id));
+
+  const sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> = [];
+
+  // Section 1: currently selected parcels — can be removed (if 2+)
   if (selectedParcels.length > 1) {
-    for (const p of selectedParcels.slice(0, 5)) {
-      rows.push({
-        id: `editparcel:remove:${p.id}`,
-        title: `❌ ${p.name}`.substring(0, 24),
-        description: `Verwijder — ${p.area?.toFixed(2) || '?'} ha`,
-      });
-    }
+    const removeRows = selectedParcels.slice(0, 10).map(p => ({
+      id: `editparcel:remove:${p.id}`,
+      title: `❌ ${p.name}`.substring(0, 24),
+      description: `Verwijder — ${p.area?.toFixed(2) || '?'} ha`,
+    }));
+    sections.push({ title: 'Huidige percelen', rows: removeRows });
   }
 
-  // Other parcels — option to add (up to remaining row slots)
-  const otherParcels = allParcels.filter(p => !currentPlots.includes(p.id));
-  const slotsLeft = 10 - rows.length;
-  for (const p of otherParcels.slice(0, slotsLeft)) {
-    rows.push({
+  // Section 2: other parcels — can be added
+  if (otherParcels.length > 0) {
+    const addRows = otherParcels.slice(0, 10).map(p => ({
       id: `editparcel:add:${p.id}`,
       title: `➕ ${p.name}`.substring(0, 24),
       description: `Toevoegen — ${p.area?.toFixed(2) || '?'} ha`,
-    });
+    }));
+    sections.push({ title: 'Beschikbare percelen', rows: addRows });
   }
 
-  if (rows.length === 0) {
-    const msg = '📍 Typ de percelen, bijv. _"zuidhoek en busje"_:';
+  if (sections.length === 0) {
+    const msg = '📍 Typ de percelen die je wil, bijv. _"zuidhoek en busje"_:';
     await sendTextMessage(metaPhone, msg);
     await logMessage({ phoneNumber, direction: 'outbound', messageText: msg });
     return;
   }
 
   const selectedNames = selectedParcels.map(p => p.name).join(', ');
+  const totalShown = sections.reduce((sum, s) => sum + s.rows.length, 0);
+  const totalAvailable = selectedParcels.length + otherParcels.length;
+  const moreHint = totalAvailable > totalShown
+    ? `\n\n_Staat je perceel er niet bij? Typ de naam._`
+    : '';
+
   await sendListMessage(
     metaPhone,
-    `📍 Huidige percelen: *${selectedNames}*\n\nVerwijder of voeg percelen toe:`,
+    `📍 Huidige percelen: *${selectedNames}*\n\nKies een perceel om toe te voegen of te verwijderen:${moreHint}`,
     'Wijzig percelen',
-    [{ title: 'Percelen', rows }]
+    sections
   );
   await logMessage({ phoneNumber, direction: 'outbound', messageText: 'Perceelkeuze getoond' });
 }
@@ -591,23 +599,65 @@ function tryDirectParcelEdit(
   pending: SprayRegistrationGroup,
   parcels: Array<{ id: string; name: string }>
 ): SprayRegistrationGroup | null {
-  const normalized = input.toLowerCase().replace(/^alleen\s+/, '').trim();
-  const names = normalized.split(/\s*(?:,|en)\s*/).map(n => n.trim()).filter(Boolean);
+  const normalized = input.toLowerCase().trim();
+
+  // "alleen X" → replace with only X
+  const alleenMatch = normalized.match(/^alleen\s+(.+)/);
+  if (alleenMatch) {
+    const names = alleenMatch[1].split(/\s*(?:,|en)\s*/).map(n => n.trim()).filter(Boolean);
+    const matchedPlots: string[] = [];
+    for (const name of names) {
+      const match = parcels.find(p =>
+        p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())
+      );
+      if (match) matchedPlots.push(match.id);
+    }
+    if (matchedPlots.length === 0) return null;
+    return {
+      ...pending,
+      units: [{ ...pending.units[0], plots: matchedPlots, products: pending.units[0]?.products || [] }],
+    };
+  }
+
+  // "verwijder X" / "geen X" → remove from current selection
+  const removeMatch = normalized.match(/^(?:verwijder|geen|zonder|weg met)\s+(.+)/);
+  if (removeMatch) {
+    const name = removeMatch[1].trim();
+    const match = parcels.find(p =>
+      p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())
+    );
+    if (!match) return null;
+    const currentPlots = pending.units.flatMap(u => u.plots);
+    const newPlots = currentPlots.filter(id => id !== match.id);
+    if (newPlots.length === 0) return null; // Can't remove all
+    return {
+      ...pending,
+      units: [{ ...pending.units[0], plots: newPlots, products: pending.units[0]?.products || [] }],
+    };
+  }
+
+  // Default: ADD parcels to current selection (toggle if already present)
+  const addMatch = normalized.replace(/^(?:voeg toe|plus|\+)\s+/, '');
+  const names = addMatch.split(/\s*(?:,|en)\s*/).map(n => n.trim()).filter(Boolean);
   if (names.length === 0) return null;
 
-  const matchedPlots: string[] = [];
+  const currentPlots = new Set(pending.units.flatMap(u => u.plots));
+  let changed = false;
   for (const name of names) {
     const match = parcels.find(p =>
       p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())
     );
-    if (match) matchedPlots.push(match.id);
+    if (match && !currentPlots.has(match.id)) {
+      currentPlots.add(match.id);
+      changed = true;
+    }
   }
 
-  if (matchedPlots.length === 0) return null;
+  if (!changed) return null;
 
   return {
     ...pending,
-    units: [{ ...pending.units[0], plots: matchedPlots, products: pending.units[0]?.products || [] }],
+    units: [{ ...pending.units[0], plots: Array.from(currentPlots), products: pending.units[0]?.products || [] }],
   };
 }
 
