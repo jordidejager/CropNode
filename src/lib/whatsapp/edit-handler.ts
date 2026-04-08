@@ -382,31 +382,36 @@ async function sendParcelList(
   const currentPlots = pending.units.flatMap(u => u.plots);
   const allParcels = await getSprayableParcelsForUser(userId);
 
-  // WhatsApp list messages: max 10 sections, each with max 10 rows — so up to 100 items total
-  // But practically we keep it readable: up to 2 sections
+  // WhatsApp interactive lists have a HARD limit of 10 rows total across all sections.
+  // Strategy: split budget between removing current + adding others.
+  const MAX_TOTAL_ROWS = 10;
   const selectedParcels = allParcels.filter(p => currentPlots.includes(p.id));
   const otherParcels = allParcels.filter(p => !currentPlots.includes(p.id));
 
+  // Budget: up to 4 slots for removal, rest for adding
+  const removeBudget = selectedParcels.length > 1
+    ? Math.min(selectedParcels.length, 4)
+    : 0;
+  const addBudget = MAX_TOTAL_ROWS - removeBudget;
+
   const sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> = [];
 
-  // Section 1: currently selected parcels — can be removed (if 2+)
-  if (selectedParcels.length > 1) {
-    const removeRows = selectedParcels.slice(0, 10).map(p => ({
+  if (removeBudget > 0) {
+    const removeRows = selectedParcels.slice(0, removeBudget).map(p => ({
       id: `editparcel:remove:${p.id}`,
       title: `❌ ${p.name}`.substring(0, 24),
       description: `Verwijder — ${p.area?.toFixed(2) || '?'} ha`,
     }));
-    sections.push({ title: 'Huidige percelen', rows: removeRows });
+    sections.push({ title: 'Verwijder', rows: removeRows });
   }
 
-  // Section 2: other parcels — can be added
-  if (otherParcels.length > 0) {
-    const addRows = otherParcels.slice(0, 10).map(p => ({
+  if (otherParcels.length > 0 && addBudget > 0) {
+    const addRows = otherParcels.slice(0, addBudget).map(p => ({
       id: `editparcel:add:${p.id}`,
       title: `➕ ${p.name}`.substring(0, 24),
       description: `Toevoegen — ${p.area?.toFixed(2) || '?'} ha`,
     }));
-    sections.push({ title: 'Beschikbare percelen', rows: addRows });
+    sections.push({ title: 'Toevoegen', rows: addRows });
   }
 
   if (sections.length === 0) {
