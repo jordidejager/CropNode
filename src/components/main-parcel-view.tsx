@@ -62,6 +62,21 @@ export function MainParcelView({
     const subParcels = parcel.subParcels || []
 
     // Calculate Aggregated KPIs and Composition Data
+    // Parse location: kan een {lat,lng} object zijn (Parcel type) of een POINT(lng lat) string (SprayableParcel)
+    const displayLocation = React.useMemo(() => {
+        const loc = parcel.location as unknown;
+        if (!loc) return null;
+        if (typeof loc === 'string') {
+            const match = loc.match(/POINT\(([^ ]+) ([^)]+)\)/);
+            if (match) return { lat: parseFloat(match[2]), lng: parseFloat(match[1]) };
+            return null;
+        }
+        if (typeof loc === 'object' && 'lat' in (loc as object) && 'lng' in (loc as object)) {
+            return loc as { lat: number; lng: number };
+        }
+        return null;
+    }, [parcel.location])
+
     const { stats, composition, mutantComposition } = React.useMemo(() => {
         const currentYear = new Date().getFullYear()
         let totalArea = 0
@@ -137,18 +152,21 @@ export function MainParcelView({
             }))
             .sort((a, b) => b.area - a.area)
 
+        // Fallback: als er geen subpercelen zijn, gebruik parcel.area direct
+        const effectiveArea = totalArea > 0 ? totalArea : (parcel.area || 0)
+
         return {
             stats: {
-                totalArea,
+                totalArea: effectiveArea,
                 totalTrees,
-                avgAge: totalArea > 0 ? Math.round(weightedAgeSum / totalArea) : 0,
-                density: totalArea > 0 ? Math.round(totalTrees / totalArea) : 0,
+                avgAge: effectiveArea > 0 && weightedAgeSum > 0 ? Math.round(weightedAgeSum / effectiveArea) : 0,
+                density: effectiveArea > 0 && totalTrees > 0 ? Math.round(totalTrees / effectiveArea) : 0,
                 latestSoilSample: latestSoilSample as SoilSample | null
             },
             composition,
             mutantComposition
         }
-    }, [subParcels])
+    }, [subParcels, parcel.area])
 
     // Prepare Production History (Stacked)
     const productionData = React.useMemo(() => {
@@ -184,14 +202,23 @@ export function MainParcelView({
                             <Button variant="ghost" size="sm" onClick={onBack} className="text-white/60 hover:text-white -ml-2 gap-2">
                                 <ArrowLeft className="h-4 w-4" /> Terug naar overzicht
                             </Button>
-                            <div className="flex items-center gap-3">
-                                <h1 className="text-4xl font-black text-white">{parcel.name}</h1>
-                                <Badge className="bg-primary/20 text-primary border-primary/30 font-bold px-3">
-                                    {subParcels.length > 0 ? 'Hoofdperceel' : 'Perceel'}
-                                </Badge>
+                            <div className="space-y-1">
+                                {/* Toon hoofdperceel naam als die verschilt van de volledige naam */}
+                                {(parcel as unknown as { parcelName?: string }).parcelName &&
+                                 (parcel as unknown as { parcelName?: string }).parcelName !== parcel.name && (
+                                    <p className="text-sm font-bold text-white/40 uppercase tracking-wider">
+                                        {(parcel as unknown as { parcelName?: string }).parcelName}
+                                    </p>
+                                )}
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-4xl font-black text-white">{parcel.name}</h1>
+                                    <Badge className="bg-primary/20 text-primary border-primary/30 font-bold px-3">
+                                        {subParcels.length > 0 ? 'Hoofdperceel' : 'Perceel'}
+                                    </Badge>
+                                </div>
                             </div>
                             <div className="flex items-center gap-4 text-white/50 font-medium">
-                                <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {parcel.location ? `${parcel.location.lat.toFixed(4)}, ${parcel.location.lng.toFixed(4)}` : 'Geen locatie'}</span>
+                                <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {displayLocation ? `${displayLocation.lat.toFixed(4)}, ${displayLocation.lng.toFixed(4)}` : 'Geen locatie'}</span>
                                 <span className="flex items-center gap-1"><Scale className="h-4 w-4" /> {stats.totalArea.toFixed(2)} ha totaal</span>
                             </div>
                         </div>
@@ -221,7 +248,7 @@ export function MainParcelView({
                     </TabsTrigger>
                 </TabsList>
                 <TabsContent value="profile" className="mt-4">
-                    <ParcelProfileForm subParcelId={parcel.id} />
+                    <ParcelProfileForm subParcelId={parcel.id} defaultGewas={parcel.crop} defaultRas={parcel.variety || undefined} />
                 </TabsContent>
                 <TabsContent value="analyses" className="mt-4">
                     <SoilAnalysisPanel subParcelId={parcel.id} />

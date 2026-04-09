@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": "true",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "NODE_ENV=production next build",
@@ -22,7 +22,10 @@
     "test:validation": "tsx src/__tests__/validation-service.test.ts",
     "knowledge:backfill": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/migrate-fruitconsult-history.ts",
     "knowledge:inspect": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/inspect-knowledge-base.ts",
+    "knowledge:publish": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/publish-knowledge-drafts.ts",
+    "knowledge:extract": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/extract-structured-knowledge.ts",
     "knowledge:cleanup": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/cleanup-deprecated-kb.ts",
+    "test:rag": "tsx scripts/test-rag-pipeline.ts",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase-client';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
@@ -137,7 +138,8 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    const adminClient = createServiceRoleClient();
+    const { data, error } = await adminClient
       .from('parcel_profiles')
       .upsert(profileData, { onConflict: type === 'parcel' ? 'parcel_id' : 'sub_parcel_id' })
       .select()

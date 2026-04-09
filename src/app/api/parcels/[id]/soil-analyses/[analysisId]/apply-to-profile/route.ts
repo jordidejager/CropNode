@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase-client';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
@@ -42,8 +43,9 @@ export async function POST(
     if (analysis.organische_stof_pct != null) profileUpdate.organische_stof_pct = analysis.organische_stof_pct;
     if (analysis.klei_percentage != null) profileUpdate.klei_percentage = analysis.klei_percentage;
 
-    // Upsert profiel
-    const { data: profile, error: upsertError } = await supabase
+    // Upsert profiel (service role to bypass RLS)
+    const adminClient = createServiceRoleClient();
+    const { data: profile, error: upsertError } = await adminClient
       .from('parcel_profiles')
       .upsert({
         ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),

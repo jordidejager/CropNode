@@ -602,10 +602,10 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
 
   // Use retry for transient network errors
   return withRetry(async () => {
-    // First try the view
+    // First try the view — include location/geometry/parent info for map & detail views
     let query = client
       .from('v_sprayable_parcels')
-      .select('id, name, area, crop, variety, parcel_id, user_id');
+      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id');
 
     // Explicitly filter by user_id for data isolation
     if (userId) {

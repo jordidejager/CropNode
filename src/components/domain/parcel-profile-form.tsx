@@ -27,6 +27,9 @@ import {
 interface ParcelProfileFormProps {
   parcelId?: string;
   subParcelId?: string;
+  /** Pre-fill gewas/ras vanuit het subperceel als er nog geen profiel is */
+  defaultGewas?: string;
+  defaultRas?: string;
 }
 
 type FormData = Record<string, unknown>;
@@ -320,7 +323,7 @@ function WeightedComboboxField({
 // Main Component
 // ============================================
 
-export function ParcelProfileForm({ parcelId, subParcelId }: ParcelProfileFormProps) {
+export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, defaultRas }: ParcelProfileFormProps) {
   const id = subParcelId || parcelId || '';
   const type = subParcelId ? 'sub_parcel' : 'parcel';
   const { data: profileData, isLoading } = useParcelProfile(id || undefined, type as 'parcel' | 'sub_parcel');
@@ -334,12 +337,18 @@ export function ParcelProfileForm({ parcelId, subParcelId }: ParcelProfileFormPr
     defaultValues: {},
   });
 
-  // Populate form when profile loads
+  // Populate form when profile loads, or use defaults from sub_parcel
   useEffect(() => {
     if (profile) {
       reset(profile);
+    } else if (profileData && !profile) {
+      // Geen profiel gevonden — pre-fill met subperceel data
+      const defaults: FormData = {};
+      if (defaultGewas) defaults.gewas = defaultGewas;
+      if (defaultRas) defaults.ras = defaultRas;
+      if (Object.keys(defaults).length > 0) reset(defaults);
     }
-  }, [profile, reset]);
+  }, [profile, profileData, reset, defaultGewas, defaultRas]);
 
   const values = watch();
 

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase-client';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 import type { ExtractionResult } from '@/ai/flows/extract-soil-analysis';
 
@@ -18,7 +19,8 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
+      console.error('[soil-analyses/upload] Auth error:', authError?.message, authError?.status);
+      return apiError(`Niet ingelogd: ${authError?.message || 'geen sessie'}`, ErrorCodes.UNAUTHORIZED, 401);
     }
 
     // Parse multipart form data
@@ -38,12 +40,15 @@ export async function POST(
       return apiError('Bestand mag maximaal 10 MB zijn', ErrorCodes.VALIDATION_ERROR, 400);
     }
 
+    // Use service role client to bypass RLS for storage + insert
+    const adminClient = createServiceRoleClient();
+
     // Upload to Supabase Storage
     const timestamp = Date.now();
     const storagePath = `${user.id}/${id}/${timestamp}_${file.name}`;
 
     const fileBuffer = await file.arrayBuffer();
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await adminClient.storage
       .from('soil-analysis-pdfs')
       .upload(storagePath, fileBuffer, {
         contentType: 'application/pdf',
@@ -55,7 +60,7 @@ export async function POST(
     }
 
     // Create soil_analyses record
-    const { data: analysis, error: insertError } = await supabase
+    const { data: analysis, error: insertError } = await adminClient
       .from('soil_analyses')
       .insert({
         ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),
@@ -73,7 +78,7 @@ export async function POST(
     }
 
     // Start AI-extractie (async — niet wachten op resultaat)
-    startExtraction(supabase, analysis.id, storagePath, user.id).catch(err => {
+    startExtraction(adminClient, analysis.id, storagePath, user.id).catch(err => {
       console.error('[Soil Analysis] Extractie gefaald:', err);
     });
 

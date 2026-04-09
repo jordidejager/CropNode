@@ -98,6 +98,57 @@ GOOGLE_API_KEY=
 
 # Weather cron job auth
 CRON_SECRET=
+
+# FruitConsult scraper credentials (knowledge pipeline)
+FRUITCONSULT_USER=
+FRUITCONSULT_PASS=
+```
+
+## Knowledge Base RAG Pipeline (`src/lib/knowledge/`)
+
+CropNode's RAG-chatbot foundation. Scrapes external sources (currently FruitConsult), transforms content into our own CropNode-knowledge artikelen, embeds with Gemini text-embedding-004, and stores in `knowledge_articles` for semantic search.
+
+**Architecture:**
+```
+Vercel cron (ma 06:00) → /api/knowledge/scrape (CRON_SECRET auth)
+  → pipeline.ts → scrapers/fruitconsult.ts (ASP.NET login + cheerio)
+  → transform.ts (Gemini herformulering, NL tone of voice, no source attribution)
+  → validate.ts (Gemini quality check → blockers ⇒ status='needs_review')
+  → embed.ts (text-embedding-004, 768-dim)
+  → fuse.ts (find_fusion_candidate RPC, similarity > 0.90 ⇒ Gemini fusion)
+  → INSERT/UPDATE knowledge_articles + knowledge_scrape_log
+```
+
+**Key files:**
+- `sql/create_knowledge_articles.sql` — schema + RPCs (`match_knowledge_articles`, `find_fusion_candidate`)
+- `src/lib/knowledge/types.ts` — Zod schemas + categorie/type/phase enums
+- `src/lib/knowledge/scrapers/index.ts` — extensible scraper registry (later: dlv, wur, ctgb)
+- `src/lib/knowledge/pipeline.ts` — orchestrator (idempotent via content_hash + scrape_log)
+- `src/lib/knowledge/search.ts` — semantic search foundation for the chatbot
+- `scripts/migrate-fruitconsult-history.ts` — one-off backfill from Python scraper JSON
+- `scripts/cleanup-deprecated-kb.ts` — removes old `kb_topics`/`kb_products` tables
+
+**Important rules:**
+- **Never** store source URLs, organisatienamen, of FruitConsult-vermeldingen in `knowledge_articles`
+- Content moet hergeformuleerd zijn — productnamen + doseringen exact, rest in eigen woorden
+- `knowledge_scrape_log.scrape_source` mag wel `"fc"` bevatten (alleen operationeel)
+- Alleen publieke bronnen (WUR/CTGB/RVO) krijgen `is_public_source=true` met bronvermelding
+
+**Run commands:**
+```bash
+npm run knowledge:backfill                              # Full backfill (~2-3u)
+npm run knowledge:backfill -- --limit 10                # Test met 10 artikelen
+npm run knowledge:backfill -- --dry-run                 # Parse only
+
+# Manual trigger (lokaal of via curl)
+curl -X POST http://localhost:3000/api/knowledge/scrape \
+  -H "Authorization: Bearer $CRON_SECRET"
+
+# Search test
+curl 'http://localhost:3000/api/knowledge/search?query=schurft+april&crops=appel'
+
+# Cleanup deprecated tables (alleen na backfill geverifieerd)
+CONFIRM_DELETE=yes npm run knowledge:cleanup
 ```
 
 ## Development Commands
