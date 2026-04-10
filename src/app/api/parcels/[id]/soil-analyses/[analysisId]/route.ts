@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase-client';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
@@ -61,31 +62,31 @@ export async function DELETE(
       return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
     }
 
+    const adminClient = createServiceRoleClient();
+
     // Haal record op voor storage path
-    const { data: analysis } = await supabase
+    const { data: analysis } = await adminClient
       .from('soil_analyses')
-      .select('pdf_storage_path')
+      .select('pdf_storage_path, user_id')
       .eq('id', analysisId)
-      .eq('user_id', user.id)
       .single();
 
-    if (!analysis) {
+    if (!analysis || analysis.user_id !== user.id) {
       return apiError('Analyse niet gevonden', ErrorCodes.NOT_FOUND, 404);
     }
 
     // Verwijder PDF uit storage
     if (analysis.pdf_storage_path) {
-      await supabase.storage
+      await adminClient.storage
         .from('soil-analysis-pdfs')
         .remove([analysis.pdf_storage_path]);
     }
 
     // Verwijder record
-    const { error } = await supabase
+    const { error } = await adminClient
       .from('soil_analyses')
       .delete()
-      .eq('id', analysisId)
-      .eq('user_id', user.id);
+      .eq('id', analysisId);
 
     if (error) {
       return apiError(`Fout bij verwijderen: ${error.message}`, ErrorCodes.INTERNAL_ERROR, 500);

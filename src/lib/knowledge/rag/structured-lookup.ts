@@ -42,26 +42,30 @@ export async function lookupProductAdvice(
     product?: string;
     crop?: string;
     applicationType?: string;
-    phase?: string;
     limit?: number;
   },
 ): Promise<ProductAdvice[]> {
   try {
-    const { data, error } = await supabase.rpc('lookup_product_advice', {
-      filter_target: params.target ?? null,
-      filter_product: params.product ?? null,
-      filter_crop: params.crop ?? null,
-      filter_type: params.applicationType ?? null,
-      filter_phase: params.phase ?? null,
-      result_limit: params.limit ?? 20,
-    });
+    // Direct query ipv RPC (RPC timeoutt op ons Supabase plan)
+    let q = supabase
+      .from('knowledge_product_advice')
+      .select('product_name, active_substance, target_name, crop, dosage, application_type, timing, curative_window_hours, max_applications_per_year, safety_interval_days, notes, country_restrictions, resistance_group, source_article_count')
+      .order('source_article_count', { ascending: false })
+      .limit(params.limit ?? 20);
+
+    if (params.target) q = q.ilike('target_name', `%${params.target}%`);
+    if (params.product) q = q.ilike('product_name', `%${params.product}%`);
+    if (params.crop) q = q.or(`crop.eq.${params.crop},crop.eq.beide`);
+    if (params.applicationType) q = q.eq('application_type', params.applicationType);
+
+    const { data, error } = await q;
     if (error) {
-      console.warn('[structured] lookup_product_advice fout:', error.message);
+      console.warn('[structured] product_advice lookup fout:', error.message);
       return [];
     }
-    return (data ?? []) as ProductAdvice[];
+    return (data ?? []) as unknown as ProductAdvice[];
   } catch (err) {
-    console.warn('[structured] lookup_product_advice exception:', err);
+    console.warn('[structured] product_advice exception:', err);
     return [];
   }
 }
@@ -77,6 +81,8 @@ export interface DiseaseProfile {
   crops: string[];
   description: string | null;
   symptoms: string | null;
+  lifecycle_notes: string | null;
+  damage_impact: string | null;
   prevention_strategy: string | null;
   curative_strategy: string | null;
   biological_options: string | null;
@@ -96,17 +102,26 @@ export async function lookupDiseaseProfile(
   diseaseName: string,
 ): Promise<DiseaseProfile | null> {
   try {
-    const { data, error } = await supabase.rpc('get_disease_profile', {
-      disease_name: diseaseName,
-    });
+    // Direct query ipv RPC (RPC timeoutt op ons Supabase plan)
+    // Use .limit(1) instead of .maybeSingle() because multiple names can match
+    const { data, error } = await supabase
+      .from('knowledge_disease_profile')
+      .select('*')
+      .ilike('name', `%${diseaseName}%`)
+      .order('source_article_count', { ascending: false })
+      .limit(1);
+
     if (error) {
-      console.warn('[structured] get_disease_profile fout:', error.message);
+      console.warn('[structured] disease_profile lookup fout:', error.message);
       return null;
     }
     const rows = data as DiseaseProfile[] | null;
+    if (rows && rows.length > 0) {
+      console.log(`[structured] Disease profile gevonden: ${rows[0].name} (lifecycle: ${rows[0].lifecycle_notes ? 'ja' : 'nee'})`);
+    }
     return rows && rows.length > 0 ? rows[0] : null;
   } catch (err) {
-    console.warn('[structured] get_disease_profile exception:', err);
+    console.warn('[structured] disease_profile exception:', err);
     return null;
   }
 }
@@ -127,16 +142,45 @@ export async function lookupProductRelations(
   productName: string,
 ): Promise<ProductRelation[]> {
   try {
-    const { data, error } = await supabase.rpc('get_product_relations', {
-      product: productName,
+    // Direct queries ipv RPC (beide richtingen)
+    const [resultA, resultB] = await Promise.all([
+      supabase
+        .from('knowledge_product_relations')
+        .select('product_b, relation_type, context, notes')
+        .ilike('product_a', `%${productName}%`)
+        .limit(20),
+      supabase
+        .from('knowledge_product_relations')
+        .select('product_a, relation_type, context, notes')
+        .ilike('product_b', `%${productName}%`)
+        .limit(20),
+    ]);
+
+    const relations: ProductRelation[] = [
+      ...(resultA.data ?? []).map((r: any) => ({
+        related_product: r.product_b,
+        relation_type: r.relation_type,
+        context: r.context,
+        notes: r.notes,
+      })),
+      ...(resultB.data ?? []).map((r: any) => ({
+        related_product: r.product_a,
+        relation_type: r.relation_type,
+        context: r.context,
+        notes: r.notes,
+      })),
+    ];
+
+    // Deduplicate
+    const seen = new Set<string>();
+    return relations.filter(r => {
+      const key = `${r.related_product}|${r.relation_type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-    if (error) {
-      console.warn('[structured] get_product_relations fout:', error.message);
-      return [];
-    }
-    return (data ?? []) as ProductRelation[];
   } catch (err) {
-    console.warn('[structured] get_product_relations exception:', err);
+    console.warn('[structured] product_relations exception:', err);
     return [];
   }
 }
@@ -161,7 +205,11 @@ export function formatStructuredContext(params: {
     const dp = params.diseaseProfile;
     parts.push('[GESTRUCTUREERDE KENNIS — ZIEKTE/PLAAG PROFIEL]');
     parts.push(`${dp.name} (${dp.profile_type})`);
+    if (dp.latin_name) parts.push(`Wetenschappelijke naam: ${dp.latin_name}`);
     if (dp.crops.length > 0) parts.push(`Gewassen: ${dp.crops.join(', ')}`);
+    if (dp.description) parts.push(`Beschrijving: ${dp.description}`);
+    if (dp.symptoms) parts.push(`Symptomen: ${dp.symptoms}`);
+    if (dp.lifecycle_notes) parts.push(`Levenscyclus: ${dp.lifecycle_notes}`);
     if (dp.peak_phases.length > 0) parts.push(`Piekfases: ${dp.peak_phases.join(', ')}`);
     if (dp.key_preventive_products.length > 0) {
       parts.push(`Preventieve middelen: ${dp.key_preventive_products.join(', ')}`);
@@ -171,9 +219,14 @@ export function formatStructuredContext(params: {
     }
     if (dp.prevention_strategy) parts.push(`Preventie: ${dp.prevention_strategy}`);
     if (dp.curative_strategy) parts.push(`Curatief: ${dp.curative_strategy}`);
+    if (dp.biological_options) parts.push(`Biologisch: ${dp.biological_options}`);
     if (dp.resistance_management) parts.push(`Resistentie: ${dp.resistance_management}`);
+    if (dp.monitoring_advice) parts.push(`Monitoring: ${dp.monitoring_advice}`);
     if (dp.susceptible_varieties.length > 0) {
       parts.push(`Gevoelige rassen: ${dp.susceptible_varieties.join(', ')}`);
+    }
+    if (dp.resistant_varieties.length > 0) {
+      parts.push(`Resistente rassen: ${dp.resistant_varieties.join(', ')}`);
     }
     parts.push('');
   }

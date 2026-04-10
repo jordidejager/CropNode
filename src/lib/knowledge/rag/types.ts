@@ -79,6 +79,7 @@ export interface RetrievedChunk {
   season_phases: string[];
   relevant_months: number[];
   products_mentioned: string[];
+  image_urls: string[];
   fusion_sources: number;
   /** Cosine similarity after month/phase boost */
   similarity: number;

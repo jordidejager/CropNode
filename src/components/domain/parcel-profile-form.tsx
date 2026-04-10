@@ -337,26 +337,38 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
     defaultValues: {},
   });
 
-  // Populate form when profile loads, or use defaults from sub_parcel
+  // Populate form when profile loads, or use defaults from sub_parcel + latest soil analysis
   useEffect(() => {
     if (profile) {
-      reset(profile);
+      // Auto-fill bodemkenmerken uit laatste grondmonster als die leeg zijn in profiel
+      const merged = { ...profile };
+      if (latestAnalysis && latestAnalysis.extractie_status === 'completed') {
+        if (!merged.grondsoort && latestAnalysis.grondsoort_rapport) merged.grondsoort = latestAnalysis.grondsoort_rapport;
+        if (merged.organische_stof_pct == null && latestAnalysis.organische_stof_pct != null) merged.organische_stof_pct = latestAnalysis.organische_stof_pct;
+        if (merged.klei_percentage == null && latestAnalysis.klei_percentage != null) merged.klei_percentage = latestAnalysis.klei_percentage;
+      }
+      reset(merged);
     } else if (profileData && !profile) {
-      // Geen profiel gevonden — pre-fill met subperceel data
+      // Geen profiel gevonden — pre-fill met subperceel data + grondmonster
       const defaults: FormData = {};
       if (defaultGewas) defaults.gewas = defaultGewas;
       if (defaultRas) defaults.ras = defaultRas;
+      if (latestAnalysis && latestAnalysis.extractie_status === 'completed') {
+        if (latestAnalysis.grondsoort_rapport) defaults.grondsoort = latestAnalysis.grondsoort_rapport;
+        if (latestAnalysis.organische_stof_pct != null) defaults.organische_stof_pct = latestAnalysis.organische_stof_pct;
+        if (latestAnalysis.klei_percentage != null) defaults.klei_percentage = latestAnalysis.klei_percentage;
+      }
       if (Object.keys(defaults).length > 0) reset(defaults);
     }
-  }, [profile, profileData, reset, defaultGewas, defaultRas]);
+  }, [profile, profileData, latestAnalysis, reset, defaultGewas, defaultRas]);
 
   const values = watch();
 
-  // Live plantdichtheid berekening
+  // Live plantdichtheid berekening (-10% correctie voor koppakkers etc.)
   const plantdichtheid = useMemo(() => {
     const rij = Number(values.rijafstand_m);
     const plant = Number(values.plantafstand_m);
-    if (rij > 0 && plant > 0) return Math.round(10000 / (rij * plant));
+    if (rij > 0 && plant > 0) return Math.round((10000 / (rij * plant)) * 0.9);
     return null;
   }, [values.rijafstand_m, values.plantafstand_m]);
 
@@ -439,10 +451,13 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         <Field label="Plantafstand (m)">
           <Input type="number" step="0.01" {...register('plantafstand_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.00" />
         </Field>
-        <Field label="Plantdichtheid (berekend)">
+        <Field label="Plantdichtheid (berekend, -10%)">
           <div className="h-10 flex items-center px-3 rounded-md bg-white/[0.02] border border-white/[0.06] text-white/50 font-mono text-sm">
             {plantdichtheid ? `${plantdichtheid} bomen/ha` : '\u2014'}
           </div>
+          {plantdichtheid && (
+            <p className="text-[10px] text-white/20 mt-1">Bruto: {Math.round(plantdichtheid / 0.9)} &middot; -10% koppakkers</p>
+          )}
         </Field>
         <Field label="Aantal bomen">
           <Input type="number" {...register('aantal_bomen', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="Totaal aantal" />
@@ -471,26 +486,16 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         </Field>
       </ProfileSection>
 
-      {/* 4. Infrastructuur */}
+      {/* 4. Infrastructuur — zonder regenkap en insectennet */}
       <ProfileSection
         title="Infrastructuur & bescherming"
         icon={Shield}
-        fields={['hagelnet', 'regenkap', 'insectennet', 'windscherm', 'steunconstructie']}
+        fields={['hagelnet', 'windscherm', 'steunconstructie']}
         values={values}
       >
         <Field label="Hagelnet">
           <Controller name="hagelnet" control={control} render={({ field }) => (
             <SelectField value={field.value as string} onChange={field.onChange} options={HAGELNET_OPTIES} />
-          )} />
-        </Field>
-        <Field label="Regenkap">
-          <Controller name="regenkap" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={REGENKAP_OPTIES} />
-          )} />
-        </Field>
-        <Field label="Insectennet">
-          <Controller name="insectennet" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={INSECTENNET_OPTIES} />
           )} />
         </Field>
         <Field label="Windscherm">
@@ -572,26 +577,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         </Field>
       </ProfileSection>
 
-      {/* 7. Certificering */}
-      <ProfileSection
-        title="Certificering"
-        icon={Award}
-        fields={['certificeringen', 'duurzaamheidsprogrammas']}
-        values={values}
-      >
-        <Field label="Certificeringen" className="md:col-span-2">
-          <Controller name="certificeringen" control={control} render={({ field }) => (
-            <MultiSelectChips value={(field.value as string[]) || []} onChange={field.onChange} options={CERTIFICERING_OPTIES} />
-          )} />
-        </Field>
-        <Field label="Duurzaamheidsprogramma's" className="md:col-span-2">
-          <Controller name="duurzaamheidsprogrammas" control={control} render={({ field }) => (
-            <MultiSelectChips value={(field.value as string[]) || []} onChange={field.onChange} options={DUURZAAMHEIDSPROGRAMMA_OPTIES} />
-          )} />
-        </Field>
-      </ProfileSection>
-
-      {/* 8. Perceelhistorie */}
+      {/* 7. Perceelhistorie */}
       <ProfileSection
         title="Perceelhistorie"
         icon={History}

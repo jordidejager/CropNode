@@ -104,6 +104,32 @@ FRUITCONSULT_USER=
 FRUITCONSULT_PASS=
 ```
 
+## Database Migrations
+
+Migrations live in `supabase/migrations/` as numbered SQL files. A `schema_migrations` table in the database tracks which have been applied.
+
+**Running migrations:**
+```bash
+# Run a specific migration (skips if already applied)
+npx tsx scripts/run-migration.ts 052_my_new_migration.sql
+
+# Run ALL pending migrations in order
+npx tsx scripts/run-all-migrations.ts
+
+# Preview what would run without applying
+npx tsx scripts/run-all-migrations.ts --dry-run
+
+# Force re-run (ignores tracking)
+npx tsx scripts/run-migration.ts 052_my_new_migration.sql --force
+```
+
+**Creating a new migration:**
+1. Create `supabase/migrations/NNN_description.sql` (next number in sequence)
+2. Write idempotent SQL (use `IF NOT EXISTS`, `OR REPLACE`, `ON CONFLICT` where possible)
+3. Run it: `npx tsx scripts/run-migration.ts NNN_description.sql`
+
+The script automatically records applied migrations — no manual bookkeeping needed.
+
 ## Knowledge Base RAG Pipeline (`src/lib/knowledge/`)
 
 CropNode's RAG-chatbot foundation. Scrapes external sources (currently FruitConsult), transforms content into our own CropNode-knowledge artikelen, embeds with Gemini text-embedding-004, and stores in `knowledge_articles` for semantic search.

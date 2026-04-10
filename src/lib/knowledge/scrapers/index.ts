@@ -12,12 +12,14 @@
 import type { Scraper } from './types';
 import { FruitConsultScraper } from './fruitconsult';
 import { GroenKennisnetScraper } from './groenkennisnet';
+import { WurEdepotScraper } from './wur-edepot';
 
 type ScraperFactory = (knownIds?: Set<string>) => Scraper;
 
 const SCRAPER_REGISTRY: Record<string, ScraperFactory> = {
   fc: (knownIds) => new FruitConsultScraper({ knownIds }),
   gkn: (knownIds) => new GroenKennisnetScraper({ knownIds }),
+  'wur-edepot': (knownIds) => new WurEdepotScraper({ knownIds }),
   // Toekomstig:
   // dlv: (knownIds) => new DlvScraper({ knownIds }),
   // ctgb: (knownIds) => new CtgbScraper({ knownIds }),

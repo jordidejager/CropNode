@@ -65,7 +65,7 @@ export const INSECTENNET_OPTIES = [
 ] as const;
 
 export const WINDSCHERM_OPTIES = [
-  'Geen', 'Natuurlijk (houtwal/haag)', 'Kunstmatig (windbreekgaas)', 'Combinatie',
+  'Geen', 'Natuurlijk (houtwal/haag)', 'Kunstmatig (windbreekgaas)', 'Combinatie', 'Deels windscherm, deels geen',
 ] as const;
 
 export const STEUNCONSTRUCTIE_OPTIES = [
@@ -134,7 +134,7 @@ export const DUURZAAMHEIDSPROGRAMMA_OPTIES = [
 // ============================================
 
 export const VOORGAAND_GEWAS_OPTIES = [
-  'Grasland', 'Akkerbouw', 'Fruitteelt (herinplant)', 'Braak', 'Overig',
+  'Appel', 'Peer', 'Grasland', 'Akkerbouw', 'Braak', 'Overig',
 ] as const;
 
 export const HERINPLANT_OPTIES = [

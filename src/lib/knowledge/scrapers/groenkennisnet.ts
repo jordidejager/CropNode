@@ -48,9 +48,13 @@ const EXCLUDE_KEYWORDS = [
   'vrijlevend', 'sclerotien',
   // Skip overzichtspagina's
   'examenlijst', 'fruitteelt', 'houtig klein fruit', 'overige fruitsoorten',
-  // Skip niet-fruit gewas-specifieke pagina's
+  // Skip niet-hardfruit gewas-specifieke pagina's
   'valse meeldauw', 'kleine veldkers', 'akkerkers', 'koolbladroller',
-  'eikenbladroller', 'zilverschurft',
+  'eikenbladroller', 'zilverschurft', 'dahlia', 'bromelia', 'snijbonen',
+  'speerdistel', 'pruimenmot', 'pruimenzaagwesp', 'pruimenschorsmijt',
+  'pruimensharka', 'loodglans', 'melige pruimenluis', 'komkommer',
+  'kool', 'roos', 'sla', 'ui', 'aardappel', 'tulp', 'lelie', 'tomaat',
+  'chrysant', 'gerbera', 'aster', 'cyclaam',
 ];
 
 interface WikiPage {

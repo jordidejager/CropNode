@@ -36,15 +36,44 @@ export async function GET(
       return apiError('Fout bij ophalen profiel', ErrorCodes.INTERNAL_ERROR, 500);
     }
 
-    // Haal ook laatste grondmonster op
-    const { data: latestAnalysis } = await supabase
+    // Haal laatste grondmonster op (eigen + hoofdperceel als fallback)
+    const analysisFields = 'id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, extractie_status';
+    let latestAnalysis = null;
+
+    const { data: ownAnalysis } = await supabase
       .from('soil_analyses')
-      .select('id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, extractie_status')
+      .select(analysisFields)
       .eq(idColumn, id)
       .eq('user_id', user.id)
       .order('datum_monstername', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    latestAnalysis = ownAnalysis;
+
+    // Fallback naar hoofdperceel's grondmonster als sub_parcel geen eigen heeft
+    if (!latestAnalysis && type === 'sub_parcel') {
+      const { data: subParcel } = await supabase
+        .from('sub_parcels')
+        .select('parcel_id')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (subParcel?.parcel_id) {
+        const { data: parentAnalysis } = await supabase
+          .from('soil_analyses')
+          .select(analysisFields)
+          .eq('parcel_id', subParcel.parcel_id)
+          .eq('user_id', user.id)
+          .order('datum_monstername', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (parentAnalysis) {
+          latestAnalysis = { ...parentAnalysis, inherited: true };
+        }
+      }
+    }
 
     return apiSuccess({
       profile: profile || null,

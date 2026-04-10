@@ -80,10 +80,11 @@ interface StoreParams {
   embedding: number[];
   contentHash: string;
   needsReview: boolean;
+  imageUrls?: string[];
 }
 
 async function insertNewArticle(params: StoreParams): Promise<void> {
-  const { supabase, draft, embedding, contentHash, needsReview } = params;
+  const { supabase, draft, embedding, contentHash, needsReview, imageUrls } = params;
 
   const status = needsReview ? 'needs_review' : 'draft';
   await withDbRetry('insert knowledge_articles', async () => {
@@ -110,6 +111,7 @@ async function insertNewArticle(params: StoreParams): Promise<void> {
       content_hash: contentHash,
       fusion_sources: 1,
       status,
+      ...(imageUrls && imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
     });
     if (error) {
       throw new Error(`insert knowledge_articles: ${error.message}`);
@@ -368,12 +370,14 @@ export async function processScrapedItem(
         result.updated += 1;
       } else {
         // 4b. Insert new
+        const imageUrls = (item.metadata.imageUrls as string[] | undefined) ?? [];
         await insertNewArticle({
           supabase,
           draft,
           embedding,
           contentHash: draftHash,
           needsReview,
+          imageUrls,
         });
         result.created += 1;
       }

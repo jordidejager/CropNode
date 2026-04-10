@@ -12,6 +12,7 @@ import { retrieveChunks } from './retriever';
 import { assessConfidence } from './confidence';
 import { resolveProductAliases } from './ctgb-postprocessor';
 import { generateGroundedAnswer } from './grounded-generator';
+import { runKnowledgeAgent } from './knowledge-agent';
 import { extractProductMentions, lookupCtgbStatus } from './ctgb-postprocessor';
 import { getCurrentPhenology } from '../phenology-service';
 import {
@@ -82,14 +83,12 @@ export async function* runChatPipeline(
       today: phenology.today,
     };
 
-    // 3. Retrieval
+    // 3. Retrieval (v2: metadata pre-filter + in-memory cosine similarity)
     yield { type: 'retrieval_start' };
     let chunks: RetrievedChunk[] = [];
     let productAliases: Record<string, string> = {};
     if (intent.topic !== 'off_topic') {
-      // Resolve product aliases BEFORE retrieval (Pyrus → Scala, etc.)
-      // AND replace alias names with canonical names in intent.products
-      // so the retriever searches for "Scala" not "Pyrus"
+      // Resolve product aliases for the generator prompt (Pyrus → Scala)
       if (intent.products.length > 0) {
         try {
           const resolved = await withRetry('alias-resolve', () =>
@@ -102,72 +101,26 @@ export async function* runChatPipeline(
           }
           if (Object.keys(productAliases).length > 0) {
             console.log('[pipeline] Product aliassen:', JSON.stringify(productAliases));
-            // Replace intent.products with canonical names only (deduped)
-            const canonicalProducts = Array.from(new Set(resolved.filter(Boolean)));
-            console.log('[pipeline] Intent products herschreven:', intent.products, '→', canonicalProducts);
-            intent.products = canonicalProducts;
+            // Replace with canonical names for retrieval
+            intent.products = Array.from(new Set(resolved.filter(Boolean)));
           }
         } catch (err) {
           console.warn('[pipeline] Alias resolution failed:', err);
         }
       }
 
-      // Now retrieve (simple array return, no overload complexity)
+      // Retrieve — the new retriever handles everything internally
+      // (metadata pre-filter + in-memory cosine + product overlaps)
       try {
-        const rawChunks = await withRetry('retrieval', () => retrieveChunks({
+        chunks = await withRetry('retrieval', () => retrieveChunks({
           supabase,
           query,
           intent,
           context,
         }));
-        chunks = Array.isArray(rawChunks) ? rawChunks : (rawChunks as any).chunks ?? [];
       } catch (err) {
-        console.warn('[pipeline] Retriever failed, trying fallback:', err);
+        console.warn('[pipeline] Retriever failed:', err);
         chunks = [];
-      }
-
-      // PRODUCT RESCUE: als retriever 0 chunks vindt maar intent WEL producten heeft,
-      // doe een directe DB lookup op products_mentioned als fallback.
-      // Dit vangt het geval op waar vector search faalt (netwerk) of similarity te laag is.
-      if (chunks.length === 0 && intent.products.length > 0) {
-        console.log('[pipeline] Product rescue: directe lookup voor', intent.products);
-        const allNames = [
-          ...intent.products,
-          ...Object.values(productAliases),
-        ].filter(Boolean);
-        const uniqueNames = Array.from(new Set(allNames));
-
-        try {
-          const { data } = await supabase
-            .from('knowledge_articles')
-            .select('id, title, content, summary, category, subcategory, knowledge_type, crops, season_phases, relevant_months, products_mentioned')
-            .eq('status', 'published')
-            .overlaps('products_mentioned', uniqueNames)
-            .order('fusion_sources', { ascending: false })
-            .limit(6);
-
-          if (data && data.length > 0) {
-            console.log(`[pipeline] Product rescue: ${data.length} artikelen gevonden via directe lookup`);
-            chunks = (data as any[]).map((row) => ({
-              id: row.id,
-              title: row.title,
-              summary: row.summary ?? '',
-              content: row.content,
-              category: row.category,
-              subcategory: row.subcategory,
-              knowledge_type: row.knowledge_type,
-              crops: row.crops ?? [],
-              season_phases: row.season_phases ?? [],
-              relevant_months: row.relevant_months ?? [],
-              products_mentioned: row.products_mentioned ?? [],
-              fusion_sources: 1,
-              similarity: 0.80,
-              raw_similarity: 0.80,
-            }));
-          }
-        } catch (rescueErr) {
-          console.warn('[pipeline] Product rescue ook mislukt:', rescueErr);
-        }
       }
     }
     // 3b. Structured lookups (parallel met het einde van retrieval)
@@ -227,38 +180,101 @@ export async function* runChatPipeline(
 
     // 4. Confidence check
     const confidence = assessConfidence(intent, chunks);
-    if (!confidence.passes) {
-      yield { type: 'confidence_fail', check: confidence };
-      // Still emit the fallback message as an answer_chunk so the UI can render it
-      yield { type: 'generation_start' };
-      yield {
-        type: 'answer_chunk',
-        text: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
-      };
-      yield {
-        type: 'generation_done',
-        fullText: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
-      };
-      yield { type: 'done' };
-      return;
-    }
+    const hasStructuredData = !!structuredContext && structuredContext.length > 50;
 
-    // 5. Grounded generation
-    yield { type: 'generation_start' };
-    const { fullText, stream } = await withRetry('generation', () =>
-      generateGroundedAnswer({
-        query,
-        intent: { crops: intent.crops, topic: intent.topic, products: intent.products },
-        context,
-        chunks,
-        productAliases,
-        structuredContext,
-      })
-    );
-    for await (const chunk of stream) {
-      if (chunk) yield { type: 'answer_chunk', text: chunk };
+    let fullText = '';
+
+    if (!confidence.passes && !hasStructuredData) {
+      // No chunks AND no structured data → genuinely can't answer
+      yield { type: 'confidence_fail', check: confidence };
+      yield { type: 'generation_start' };
+
+      // Last resort: try the agent with tools (it can query the DB itself)
+      try {
+        console.log('[pipeline] Confidence fail + no structured data → agent fallback');
+        const agentResult = await withRetry('agent-fallback', () =>
+          runKnowledgeAgent({
+            supabase,
+            query,
+            intent,
+            context,
+            productAliases,
+          })
+        );
+        if (agentResult.fullText && agentResult.fullText.length > 20) {
+          fullText = agentResult.fullText;
+          yield { type: 'answer_chunk', text: fullText };
+          yield { type: 'generation_done', fullText };
+          // Extract sources from agent tool calls for the UI
+          const agentChunks = extractChunksFromToolCalls(agentResult.toolCalls);
+          if (agentChunks.length > 0) {
+            chunks = agentChunks;
+          }
+        } else {
+          yield {
+            type: 'answer_chunk',
+            text: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
+          };
+          yield {
+            type: 'generation_done',
+            fullText: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
+          };
+          yield { type: 'done' };
+          return;
+        }
+      } catch (agentErr) {
+        console.warn('[pipeline] Agent fallback failed:', agentErr);
+        yield {
+          type: 'answer_chunk',
+          text: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
+        };
+        yield {
+          type: 'generation_done',
+          fullText: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
+        };
+        yield { type: 'done' };
+        return;
+      }
+    } else {
+      // 5. Normal generation (with chunks + structured context)
+      // Use agent if chunks are weak but structured data is strong
+      const useAgent = !confidence.passes && hasStructuredData;
+      yield { type: 'generation_start' };
+
+      if (useAgent) {
+        console.log('[pipeline] Confidence fail maar structured data beschikbaar → agent met tools');
+        const agentResult = await withRetry('agent-structured', () =>
+          runKnowledgeAgent({
+            supabase,
+            query,
+            intent,
+            context,
+            preRetrievedChunks: chunks,
+            productAliases,
+          })
+        );
+        fullText = agentResult.fullText;
+        yield { type: 'answer_chunk', text: fullText };
+        yield { type: 'generation_done', fullText };
+      } else {
+        // Standard grounded generation (best path — good chunks + structured context)
+        const genResult = await withRetry('generation', () =>
+          generateGroundedAnswer({
+            query,
+            intent: { crops: intent.crops, topic: intent.topic, products: intent.products },
+            context,
+            chunks,
+            productAliases,
+            structuredContext,
+          })
+        );
+        fullText = genResult.fullText;
+        for await (const chunk of genResult.stream) {
+          if (chunk) yield { type: 'answer_chunk', text: chunk };
+        }
+        yield { type: 'generation_done', fullText };
+      }
     }
-    yield { type: 'generation_done', fullText };
 
     // 6. CTGB post-processing
     if (fullText) {
@@ -278,6 +294,7 @@ export async function* runChatPipeline(
         title: c.title,
         category: c.category,
         subcategory: c.subcategory,
+        image_urls: c.image_urls ?? [],
       })),
     };
 
@@ -292,4 +309,38 @@ export async function* runChatPipeline(
     yield { type: 'error', message: userMessage };
     yield { type: 'done' };
   }
+}
+
+/**
+ * Extract pseudo-chunks from agent tool call results for source attribution.
+ */
+function extractChunksFromToolCalls(
+  toolCalls: Array<{ tool: string; input: unknown; output: unknown }>,
+): RetrievedChunk[] {
+  const chunks: RetrievedChunk[] = [];
+  for (const call of toolCalls) {
+    if (call.tool === 'searchKnowledgeBase' && call.output) {
+      const out = call.output as { articles?: Array<{ title: string; summary: string; content: string; category: string; subcategory: string | null; products_mentioned: string[] }> };
+      for (const a of out.articles ?? []) {
+        chunks.push({
+          id: '',
+          title: a.title,
+          summary: a.summary,
+          content: a.content,
+          category: a.category,
+          subcategory: a.subcategory,
+          knowledge_type: '',
+          crops: [],
+          season_phases: [],
+          relevant_months: [],
+          products_mentioned: a.products_mentioned ?? [],
+          image_urls: [],
+          fusion_sources: 1,
+          similarity: 0.8,
+          raw_similarity: 0.8,
+        });
+      }
+    }
+  }
+  return chunks;
 }

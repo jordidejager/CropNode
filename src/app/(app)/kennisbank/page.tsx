@@ -1,45 +1,44 @@
 'use client';
 
 /**
- * Knowledge Atlas — the main kennisbank page.
+ * Kennisbank — Chat-first design.
  *
- * Wires together all zones of the Teeltkennis Atlas:
- *   1. Ambient background
- *   2. Hero "Nu in het veld"
- *   3. Fenologische Compas
- *   4. Categorie Constellatie
- *   5. Atlas Grid with filters
- *   6. Season Scrubber (sticky footer)
- *   + ⌘K Command Palette (global)
- *   + Article Dossier (full-screen takeover)
+ * The chatbot is the PRIMARY interface. Articles, categories, and filters
+ * are secondary — accessible by scrolling down or via ⌘K.
  */
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Command } from 'lucide-react';
+import { Command, BookOpen, Sparkles } from 'lucide-react';
 
 import { AmbientBackground } from '@/components/knowledge-atlas/ambient-background';
-import { NowInTheField } from '@/components/knowledge-atlas/now-in-the-field';
 import { CategoryConstellation } from '@/components/knowledge-atlas/category-constellation';
 import { AtlasFilters } from '@/components/knowledge-atlas/atlas-filters';
 import { AtlasGrid } from '@/components/knowledge-atlas/atlas-grid';
 import { SeasonScrubber } from '@/components/knowledge-atlas/season-scrubber';
 import { CommandPalette } from '@/components/knowledge-atlas/command-palette';
 import { ArticleDossier } from '@/components/knowledge-atlas/article-dossier';
+import { KnowledgeChat } from '@/components/knowledge-atlas/knowledge-chat';
+import { useCurrentPhenology, useArticleStats } from '@/hooks/use-knowledge';
 
 import type { ArticleFilters, KnowledgeArticleListItem } from '@/lib/knowledge/client-api';
 import type { KnowledgeCategory } from '@/lib/knowledge/types';
 
+const MONTH_LABELS = [
+  'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+  'juli', 'augustus', 'september', 'oktober', 'november', 'december',
+];
+
 export default function KnowledgeAtlasPage() {
-  // Filter state
   const [filters, setFilters] = useState<ArticleFilters>({});
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-
-  // Dialog state
   const [commandOpen, setCommandOpen] = useState(false);
   const [dossierArticleId, setDossierArticleId] = useState<string | null>(null);
+  const [showArticles, setShowArticles] = useState(false);
 
-  // When a month is picked from the scrubber, merge into filters
+  const { data: phenology } = useCurrentPhenology();
+  const { data: stats } = useArticleStats();
+
   const effectiveFilters: ArticleFilters = {
     ...filters,
     months: selectedMonth ? [selectedMonth] : filters.months,
@@ -49,93 +48,123 @@ export default function KnowledgeAtlasPage() {
     setDossierArticleId(article.id);
   };
 
-  const handleCloseDossier = () => {
-    setDossierArticleId(null);
-  };
-
-  const handleCategorySelect = (category: KnowledgeCategory | null) => {
-    setFilters((prev) => ({
-      ...prev,
-      categories: category ? [category] : undefined,
-    }));
-  };
-
-  const handleClearFilters = () => {
-    setFilters({});
-    setSelectedMonth(null);
-  };
+  const phase = phenology?.phenologicalPhase?.replace(/-/g, ' ').replace(/\//g, ' / ') ?? '';
+  const monthName = phenology?.month ? MONTH_LABELS[phenology.month - 1] : '';
 
   return (
     <>
       <AmbientBackground month={selectedMonth ?? undefined} />
 
       <div className="relative min-h-screen pb-32">
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-          className="mx-auto max-w-7xl px-6 pt-12"
-        >
-          <NowInTheField onArticleClick={handleOpenArticle} />
-        </motion.div>
+        {/* ===== HERO: Chat-centric ===== */}
+        <div className="mx-auto max-w-3xl px-6 pt-10">
+          {/* Minimal header */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="mb-8 text-center"
+          >
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+              <Sparkles className="h-3 w-3" />
+              {phase || 'Teeltkennis'}
+              {monthName ? ` · ${monthName}` : ''}
+            </div>
+            <h1 className="text-3xl font-light text-white sm:text-4xl">
+              Stel je teeltvraag
+            </h1>
+            <p className="mt-2 text-sm text-white/40">
+              Antwoorden op basis van {stats?.total ?? '2000'}+ kennisartikelen
+              {' '}· appel & peer
+            </p>
+          </motion.div>
 
-        {/* ⌘K hint */}
-        <div className="mx-auto mt-6 max-w-7xl px-6">
+          {/* ===== THE CHAT ===== */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
+          >
+            <KnowledgeChat
+              onArticleClick={(id) => setDossierArticleId(id)}
+            />
+          </motion.div>
+
+          {/* ⌘K shortcut hint */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="mt-3"
+          >
+            <button
+              type="button"
+              onClick={() => setCommandOpen(true)}
+              className="group flex w-full items-center justify-between rounded-xl border border-white/[0.04] bg-transparent px-4 py-2 text-left text-xs text-white/25 transition-colors hover:border-emerald-500/15 hover:text-white/40"
+            >
+              <span className="flex items-center gap-2">
+                <Command className="h-3 w-3 text-emerald-400/30" />
+                Zoek direct in alle artikelen
+              </span>
+              <span className="flex items-center gap-1 font-mono text-[9px]">
+                <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">⌘</kbd>
+                <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">K</kbd>
+              </span>
+            </button>
+          </motion.div>
+        </div>
+
+        {/* ===== DIVIDER: Show articles section ===== */}
+        <div className="mx-auto mt-16 max-w-3xl px-6">
           <button
             type="button"
-            onClick={() => setCommandOpen(true)}
-            className="group flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-3 text-left text-sm text-white/40 backdrop-blur-xl transition-colors hover:border-emerald-500/30 hover:bg-white/[0.04] hover:text-white/70"
+            onClick={() => setShowArticles(!showArticles)}
+            className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.01] px-4 py-3 text-xs text-white/30 transition-colors hover:border-white/10 hover:text-white/50"
           >
-            <span className="flex items-center gap-3">
-              <Command className="h-4 w-4 text-emerald-400/60" />
-              Zoek in 1970+ kennisartikelen met AI-semantisch zoeken...
-            </span>
-            <span className="flex items-center gap-1 font-mono text-[10px]">
-              <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5">⌘</kbd>
-              <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5">K</kbd>
-            </span>
+            <BookOpen className="h-3.5 w-3.5" />
+            {showArticles ? 'Artikelen verbergen' : `Blader door ${stats?.total ?? '2000'}+ kennisartikelen`}
           </button>
         </div>
 
-        {/* Category constellation (full width now that the compass is gone) */}
-        <div className="mx-auto mt-16 flex max-w-7xl justify-center px-6">
-          <CategoryConstellation
-            selected={filters.categories?.[0] ?? null}
-            onSelect={handleCategorySelect}
-          />
-        </div>
-
-        {/* Filters */}
-        <div className="mt-16 px-6">
-          <motion.h2
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mx-auto mb-6 max-w-5xl text-center"
+        {/* ===== ARTICLES SECTION (collapsed by default) ===== */}
+        {showArticles && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.4 }}
           >
-            <span className="block text-xs uppercase tracking-[0.2em] text-emerald-400/70">
-              De kennis-atlas
-            </span>
-            <span className="mt-2 block text-3xl font-light text-white sm:text-5xl">
-              Verken alle kennis
-            </span>
-          </motion.h2>
+            {/* Categories */}
+            <div className="mx-auto mt-12 flex max-w-7xl justify-center px-6">
+              <CategoryConstellation
+                selected={filters.categories?.[0] ?? null}
+                onSelect={(cat) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    categories: cat ? [cat] : undefined,
+                  }))
+                }
+              />
+            </div>
 
-          <AtlasFilters
-            filters={filters}
-            onChange={setFilters}
-            onClear={handleClearFilters}
-          />
-
-          {/* Grid */}
-          <div>
-            <AtlasGrid filters={effectiveFilters} onArticleClick={handleOpenArticle} />
-          </div>
-        </div>
+            {/* Filters + Grid */}
+            <div className="mt-12 px-6">
+              <AtlasFilters
+                filters={filters}
+                onChange={setFilters}
+                onClear={() => {
+                  setFilters({});
+                  setSelectedMonth(null);
+                }}
+              />
+              <div className="mt-4">
+                <AtlasGrid filters={effectiveFilters} onArticleClick={handleOpenArticle} />
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
 
-      {/* Floating UI layers */}
+      {/* Floating layers */}
       <SeasonScrubber
         selectedMonth={selectedMonth}
         onMonthChange={setSelectedMonth}
@@ -149,7 +178,7 @@ export default function KnowledgeAtlasPage() {
 
       <ArticleDossier
         articleId={dossierArticleId}
-        onClose={handleCloseDossier}
+        onClose={() => setDossierArticleId(null)}
         onRelatedClick={(article) => setDossierArticleId(article.id)}
       />
     </>

@@ -352,6 +352,23 @@ export function useApplyAnalysisToProfile(id: string, type: 'parcel' | 'sub_parc
     });
 }
 
+export function useDeleteSoilAnalysis(id: string, type: 'parcel' | 'sub_parcel' = 'sub_parcel') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (analysisId: string) => {
+            const res = await fetch(`/api/parcels/${id}/soil-analyses/${analysisId}?type=${type}`, {
+                method: 'DELETE',
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Verwijderen mislukt');
+            return json.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.soilAnalyses(id) });
+        },
+    });
+}
+
 // ============================================
 // Logbook Hooks (Slimme Invoer)
 // ============================================

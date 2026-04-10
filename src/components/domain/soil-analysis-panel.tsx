@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
-import { useSoilAnalyses, useUploadSoilAnalysis, useApplyAnalysisToProfile } from "@/hooks/use-data";
+import { useSoilAnalyses, useUploadSoilAnalysis, useApplyAnalysisToProfile, useDeleteSoilAnalysis } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, Loader2, FileText, Calendar, FlaskConical, CheckCircle2,
-  AlertTriangle, XCircle, ChevronRight, Copy, ArrowRight, Info,
+  AlertTriangle, XCircle, ChevronRight, Copy, ArrowRight, Info, Trash2,
 } from "lucide-react";
 import { WAARDERING_KLEUREN } from "@/lib/parcel-profile-constants";
 
@@ -40,6 +40,7 @@ export function SoilAnalysisPanel({ parcelId, subParcelId }: SoilAnalysisPanelPr
   const { data: analyses = [], isLoading } = useSoilAnalyses(id || undefined, type);
   const uploadMutation = useUploadSoilAnalysis(id, type);
   const applyMutation = useApplyAnalysisToProfile(id, type);
+  const deleteMutation = useDeleteSoilAnalysis(id, type);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -73,6 +74,17 @@ export function SoilAnalysisPanel({ parcelId, subParcelId }: SoilAnalysisPanelPr
       toast({ variant: 'destructive', title: 'Fout', description: err.message });
     }
   }, [applyMutation, toast]);
+
+  const handleDelete = useCallback(async (analysisId: string) => {
+    if (!confirm('Weet je zeker dat je dit grondmonster wilt verwijderen?')) return;
+    try {
+      await deleteMutation.mutateAsync(analysisId);
+      setSelectedId(null);
+      toast({ title: 'Verwijderd', description: 'Grondmonster is verwijderd.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Fout', description: err.message });
+    }
+  }, [deleteMutation, toast]);
 
   const selectedAnalysis = analyses.find((a: any) => a.id === selectedId);
 
@@ -201,6 +213,17 @@ export function SoilAnalysisPanel({ parcelId, subParcelId }: SoilAnalysisPanelPr
               </Button>
             </>
           )}
+
+          {/* Delete knop */}
+          <Button
+            variant="ghost"
+            onClick={() => handleDelete(a.id)}
+            disabled={deleteMutation.isPending}
+            className="w-full text-red-400/60 hover:text-red-400 hover:bg-red-500/10 font-bold mt-2"
+          >
+            {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            Verwijderen
+          </Button>
         </div>
       </div>
     );

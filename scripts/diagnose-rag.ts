@@ -136,16 +136,13 @@ async function main() {
       currentPhaseBase: 'bloei' as string | null,
       currentPhaseDetail: 'volle-bloei',
     };
-    const result = await retrieveChunks({
+    const chunks = await retrieveChunks({
       supabase,
       query,
       intent,
       context,
-      returnAliases: true,
     });
-
-    const chunks = 'chunks' in result ? result.chunks : result;
-    const aliases = 'resolvedAliases' in result ? result.resolvedAliases : {};
+    const aliases = {};
     console.log(`  ${(chunks as any[]).length} chunks na re-ranking`);
     console.log('  aliases:', JSON.stringify(aliases));
     for (const c of (chunks as any[]).slice(0, 5)) {

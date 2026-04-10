@@ -160,14 +160,14 @@ export function CategoryConstellation({ selected, onSelect }: CategoryConstellat
                   : 'border-white/10 hover:border-white/25',
               )}
               style={{
-                left: x - planetSize / 2,
-                top: y - planetSize / 2,
-                width: planetSize,
-                height: planetSize,
+                left: `${x - planetSize / 2}px`,
+                top: `${y - planetSize / 2}px`,
+                width: `${planetSize}px`,
+                height: `${planetSize}px`,
                 background: isActive
                   ? `radial-gradient(circle at 30% 30%, ${cfg.hex}40, ${cfg.hex}10)`
                   : `radial-gradient(circle at 30% 30%, ${cfg.hex}20, ${cfg.hex}05)`,
-                boxShadow: isActive ? `0 0 32px ${cfg.hex}60` : undefined,
+                boxShadow: isActive ? `0 0 32px ${cfg.hex}60` : 'none',
               }}
             >
               <Icon
