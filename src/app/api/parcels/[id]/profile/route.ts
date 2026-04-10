@@ -98,8 +98,13 @@ export async function PUT(
     const type = request.nextUrl.searchParams.get('type') || 'sub_parcel';
     const supabase = await createServerClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Auth: probeer getUser, fallback naar getSession
+    let user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData?.session?.user || null;
+    }
+    if (!user) {
       return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
     }
 

@@ -3,8 +3,7 @@ import { PageTabs } from '@/components/layout/page-tabs';
 const tabs = [
     { label: 'Registratie', href: '/oogst' },
     { label: 'Koelcelbeheer', href: '/oogst/koelcel' },
-    { label: 'Sortering', href: '/oogst/sortering' },
-    { label: 'Afleveroverzicht', href: '/oogst/aflevering' },
+    { label: 'Geschiedenis', href: '/oogst/geschiedenis' },
 ];
 
 export default function OogstLayout({ children }: { children: React.ReactNode }) {

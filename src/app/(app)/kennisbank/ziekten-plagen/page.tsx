@@ -330,8 +330,8 @@ function DiseaseCard({
       {/* Products */}
       {topProducts.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {topProducts.map((p) => (
-            <span key={p} className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">
+          {topProducts.map((p, i) => (
+            <span key={`${p}-${i}`} className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">
               {p}
             </span>
           ))}

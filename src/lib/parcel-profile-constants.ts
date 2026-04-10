@@ -86,12 +86,10 @@ export const FERTIGATIE_OPTIES = [
   { value: 'voorbereid', label: 'Voorbereid (leidingwerk aanwezig)' },
 ] as const;
 
-export const NACHTVORSTBEREGENING_OPTIES = [
-  'Geen', 'Bovenberegening', 'Onderberegening', 'Combinatie',
-] as const;
-
-export const KOELBEREGENING_OPTIES = [
-  'Geen', 'Bovenberegening', 'Verdampingskoeling',
+export const BEREGENING_OPTIES = [
+  'Geen', 'Nachtvorst — bovenberegening', 'Nachtvorst — onderberegening', 'Nachtvorst — combinatie',
+  'Koelberegening — bovenberegening', 'Koelberegening — verdampingskoeling',
+  'Nachtvorst + koelberegening',
 ] as const;
 
 export const WATERBRON_OPTIES = [

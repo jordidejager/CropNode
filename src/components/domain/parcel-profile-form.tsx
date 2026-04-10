@@ -17,10 +17,9 @@ import {
 import {
   GEWAS_OPTIES, RAS_SUGGESTIES, ONDERSTAM_SUGGESTIES,
   TEELTSYSTEEM_OPTIES, RIJRICHTING_OPTIES,
-  HAGELNET_OPTIES, REGENKAP_OPTIES, INSECTENNET_OPTIES, WINDSCHERM_OPTIES, STEUNCONSTRUCTIE_OPTIES,
-  IRRIGATIE_OPTIES, FERTIGATIE_OPTIES, NACHTVORSTBEREGENING_OPTIES, KOELBEREGENING_OPTIES, WATERBRON_OPTIES, DRAINAGE_OPTIES,
-  GRONDSOORT_OPTIES, GRONDWATERNIVEAU_OPTIES,
-  CERTIFICERING_OPTIES, DUURZAAMHEIDSPROGRAMMA_OPTIES,
+  HAGELNET_OPTIES, WINDSCHERM_OPTIES, STEUNCONSTRUCTIE_OPTIES,
+  IRRIGATIE_OPTIES, FERTIGATIE_OPTIES, BEREGENING_OPTIES, WATERBRON_OPTIES,
+  GRONDSOORT_OPTIES,
   VOORGAAND_GEWAS_OPTIES, HERINPLANT_OPTIES,
 } from "@/lib/parcel-profile-constants";
 
@@ -340,16 +339,20 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
   // Helper: vul bodemkenmerken aan vanuit grondmonster (altijd overschrijven als grondmonster data heeft)
   const applySoilDefaults = useCallback((target: FormData, analysis: any) => {
     if (!analysis || analysis.extractie_status !== 'completed') return;
-    // Altijd vullen vanuit grondmonster als de waarde beschikbaar is
     if (analysis.grondsoort_rapport) target.grondsoort = analysis.grondsoort_rapport;
     if (analysis.organische_stof_pct != null) target.organische_stof_pct = analysis.organische_stof_pct;
+    if (analysis.c_organisch_pct != null) target.c_organisch_pct = analysis.c_organisch_pct;
     if (analysis.klei_percentage != null) target.klei_percentage = analysis.klei_percentage;
+    if (analysis.pw_getal != null) target.pw_getal = analysis.pw_getal;
   }, []);
 
   // Populate form when profile loads, or use defaults from sub_parcel + latest soil analysis
   useEffect(() => {
     if (profile) {
       const merged = { ...profile };
+      // Vul gewas/ras aan vanuit subperceel als ze leeg zijn in het opgeslagen profiel
+      if (!merged.gewas && defaultGewas) merged.gewas = defaultGewas;
+      if (!merged.ras && defaultRas) merged.ras = defaultRas;
       applySoilDefaults(merged, latestAnalysis);
       reset(merged);
     } else if (profileData && !profile) {
@@ -513,7 +516,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       <ProfileSection
         title="Waterhuishouding"
         icon={Droplets}
-        fields={['irrigatiesysteem', 'fertigatie_aansluiting', 'nachtvorstberegening', 'koelberegening', 'waterbron', 'drainage']}
+        fields={['irrigatiesysteem', 'fertigatie_aansluiting', 'beregening', 'waterbron']}
         values={values}
       >
         <Field label="Irrigatiesysteem">
@@ -526,24 +529,14 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
             <SelectField value={field.value as string} onChange={field.onChange} options={FERTIGATIE_OPTIES} />
           )} />
         </Field>
-        <Field label="Nachtvorstberegening">
-          <Controller name="nachtvorstberegening" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={NACHTVORSTBEREGENING_OPTIES} />
-          )} />
-        </Field>
-        <Field label="Koelberegening">
-          <Controller name="koelberegening" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={KOELBEREGENING_OPTIES} />
+        <Field label="Beregening">
+          <Controller name="beregening" control={control} render={({ field }) => (
+            <SelectField value={field.value as string} onChange={field.onChange} options={BEREGENING_OPTIES} />
           )} />
         </Field>
         <Field label="Waterbron">
           <Controller name="waterbron" control={control} render={({ field }) => (
             <SelectField value={field.value as string} onChange={field.onChange} options={WATERBRON_OPTIES} />
-          )} />
-        </Field>
-        <Field label="Drainage">
-          <Controller name="drainage" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={DRAINAGE_OPTIES} />
           )} />
         </Field>
       </ProfileSection>
@@ -552,7 +545,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       <ProfileSection
         title="Bodemkenmerken"
         icon={Mountain}
-        fields={['grondsoort', 'bodem_ph', 'organische_stof_pct', 'klei_percentage', 'grondwaterniveau']}
+        fields={['grondsoort', 'bodem_ph', 'organische_stof_pct', 'c_organisch_pct', 'klei_percentage', 'pw_getal']}
         values={values}
       >
         <Field label="Grondsoort" source={bodemSource}>
@@ -566,13 +559,14 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         <Field label="Organische stof (%)" source={bodemSource}>
           <Input type="number" step="0.1" {...register('organische_stof_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 2.7" />
         </Field>
+        <Field label="C-organisch (%)" source={bodemSource}>
+          <Input type="number" step="0.1" {...register('c_organisch_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.5" />
+        </Field>
         <Field label="Klei (%)" source={bodemSource}>
           <Input type="number" step="0.1" {...register('klei_percentage', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 15" />
         </Field>
-        <Field label="Grondwaterniveau">
-          <Controller name="grondwaterniveau" control={control} render={({ field }) => (
-            <SelectField value={field.value as string} onChange={field.onChange} options={GRONDWATERNIVEAU_OPTIES} />
-          )} />
+        <Field label="Pw-getal" source={bodemSource}>
+          <Input type="number" step="1" {...register('pw_getal', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 40" />
         </Field>
       </ProfileSection>
 

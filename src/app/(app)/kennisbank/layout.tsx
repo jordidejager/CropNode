@@ -2,7 +2,8 @@ import { PageTabs } from '@/components/layout/page-tabs';
 
 const tabs = [
   { label: 'Atlas', href: '/kennisbank' },
-  { label: 'Ziekten & Plagen', href: '/kennisbank/ziekten-plagen' },
+  { label: 'Actueel', href: '/kennisbank/ziekten-plagen' },
+  { label: 'Encyclopedie', href: '/kennisbank/encyclopedie' },
 ];
 
 export default function KennisbankLayout({ children }: { children: React.ReactNode }) {

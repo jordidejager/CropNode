@@ -134,12 +134,12 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, e
           {/* Sub-Parcel */}
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-400">Perceel (optioneel)</Label>
-            <Select value={subParcelId} onValueChange={setSubParcelId}>
+            <Select value={subParcelId || '__none__'} onValueChange={(v) => setSubParcelId(v === '__none__' ? '' : v)}>
               <SelectTrigger className="bg-white/5 border-white/10 text-slate-200">
                 <SelectValue placeholder="Geheel bedrijf" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-white/10">
-                <SelectItem value="" className="text-slate-400 focus:bg-white/10">Geheel bedrijf</SelectItem>
+                <SelectItem value="__none__" className="text-slate-400 focus:bg-white/10">Geheel bedrijf</SelectItem>
                 {subParcels.map((sp) => (
                   <SelectItem key={sp.id} value={sp.id} className="text-slate-200 focus:bg-white/10">
                     {sp.name} ({sp.variety}, {sp.area} ha)
