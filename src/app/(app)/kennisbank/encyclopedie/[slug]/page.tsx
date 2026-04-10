@@ -205,6 +205,11 @@ export default function EncyclopediaDetailPage() {
   const { data: phenology } = useCurrentPhenology();
   const { data: relatedArticles = [] } = useRelatedArticles(profile?.name ?? null);
   const currentMonth = phenology?.month ?? new Date().getUTCMonth() + 1;
+  const allProducts = [
+    ...(profile?.key_preventive_products ?? []),
+    ...(profile?.key_curative_products ?? []),
+  ];
+  const { data: ctgbStatuses = {} } = useCtgbStatus(allProducts);
 
   if (isLoading) {
     return (
@@ -328,9 +333,7 @@ export default function EncyclopediaDetailPage() {
           {profile.key_preventive_products.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {profile.key_preventive_products.map((p, idx) => (
-                <span key={`prev-${idx}`} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 text-[11px] text-emerald-400">
-                  {p}
-                </span>
+                <ProductBadge key={`prev-${idx}`} name={p} status={ctgbStatuses[p]} />
               ))}
             </div>
           )}
@@ -339,9 +342,7 @@ export default function EncyclopediaDetailPage() {
           {profile.key_curative_products.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {profile.key_curative_products.map((p, idx) => (
-                <span key={`cur-${idx}`} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-0.5 text-[11px] text-amber-400">
-                  {p}
-                </span>
+                <ProductBadge key={`cur-${idx}`} name={p} status={ctgbStatuses[p]} />
               ))}
             </div>
           )}

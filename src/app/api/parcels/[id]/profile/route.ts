@@ -124,10 +124,18 @@ export async function PUT(
       return apiError('Klei percentage moet tussen 0 en 100% zijn', ErrorCodes.VALIDATION_ERROR, 400);
     }
 
-    // Bereken plantdichtheid server-side
+    // Bereken plantdichtheid server-side (-10% koppakkers)
     let plantdichtheid = body.plantdichtheid_per_ha;
     if (body.rijafstand_m && body.plantafstand_m && body.rijafstand_m > 0 && body.plantafstand_m > 0) {
-      plantdichtheid = Math.round(10000 / (body.rijafstand_m * body.plantafstand_m));
+      plantdichtheid = Math.round((10000 / (body.rijafstand_m * body.plantafstand_m)) * 0.9);
+    }
+
+    // Extract ziekte_* en vijand_* velden naar JSONB objecten
+    const ziektenPlagen: Record<string, string> = {};
+    const natuurlijkeVijanden: Record<string, string> = {};
+    for (const [key, val] of Object.entries(body)) {
+      if (key.startsWith('ziekte_') && val) ziektenPlagen[key] = val as string;
+      if (key.startsWith('vijand_') && val) natuurlijkeVijanden[key] = val as string;
     }
 
     const profileData = {
@@ -167,6 +175,9 @@ export async function PUT(
       voorgaand_gewas: body.voorgaand_gewas ?? null,
       herinplant: body.herinplant ?? null,
       verwachte_rooidatum: body.verwachte_rooidatum ?? null,
+      bestuiver_afstand: body.bestuiver_afstand ?? null,
+      ziekten_plagen: Object.keys(ziektenPlagen).length > 0 ? ziektenPlagen : {},
+      natuurlijke_vijanden: Object.keys(natuurlijkeVijanden).length > 0 ? natuurlijkeVijanden : {},
       notities: body.notities ?? null,
       bodem_bron_analyse_id: body.bodem_bron_analyse_id ?? null,
       updated_at: new Date().toISOString(),

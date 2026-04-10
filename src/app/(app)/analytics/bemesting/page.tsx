@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Sprout, Leaf, FlaskConical, Droplets, MapPin, FileText,
@@ -153,6 +153,11 @@ function HoofdPerceelSection({ hoofd, isExpanded, onToggle }: {
               <CheckCircle2 className="size-3" /> Geldig
             </span>
           )}
+          {!a && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">
+              Geen grondmonster
+            </span>
+          )}
         </div>
       </button>
 
@@ -296,8 +301,7 @@ export default function BemestingPage() {
   const chartSummaries = useMemo(() => {
     return groups.flatMap((g) =>
       g.subParcels
-        .filter((sp) => sp.analysis)
-        .map((sp) => ({
+                .map((sp) => ({
           parcelId: sp.subParcelId,
           parcelName: sp.subParcelName,
           variety: sp.variety,
@@ -359,11 +363,66 @@ export default function BemestingPage() {
         <BemestingKPI label="Gem. P-Al" value={stats.avgPAl?.toFixed(0) ?? null} unit="mg" icon={FileText} color="teal" />
       </div>
 
-      {/* Charts */}
+      {/* Charts + Overview table side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SoilComparisonChart summaries={chartSummaries} />
-        <NutrientRadarChart summaries={chartSummaries} />
+
+        {/* Overzichtstabel */}
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+          <h3 className="text-sm font-semibold text-slate-200 mb-4">Overzicht alle percelen</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="text-left py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Perceel</th>
+                  <th className="text-left py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Ras</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Ha</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Org. stof %</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">N-lev.</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">P-besch.</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">P-Al</th>
+                  <th className="text-right py-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Klei %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((hoofd) => (
+                  <React.Fragment key={hoofd.parcelId}>
+                    {/* Hoofdperceel header row */}
+                    <tr className="bg-white/[0.02]">
+                      <td colSpan={8} className="py-2 px-2 text-xs font-semibold text-slate-300">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="size-3 text-emerald-400" />
+                          {hoofd.parcelName}
+                          <span className="text-slate-600 font-normal ml-1">{hoofd.totalHa.toFixed(2)} ha</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Sub-parcel rows */}
+                    {hoofd.subParcels.map((sp) => {
+                      const a = sp.analysis;
+                      return (
+                        <tr key={sp.subParcelId} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                          <td className="py-1.5 pl-6 text-slate-200 text-xs">{sp.subParcelName}</td>
+                          <td className="py-1.5 text-slate-400 text-xs">{sp.variety}</td>
+                          <td className="py-1.5 text-right text-slate-400 text-xs">{sp.hectares.toFixed(2)}</td>
+                          <td className="py-1.5 text-right text-slate-200 text-xs">{a?.organische_stof_pct?.toFixed(1) ?? '—'}</td>
+                          <td className="py-1.5 text-right text-slate-200 text-xs">{a?.n_leverend_vermogen_kg_ha?.toFixed(0) ?? '—'}</td>
+                          <td className="py-1.5 text-right text-slate-200 text-xs">{a?.p_plantbeschikbaar_kg_ha?.toFixed(0) ?? '—'}</td>
+                          <td className="py-1.5 text-right text-slate-200 text-xs">{a?.p_bodemvoorraad_p_al?.toFixed(0) ?? '—'}</td>
+                          <td className="py-1.5 text-right text-slate-400 text-xs">{a?.klei_percentage?.toFixed(0) ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
+
+      {/* Radar chart full width */}
+      <NutrientRadarChart summaries={chartSummaries} />
 
       {/* Hoofdperceel sections */}
       <div className="space-y-4">

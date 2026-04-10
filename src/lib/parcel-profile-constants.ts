@@ -142,6 +142,58 @@ export const HERINPLANT_OPTIES = [
 ] as const;
 
 // ============================================
+// Ziekten & Plagen — gevoeligheid/historie
+// ============================================
+
+export const DRUK_NIVEAU_OPTIES = [
+  { value: 'geen', label: 'Geen / niet waargenomen' },
+  { value: 'laag', label: 'Lage druk' },
+  { value: 'gemiddeld', label: 'Gemiddelde druk' },
+  { value: 'hoog', label: 'Hoge druk' },
+  { value: 'zeer_hoog', label: 'Zeer hoge druk / probleem' },
+] as const;
+
+/** Ziekten/plagen die voor alle fruitgewassen gelden */
+export const ZIEKTEN_ALGEMEEN = [
+  'Schurft',
+  'Vruchtboomkanker',
+  'Bacterievuur',
+  'Meeldauw',
+  'Fruitmot',
+] as const;
+
+/** Extra ziekten/plagen specifiek voor appel */
+export const ZIEKTEN_APPEL = [
+  'Appelbloesemkever',
+  'Roze appelluis',
+] as const;
+
+/** Extra ziekten/plagen specifiek voor peer */
+export const ZIEKTEN_PEER = [
+  'Zwartvruchtrot',
+  'Perenbladvlo',
+] as const;
+
+/** Natuurlijke vijanden — aanwezigheid */
+export const NATUURLIJKE_VIJANDEN = [
+  'Oorwormen',
+  'Lieveheersbeestjes',
+  'Gaasvliegen',
+  'Roofmijten (Typhlodromus pyri)',
+  'Sluipwespen',
+  'Roofwantsen',
+  'Zweefvliegen',
+  'Spinnen',
+] as const;
+
+export const AANWEZIGHEID_OPTIES = [
+  { value: 'niet_waargenomen', label: 'Niet waargenomen' },
+  { value: 'weinig', label: 'Weinig' },
+  { value: 'matig', label: 'Matig aanwezig' },
+  { value: 'veel', label: 'Veel aanwezig' },
+] as const;
+
+// ============================================
 // Waardering kleuren (voor UI badges)
 // ============================================
 

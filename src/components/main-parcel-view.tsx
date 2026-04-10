@@ -25,8 +25,17 @@ import {
     Scale,
     Timer,
     AlertTriangle,
-    CheckCircle2
+    CheckCircle2,
+    Pencil,
+    Save,
+    X,
+    Loader2,
 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { updateSubParcel } from "@/lib/supabase-store"
+import { useInvalidateQueries } from "@/hooks/use-data"
+import { useToast } from "@/hooks/use-toast"
 import { GewasrotatieTimeline } from "@/components/domain/gewas-rotatie-timeline"
 import { ParcelProfileForm } from "@/components/domain/parcel-profile-form"
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel"
@@ -60,6 +69,36 @@ export function MainParcelView({
     lastSpray
 }: MainParcelViewProps) {
     const subParcels = parcel.subParcels || []
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editSaving, setEditSaving] = React.useState(false)
+    const [editCrop, setEditCrop] = React.useState(parcel.crop || '')
+    const [editVariety, setEditVariety] = React.useState(parcel.variety || '')
+    const [editArea, setEditArea] = React.useState(String(parcel.area || ''))
+    const { invalidateParcels } = useInvalidateQueries()
+    const { toast } = useToast()
+
+    const handleSaveEdit = React.useCallback(async () => {
+        setEditSaving(true)
+        try {
+            await updateSubParcel({
+                id: parcel.id,
+                crop: editCrop,
+                variety: editVariety,
+                area: Number(editArea) || 0,
+            })
+            await invalidateParcels()
+            toast({ title: 'Opgeslagen', description: 'Perceel gegevens zijn bijgewerkt.' })
+            setIsEditing(false)
+            // Update de lokale parcel data zodat de UI direct reflecteert
+            parcel.crop = editCrop
+            parcel.variety = editVariety
+            parcel.area = Number(editArea) || 0
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fout', description: err.message })
+        } finally {
+            setEditSaving(false)
+        }
+    }, [parcel, editCrop, editVariety, editArea, invalidateParcels, toast])
 
     // Calculate Aggregated KPIs and Composition Data
     // Parse location: kan een {lat,lng} object zijn (Parcel type) of een POINT(lng lat) string (SprayableParcel)
@@ -223,8 +262,8 @@ export function MainParcelView({
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <Button variant="outline" className="bg-white/5 border-white/10 text-white font-bold rounded-full">
-                                Instellingen
+                            <Button variant="outline" onClick={() => { setIsEditing(!isEditing); setEditCrop(parcel.crop || ''); setEditVariety(parcel.variety || ''); setEditArea(String(parcel.area || '')); }} className="bg-white/5 border-white/10 text-white font-bold rounded-full gap-2">
+                                <Pencil className="h-3.5 w-3.5" /> Bewerken
                             </Button>
                             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-black px-8 rounded-full shadow-lg shadow-primary/20">
                                 Nieuwe Waarneming
@@ -233,6 +272,46 @@ export function MainParcelView({
                     </div>
                 </div>
             </div>
+
+            {/* Inline Edit panel */}
+            {isEditing && (
+                <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-white flex items-center gap-2"><Pencil className="h-4 w-4 text-primary" /> Perceel bewerken</h3>
+                        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white">
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 block">Gewas</label>
+                            <Select value={editCrop} onValueChange={setEditCrop}>
+                                <SelectTrigger className="bg-white/[0.03] border-white/[0.08] h-10"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {['Appel', 'Peer', 'Kers', 'Pruim', 'Overig'].map(g => (
+                                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 block">Ras</label>
+                            <Input value={editVariety} onChange={e => setEditVariety(e.target.value)} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. Conference" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 block">Oppervlakte (ha)</label>
+                            <Input type="number" step="0.01" value={editArea} onChange={e => setEditArea(e.target.value)} className="bg-white/[0.03] border-white/[0.08] h-10" />
+                        </div>
+                        <div className="flex items-end">
+                            <Button onClick={handleSaveEdit} disabled={editSaving} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-10 rounded-xl gap-2">
+                                {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Opslaan
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-white/25">Wijzigingen worden direct doorgevoerd in slimme invoer, spuitschrift en CTGB validatie.</p>
+                </div>
+            )}
 
             {/* 0. Perceelprofiel & Grondmonsters — direct na header */}
             <Tabs defaultValue="profile" className="w-full">

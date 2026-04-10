@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ChevronDown, Save, Loader2, TreePine, Ruler, Settings2,
-  Shield, Droplets, Mountain, Award, History, FileText, Sprout, X,
+  Shield, Droplets, Mountain, Award, History, FileText, Sprout, X, Bug, Bird,
 } from "lucide-react";
 import {
   GEWAS_OPTIES, RAS_SUGGESTIES, ONDERSTAM_SUGGESTIES,
@@ -21,6 +21,8 @@ import {
   IRRIGATIE_OPTIES, FERTIGATIE_OPTIES, BEREGENING_OPTIES, WATERBRON_OPTIES,
   GRONDSOORT_OPTIES,
   VOORGAAND_GEWAS_OPTIES, HERINPLANT_OPTIES,
+  ZIEKTEN_ALGEMEEN, ZIEKTEN_APPEL, ZIEKTEN_PEER, DRUK_NIVEAU_OPTIES,
+  NATUURLIJKE_VIJANDEN, AANWEZIGHEID_OPTIES,
 } from "@/lib/parcel-profile-constants";
 
 interface ParcelProfileFormProps {
@@ -354,6 +356,17 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       if (!merged.gewas && defaultGewas) merged.gewas = defaultGewas;
       if (!merged.ras && defaultRas) merged.ras = defaultRas;
       applySoilDefaults(merged, latestAnalysis);
+      // Ziekten/vijanden JSONB → losse velden
+      if (merged.ziekten_plagen && typeof merged.ziekten_plagen === 'object') {
+        for (const [k, v] of Object.entries(merged.ziekten_plagen as Record<string, string>)) {
+          merged[k] = v;
+        }
+      }
+      if (merged.natuurlijke_vijanden && typeof merged.natuurlijke_vijanden === 'object') {
+        for (const [k, v] of Object.entries(merged.natuurlijke_vijanden as Record<string, string>)) {
+          merged[k] = v;
+        }
+      }
       reset(merged);
     } else if (profileData && !profile) {
       const defaults: FormData = {};
@@ -406,7 +419,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       <ProfileSection
         title="Aanplantgegevens"
         icon={Sprout}
-        fields={['plantjaar', 'gewas', 'ras', 'onderstammen', 'bestuiversras', 'kloon_selectie']}
+        fields={['plantjaar', 'gewas', 'ras', 'onderstammen', 'bestuiversras', 'bestuiver_afstand', 'kloon_selectie']}
         values={values}
       >
         <Field label="Plantjaar">
@@ -434,6 +447,9 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         </Field>
         <Field label="Bestuiversras">
           <Input {...register('bestuiversras')} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="Optioneel" />
+        </Field>
+        <Field label="Bestuiver om de ... meter">
+          <Input {...register('bestuiver_afstand')} type="number" step="1" className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 10" />
         </Field>
         <Field label="Kloon / selectie">
           <Input {...register('kloon_selectie')} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="Optioneel" />
@@ -592,7 +608,59 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         </Field>
       </ProfileSection>
 
-      {/* 9. Notities */}
+      {/* 8. Ziekten & Plagen */}
+      {(() => {
+        const gewas = (values.gewas as string) || selectedGewas;
+        const ziekten = [
+          ...ZIEKTEN_ALGEMEEN,
+          ...(gewas === 'Appel' ? ZIEKTEN_APPEL : []),
+          ...(gewas === 'Peer' ? ZIEKTEN_PEER : []),
+        ];
+        return (
+          <ProfileSection
+            title="Ziekten & Plagen"
+            icon={Bug}
+            fields={ziekten.map(z => `ziekte_${z.toLowerCase().replace(/[^a-z]/g, '_')}`)}
+            values={values}
+            defaultOpen={false}
+          >
+            <p className="text-[11px] text-white/25 md:col-span-2 -mt-1 mb-1">Geef per ziekte/plaag de historische druk op dit perceel aan.</p>
+            {ziekten.map(ziekte => {
+              const fieldName = `ziekte_${ziekte.toLowerCase().replace(/[^a-z]/g, '_')}`;
+              return (
+                <Field key={fieldName} label={ziekte}>
+                  <Controller name={fieldName} control={control} render={({ field }) => (
+                    <SelectField value={field.value as string} onChange={field.onChange} options={DRUK_NIVEAU_OPTIES} placeholder="Selecteer druk..." />
+                  )} />
+                </Field>
+              );
+            })}
+          </ProfileSection>
+        );
+      })()}
+
+      {/* 9. Natuurlijke vijanden */}
+      <ProfileSection
+        title="Natuurlijke vijanden"
+        icon={Bird}
+        fields={NATUURLIJKE_VIJANDEN.map(v => `vijand_${v.toLowerCase().replace(/[^a-z]/g, '_')}`)}
+        values={values}
+        defaultOpen={false}
+      >
+        <p className="text-[11px] text-white/25 md:col-span-2 -mt-1 mb-1">Geef aan welke natuurlijke vijanden je op dit perceel waarneemt.</p>
+        {NATUURLIJKE_VIJANDEN.map(vijand => {
+          const fieldName = `vijand_${vijand.toLowerCase().replace(/[^a-z]/g, '_')}`;
+          return (
+            <Field key={fieldName} label={vijand}>
+              <Controller name={fieldName} control={control} render={({ field }) => (
+                <SelectField value={field.value as string} onChange={field.onChange} options={AANWEZIGHEID_OPTIES} placeholder="Selecteer..." />
+              )} />
+            </Field>
+          );
+        })}
+      </ProfileSection>
+
+      {/* 10. Notities */}
       <ProfileSection
         title="Notities"
         icon={FileText}

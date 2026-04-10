@@ -150,7 +150,9 @@ function YearCell({
 
 export default function GeschiedenisPage() {
   const currentYear = getCurrentHarvestYear();
-  const displayYears = useMemo(() => Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i), [currentYear]);
+    // Grid toont t/m vorig oogstjaar (huidig jaar is nog niet geplukt)
+  const lastDisplayYear = currentYear - 1;
+  const displayYears = useMemo(() => Array.from({ length: lastDisplayYear - 2016 }, (_, i) => lastDisplayYear - i), [lastDisplayYear]);
 
   const [summaries, setSummaries] = useState<ProductionSummaryRow[]>([]);
   const [subParcels, setSubParcels] = useState<AnalyticsSubParcel[]>([]);
@@ -211,21 +213,23 @@ export default function GeschiedenisPage() {
       }
     });
 
-    // Group by hoofdperceel (parcel_id)
+    // Group by hoofdperceel NAME (not ID) — multiple parcels can share a name
     const hoofdMap = new Map<string, HoofdPerceelGroup>();
 
     parcelMap.forEach((group) => {
       const hoofdId = group.subParcel.parcel_id || 'onbekend';
-      if (!hoofdMap.has(hoofdId)) {
-        const hoofdPerceel = parcels.find((p) => p.id === hoofdId);
-        hoofdMap.set(hoofdId, {
+      const hoofdPerceel = parcels.find((p) => p.id === hoofdId);
+      const naam = hoofdPerceel?.name || 'Onbekend perceel';
+
+      if (!hoofdMap.has(naam)) {
+        hoofdMap.set(naam, {
           id: hoofdId,
-          name: hoofdPerceel?.name || 'Onbekend perceel',
+          name: naam,
           totalHa: 0,
           subParcels: [],
         });
       }
-      const hg = hoofdMap.get(hoofdId)!;
+      const hg = hoofdMap.get(naam)!;
       hg.subParcels.push(group);
       hg.totalHa += group.subParcel.area || 0;
     });
@@ -295,7 +299,7 @@ export default function GeschiedenisPage() {
   // Auto-expand all on first load
   useEffect(() => {
     if (hoofdPerceelGroups.length > 0 && expandedGroups.size === 0) {
-      setExpandedGroups(new Set(hoofdPerceelGroups.map((h) => h.id)));
+      setExpandedGroups(new Set(hoofdPerceelGroups.map((h) => h.name)));
     }
   }, [hoofdPerceelGroups, expandedGroups.size]);
 
@@ -354,20 +358,20 @@ export default function GeschiedenisPage() {
 
       {/* Production Grid per Hoofdperceel */}
       {hoofdPerceelGroups.map((hoofd) => (
-        <div key={hoofd.id} className="rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden">
+        <div key={hoofd.name} className="rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden">
           {/* Hoofdperceel Header */}
           <button
-            onClick={() => toggleCrop(hoofd.id)}
+            onClick={() => toggleCrop(hoofd.name)}
             className="w-full flex items-center gap-2 px-4 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors border-b border-white/5"
           >
-            {expandedGroups.has(hoofd.id) ? <ChevronDown className="size-4 text-slate-500" /> : <ChevronRight className="size-4 text-slate-500" />}
+            {expandedGroups.has(hoofd.name) ? <ChevronDown className="size-4 text-slate-500" /> : <ChevronRight className="size-4 text-slate-500" />}
             <MapPin className="size-4 text-emerald-400" />
             <span className="text-sm font-semibold text-slate-200">{hoofd.name}</span>
             <span className="text-xs text-slate-500 ml-1">{hoofd.totalHa.toFixed(2)} ha · {hoofd.subParcels.length} {hoofd.subParcels.length === 1 ? 'blok' : 'blokken'}</span>
           </button>
 
           {/* Grid */}
-          {expandedGroups.has(hoofd.id) && (
+          {expandedGroups.has(hoofd.name) && (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -478,12 +482,11 @@ export default function GeschiedenisPage() {
         onOpenChange={(open) => { setFormOpen(open); if (!open) { setEditingEntry(null); setPrefillYear(null); setPrefillSubParcel(null); } }}
         onSubmit={handleSubmit}
         subParcels={subParcels}
+        parcels={parcels}
         existingYears={existingYears}
         editingEntry={editingEntry || (prefillYear || prefillSubParcel ? {
           harvest_year: prefillYear || currentYear,
           sub_parcel_id: prefillSubParcel || '',
-          variety: prefillSubParcel ? subParcels.find((s) => s.id === prefillSubParcel)?.variety || '' : '',
-          hectares: prefillSubParcel ? subParcels.find((s) => s.id === prefillSubParcel)?.area || null : null,
         } : undefined)}
       />
     </div>

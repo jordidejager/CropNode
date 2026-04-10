@@ -64,24 +64,51 @@ export async function upsertProductionSummary(input: ProductionSummaryInput): Pr
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Niet ingelogd' };
 
-  const { error } = await supabase
+  const row = {
+    user_id: user.id,
+    harvest_year: input.harvest_year,
+    parcel_id: input.parcel_id || null,
+    sub_parcel_id: input.sub_parcel_id || null,
+    variety: input.variety,
+    total_kg: input.total_kg,
+    total_crates: input.total_crates || null,
+    weight_per_crate: input.weight_per_crate || 18,
+    hectares: input.hectares || null,
+    notes: input.notes || null,
+    source: 'manual',
+    updated_at: new Date().toISOString(),
+  };
+
+  // Check if a matching record already exists (the unique index uses COALESCE,
+  // which the Supabase client can't use in onConflict)
+  let query = supabase
     .from('production_summaries')
-    .upsert({
-      user_id: user.id,
-      harvest_year: input.harvest_year,
-      parcel_id: input.parcel_id || null,
-      sub_parcel_id: input.sub_parcel_id || null,
-      variety: input.variety,
-      total_kg: input.total_kg,
-      total_crates: input.total_crates || null,
-      weight_per_crate: input.weight_per_crate || 18,
-      hectares: input.hectares || null,
-      notes: input.notes || null,
-      source: 'manual',
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id,harvest_year,sub_parcel_id,variety',
-    });
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('harvest_year', input.harvest_year)
+    .eq('variety', input.variety);
+
+  if (input.sub_parcel_id) {
+    query = query.eq('sub_parcel_id', input.sub_parcel_id);
+  } else {
+    query = query.is('sub_parcel_id', null);
+  }
+
+  const { data: existing } = await query.maybeSingle();
+
+  let error;
+  if (existing) {
+    // Update existing record
+    ({ error } = await supabase
+      .from('production_summaries')
+      .update(row)
+      .eq('id', existing.id));
+  } else {
+    // Insert new record
+    ({ error } = await supabase
+      .from('production_summaries')
+      .insert(row));
+  }
 
   if (error) {
     console.error('Error upserting production summary:', error);

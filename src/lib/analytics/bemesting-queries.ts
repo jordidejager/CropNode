@@ -112,34 +112,44 @@ export function buildHoofdPerceelBemesting(
     }
   });
 
-  // Group sub_parcels by their parcel_id (hoofdperceel)
+  // Group sub_parcels by hoofdperceel NAME (multiple parcels can share a name)
   const hoofdMap = new Map<string, HoofdPerceelBemesting>();
 
-  // Initialize from parcels
+  // Initialize from parcels — group by name
   parcels.forEach((p) => {
+    if (hoofdMap.has(p.name)) {
+      // Merge analyses from multiple parcels with same name
+      const existing = hoofdMap.get(p.name)!;
+      const extraAnalyses = analysesByParcel.get(p.id);
+      if (extraAnalyses?.[0] && !existing.hoofdAnalysis) {
+        existing.hoofdAnalysis = extraAnalyses[0];
+      }
+      return;
+    }
     const hoofdAnalyses = analysesByParcel.get(p.id);
-    hoofdMap.set(p.id, {
+    hoofdMap.set(p.name, {
       parcelId: p.id,
       parcelName: p.name,
       totalHa: 0,
-      hoofdAnalysis: hoofdAnalyses?.[0] || null, // latest (already sorted desc)
+      hoofdAnalysis: hoofdAnalyses?.[0] || null,
       subParcels: [],
     });
   });
 
-  // Populate sub-parcels into their hoofdperceel
+  // Populate sub-parcels into their hoofdperceel (by name)
   subParcels.forEach((sp) => {
-    let hoofd = hoofdMap.get(sp.parcel_id);
+    const hoofdPerceel = parcels.find((p) => p.id === sp.parcel_id);
+    const naam = hoofdPerceel?.name || sp.parcel_id;
+    let hoofd = hoofdMap.get(naam);
     if (!hoofd) {
-      // Orphan sub-parcel without a matching parcel
       hoofd = {
         parcelId: sp.parcel_id,
-        parcelName: sp.parcel_id,
+        parcelName: naam,
         totalHa: 0,
         hoofdAnalysis: analysesByParcel.get(sp.parcel_id)?.[0] || null,
         subParcels: [],
       };
-      hoofdMap.set(sp.parcel_id, hoofd);
+      hoofdMap.set(naam, hoofd);
     }
 
     // Direct analysis on sub-parcel, or inherit from hoofdperceel
@@ -159,9 +169,9 @@ export function buildHoofdPerceelBemesting(
     hoofd.totalHa += sp.area || 0;
   });
 
-  // Only return hoofdpercelen that have analyses (direct or on sub-parcels)
+  // Return ALL hoofdpercelen — also those without analyses, so users see what's missing
   return [...hoofdMap.values()]
-    .filter((h) => h.hoofdAnalysis || h.subParcels.some((sp) => sp.analysis))
+    .filter((h) => h.subParcels.length > 0)
     .sort((a, b) => a.parcelName.localeCompare(b.parcelName));
 }
 
