@@ -257,6 +257,17 @@ export default function GeschiedenisPage() {
     [summaries]
   );
 
+  // Map of sub_parcel_id → Set of years with data (for "next empty" logic)
+  const filledCells = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    summaries.forEach((s) => {
+      if (!s.sub_parcel_id) return;
+      if (!map.has(s.sub_parcel_id)) map.set(s.sub_parcel_id, new Set());
+      map.get(s.sub_parcel_id)!.add(s.harvest_year);
+    });
+    return map;
+  }, [summaries]);
+
   const handleAdd = (year?: number, subParcelId?: string) => {
     setEditingEntry(null);
     setPrefillYear(year || null);
@@ -283,8 +294,41 @@ export default function GeschiedenisPage() {
   };
 
   const handleSubmit = async (input: ProductionSummaryInput) => {
-    await upsertProductionSummary(input);
-    await loadData();
+    // Optimistic update — add to local state immediately, no full page refresh
+    const optimisticRow: ProductionSummaryRow = {
+      id: `temp-${Date.now()}`,
+      user_id: '',
+      harvest_year: input.harvest_year,
+      parcel_id: input.parcel_id || null,
+      sub_parcel_id: input.sub_parcel_id || null,
+      variety: input.variety,
+      total_kg: input.total_kg,
+      total_crates: input.total_crates || null,
+      weight_per_crate: input.weight_per_crate || 350,
+      hectares: input.hectares || null,
+      notes: input.notes || null,
+      source: 'manual',
+      created_at: new Date().toISOString(),
+    };
+
+    setSummaries((prev) => {
+      // Remove existing entry for same parcel+year+variety if exists
+      const filtered = prev.filter((s) =>
+        !(s.sub_parcel_id === input.sub_parcel_id &&
+          s.harvest_year === input.harvest_year &&
+          s.variety === input.variety)
+      );
+      return [...filtered, optimisticRow];
+    });
+
+    // Save in background — no await, no full reload
+    upsertProductionSummary(input).then((result) => {
+      if (!result.success) {
+        console.error('Opslaan mislukt:', result.error);
+        // Reload to get correct state on failure
+        loadData();
+      }
+    });
   };
 
   const toggleCrop = (crop: string) => {
@@ -480,10 +524,12 @@ export default function GeschiedenisPage() {
       <HistoricalDataForm
         open={formOpen}
         onOpenChange={(open) => { setFormOpen(open); if (!open) { setEditingEntry(null); setPrefillYear(null); setPrefillSubParcel(null); } }}
-        onSubmit={handleSubmit}
+        onSubmit={(input) => { setPrefillYear(null); setPrefillSubParcel(null); setEditingEntry(null); handleSubmit(input); }}
         subParcels={subParcels}
         parcels={parcels}
         existingYears={existingYears}
+        filledCells={filledCells}
+        displayYears={displayYears}
         editingEntry={editingEntry || (prefillYear || prefillSubParcel ? {
           harvest_year: prefillYear || currentYear,
           sub_parcel_id: prefillSubParcel || '',

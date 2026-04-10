@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { updateSubParcel } from "@/lib/supabase-store"
+import { RAS_SUGGESTIES } from "@/lib/parcel-profile-constants"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
 import { GewasrotatieTimeline } from "@/components/domain/gewas-rotatie-timeline"
@@ -296,7 +297,18 @@ export function MainParcelView({
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 block">Ras</label>
-                            <Input value={editVariety} onChange={e => setEditVariety(e.target.value)} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. Conference" />
+                            <Select value={editVariety} onValueChange={setEditVariety}>
+                                <SelectTrigger className="bg-white/[0.03] border-white/[0.08] h-10"><SelectValue placeholder="Selecteer ras" /></SelectTrigger>
+                                <SelectContent>
+                                    {(RAS_SUGGESTIES[editCrop] || []).map(r => (
+                                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                                    ))}
+                                    {/* Toon huidige waarde als die niet in de suggesties staat */}
+                                    {editVariety && !(RAS_SUGGESTIES[editCrop] || []).includes(editVariety) && (
+                                        <SelectItem value={editVariety}>{editVariety} (huidig)</SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-1 block">Oppervlakte (ha)</label>

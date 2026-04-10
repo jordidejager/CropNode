@@ -41,39 +41,41 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, p
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [addAnother, setAddAnother] = React.useState(false);
 
-  // Initialize from editingEntry when dialog opens
+  // Initialize ONLY when dialog opens (not on every editingEntry change while open)
+  const prevOpen = React.useRef(false);
   React.useEffect(() => {
-    if (!open) return;
+    // Only trigger on open transition (false → true)
+    if (open && !prevOpen.current) {
+      if (editingEntry) {
+        setHarvestYear(editingEntry.harvest_year || currentYear);
+        setSubParcelId(editingEntry.sub_parcel_id || '');
+        setVariety(editingEntry.variety || '');
+        setTotalKg(editingEntry.total_kg?.toString() || '');
+        setTotalCrates(editingEntry.total_crates?.toString() || '');
+        setWeightPerCrate(editingEntry.weight_per_crate?.toString() || '350');
+        setHectares(editingEntry.hectares?.toString() || '');
+        setNotes(editingEntry.notes || '');
 
-    if (editingEntry) {
-      setHarvestYear(editingEntry.harvest_year || currentYear);
-      setSubParcelId(editingEntry.sub_parcel_id || '');
-      setVariety(editingEntry.variety || '');
-      setTotalKg(editingEntry.total_kg?.toString() || '');
-      setTotalCrates(editingEntry.total_crates?.toString() || '');
-      setWeightPerCrate(editingEntry.weight_per_crate?.toString() || '18');
-      setHectares(editingEntry.hectares?.toString() || '');
-      setNotes(editingEntry.notes || '');
-
-      // If sub_parcel_id is prefilled, auto-fill variety + hectares + kg/kist
-      if (editingEntry.sub_parcel_id) {
-        const sp = subParcels.find((s) => s.id === editingEntry.sub_parcel_id);
-        if (sp) {
-          if (!editingEntry.variety) setVariety(sp.variety);
-          if (!editingEntry.hectares) setHectares(sp.area.toString());
-          if (!editingEntry.weight_per_crate) setWeightPerCrate(getDefaultWeightPerCrate(sp.crop));
+        if (editingEntry.sub_parcel_id) {
+          const sp = subParcels.find((s) => s.id === editingEntry.sub_parcel_id);
+          if (sp) {
+            if (!editingEntry.variety) setVariety(sp.variety);
+            if (!editingEntry.hectares) setHectares(sp.area.toString());
+            if (!editingEntry.weight_per_crate) setWeightPerCrate(getDefaultWeightPerCrate(sp.crop));
+          }
         }
+      } else {
+        setHarvestYear(currentYear);
+        setSubParcelId('');
+        setVariety('');
+        setTotalKg('');
+        setTotalCrates('');
+        setWeightPerCrate('350');
+        setHectares('');
+        setNotes('');
       }
-    } else {
-      setHarvestYear(currentYear);
-      setSubParcelId('');
-      setVariety('');
-      setTotalKg('');
-      setTotalCrates('');
-      setWeightPerCrate('350');
-      setHectares('');
-      setNotes('');
     }
+    prevOpen.current = open;
   }, [open, editingEntry, currentYear, subParcels]);
 
   // Default kg/kist based on crop type
@@ -176,7 +178,7 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, p
     return { subParcelId: currentSpId, year: currentYear };
   }, [filledCells, displayYears, subParcels]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = (shouldAddAnother: boolean) => {
     const kg = Number(totalKg);
     if (!subParcelId || !variety || kg <= 0 || !harvestYear) return;
 
@@ -187,18 +189,23 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, p
       variety,
       total_kg: kg,
       total_crates: totalCrates ? Number(totalCrates) : null,
-      weight_per_crate: Number(weightPerCrate) || 18,
+      weight_per_crate: Number(weightPerCrate) || 350,
       hectares: hectares ? Number(hectares) : null,
       notes: notes || null,
     };
 
-    if (addAnother) {
-      // Fire-and-forget — don't wait, immediately navigate to next
-      onSubmit(input); // no await
+    // Close dialog FIRST (before async work), so UI is instant
+    if (!shouldAddAnother) {
+      onOpenChange(false);
+    }
 
+    // Fire-and-forget save
+    onSubmit(input);
+
+    if (shouldAddAnother) {
+      // Navigate to next empty cell
       const next = findNextEmpty(subParcelId, harvestYear);
       if (next.subParcelId !== subParcelId) {
-        // Switch to next parcel
         const sp = subParcels.find((s) => s.id === next.subParcelId);
         if (sp) {
           setSubParcelId(sp.id);
@@ -211,10 +218,6 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, p
       setTotalKg('');
       setTotalCrates('');
       setNotes('');
-    } else {
-      // Normal save — fire-and-forget too, close immediately
-      onSubmit(input); // no await
-      onOpenChange(false);
     }
   };
 
@@ -345,14 +348,14 @@ export function HistoricalDataForm({ open, onOpenChange, onSubmit, subParcels, p
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
             variant="ghost"
-            onClick={() => { setAddAnother(true); handleSubmit(); }}
+            onClick={() => handleSubmit(true)}
             disabled={!subParcelId || !variety || !totalKg}
             className="text-slate-400 hover:text-slate-200 hover:bg-white/5"
           >
-            <Plus className="size-4 mr-1" /> Opslaan & nog een
+            <Plus className="size-4 mr-1" /> Opslaan & volgende jaar
           </Button>
           <Button
-            onClick={() => { setAddAnother(false); handleSubmit(); }}
+            onClick={() => handleSubmit(false)}
             disabled={!subParcelId || !variety || !totalKg}
             className="bg-emerald-600 text-white hover:bg-emerald-500"
           >
