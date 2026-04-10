@@ -7,7 +7,8 @@ import type { Parcel, SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical } from "lucide-react";
+import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton, ErrorState, EmptyState } from "@/components/ui/data-states";
@@ -518,38 +519,121 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     )
   }
 
-  // Grouped parcel view - shows subparcels within a main parcel
+  // Grouped parcel view - hoofdperceel overview met subpercelen
   if (selectedGroupedParcel) {
+    const gp = selectedGroupedParcel;
+    const cropSet = new Set(gp.subParcels.map(p => p.crop));
+    const varietySet = new Set(gp.subParcels.map(p => p.variety).filter(Boolean));
+    // Use the first sub_parcel's parcelId as the real parcels-table ID (for grondmonster upload)
+    const realParcelId = (gp.subParcels[0] as unknown as { parcelId?: string })?.parcelId;
+
     return (
-      <div className="space-y-6 h-full flex flex-col pb-8">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSelectedGroupedParcel(null)}
-            className="h-12 w-12 rounded-full bg-white/5 hover:bg-white/10"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-black text-white">{selectedGroupedParcel.name}</h1>
-            <p className="text-sm text-white/50">
-              {selectedGroupedParcel.subParcels.length} blokken • {selectedGroupedParcel.totalArea.toFixed(2)} ha totaal
-            </p>
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+        {/* Hero Header */}
+        <div className="relative h-56 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/80 via-slate-900 to-black" />
+          <div className="absolute inset-0 p-8 flex flex-col justify-end bg-gradient-to-t from-black/80 to-transparent">
+            <div className="flex justify-between items-end">
+              <div className="space-y-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedGroupedParcel(null)} className="text-white/60 hover:text-white -ml-2 gap-2">
+                  <ArrowLeft className="h-4 w-4" /> Terug naar overzicht
+                </Button>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-4xl font-black text-white">{gp.name}</h1>
+                  <span className="inline-flex items-center justify-center h-7 min-w-[1.75rem] px-2.5 rounded-full bg-primary/20 border border-primary/30 text-sm font-black text-primary">
+                    {gp.subParcels.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-white/50 text-sm font-medium">
+                  <span>{gp.totalArea.toFixed(2)} ha totaal</span>
+                  <span>&middot;</span>
+                  <span>{gp.subParcels.length} blokken</span>
+                  <span>&middot;</span>
+                  <span>{varietySet.size} rassen</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {gp.crops.map(crop => {
+                  const colors = getCropColor(crop);
+                  return (
+                    <span key={crop} className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${colors.bg} ${colors.text}`}>
+                      {crop === 'Appel' ? <Apple className="h-3 w-3" /> : <Leaf className="h-3 w-3" />}
+                      {crop}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-grow overflow-y-auto">
-          <AnimatePresence mode="popLayout">
-            {selectedGroupedParcel.subParcels.map((parcel, index) => (
-              <ParcelCard
-                key={parcel.id}
-                parcel={parcel}
-                index={index}
-                onClick={() => setSelectedMainParcel(parcel)}
-              />
-            ))}
-          </AnimatePresence>
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Oppervlakte", value: `${gp.totalArea.toFixed(2)} ha`, color: "text-blue-400" },
+            { label: "Blokken", value: `${gp.subParcels.length}`, color: "text-emerald-400" },
+            { label: "Gewassen", value: `${cropSet.size}`, color: "text-amber-400" },
+            { label: "Rassen", value: `${varietySet.size}`, color: "text-purple-400" },
+          ].map((kpi, i) => (
+            <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+              <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{kpi.label}</p>
+              <p className={`text-2xl font-black mt-1 ${kpi.color}`}>{kpi.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Grondmonster upload — op hoofdperceel-niveau */}
+        {realParcelId && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <FlaskConical className="h-5 w-5 text-primary" />
+              Grondmonsters (hoofdperceel)
+            </h3>
+            <p className="text-xs text-white/30">
+              Grondmonsters die hier worden geüpload gelden voor alle {gp.subParcels.length} blokken, tenzij een blok een eigen grondmonster heeft.
+            </p>
+            <SoilAnalysisPanel parcelId={realParcelId} />
+          </div>
+        )}
+
+        {/* Subpercelen grid */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-black text-white">Blokken</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {gp.subParcels.map((parcel, index) => {
+              const crop = parcel.crop || 'Onbekend';
+              const colors = getCropColor(crop);
+              return (
+                <motion.div
+                  key={parcel.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => setSelectedMainParcel(parcel)}
+                  className="group relative rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.04] to-transparent p-5 cursor-pointer hover:border-white/[0.12] hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors.bg}`}>
+                        {crop === 'Appel' ? <Apple className={`h-5 w-5 ${colors.text}`} /> : <Leaf className={`h-5 w-5 ${colors.text}`} />}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-white group-hover:text-primary transition-colors">
+                          {parcel.name.startsWith(gp.name) ? parcel.name.slice(gp.name.length).trim() || parcel.name : parcel.name}
+                        </h4>
+                        <p className="text-[10px] text-white/30 uppercase font-bold">{parcel.variety}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-white/10 group-hover:text-primary/50 transition-colors" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-mono font-bold text-white/60">{(parcel.area || 0).toFixed(2)} ha</span>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${colors.bg} ${colors.text}`}>{crop}</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -848,6 +932,17 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                             </span>
                             <span className="text-[10px] text-white/25 ml-1">ha</span>
                           </div>
+
+                          {/* Bekijk hoofdperceel button */}
+                          {!isSingleParcel && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedGroupedParcel(group); }}
+                              className="p-2 rounded-xl opacity-0 group-hover/card:opacity-100 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all duration-200 shrink-0"
+                              title="Bekijk hoofdperceel"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
 
                         {/* Expanded Sub-parcels with tree connectors */}
