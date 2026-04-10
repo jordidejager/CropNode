@@ -37,7 +37,7 @@ export async function GET(
     }
 
     // Haal laatste grondmonster op (eigen + hoofdperceel als fallback)
-    const analysisFields = 'id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, extractie_status';
+    const analysisFields = 'id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, c_organisch_pct, pw_getal, rvo_p_al_mg_p2o5, rvo_p_cacl2_mg_kg, extractie_status';
     let latestAnalysis = null;
 
     const { data: ownAnalysis } = await supabase

@@ -143,34 +143,47 @@ export function SoilAnalysisPanel({ parcelId, subParcelId }: SoilAnalysisPanelPr
                 </div>
               </div>
 
-              {/* Organische stof & klei */}
+              {/* Organische stof, C-organisch & klei */}
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Bodem</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <ResultCard label="Organische stof" value={a.organische_stof_pct} unit="%" />
+                  <ResultCard label="C-organisch" value={a.c_organisch_pct} unit="%" />
                   <ResultCard label="Klei" value={a.klei_percentage} unit="%" />
+                  <ResultCard label="Bulkdichtheid" value={a.bulkdichtheid_kg_m3} unit="kg/m³" />
                   <ResultCard label="Grondsoort" value={a.grondsoort_rapport} />
                 </div>
               </div>
 
               {/* RVO waarden */}
-              {(a.rvo_p_al_mg_p2o5 || a.rvo_p_cacl2_mg_kg) && (
+              {(a.rvo_p_al_mg_p2o5 || a.rvo_p_cacl2_mg_kg || a.pw_getal) && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Info className="h-4 w-4 text-amber-400" />
                     <span className="text-sm font-bold text-amber-300">RVO Doorgave</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-white/40">P-Al:</span>{' '}
-                      <span className="font-mono font-bold text-white">{a.rvo_p_al_mg_p2o5}</span>
-                      <span className="text-white/30 text-xs ml-1">mg P\u2082O\u2085/100g</span>
-                    </div>
-                    <div>
-                      <span className="text-white/40">P-CaCl\u2082:</span>{' '}
-                      <span className="font-mono font-bold text-white">{a.rvo_p_cacl2_mg_kg}</span>
-                      <span className="text-white/30 text-xs ml-1">mg P/kg</span>
-                    </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    {a.rvo_p_al_mg_p2o5 != null && (
+                      <div>
+                        <span className="text-white/40">P-Al:</span>{' '}
+                        <span className="font-mono font-bold text-white">{a.rvo_p_al_mg_p2o5}</span>
+                        <span className="text-white/30 text-xs ml-1">mg P₂O₅/100g</span>
+                      </div>
+                    )}
+                    {a.rvo_p_cacl2_mg_kg != null && (
+                      <div>
+                        <span className="text-white/40">P-CaCl₂:</span>{' '}
+                        <span className="font-mono font-bold text-white">{a.rvo_p_cacl2_mg_kg}</span>
+                        <span className="text-white/30 text-xs ml-1">mg P/kg</span>
+                      </div>
+                    )}
+                    {a.pw_getal != null && (
+                      <div>
+                        <span className="text-white/40">Pw-getal:</span>{' '}
+                        <span className="font-mono font-bold text-white">{a.pw_getal}</span>
+                        <span className="text-white/30 text-xs ml-1">mg P₂O₅/l</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

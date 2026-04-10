@@ -337,30 +337,29 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
     defaultValues: {},
   });
 
+  // Helper: vul bodemkenmerken aan vanuit grondmonster (altijd overschrijven als grondmonster data heeft)
+  const applySoilDefaults = useCallback((target: FormData, analysis: any) => {
+    if (!analysis || analysis.extractie_status !== 'completed') return;
+    // Altijd vullen vanuit grondmonster als de waarde beschikbaar is
+    if (analysis.grondsoort_rapport) target.grondsoort = analysis.grondsoort_rapport;
+    if (analysis.organische_stof_pct != null) target.organische_stof_pct = analysis.organische_stof_pct;
+    if (analysis.klei_percentage != null) target.klei_percentage = analysis.klei_percentage;
+  }, []);
+
   // Populate form when profile loads, or use defaults from sub_parcel + latest soil analysis
   useEffect(() => {
     if (profile) {
-      // Auto-fill bodemkenmerken uit laatste grondmonster als die leeg zijn in profiel
       const merged = { ...profile };
-      if (latestAnalysis && latestAnalysis.extractie_status === 'completed') {
-        if (!merged.grondsoort && latestAnalysis.grondsoort_rapport) merged.grondsoort = latestAnalysis.grondsoort_rapport;
-        if (merged.organische_stof_pct == null && latestAnalysis.organische_stof_pct != null) merged.organische_stof_pct = latestAnalysis.organische_stof_pct;
-        if (merged.klei_percentage == null && latestAnalysis.klei_percentage != null) merged.klei_percentage = latestAnalysis.klei_percentage;
-      }
+      applySoilDefaults(merged, latestAnalysis);
       reset(merged);
     } else if (profileData && !profile) {
-      // Geen profiel gevonden — pre-fill met subperceel data + grondmonster
       const defaults: FormData = {};
       if (defaultGewas) defaults.gewas = defaultGewas;
       if (defaultRas) defaults.ras = defaultRas;
-      if (latestAnalysis && latestAnalysis.extractie_status === 'completed') {
-        if (latestAnalysis.grondsoort_rapport) defaults.grondsoort = latestAnalysis.grondsoort_rapport;
-        if (latestAnalysis.organische_stof_pct != null) defaults.organische_stof_pct = latestAnalysis.organische_stof_pct;
-        if (latestAnalysis.klei_percentage != null) defaults.klei_percentage = latestAnalysis.klei_percentage;
-      }
+      applySoilDefaults(defaults, latestAnalysis);
       if (Object.keys(defaults).length > 0) reset(defaults);
     }
-  }, [profile, profileData, latestAnalysis, reset, defaultGewas, defaultRas]);
+  }, [profile, profileData, latestAnalysis, reset, defaultGewas, defaultRas, applySoilDefaults]);
 
   const values = watch();
 

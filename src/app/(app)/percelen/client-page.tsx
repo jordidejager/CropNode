@@ -888,6 +888,17 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                             </div>
                           )}
 
+                          {/* Bekijk hoofdperceel button — links naast naam */}
+                          {!isSingleParcel && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedGroupedParcel(group); }}
+                              className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all duration-200 shrink-0"
+                              title="Bekijk hoofdperceel"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
                           {/* Name + meta */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3">
@@ -933,16 +944,6 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                             <span className="text-[10px] text-white/25 ml-1">ha</span>
                           </div>
 
-                          {/* Bekijk hoofdperceel button */}
-                          {!isSingleParcel && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedGroupedParcel(group); }}
-                              className="p-2 rounded-xl opacity-0 group-hover/card:opacity-100 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all duration-200 shrink-0"
-                              title="Bekijk hoofdperceel"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                          )}
                         </div>
 
                         {/* Expanded Sub-parcels with tree connectors */}
