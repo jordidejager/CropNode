@@ -432,7 +432,11 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         </Field>
         <Field label="Ras">
           <Controller name="ras" control={control} render={({ field }) => (
-            <ComboboxField value={field.value as string} onChange={field.onChange} suggestions={rasSuggesties} placeholder="Typ of selecteer ras" />
+            rasSuggesties.length > 0 ? (
+              <SelectField value={field.value as string} onChange={field.onChange} options={rasSuggesties} placeholder="Selecteer ras" />
+            ) : (
+              <Input value={(field.value as string) || ''} onChange={e => field.onChange(e.target.value)} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="Typ ras" />
+            )
           )} />
         </Field>
         <Field label="Onderstam(men)" className="col-span-full">
@@ -464,10 +468,10 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
         values={values}
       >
         <Field label="Rijafstand (m)">
-          <Input type="number" step="0.01" {...register('rijafstand_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 3.25" />
+          <Input type="number" step="any" {...register('rijafstand_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 3.25" />
         </Field>
         <Field label="Plantafstand (m)">
-          <Input type="number" step="0.01" {...register('plantafstand_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.00" />
+          <Input type="number" step="any" {...register('plantafstand_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.00" />
         </Field>
         <Field label="Plantdichtheid (berekend, -10%)">
           <div className="h-10 flex items-center px-3 rounded-md bg-white/[0.02] border border-white/[0.06] text-white/50 font-mono text-sm">
@@ -495,7 +499,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
           )} />
         </Field>
         <Field label="Boomhoogte (m)">
-          <Input type="number" step="0.1" {...register('boomhoogte_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 3.2" />
+          <Input type="number" step="any" {...register('boomhoogte_m', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 3.2" />
         </Field>
         <Field label="Rijrichting">
           <Controller name="rijrichting" control={control} render={({ field }) => (
@@ -570,19 +574,19 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
           )} />
         </Field>
         <Field label="pH">
-          <Input type="number" step="0.1" {...register('bodem_ph', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 6.5" />
+          <Input type="number" step="any" {...register('bodem_ph', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 6.5" />
         </Field>
         <Field label="Organische stof (%)" source={bodemSource}>
-          <Input type="number" step="0.1" {...register('organische_stof_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 2.7" />
+          <Input type="number" step="any" {...register('organische_stof_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 2.7" />
         </Field>
         <Field label="C-organisch (%)" source={bodemSource}>
-          <Input type="number" step="0.1" {...register('c_organisch_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.5" />
+          <Input type="number" step="any" {...register('c_organisch_pct', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 1.5" />
         </Field>
         <Field label="Klei (%)" source={bodemSource}>
-          <Input type="number" step="0.1" {...register('klei_percentage', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 15" />
+          <Input type="number" step="any" {...register('klei_percentage', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 15" />
         </Field>
         <Field label="Pw-getal" source={bodemSource}>
-          <Input type="number" step="1" {...register('pw_getal', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 40" />
+          <Input type="number" step="any" {...register('pw_getal', { valueAsNumber: true })} className="bg-white/[0.03] border-white/[0.08] h-10" placeholder="bijv. 40" />
         </Field>
       </ProfileSection>
 

@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { updateSubParcel } from "@/lib/supabase-store"
+import { supabase } from "@/lib/supabase-client"
 import { RAS_SUGGESTIES } from "@/lib/parcel-profile-constants"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
@@ -81,16 +82,41 @@ export function MainParcelView({
     const handleSaveEdit = React.useCallback(async () => {
         setEditSaving(true)
         try {
+            const oldVariety = parcel.variety
+            const oldCrop = parcel.crop
+
+            // 1. Update sub_parcels (bron van waarheid)
             await updateSubParcel({
                 id: parcel.id,
                 crop: editCrop,
                 variety: editVariety,
                 area: Number(editArea) || 0,
             })
+
+            // 2. Cascade: update ALLE tabellen die variety/crop als string kopie opslaan
+            if (oldVariety !== editVariety || oldCrop !== editCrop) {
+                // Spuitregistratie history
+                await supabase
+                    .from('parcel_history')
+                    .update({ variety: editVariety, crop: editCrop })
+                    .eq('parcel_id', parcel.id)
+
+                // Opslag registraties
+                await supabase
+                    .from('cell_sub_parcels')
+                    .update({ variety: editVariety })
+                    .eq('sub_parcel_id', parcel.id)
+
+                // Productie/oogst samenvattingen
+                await supabase
+                    .from('production_summaries')
+                    .update({ variety: editVariety })
+                    .eq('sub_parcel_id', parcel.id)
+            }
+
             await invalidateParcels()
-            toast({ title: 'Opgeslagen', description: 'Perceel gegevens zijn bijgewerkt.' })
+            toast({ title: 'Opgeslagen', description: 'Perceel gegevens zijn overal bijgewerkt.' })
             setIsEditing(false)
-            // Update de lokale parcel data zodat de UI direct reflecteert
             parcel.crop = editCrop
             parcel.variety = editVariety
             parcel.area = Number(editArea) || 0

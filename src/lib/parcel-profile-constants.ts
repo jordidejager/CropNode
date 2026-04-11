@@ -15,6 +15,7 @@ export const RAS_SUGGESTIES: Record<string, string[]> = {
     'Boskoop', 'Cox Orange', 'Delbar', 'Fuji', 'Gala', 'Golden Delicious',
     'Granny Smith', 'Greenstar', 'Natyra', 'Pinova', 'Red Prince', 'Rubens',
     'Smitten', 'SweeTango', 'Braeburn', 'Magic Star', 'Evelina', 'Freya',
+    'Tessa', 'Fenpagì',
   ],
   Peer: [
     'Conference', 'Doyenné du Comice', 'Beurré Alexandre Lucas',

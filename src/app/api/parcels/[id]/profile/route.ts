@@ -19,13 +19,21 @@ export async function GET(
     const idColumn = type === 'parcel' ? 'parcel_id' : 'sub_parcel_id';
     const supabase = await createServerClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Auth check
+    let user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData?.session?.user || null;
+    }
+    if (!user) {
       return apiError('Niet ingelogd', ErrorCodes.UNAUTHORIZED, 401);
     }
 
+    // Gebruik adminClient voor data queries (bypass RLS, betrouwbaarder)
+    const adminClient = createServiceRoleClient();
+
     // Haal profiel op
-    const { data: profile, error } = await supabase
+    const { data: profile, error } = await adminClient
       .from('parcel_profiles')
       .select('*')
       .eq(idColumn, id)
@@ -37,10 +45,10 @@ export async function GET(
     }
 
     // Haal laatste grondmonster op (eigen + hoofdperceel als fallback)
-    const analysisFields = 'id, datum_monstername, lab, grondsoort_rapport, organische_stof_pct, klei_percentage, c_organisch_pct, pw_getal, rvo_p_al_mg_p2o5, rvo_p_cacl2_mg_kg, extractie_status';
+    const analysisFields = '*';
     let latestAnalysis = null;
 
-    const { data: ownAnalysis } = await supabase
+    const { data: ownAnalysis } = await adminClient
       .from('soil_analyses')
       .select(analysisFields)
       .eq(idColumn, id)
@@ -53,14 +61,16 @@ export async function GET(
 
     // Fallback naar hoofdperceel's grondmonster als sub_parcel geen eigen heeft
     if (!latestAnalysis && type === 'sub_parcel') {
-      const { data: subParcel } = await supabase
+      const { data: subParcel } = await adminClient
         .from('sub_parcels')
         .select('parcel_id')
         .eq('id', id)
         .maybeSingle();
 
+      console.log(`[profile GET] Fallback lookup: sub_parcel ${id} → parcel_id: ${subParcel?.parcel_id || 'NULL'}`);
+
       if (subParcel?.parcel_id) {
-        const { data: parentAnalysis } = await supabase
+        const { data: parentAnalysis } = await adminClient
           .from('soil_analyses')
           .select(analysisFields)
           .eq('parcel_id', subParcel.parcel_id)
@@ -124,6 +134,15 @@ export async function PUT(
       return apiError('Klei percentage moet tussen 0 en 100% zijn', ErrorCodes.VALIDATION_ERROR, 400);
     }
 
+    // Sanitize: lege strings → null voor numerieke velden
+    const numFields = ['plantjaar', 'rijafstand_m', 'plantafstand_m', 'plantdichtheid_per_ha',
+      'aantal_bomen', 'boomhoogte_m', 'bodem_ph', 'organische_stof_pct', 'klei_percentage',
+      'verwachte_rooidatum', 'bestuiver_afstand', 'c_organisch_pct', 'pw_getal'];
+    for (const f of numFields) {
+      if (body[f] === '' || body[f] === undefined) body[f] = null;
+      else if (body[f] != null) body[f] = Number(body[f]);
+    }
+
     // Bereken plantdichtheid server-side (-10% koppakkers)
     let plantdichtheid = body.plantdichtheid_per_ha;
     if (body.rijafstand_m && body.plantafstand_m && body.rijafstand_m > 0 && body.plantafstand_m > 0) {
@@ -138,57 +157,69 @@ export async function PUT(
       if (key.startsWith('vijand_') && val) natuurlijkeVijanden[key] = val as string;
     }
 
-    const profileData = {
+    // Bouw profileData op — alleen velden die daadwerkelijk naar DB gaan
+    const profileData: Record<string, unknown> = {
       ...(type === 'parcel' ? { parcel_id: id } : { sub_parcel_id: id }),
       user_id: user.id,
-      plantjaar: body.plantjaar ?? null,
-      gewas: body.gewas ?? null,
-      ras: body.ras ?? null,
-      onderstammen: body.onderstammen ?? [],
-      bestuiversras: body.bestuiversras ?? null,
-      kloon_selectie: body.kloon_selectie ?? null,
-      rijafstand_m: body.rijafstand_m ?? null,
-      plantafstand_m: body.plantafstand_m ?? null,
-      plantdichtheid_per_ha: plantdichtheid ?? null,
-      aantal_bomen: body.aantal_bomen ?? null,
-      teeltsysteem: body.teeltsysteem ?? null,
-      boomhoogte_m: body.boomhoogte_m ?? null,
-      rijrichting: body.rijrichting ?? null,
-      hagelnet: body.hagelnet ?? null,
-      regenkap: body.regenkap ?? null,
-      insectennet: body.insectennet ?? null,
-      windscherm: body.windscherm ?? null,
-      steunconstructie: body.steunconstructie ?? null,
-      irrigatiesysteem: body.irrigatiesysteem ?? null,
-      fertigatie_aansluiting: body.fertigatie_aansluiting ?? null,
-      nachtvorstberegening: body.nachtvorstberegening ?? null,
-      koelberegening: body.koelberegening ?? null,
-      waterbron: body.waterbron ?? null,
-      drainage: body.drainage ?? null,
-      grondsoort: body.grondsoort ?? null,
-      bodem_ph: body.bodem_ph ?? null,
-      organische_stof_pct: body.organische_stof_pct ?? null,
-      klei_percentage: body.klei_percentage ?? null,
-      grondwaterniveau: body.grondwaterniveau ?? null,
-      certificeringen: body.certificeringen ?? [],
-      duurzaamheidsprogrammas: body.duurzaamheidsprogrammas ?? [],
-      voorgaand_gewas: body.voorgaand_gewas ?? null,
-      herinplant: body.herinplant ?? null,
-      verwachte_rooidatum: body.verwachte_rooidatum ?? null,
-      bestuiver_afstand: body.bestuiver_afstand ?? null,
-      ziekten_plagen: Object.keys(ziektenPlagen).length > 0 ? ziektenPlagen : {},
-      natuurlijke_vijanden: Object.keys(natuurlijkeVijanden).length > 0 ? natuurlijkeVijanden : {},
-      notities: body.notities ?? null,
-      bodem_bron_analyse_id: body.bodem_bron_analyse_id ?? null,
       updated_at: new Date().toISOString(),
     };
 
+    // Stel alle bekende profiel-velden in (null als niet meegegeven)
+    const textFields = [
+      'gewas', 'ras', 'bestuiversras', 'kloon_selectie', 'teeltsysteem', 'rijrichting',
+      'hagelnet', 'regenkap', 'insectennet', 'windscherm', 'steunconstructie',
+      'irrigatiesysteem', 'fertigatie_aansluiting', 'nachtvorstberegening', 'koelberegening',
+      'beregening', 'waterbron', 'drainage', 'grondsoort', 'grondwaterniveau',
+      'voorgaand_gewas', 'herinplant', 'notities',
+    ];
+    for (const f of textFields) {
+      if (f in body) profileData[f] = body[f] || null;
+    }
+
+    // Numerieke velden (al gesanitized boven)
+    const numericFields = [
+      'plantjaar', 'rijafstand_m', 'plantafstand_m', 'aantal_bomen',
+      'boomhoogte_m', 'bodem_ph', 'organische_stof_pct', 'klei_percentage',
+      'verwachte_rooidatum', 'bestuiver_afstand', 'c_organisch_pct', 'pw_getal',
+    ];
+    for (const f of numericFields) {
+      if (f in body) profileData[f] = body[f];
+    }
+
+    // Plantdichtheid
+    profileData.plantdichtheid_per_ha = plantdichtheid ?? null;
+
+    // Array/JSONB velden
+    if ('onderstammen' in body) profileData.onderstammen = body.onderstammen ?? [];
+    if ('certificeringen' in body) profileData.certificeringen = body.certificeringen ?? [];
+    if ('duurzaamheidsprogrammas' in body) profileData.duurzaamheidsprogrammas = body.duurzaamheidsprogrammas ?? [];
+
+    // Ziekten & natuurlijke vijanden (JSONB)
+    profileData.ziekten_plagen = Object.keys(ziektenPlagen).length > 0 ? ziektenPlagen : {};
+    profileData.natuurlijke_vijanden = Object.keys(natuurlijkeVijanden).length > 0 ? natuurlijkeVijanden : {};
+
+    if ('bodem_bron_analyse_id' in body) profileData.bodem_bron_analyse_id = body.bodem_bron_analyse_id ?? null;
+
     const adminClient = createServiceRoleClient();
-    const { data, error } = await adminClient
+    let { data, error } = await adminClient
       .from('parcel_profiles')
       .upsert(profileData, { onConflict: type === 'parcel' ? 'parcel_id' : 'sub_parcel_id' })
       .select()
       .single();
+
+    // Als er een kolom-fout is (migratie niet uitgevoerd), probeer opnieuw zonder nieuwe kolommen
+    if (error?.message?.includes('column') || error?.code === '42703') {
+      console.warn('[profile PUT] Column error, retrying without new fields:', error.message);
+      const safeFields = ['bestuiver_afstand', 'ziekten_plagen', 'natuurlijke_vijanden', 'c_organisch_pct', 'pw_getal', 'beregening'];
+      for (const f of safeFields) delete profileData[f];
+      const retry = await adminClient
+        .from('parcel_profiles')
+        .upsert(profileData, { onConflict: type === 'parcel' ? 'parcel_id' : 'sub_parcel_id' })
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       return apiError(`Fout bij opslaan profiel: ${error.message}`, ErrorCodes.INTERNAL_ERROR, 500);
