@@ -137,7 +137,7 @@ async function main() {
     if (!p) continue;
     console.log(`  DELETE: "${name}" (${p.source_article_count} art)`);
     if (!dryRun) {
-      await retryOp(() => supabase.from('knowledge_disease_profile').delete().eq('id', p.id));
+      await retryOp(async () => supabase.from('knowledge_disease_profile').delete().eq('id', p.id));
     }
     byName.delete(name);
     deleteCount++;
@@ -156,7 +156,7 @@ async function main() {
         console.log(`  MERGE: "${sourceName}" → "${canonicalName}" (+${source.source_article_count} art)`);
         if (!dryRun) {
           const merged = mergeProfiles(target, source);
-          await retryOp(() =>
+          await retryOp(async () =>
             supabase.from('knowledge_disease_profile').update({
               source_article_count: merged.source_article_count,
               crops: merged.crops,
@@ -173,7 +173,7 @@ async function main() {
               biological_options: merged.biological_options,
             }).eq('id', target.id),
           );
-          await retryOp(() => supabase.from('knowledge_disease_profile').delete().eq('id', source.id));
+          await retryOp(async () => supabase.from('knowledge_disease_profile').delete().eq('id', source.id));
           // Update local cache
           Object.assign(target, merged);
         }
@@ -187,20 +187,20 @@ async function main() {
           console.log(`  MERGE(late): "${sourceName}" → "${canonicalName}" (+${source.source_article_count} art)`);
           if (!dryRun) {
             const merged = mergeProfiles(existing, source);
-            await retryOp(() =>
+            await retryOp(async () =>
               supabase.from('knowledge_disease_profile').update({
                 source_article_count: merged.source_article_count,
                 crops: merged.crops, peak_phases: merged.peak_phases, peak_months: merged.peak_months,
                 key_preventive_products: merged.key_preventive_products, key_curative_products: merged.key_curative_products,
               }).eq('id', existing.id),
             );
-            await retryOp(() => supabase.from('knowledge_disease_profile').delete().eq('id', source.id));
+            await retryOp(async () => supabase.from('knowledge_disease_profile').delete().eq('id', source.id));
           }
         } else {
           // Truly new — rename
           console.log(`  RENAME: "${sourceName}" → "${canonicalName}"`);
           if (!dryRun) {
-            await retryOp(() =>
+            await retryOp(async () =>
               supabase.from('knowledge_disease_profile').update({ name: canonicalName }).eq('id', source.id),
             );
           }
@@ -216,7 +216,7 @@ async function main() {
     if (entry && entry.profile_type !== config.type) {
       console.log(`  TYPE: "${canonicalName}" ${entry.profile_type} → ${config.type}`);
       if (!dryRun) {
-        await retryOp(() =>
+        await retryOp(async () =>
           supabase.from('knowledge_disease_profile').update({ profile_type: config.type }).eq('id', entry.id),
         );
       }
