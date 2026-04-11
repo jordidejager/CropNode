@@ -96,6 +96,7 @@ interface ChatMessage {
   loading: boolean;
   error: string | null;
   pipelineStage: string;
+  feedback: 'positive' | 'negative' | null;
 }
 
 // ============================================
