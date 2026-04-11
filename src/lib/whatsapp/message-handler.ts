@@ -316,16 +316,18 @@ export async function handleIncomingMessage(
         return;
       }
 
-      // Product info query: "wat is delan", "info captan", "dosering pyrus op appel"
-      const productQueryParams = detectProductQuery(messageText);
-      if (productQueryParams) {
-        await handleProductQuery(userId, e164Phone, messageText, productQueryParams);
+      // Knowledge base query FIRST: "hoe herken ik schurft", "wat is levenscyclus", etc.
+      // Must come BEFORE product query, because questions like "wat is perenbladvlo"
+      // would otherwise be caught by detectProductQuery as a product lookup.
+      if (isRagQueryIntent(messageText)) {
+        await handleRagQuery(userId, e164Phone, messageText, waMessageId);
         return;
       }
 
-      // Knowledge base query: "hoe herken ik schurft", "wanneer GA4/7 spuiten", etc.
-      if (isRagQueryIntent(messageText)) {
-        await handleRagQuery(userId, e164Phone, messageText, waMessageId);
+      // Product info query: "info delan", "dosering captan op appel"
+      const productQueryParams = detectProductQuery(messageText);
+      if (productQueryParams) {
+        await handleProductQuery(userId, e164Phone, messageText, productQueryParams);
         return;
       }
 
