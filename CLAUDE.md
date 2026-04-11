@@ -39,7 +39,11 @@ Pushing only to `origin` silently leaves Vercel out of date. If you must push to
 | Gemini API | AI parsing & embeddings (via Genkit) |
 | PDOK Gewaspercelen | RVO parcel data (`api.pdok.nl/rvo/gewaspercelen/`) |
 | PDOK Locatieserver | Address search (`api.pdok.nl/bzk/locatieserver/`) |
-| Open-Meteo | Weather data — forecast + historical (free, no key) |
+| Open-Meteo | Weather data — forecast + historical + multi-model (free, no key) |
+| Meta Cloud API v21.0 | WhatsApp Business messaging (text, images, buttons, lists, location) |
+| MapTiler Weather SDK | Precipitation forecast map layers for 8h/24h/48h/96h radar |
+| QuickChart.io | Server-side Chart.js v4 → PNG for WhatsApp forecast charts |
+| Buienradar | 2h radar animation GIF (gifuct-js client-side frame extraction) |
 
 ## Global Conventions
 
@@ -176,6 +180,222 @@ curl 'http://localhost:3000/api/knowledge/search?query=schurft+april&crops=appel
 # Cleanup deprecated tables (alleen na backfill geverifieerd)
 CONFIRM_DELETE=yes npm run knowledge:cleanup
 ```
+
+## WhatsApp Bot (`src/lib/whatsapp/`)
+
+AI-powered WhatsApp assistant for fruit growers. Users link their phone number in Instellingen, then interact via WhatsApp for spray registrations, field notes, product queries, and weather forecasts.
+
+### Architecture
+```
+Meta Webhook → /api/whatsapp/webhook/route.ts (HMAC verification)
+  → message-handler.ts (state machine dispatcher)
+  → routes to one of:
+     ├─ weather-query-handler.ts   — "weersverwachting" / "14 daagse" / "wat wordt het weer"
+     ├─ field-note-processor.ts    — "notitie:", "gezien", photo messages, GPS
+     ├─ product-query-handler.ts   — "wat is delan", "dosering X op Y"
+     └─ registration-processor.ts  — default: Gemini spray/fertilizer parsing
+```
+
+### Intent detection (deterministic, no AI)
+- **Weather**: keywords `weersverwachting`, `14 daagse`, `wat wordt het weer`, `komende week weer`
+- **Field note**: prefixes `notitie:`, `noteer:`, `memo:` or observation keywords `gezien`, `opgemerkt`
+- **Product query**: patterns `wat is X`, `dosering X op Y`, `middelen tegen Z`
+- **Spray registration**: everything else → Gemini pipeline
+
+### Weather forecast flow
+```
+User: "weersverwachting"
+  → resolveStationForUser() — parcel_weather_stations → first parcel with location
+  → getBestMatchHourlyData() — best_match hourly from weather_data_hourly (admin client, bypasses RLS)
+  → aggregatePerDay() — sum precip, min/max temp, circular-mean wind direction, beaufort
+  → parallel:
+     ├─ QuickChart POST /chart/create → short URL → sharp composite with CropNode logo → Supabase Storage
+     └─ Gemini summarizeWeatherForecast() — 4-6 sentence Dutch summary (deterministic fallback if timeout)
+  → sendImageMessage(chartUrl) + sendTextMessage(summary)
+```
+
+### State machine (conversation states)
+`idle` → `awaiting_product_selection` → `awaiting_confirmation` → `awaiting_send_choice` / `awaiting_edit_choice` → `awaiting_edit_input`
+
+State stored in `whatsapp_conversations` table (JSONB `pending_registration`), auto-expires after 30 minutes.
+
+### Key gotchas
+- **RLS**: Webhook has no cookie auth. All DB queries MUST use `getSupabaseAdmin()` (service-role client). The default `createClient()` returns zero rows for all user-owned tables.
+- **Rate limiting**: 10 msg/min per phone (in-memory Map). Meta retries — dedup via `wa_message_id`.
+- **24h window**: Free-form replies only within 24h of user's last message. After that, only template messages (costs money).
+- **Image limits**: JPG/PNG max 5MB via HTTPS URL. Chart PNGs are ~80-120KB.
+
+### Key files
+```
+src/lib/whatsapp/
+  message-handler.ts          — State machine dispatcher (main entry point)
+  weather-query-handler.ts    — 14-day forecast: chart + Gemini summary
+  registration-processor.ts   — Gemini spray/fertilizer parsing
+  field-note-processor.ts     — Field notes with photo/GPS support
+  product-query-handler.ts    — CTGB product info queries
+  confirmation-handler.ts     — Save spray registration to spuitschrift
+  edit-handler.ts             — Edit pending registration fields
+  product-selection-handler.ts — CTGB disambiguation (button replies)
+  client.ts                   — Meta Cloud API (sendText, sendImage, sendButtons, sendList, uploadMedia)
+  store.ts                    — Supabase lookups (phone→user, conversations, parcels)
+  media.ts                    — Photo download from Meta → Supabase Storage upload
+  format.ts                   — Message formatting helpers
+  phone-utils.ts              — E.164 normalization (addPlus/stripPlus)
+  types.ts                    — TypeScript interfaces
+
+src/ai/flows/
+  summarize-weather-forecast.ts — Genkit flow: aggregated metrics → Dutch summary
+
+src/lib/weather/
+  forecast-chart-url.ts       — QuickChart config builder + sharp logo composite
+```
+
+### Environment variables (WhatsApp-specific)
+```env
+WHATSAPP_PHONE_NUMBER_ID=     # Meta Business phone number ID
+WHATSAPP_ACCESS_TOKEN=        # Meta Cloud API access token
+WHATSAPP_VERIFY_TOKEN=        # Webhook verification token
+WHATSAPP_APP_SECRET=          # HMAC signature verification
+```
+
+## Weather Hub (`/weer`)
+
+Weather dashboard with multi-model forecasts, radar, and spray window detection.
+
+### Data pipeline
+```
+Vercel cron (daily 06:00) → /api/weather/cron (CRON_SECRET)
+  → refreshAllStations() → for each station:
+     ├─ Open-Meteo forecast (best_match) → weather_data_hourly + weather_data_daily
+     ├─ Open-Meteo multi-model (ECMWF, GFS, ICON-EU, MeteoFrance) → weather_data_hourly
+     └─ Open-Meteo ensemble (51 members) → weather_ensemble_hourly
+```
+
+### Supabase row limits
+PostgREST has a server-side max of 1000 rows per request (cannot be overridden by `.limit()`). Multi-model data for 14 days = ~1500-2000 rows. Solution: **pagination with `.range()`** — two parallel requests `range(0, 999)` + `range(1000, 2499)`.
+
+### Rain forecast (RainForecast.tsx)
+- **2h**: Buienradar animated GIF (gifuct-js frame extraction, `RadarPlayer.tsx`)
+- **8h/24h/48h/96h**: MapTiler Weather SDK precipitation layer (`PrecipForecastMap.tsx`, lazy-loaded)
+- Styled to match Buienradar: BACKDROP.DARK, no labels/symbols, interactive=false
+
+### Key files
+```
+src/lib/weather/
+  weather-service.ts          — All weather queries (forecast, multimodel, ensemble, hourly, daily)
+  weather-constants.ts        — FORECAST_DAYS=16, model names, thresholds
+  open-meteo-client.ts        — Open-Meteo API client (forecast, multi-model, ensemble, historical)
+  ensure-weather-station.ts   — Auto-link parcels to weather stations
+  forecast-chart-url.ts       — WhatsApp chart generation (QuickChart + sharp)
+
+src/components/weather/
+  RadarPlayer.tsx             — Buienradar 2h radar animation
+  PrecipForecastMap.tsx       — MapTiler 8h-96h precipitation map
+  RainForecast.tsx            — Tab container (2h/8h/24h/48h/96h)
+  MultiModelPreview.tsx       — Compact 2x2 dashboard widget (14-day)
+  expert/
+    MultiModelChart.tsx       — Full-size multi-model comparison
+    CombinedMultiModelChart.tsx — 2x2 grid (temp, precip, wind, humidity)
+```
+
+### Environment variables (Weather-specific)
+```env
+NEXT_PUBLIC_MAPTILER_API_KEY=  # MapTiler SDK (precipitation maps)
+```
+
+## Analytics Module (`/analytics`)
+
+Bedrijfsanalyse dashboard met meerdere subpagina's via tab-navigatie. Alle data wordt gefilterd op `harvest_year` (oogstjaar) — het kernconcept dat kosten en opbrengsten groepeert over kalenderjaren heen.
+
+### Oogstjaar-logica (`lib/analytics/harvest-year-utils.ts`)
+- Jan-Okt registraties → `harvest_year = huidig jaar`
+- Nov-Dec registraties → `harvest_year = volgend jaar` (voorbereiding volgende oogst)
+- Database kolom `harvest_year INTEGER` op `spuitschrift`, `parcel_history`, `harvest_registrations`
+
+### Subpagina's
+
+**Seizoensdashboard** (`/analytics`) — Hoofdoverzicht per oogstjaar
+- KPI's: inputkosten, kosten/ha, behandelingen, oogst (ton), kosten/ton
+- Donut: kostenverdeling (gewasbescherming/bladmeststof/strooimeststof)
+- Stacked bar: maandelijkse kosten
+- Middelenanalyse: top 10 middelen, kosten per bespuiting, perceelkosten-tabel
+- Oogst & opbrengst: kg/ha per perceel, per ras, kosten-batenratio, best/slechtst rendabel
+- Perceelsvergelijking: radar chart met genormaliseerde waarden
+- Weerimpact: neerslag vs behandelingen, temperatuursom (GDD)
+- Export: CSV download (werkend), PDF/certificering/coöperatie (placeholder)
+
+**Productie** (`/analytics/productie`) — Productiegeschiedenis & trends
+- Data: `production_summaries` tabel (handmatig ingevoerd, per subperceel per oogstjaar) + `harvest_registrations` (dagelijkse oogstdata)
+- Jaar-trendgrafiek, ras-verdeling, perceelvergelijking, ras-ranking
+- Invoerformulier: per subperceel, gegroepeerd per hoofdperceel, auto-fill ras/hectares/kg-per-kist (peer=400, appel=350)
+
+**Bemesting** (`/analytics/bemesting`) — Bodemkwaliteit uit grondmonsters
+- Data: `soil_analyses` tabel (Eurofins PDF's, AI-geëxtraheerd via Gemini)
+- Per hoofdperceel: org. stof, N-leverend, P-beschikbaar, P-Al, klei%, C/N-ratio
+- Waardering-badges (Laag/Vrij laag/Goed/Vrij hoog/Hoog) met kleurcodering
+- Overerving: grondmonster op hoofdperceel → geldt voor alle subpercelen
+- Alle percelen altijd zichtbaar (ook zonder grondmonster)
+
+**Ziektedruk** (`/analytics/ziektedruk`) — Schurft/ziektedruk monitoring
+- Ascosporenrijping, infectieperiodes, graaddagen
+
+**Inzichten** (`/analytics/inzichten`) — AI correlatie-engine
+- API: `POST /api/analytics/inzichten/generate` — aggregeert alle bedrijfsdata → Gemini
+- Gemini zoekt top 8-12 correlaties: productie × ras/onderstam/plantdichtheid/leeftijd, bodem × productie, weer × productie, infrastructuur × productie, uitschieters
+- Gecacht in `insight_results` tabel (24h, data_hash invalidatie)
+- Rate limiting: 1 call per 5 min per user
+- Mini-charts per inzichtkaart (bar, lijn, scatter, waarde-highlight)
+
+### Oogst & Opslag — Geschiedenis (`/oogst/geschiedenis`)
+- Spreadsheet-grid: subpercelen als rijen, oogstjaren (2017-heden) als kolommen
+- Gegroepeerd per hoofdperceel (op naam, niet ID — meerdere kadastrale percelen met dezelfde naam worden samengevoegd)
+- Klik op lege cel → formulier opent met perceel/ras/hectares/jaar pre-filled
+- Mini-sparklines per perceel (productietrend)
+- Hergebruikt `HistoricalDataForm` component uit analytics/productie
+
+### Key files
+```
+src/lib/analytics/
+  harvest-year-utils.ts     — suggestHarvestYear(), getCurrentHarvestYear()
+  types.ts                  — AnalyticsData, KPIData, filters, etc.
+  queries.ts                — Supabase queries (spuitschrift, harvests, parcels, weather)
+  calculations.ts           — KPI's, kostenverdeling, parcel costs, CSV export
+  production-queries.ts     — production_summaries CRUD
+  production-calculations.ts — yearly trends, variety ranking
+  bemesting-queries.ts      — soil analyses aggregatie, hoofdperceel grouping
+
+src/components/analytics/
+  AnalyticsHero.tsx          — Premium header met CropNode logo + hero KPI's
+  AnalyticsFilterBar.tsx     — Sticky filter: oogstjaar, percelen, datumbereik
+  SeasonDashboard.tsx        — KPI cards + donut + bar charts
+  CropProtectionAnalysis.tsx — Middelen, perceelkosten, behandelingstijdlijn
+  FertilizerAnalysis.tsx     — Bemestingskosten, kg/ha per perceel
+  HarvestYieldAnalysis.tsx   — Opbrengst, kwaliteit, kosten-baten
+  ParcelComparison.tsx       — Radar chart vergelijking
+  WeatherImpact.tsx          — Neerslag vs behandelingen, GDD
+  ReportsExport.tsx          — CSV + placeholder exports
+  shared/                    — KPICard, ChartCard, EmptyState, CountUpNumber
+  bemesting/                 — SoilComparisonChart, NutrientRadarChart
+  productie/                 — HistoricalDataForm, YearTrendChart, etc.
+  inzichten/                 — InsightMiniChart
+
+src/app/(app)/analytics/
+  page.tsx                   — Seizoensdashboard
+  layout.tsx                 — Tab navigatie (5 tabs)
+  productie/page.tsx         — Productiegeschiedenis
+  bemesting/page.tsx         — Bodemkwaliteit
+  ziektedruk/page.tsx        — Ziektedruk monitoring
+  inzichten/page.tsx         — AI inzichten
+
+src/app/(app)/oogst/
+  geschiedenis/page.tsx      — Productie-invoer grid
+```
+
+### Database tabellen (analytics-specifiek)
+- `production_summaries` — Handmatige jaarlijkse productiecijfers per subperceel
+- `insight_results` — Gecachte Gemini analyse-resultaten
+- Kolom `harvest_year` op `spuitschrift`, `parcel_history`, `harvest_registrations`
+- Kolom `unit_price` op `parcel_history` (voor kostenanalyse)
 
 ## Development Commands
 
