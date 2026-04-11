@@ -524,7 +524,7 @@ export default function GeschiedenisPage() {
       <HistoricalDataForm
         open={formOpen}
         onOpenChange={(open) => { setFormOpen(open); if (!open) { setEditingEntry(null); setPrefillYear(null); setPrefillSubParcel(null); } }}
-        onSubmit={(input) => { setPrefillYear(null); setPrefillSubParcel(null); setEditingEntry(null); handleSubmit(input); }}
+        onSubmit={async (input) => { setPrefillYear(null); setPrefillSubParcel(null); setEditingEntry(null); await handleSubmit(input); }}
         subParcels={subParcels}
         parcels={parcels}
         existingYears={existingYears}
