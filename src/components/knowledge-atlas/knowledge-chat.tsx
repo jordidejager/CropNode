@@ -24,6 +24,8 @@ import {
   MessageSquare,
   ChevronDown,
   Leaf,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 
 import type {
@@ -139,6 +141,7 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
       loading: true,
       error: null,
       pipelineStage: 'Intentie analyseren...',
+      feedback: null,
     };
     setMessages((prev) => [...prev, msg]);
     setQuery('');
@@ -254,6 +257,27 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
     }
   }, [query]);
 
+  const handleFeedback = useCallback(async (messageId: string, type: 'positive' | 'negative') => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, feedback: type } : m)),
+    );
+    // Save feedback to server (fire-and-forget)
+    try {
+      await fetch('/api/knowledge/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          query: messages.find((m) => m.id === messageId)?.query,
+          answer: messages.find((m) => m.id === messageId)?.answer?.slice(0, 500),
+          feedback: type,
+        }),
+      });
+    } catch {
+      // Silent fail — feedback is nice-to-have
+    }
+  }, [messages]);
+
   return (
     <div className={cn('relative', className)}>
       {/* Chat container */}
@@ -327,6 +351,7 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
                   key={msg.id}
                   message={msg}
                   onArticleClick={onArticleClick}
+                  onFeedback={handleFeedback}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -371,9 +396,11 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
 function ChatMessageBlock({
   message,
   onArticleClick,
+  onFeedback,
 }: {
   message: ChatMessage;
   onArticleClick?: (articleId: string) => void;
+  onFeedback?: (messageId: string, type: 'positive' | 'negative') => void;
 }) {
   return (
     <div className="space-y-2">
@@ -409,6 +436,48 @@ function ChatMessageBlock({
               <FormattedAnswer text={message.answer} />
             </div>
           </div>
+
+          {/* Feedback buttons */}
+          {!message.loading && message.answer && (
+            <div className="mt-2 flex items-center gap-1">
+              <span className="text-[9px] text-white/20 mr-1">Was dit nuttig?</span>
+              <button
+                type="button"
+                onClick={() => onFeedback?.(message.id, 'positive')}
+                disabled={message.feedback !== null}
+                className={cn(
+                  'rounded-md p-1 transition-all',
+                  message.feedback === 'positive'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : message.feedback !== null
+                      ? 'text-white/10 cursor-default'
+                      : 'text-white/25 hover:text-emerald-400 hover:bg-emerald-500/10',
+                )}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onFeedback?.(message.id, 'negative')}
+                disabled={message.feedback !== null}
+                className={cn(
+                  'rounded-md p-1 transition-all',
+                  message.feedback === 'negative'
+                    ? 'bg-rose-500/20 text-rose-400'
+                    : message.feedback !== null
+                      ? 'text-white/10 cursor-default'
+                      : 'text-white/25 hover:text-rose-400 hover:bg-rose-500/10',
+                )}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+              </button>
+              {message.feedback && (
+                <span className="ml-1 text-[9px] text-white/20">
+                  {message.feedback === 'positive' ? 'Bedankt!' : 'Bedankt voor de feedback'}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Images from sources */}
           {(() => {
