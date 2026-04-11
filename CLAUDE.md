@@ -75,6 +75,9 @@ Pushing only to `origin` silently leaves Vercel out of date. If you must push to
 - **Two-tier parcel system**: Parcels (physical boundaries) → Sub-parcels/blocks (work units for spray registrations with specific crop/variety combos)
 - **Combined intent + parsing**: Single AI call does both intent classification and spray parsing (saves 50% API calls)
 - **Deterministic CTGB validation**: No AI for regulation checks — pure TypeScript logic with 6 priority checks (crop auth, dosage, interval, seasonal max, substance cumulation, safety period)
+- **Unified product database**: Single `products` table (2.910 records) as entry point for both CTGB gewasbeschermingsmiddelen and meststoffen. Detail tables `ctgb_products` and `fertilizers` linked via `source_id`. Unified `product_aliases_unified` replaces three separate alias systems. See `DATABASE.md` for full schema.
+- **CTGB data enrichment**: Gebruiksvoorschriften contain BBCH growth stages, application timing (months), spray volume ranges, numeric PHI/interval, and max dosage per season — all from MST API re-sync.
+- **Boomkwekerij filter**: GV entries with 8+ comma-separated crops are excluded from hardfruit view (prevents boomkwekerij listings from appearing as appel/peer dosages). Word-boundary regex prevents "aardappel" matching "appel".
 - **Flattened Gemini output**: Gemini has 5-level nesting limit, so output uses comma-separated strings with post-processing
 - **Feedback loop**: User corrections stored in `smart_input_feedback` to improve future parsing (product aliases, dosage preferences, parcel groups)
 - **Work day weighting**: Mon-Fri = 1, Sat = 0.5, Sun = 0 (for task hour calculations)
@@ -396,6 +399,124 @@ src/app/(app)/oogst/
 - `insight_results` — Gecachte Gemini analyse-resultaten
 - Kolom `harvest_year` op `spuitschrift`, `parcel_history`, `harvest_registrations`
 - Kolom `unit_price` op `parcel_history` (voor kostenanalyse)
+
+## Ziektedruk (Disease Pressure) — Analytics subpage
+
+Infection risk modeling for apple scab (*Venturia inaequalis*) at `/analytics/ziektedruk`. Based on published peer-reviewed science (A-scab model, revised Mills table).
+
+### Architecture
+
+Three coupled submodels that simulate the primary infection season:
+
+1. **Ascospore Maturation (PAM)** — Logistic curve on cumulative degree-days (base 0°C) since biofix. `PAM = 1 / (1 + exp(7.486 - 0.0152 × DD))`. Predicts what fraction of seasonal spores are mature.
+
+2. **Infection Risk (Mills table)** — Per wet period: lookup severity based on avg temp × wet duration hours. Severity = Mills result directly (not derived from RIM). RIM = magnitude metric scaling by PAM.
+
+3. **Incubation Period** — `≈ 230 / T_avg` days post-infection for symptom appearance.
+
+### Key files
+
+```
+lib/disease-models/
+├── types.ts                          — All TypeScript types
+├── disease-service.ts                — Orchestration: weather fetch, calculate, cache
+└── apple-scab/
+    ├── mills-table.ts                — Static Mills table + lookup with interpolation
+    ├── ascospore-maturation.ts       — Degree-days + PAM calculation
+    ├── wet-period-detection.ts       — Wet period detection from hourly weather
+    ├── infection-calculator.ts       — Combines all submodels → InfectionPeriod[]
+    └── incubation.ts                 — Symptom date estimation
+
+components/analytics/ziektedruk/
+├── BiofixConfig.tsx                  — Parcel selector, biofix datepicker, inoculum toggle
+├── SeasonProgress.tsx                — PAM bar + KPI cards
+├── InfectionTimeline.tsx             — Recharts ComposedChart (PAM curve + infection bars)
+├── InfectionTable.tsx                — Sortable infection events table
+├── SeasonSummary.tsx                 — Summary KPI cards
+└── ZiektedrukDisclaimer.tsx          — Dismissible disclaimer banner
+
+app/api/analytics/ziektedruk/
+├── route.ts                          — GET results (?force=1 to skip cache)
+├── config/route.ts                   — POST biofix config (triggers recalculation)
+└── recalculate/route.ts              — POST force recalculate
+```
+
+### Database tables
+
+- `disease_model_config` — Per parcel/harvest_year: biofix_date, inoculum_pressure
+- `disease_season_progress` — Daily PAM/DD snapshots (cache)
+- `disease_infection_periods` — Calculated infection events (cache)
+
+Migration: `supabase/migrations/043_disease_pressure.sql`
+
+### Data flow
+
+1. Weather data from existing `weather_data_hourly` table via `getHourlyRange()` (chunked, 31 days per fetch)
+2. Server-side calculation in `disease-service.ts` → cached in DB (3-hour staleness)
+3. Client fetches cached results via GET, renders Recharts timeline + table
+4. Config POST triggers immediate recalculation
+
+### Design decisions
+
+- **Severity = Mills severity** (direct from table, not derived from RIM). Mills determines IF infection occurs. RIM scales magnitude by PAM.
+- **Wet period start**: precipitation > 0mm OR RH ≥ 90%. Must contain at least 1 rain hour (spore discharge requires rain).
+- **No Framer Motion** — Tailwind animations only, despite legacy mention in tech stack.
+- **Extensible**: `disease_type` field supports future models (pear scab, fire blight, etc.)
+
+## Perceelprofiel & Grondmonsteranalyse
+
+### Perceelprofiel (`parcel_profiles` tabel)
+Uitgebreid formulier per (sub)perceel met 10 secties:
+
+1. **Aanplantgegevens** — plantjaar, gewas, ras (dropdown per gewas), onderstam(men) met % verdeling, bestuiversras + afstand, kloon/selectie
+2. **Plantverband** — rijafstand, plantafstand, plantdichtheid (auto -10% koppakkers), aantal bomen
+3. **Teeltsysteem** — slanke spil/V-haag/etc., boomhoogte, rijrichting
+4. **Infrastructuur** — hagelnet, windscherm, steunconstructie
+5. **Waterhuishouding** — irrigatie, fertigatie, beregening (nachtvorst+koel gecombineerd), waterbron
+6. **Bodemkenmerken** — grondsoort, pH, org. stof, C-organisch, klei%, Pw-getal. **Auto-fill vanuit laatste grondmonster**
+7. **Perceelhistorie** — voorgaand gewas (specifiek appel/peer), herinplant, verwachte rooidatum
+8. **Ziekten & Plagen** — drukniveau per ziekte. Algemeen: schurft, vruchtboomkanker, bacterievuur, meeldauw, fruitmot. Appel-specifiek: appelbloesemkever, roze appelluis. Peer-specifiek: zwartvruchtrot, perenbladvlo
+9. **Natuurlijke vijanden** — aanwezigheid van oorwormen, lieveheersbeestjes, gaasvliegen, roofmijten, sluipwespen, roofwantsen, zweefvliegen, spinnen
+10. **Notities** — vrij tekstveld
+
+**Flexibele koppeling:** `parcel_id` OF `sub_parcel_id` (CHECK constraint). Werkt voor zowel hoofdpercelen als subpercelen.
+
+### Grondmonsteranalyse (`soil_analyses` tabel)
+- **Upload** Eurofins Agro PDF → AI-extractie via Gemini (multimodal)
+- Geëxtraheerde data: N-totaal, C/N-ratio, N-leverend vermogen, P-plantbeschikbaar, P-bodemvoorraad, P-Al, Pw-getal, org. stof, klei%, bulkdichtheid
+- **Waarderingen** met kleur-badges (laag/vrij laag/goed/vrij hoog/hoog)
+- **Bemestingsadviezen** (bodemgericht + gewasgericht)
+- **RVO doorgave** waarden (P-Al, P-CaCl2, Pw-getal) met banner vóór 15 mei
+- **Cascadering**: grondmonster op hoofdperceel valt automatisch door naar subpercelen
+- Storage bucket: `soil-analysis-pdfs`
+
+### Perceelbewerking
+- **Inline edit** op perceelpagina: gewas, ras (dropdown met suggesties), oppervlakte
+- **Cascading update**: wijziging werkt door naar `parcel_history`, `cell_sub_parcels`, en `v_sprayable_parcels`
+
+### API Routes
+- `GET/PUT /api/parcels/[id]/profile?type=parcel|sub_parcel`
+- `GET /api/parcels/[id]/soil-analyses?type=...` — incl. inherited van hoofdperceel
+- `POST .../upload`, `PUT/DELETE .../[analysisId]`, `POST .../apply-to-profile`
+
+**RLS pattern:** Auth via cookie client, writes via `createServiceRoleClient()`.
+
+## BRP Gewasrotatiehistorie
+
+Gewashistorie (2009-2025) voor elk perceel in Nederland via PDOK.
+
+- **Realtime**: PDOK OGC/WFS API voor huidig jaar
+- **Historisch**: `brp_gewas_nationaal` tabel met centroids (GeoPackage imports)
+- **Componenten**: `GewasrotatieTimeline`, `RvoParcelSheet` gewasrotatie
+- **Import**: `python3 scripts/import-brp-nationaal.py` (vereist GDAL)
+
+## Percelenlijst — Gegroepeerde Weergave
+
+Collapsible accordion per hoofdperceel:
+- Groep header: naam, gewas-badges, blokken, oppervlakte
+- Tree-connector UI voor subpercelen
+- Eye-knop → hoofdperceel overview met grondmonster upload
+- Checkbox selectie op groep- en individueel niveau
 
 ## Development Commands
 

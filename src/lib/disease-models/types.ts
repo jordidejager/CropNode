@@ -83,6 +83,10 @@ export interface ZiektedrukResult {
   seasonProgress: SeasonProgressEntry[];
   infectionPeriods: InfectionPeriod[];
   kpis: ZiektedrukKPIs;
+  // Coverage data (Niveau 2)
+  coverageTimeline: CoveragePoint[];
+  infectionCoverage: Record<string, InfectionCoverage>; // keyed by wetPeriodStart
+  sprayEvents: { date: string; product: string }[];
 }
 
 export interface ZiektedrukNotConfigured {
@@ -90,6 +94,53 @@ export interface ZiektedrukNotConfigured {
 }
 
 export type ZiektedrukResponse = ZiektedrukResult | ZiektedrukNotConfigured;
+
+// === Fungicide Coverage (Niveau 2) ===
+
+export type CoverageStatus = 'good' | 'moderate' | 'low' | 'none';
+
+export interface FungicideProperties {
+  active_substance: string;
+  active_substance_nl: string | null;
+  frac_group: string | null;
+  mode_of_action: 'preventief' | 'curatief' | 'beide';
+  rain_washoff_halflife_mm: number;
+  min_residual_fraction: number;
+  curative_max_degree_hours: number | null;
+  min_drying_hours: number;
+}
+
+export interface SprayEvent {
+  id: string;                    // spuitschrift id
+  date: Date;                    // application datetime
+  products: {
+    name: string;
+    fungicideProps: FungicideProperties | null;
+  }[];
+  parcelIds: string[];
+}
+
+export interface CoveragePoint {
+  timestamp: Date;
+  coveragePct: number;           // 0-100
+  product: string;
+}
+
+export interface CoverageTimeline {
+  sprayId: string;
+  sprayDate: Date;
+  product: string;
+  points: CoveragePoint[];
+}
+
+export interface InfectionCoverage {
+  coverageAtInfection: number;   // 0-100
+  coverageStatus: CoverageStatus;
+  lastSprayProduct: string | null;
+  lastSprayDate: string | null;  // ISO timestamp
+  curativeWindowOpen: boolean;
+  curativeRemainingDH: number | null;
+}
 
 // === Weather data input (subset of HourlyWeatherData from weather-types.ts) ===
 export interface HourlyWeatherInput {
