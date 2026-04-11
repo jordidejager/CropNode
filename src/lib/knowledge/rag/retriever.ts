@@ -29,7 +29,7 @@ const MAX_CANDIDATES = 80;
 const SELECT_WITH_EMBEDDING =
   'id, title, content, summary, category, subcategory, knowledge_type, ' +
   'crops, season_phases, relevant_months, products_mentioned, ' +
-  'is_public_source, public_source_ref, fusion_sources, harvest_year, content_embedding, image_urls';
+  'is_public_source, public_source_ref, fusion_sources, harvest_year, valid_until, content_embedding, image_urls';
 
 export interface RetrieveOptions {
   supabase: SupabaseClient;
@@ -56,6 +56,7 @@ type CandidateRow = {
   public_source_ref: string | null;
   fusion_sources: number;
   harvest_year: number | null;
+  valid_until: string | null;
   content_embedding: string | null;
   image_urls: string[] | null;
 };
@@ -138,7 +139,14 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
         similarity -= 0.02;
       }
     }
-    similarity = Math.min(1, similarity);
+    // Downrank expired content (valid_until in the past)
+    if (row.valid_until) {
+      const validUntil = new Date(row.valid_until);
+      if (validUntil < new Date()) {
+        similarity -= 0.06; // significant penalty for expired content
+      }
+    }
+    similarity = Math.min(1, Math.max(0, similarity));
 
     if (similarity >= threshold) {
       ranked.push({

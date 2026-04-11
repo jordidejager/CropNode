@@ -34,12 +34,22 @@ export async function fetchSprayEventsForParcel(
   harvestYear: number,
   supabase: SupabaseClient
 ): Promise<SprayEvent[]> {
-  // 1. Fetch spuitschrift records that include this parcel
+  // 1. Get sub-parcel IDs for this parcel (spuitschrift.plots contains sub-parcel IDs)
+  const { data: subParcels } = await supabase
+    .from('sub_parcels')
+    .select('id')
+    .eq('parcel_id', parcelId);
+
+  const plotIds = [parcelId, ...(subParcels?.map((sp) => sp.id) ?? [])];
+
+  // 2. Fetch spuitschrift records that include this parcel or any of its sub-parcels
+  // Supabase .contains() checks if array contains ALL values, but we need ANY match
+  // So we use .overlaps() which checks for ANY intersection
   const { data: sprays } = await supabase
     .from('spuitschrift')
     .select('id, date, plots, products, harvest_year')
     .eq('harvest_year', harvestYear)
-    .contains('plots', [parcelId])
+    .overlaps('plots', plotIds)
     .order('date');
 
   if (!sprays || sprays.length === 0) return [];
@@ -77,8 +87,10 @@ export async function fetchSprayEventsForParcel(
   }
 
   // Look up werkzame_stoffen from ctgb_products
-  const ctgbMap = new Map<string, string[]>(); // product name → active substances
+  // Match by exact name first, then try case-insensitive for unmatched products
+  const ctgbMap = new Map<string, string[]>(); // product name (lowercase) → active substances
   if (productNames.size > 0) {
+    // Try exact match first
     const { data: ctgbProducts } = await supabase
       .from('ctgb_products')
       .select('naam, werkzame_stoffen')
@@ -86,7 +98,23 @@ export async function fetchSprayEventsForParcel(
 
     if (ctgbProducts) {
       for (const cp of ctgbProducts) {
-        ctgbMap.set(cp.naam, cp.werkzame_stoffen || []);
+        ctgbMap.set(cp.naam.toLowerCase(), cp.werkzame_stoffen || []);
+      }
+    }
+
+    // For unmatched products, try case-insensitive search
+    const unmatchedNames = Array.from(productNames).filter(
+      (name) => !ctgbMap.has(name.toLowerCase())
+    );
+    for (const name of unmatchedNames) {
+      const { data: fuzzyResults } = await supabase
+        .from('ctgb_products')
+        .select('naam, werkzame_stoffen')
+        .ilike('naam', `%${name}%`)
+        .limit(1);
+
+      if (fuzzyResults && fuzzyResults.length > 0) {
+        ctgbMap.set(name.toLowerCase(), fuzzyResults[0].werkzame_stoffen || []);
       }
     }
   }
@@ -96,8 +124,8 @@ export async function fetchSprayEventsForParcel(
 
   for (const spray of sprays as SpuitschriftRow[]) {
     const sprayProducts = spray.products.map((p) => {
-      // Find active substances via CTGB
-      const activeSubstances = ctgbMap.get(p.product) || [];
+      // Find active substances via CTGB (case-insensitive lookup)
+      const activeSubstances = ctgbMap.get(p.product.toLowerCase()) || [];
 
       // Match against fungicide properties
       let fungicideProps: FungicideProperties | null = null;

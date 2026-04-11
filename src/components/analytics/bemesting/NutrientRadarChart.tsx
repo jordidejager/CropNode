@@ -34,7 +34,7 @@ export function NutrientRadarChart({ summaries }: NutrientRadarChartProps) {
   // Normalize values to 0-100 scale for radar
   const { chartData, maxValues } = useMemo(() => {
     const metrics = ['Org. stof', 'N-leverend', 'P-beschikbaar', 'P-Al', 'Klei %'];
-    const getters: ((s: BemestingParcelSummary) => number | null)[] = [
+    const getters: ((s: SoilSummary) => number | null)[] = [
       (s) => s.organischeStof,
       (s) => s.nLeverendVermogen,
       (s) => s.pPlantbeschikbaar,

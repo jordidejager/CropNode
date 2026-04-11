@@ -80,6 +80,8 @@ Als de tekst hoofdzakelijk zo'n meta-bericht is, retourneer { "articles": [] }. 
 - relevant_months: lijst van maandnummers (1-12) waarin de kennis bruikbaar is
 - products_mentioned: alle genoemde productnamen
 - is_evergreen: true bij tijdloze kennis (raseigenschappen, biologie), false bij seizoensgebonden advies
+- valid_from: YYYY-MM-DD vanaf wanneer dit advies relevant is (bv "2026-03-01" voor voorjaarsadvies). Null als niet seizoensgebonden.
+- valid_until: YYYY-MM-DD tot wanneer dit advies relevant is (bv "2026-10-31" voor seizoensadvies). Na deze datum is het advies verouderd. Null als tijdloos (is_evergreen=true). Vuistregel: seizoensadvies = geldig tot einde van dat seizoen (bv oogstadvies 2025 → valid_until "2025-12-31").
 - harvest_year: het jaar waarop het advies gericht is (of het jaar van publicatie)
 
 OUTPUT: JSON object met "articles" array. Bij meta-content: "articles": [].`;

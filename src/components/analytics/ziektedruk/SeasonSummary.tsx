@@ -1,12 +1,13 @@
 'use client';
 
-import { Bug, ShieldAlert, Thermometer, CalendarCheck } from 'lucide-react';
+import { Bug, ShieldAlert, Shield, Thermometer, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import type { ZiektedrukKPIs } from '@/lib/disease-models/types';
+import type { ZiektedrukKPIs, CoveragePoint } from '@/lib/disease-models/types';
 
 interface SeasonSummaryProps {
   kpis: ZiektedrukKPIs;
+  coverageTimeline?: CoveragePoint[];
 }
 
 interface KPICardProps {
@@ -32,7 +33,14 @@ function KPICard({ icon: Icon, label, value, subtext, iconColor = 'text-slate-40
   );
 }
 
-export function SeasonSummary({ kpis }: SeasonSummaryProps) {
+export function SeasonSummary({ kpis, coverageTimeline }: SeasonSummaryProps) {
+  // Calculate current coverage from latest point in timeline
+  const currentCoverage = coverageTimeline && coverageTimeline.length > 0
+    ? coverageTimeline[coverageTimeline.length - 1].coveragePct
+    : null;
+  const lastProduct = coverageTimeline && coverageTimeline.length > 0
+    ? coverageTimeline[coverageTimeline.length - 1].product
+    : null;
   return (
     <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
       <KPICard
@@ -62,6 +70,16 @@ export function SeasonSummary({ kpis }: SeasonSummaryProps) {
         subtext={`${Math.round(kpis.currentDegreeDays)} graaddagen`}
         iconColor="text-emerald-400"
       />
+
+      {currentCoverage !== null && (
+        <KPICard
+          icon={Shield}
+          label="Huidige dekking"
+          value={`${Math.round(currentCoverage)}%`}
+          subtext={lastProduct ?? 'geen bespuiting'}
+          iconColor={currentCoverage >= 50 ? 'text-emerald-400' : currentCoverage >= 30 ? 'text-yellow-400' : 'text-red-400'}
+        />
+      )}
 
       <KPICard
         icon={CalendarCheck}

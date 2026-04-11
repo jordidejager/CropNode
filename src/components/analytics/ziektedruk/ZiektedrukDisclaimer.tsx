@@ -21,8 +21,10 @@ export function ZiektedrukDisclaimer() {
       <div className="flex-1">
         <p className="text-sm text-amber-200/90">
           Ziektedruk is een experimentele indicator gebaseerd op gepubliceerde
-          wetenschappelijke modellen en weerdata. Gebruik het als aanvulling op,
-          niet als vervanging van, het advies van je gewasbeschermingsadviseur.
+          wetenschappelijke modellen en weerdata. De restdekkingsberekening is
+          een schatting op basis van gemiddelde producteigenschappen, temperatuur
+          en neerslag. Gebruik het als aanvulling op, niet als vervanging van,
+          het advies van je gewasbeschermingsadviseur.
         </p>
       </div>
       <button

@@ -12,11 +12,18 @@ import type { HourlyWeatherData } from '@/lib/weather/weather-types';
 import { buildSeasonProgress } from './apple-scab/ascospore-maturation';
 import { detectWetPeriods } from './apple-scab/wet-period-detection';
 import { evaluateInfections } from './apple-scab/infection-calculator';
+import {
+  evaluateCoverageForInfections,
+  buildCombinedCoverageTimeline,
+} from './apple-scab/fungicide-coverage';
+import { fetchSprayEventsForParcel } from './apple-scab/spray-linker';
 import type {
   DiseaseModelConfig,
   HourlyWeatherInput,
   SeasonProgressEntry,
   InfectionPeriod,
+  InfectionCoverage,
+  CoveragePoint,
   ZiektedrukKPIs,
   ZiektedrukResult,
 } from './types';
@@ -224,12 +231,47 @@ export async function calculateDiseaseResults(
   );
   const kpis = calculateKPIs(seasonProgress, infectionPeriods);
 
+  // Coverage model (Niveau 2): link sprays to infection periods
+  const sprayEvents = await fetchSprayEventsForParcel(
+    config.parcel_id,
+    config.harvest_year,
+    supabase
+  );
+
+  const infectionCoverageMap = evaluateCoverageForInfections(
+    infectionPeriods,
+    sprayEvents,
+    weatherInput,
+    seasonProgress
+  );
+
+  const coverageTimeline = buildCombinedCoverageTimeline(
+    sprayEvents,
+    weatherInput,
+    seasonProgress
+  );
+
+  // Convert Map to plain object for JSON serialization
+  const infectionCoverage: Record<string, InfectionCoverage> = {};
+  for (const [key, value] of infectionCoverageMap) {
+    infectionCoverage[key] = value;
+  }
+
   return {
     configured: true,
     config,
     seasonProgress,
     infectionPeriods,
     kpis,
+    coverageTimeline: coverageTimeline.map((p) => ({
+      ...p,
+      timestamp: p.timestamp as unknown as Date, // Already Date objects
+    })),
+    infectionCoverage,
+    sprayEvents: sprayEvents.map((s) => ({
+      date: s.date.toISOString(),
+      product: s.products.map((p) => p.name).join(' + '),
+    })),
   };
 }
 
@@ -272,21 +314,31 @@ export async function calculateAndCache(
     }
   }
 
-  // Insert infection periods
+  // Insert infection periods (with coverage data)
   if (result.infectionPeriods.length > 0) {
-    const infectionRows = result.infectionPeriods.map((ip) => ({
-      config_id: config.id,
-      wet_period_start: ip.wetPeriodStart,
-      wet_period_end: ip.wetPeriodEnd,
-      wet_duration_hours: ip.durationHours,
-      avg_temperature: ip.avgTemperature,
-      severity: ip.severity,
-      rim_value: ip.rimValue,
-      pam_at_event: ip.pamAtEvent,
-      degree_days_cumulative: ip.degreeDaysCumulative,
-      expected_symptom_date: ip.expectedSymptomDate,
-      is_forecast: ip.isForecast,
-    }));
+    const infectionRows = result.infectionPeriods.map((ip) => {
+      const coverage = result.infectionCoverage[ip.wetPeriodStart];
+      return {
+        config_id: config.id,
+        wet_period_start: ip.wetPeriodStart,
+        wet_period_end: ip.wetPeriodEnd,
+        wet_duration_hours: ip.durationHours,
+        avg_temperature: ip.avgTemperature,
+        severity: ip.severity,
+        rim_value: ip.rimValue,
+        pam_at_event: ip.pamAtEvent,
+        degree_days_cumulative: ip.degreeDaysCumulative,
+        expected_symptom_date: ip.expectedSymptomDate,
+        is_forecast: ip.isForecast,
+        // Coverage columns (Niveau 2)
+        coverage_at_infection: coverage?.coverageAtInfection ?? null,
+        coverage_status: coverage?.coverageStatus ?? null,
+        last_spray_product: coverage?.lastSprayProduct ?? null,
+        last_spray_date: coverage?.lastSprayDate ?? null,
+        curative_window_open: coverage?.curativeWindowOpen ?? false,
+        curative_remaining_dh: coverage?.curativeRemainingDH ?? null,
+      };
+    });
 
     await supabase.from('disease_infection_periods').upsert(infectionRows, {
       onConflict: 'config_id,wet_period_start',
@@ -373,12 +425,63 @@ async function loadCachedResults(
 
   const kpis = calculateKPIs(seasonProgress, infectionPeriods);
 
+  // Coverage is always calculated fresh (spuitschrift may have changed)
+  const sprayEvents = await fetchSprayEventsForParcel(
+    config.parcel_id,
+    config.harvest_year,
+    supabase
+  );
+
+  // For coverage we need hourly weather — fetch it
+  let coverageTimeline: CoveragePoint[] = [];
+  let infectionCoverage: Record<string, InfectionCoverage> = {};
+
+  if (sprayEvents.length > 0 && seasonProgress.length > 0) {
+    const today = new Date();
+    const forecastEnd = new Date(today);
+    forecastEnd.setDate(forecastEnd.getDate() + 7);
+
+    // Find station for this parcel
+    const stationId = await getStationForParcel(config.parcel_id, supabase);
+    if (stationId) {
+      const weatherData = await fetchWeatherChunked(
+        stationId,
+        config.biofix_date,
+        formatDate(forecastEnd),
+        supabase
+      );
+      const weatherInput = toWeatherInput(weatherData);
+
+      const coverageMap = evaluateCoverageForInfections(
+        infectionPeriods,
+        sprayEvents,
+        weatherInput,
+        seasonProgress
+      );
+      for (const [key, value] of coverageMap) {
+        infectionCoverage[key] = value;
+      }
+
+      coverageTimeline = buildCombinedCoverageTimeline(
+        sprayEvents,
+        weatherInput,
+        seasonProgress
+      );
+    }
+  }
+
   return {
     configured: true,
     config,
     seasonProgress,
     infectionPeriods,
     kpis,
+    coverageTimeline,
+    infectionCoverage,
+    sprayEvents: sprayEvents.map((s) => ({
+      date: s.date.toISOString(),
+      product: s.products.map((p) => p.name).join(' + '),
+    })),
   };
 }
 

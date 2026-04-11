@@ -237,7 +237,7 @@ export default function ZiektedrukPage() {
       {result && !calculating && (
         <>
           {/* Season Summary KPIs */}
-          <SeasonSummary kpis={result.kpis} />
+          <SeasonSummary kpis={result.kpis} coverageTimeline={result.coverageTimeline} />
 
           {/* Season Progress (PAM bar) */}
           <SeasonProgress kpis={result.kpis} />
@@ -246,10 +246,16 @@ export default function ZiektedrukPage() {
           <InfectionTimeline
             seasonProgress={result.seasonProgress}
             infectionPeriods={result.infectionPeriods}
+            coverageTimeline={result.coverageTimeline}
+            infectionCoverage={result.infectionCoverage}
+            sprayEvents={result.sprayEvents}
           />
 
           {/* Infection Detail Table */}
-          <InfectionTable infectionPeriods={result.infectionPeriods} />
+          <InfectionTable
+            infectionPeriods={result.infectionPeriods}
+            infectionCoverage={result.infectionCoverage}
+          />
         </>
       )}
     </div>
