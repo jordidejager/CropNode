@@ -20,6 +20,7 @@ import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
 import { detectProductQuery, handleProductQuery } from './product-query-handler';
 import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
+import { isRagQueryIntent, handleRagQuery } from './rag-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
@@ -319,6 +320,12 @@ export async function handleIncomingMessage(
       const productQueryParams = detectProductQuery(messageText);
       if (productQueryParams) {
         await handleProductQuery(userId, e164Phone, messageText, productQueryParams);
+        return;
+      }
+
+      // Knowledge base query: "hoe herken ik schurft", "wanneer GA4/7 spuiten", etc.
+      if (isRagQueryIntent(messageText)) {
+        await handleRagQuery(userId, e164Phone, messageText, waMessageId);
         return;
       }
 

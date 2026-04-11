@@ -24,6 +24,7 @@
     "knowledge:inspect": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/inspect-knowledge-base.ts",
     "knowledge:publish": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/publish-knowledge-drafts.ts",
     "knowledge:extract": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/extract-structured-knowledge.ts",
+    "knowledge:enrich": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/enrich-disease-profiles.ts",
     "knowledge:cleanup": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/cleanup-deprecated-kb.ts",
     "test:rag": "tsx scripts/test-rag-pipeline.ts",
     "analyze": "ANALYZE=true next build"

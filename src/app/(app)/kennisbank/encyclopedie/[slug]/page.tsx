@@ -87,6 +87,42 @@ function useRelatedArticles(name: string | null) {
   });
 }
 
+// Fetch structured product advice for this disease/topic
+interface ProductAdviceRow {
+  product_name: string;
+  active_substance: string | null;
+  crop: string;
+  dosage: string | null;
+  application_type: string | null;
+  timing: string | null;
+  curative_window_hours: number | null;
+  safety_interval_days: number | null;
+  max_applications_per_year: number | null;
+  notes: string | null;
+  country_restrictions: string | null;
+  resistance_group: string | null;
+}
+
+function useProductAdvice(targetName: string | null) {
+  return useQuery<ProductAdviceRow[]>({
+    queryKey: ['product-advice-detail', targetName],
+    queryFn: async () => {
+      if (!targetName) return [];
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from('knowledge_product_advice')
+        .select('product_name, active_substance, crop, dosage, application_type, timing, curative_window_hours, safety_interval_days, max_applications_per_year, notes, country_restrictions, resistance_group')
+        .ilike('target_name', `%${targetName}%`)
+        .order('source_article_count', { ascending: false })
+        .limit(30);
+      if (error) return [];
+      return (data ?? []) as unknown as ProductAdviceRow[];
+    },
+    enabled: !!targetName,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // ============================================
 // CTGB status lookup for products
 // ============================================
@@ -204,12 +240,15 @@ export default function EncyclopediaDetailPage() {
   const { data: profile, isLoading } = useProfile(profileId);
   const { data: phenology } = useCurrentPhenology();
   const { data: relatedArticles = [] } = useRelatedArticles(profile?.name ?? null);
+  const { data: productAdvice = [] } = useProductAdvice(profile?.name ?? null);
   const currentMonth = phenology?.month ?? new Date().getUTCMonth() + 1;
   const allProducts = [
     ...(profile?.key_preventive_products ?? []),
     ...(profile?.key_curative_products ?? []),
+    ...productAdvice.map((pa) => pa.product_name),
   ];
-  const { data: ctgbStatuses = {} } = useCtgbStatus(allProducts);
+  const uniqueProducts = Array.from(new Set(allProducts));
+  const { data: ctgbStatuses = {} } = useCtgbStatus(uniqueProducts);
 
   if (isLoading) {
     return (
@@ -347,6 +386,76 @@ export default function EncyclopediaDetailPage() {
             </div>
           )}
         </ContentSection>
+        {/* Detailed product advice table from knowledge_product_advice */}
+        {productAdvice.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }}
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-emerald-400/60" />
+              <h3 className="text-sm font-semibold text-white">Gedetailleerd middelenoverzicht</h3>
+              <span className="text-[10px] text-white/30">({productAdvice.length} adviezen)</span>
+            </div>
+            <div className="overflow-x-auto -mx-2 px-2">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/[0.06] text-left text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                    <th className="pb-2 pr-3">Middel</th>
+                    <th className="pb-2 pr-3">Werkzame stof</th>
+                    <th className="pb-2 pr-3">Gewas</th>
+                    <th className="pb-2 pr-3">Dosering</th>
+                    <th className="pb-2 pr-3">Type</th>
+                    <th className="pb-2 pr-3">Timing</th>
+                    <th className="pb-2 pr-3">CTGB</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {productAdvice.map((pa, idx) => {
+                    const status = ctgbStatuses[pa.product_name];
+                    const statusColor = status?.status === 'toegelaten' ? 'text-emerald-400'
+                      : status?.status === 'vervallen' ? 'text-rose-400' : 'text-white/30';
+                    const StatusIcon = status?.status === 'toegelaten' ? Check
+                      : status?.status === 'vervallen' ? X : CircleDashed;
+                    return (
+                      <tr key={idx} className={cn('text-white/60', status?.status === 'vervallen' && 'opacity-50 line-through')}>
+                        <td className="py-2 pr-3 font-medium text-white/80 no-underline" style={{ textDecoration: 'none' }}>{pa.product_name}</td>
+                        <td className="py-2 pr-3 text-white/40">{pa.active_substance ?? '-'}</td>
+                        <td className="py-2 pr-3">{pa.crop === 'beide' ? '🍎🍐' : pa.crop === 'appel' ? '🍎' : '🍐'}</td>
+                        <td className="py-2 pr-3 font-mono text-[10px]">{pa.dosage ?? '-'}</td>
+                        <td className="py-2 pr-3">
+                          {pa.application_type && (
+                            <span className={cn(
+                              'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
+                              pa.application_type === 'preventief' ? 'bg-emerald-500/10 text-emerald-400' :
+                              pa.application_type === 'curatief' ? 'bg-amber-500/10 text-amber-400' :
+                              'bg-white/5 text-white/40',
+                            )}>
+                              {pa.application_type}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 max-w-[200px] truncate">{pa.timing ?? '-'}</td>
+                        <td className="py-2">
+                          <StatusIcon className={cn('h-3.5 w-3.5', statusColor)} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {productAdvice.some((pa) => pa.safety_interval_days) && (
+              <p className="mt-3 text-[10px] text-white/30">
+                VGT (veiligheidstermijn): {productAdvice.filter((pa) => pa.safety_interval_days).map((pa) => `${pa.product_name} ${pa.safety_interval_days}d`).join(' · ')}
+              </p>
+            )}
+            {productAdvice.some((pa) => pa.country_restrictions) && (
+              <p className="mt-1 text-[10px] text-amber-400/60">
+                ⚠️ Let op: {productAdvice.filter((pa) => pa.country_restrictions).map((pa) => `${pa.product_name}: ${pa.country_restrictions}`).join(' · ')}
+              </p>
+            )}
+          </motion.div>
+        )}
+
         <ContentSection icon={Sprout} title="Biologische bestrijding" content={profile.biological_options} delay={0.45} />
         <ContentSection icon={AlertTriangle} title="Resistentiemanagement" content={profile.resistance_management} delay={0.5} />
         <ContentSection icon={Eye} title="Monitoring & waarneming" content={profile.monitoring_advice} delay={0.55} />

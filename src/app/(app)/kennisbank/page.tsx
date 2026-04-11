@@ -19,6 +19,7 @@ import { SeasonScrubber } from '@/components/knowledge-atlas/season-scrubber';
 import { CommandPalette } from '@/components/knowledge-atlas/command-palette';
 import { ArticleDossier } from '@/components/knowledge-atlas/article-dossier';
 import { KnowledgeChat } from '@/components/knowledge-atlas/knowledge-chat';
+import { PhenologicalCompass } from '@/components/knowledge-atlas/phenological-compass';
 import { useCurrentPhenology, useArticleStats } from '@/hooks/use-knowledge';
 
 import type { ArticleFilters, KnowledgeArticleListItem } from '@/lib/knowledge/client-api';
@@ -56,9 +57,9 @@ export default function KnowledgeAtlasPage() {
       <AmbientBackground month={selectedMonth ?? undefined} />
 
       <div className="relative min-h-screen pb-32">
-        {/* ===== HERO: Chat-centric ===== */}
-        <div className="mx-auto max-w-3xl px-6 pt-10">
-          {/* Minimal header */}
+        {/* ===== HERO: Compass + Chat ===== */}
+        <div className="mx-auto max-w-5xl px-6 pt-10">
+          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -74,44 +75,85 @@ export default function KnowledgeAtlasPage() {
               Stel je teeltvraag
             </h1>
             <p className="mt-2 text-sm text-white/40">
-              Antwoorden op basis van {stats?.total ?? '2000'}+ kennisartikelen
-              {' '}· appel & peer
+              Antwoorden op basis van {stats?.total ?? '2000'}+ kennisartikelen · appel & peer
             </p>
           </motion.div>
 
-          {/* ===== THE CHAT ===== */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-          >
-            <KnowledgeChat
-              onArticleClick={(id) => setDossierArticleId(id)}
-            />
-          </motion.div>
-
-          {/* ⌘K shortcut hint */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="mt-3"
-          >
-            <button
-              type="button"
-              onClick={() => setCommandOpen(true)}
-              className="group flex w-full items-center justify-between rounded-xl border border-white/[0.04] bg-transparent px-4 py-2 text-left text-xs text-white/25 transition-colors hover:border-emerald-500/15 hover:text-white/40"
+          {/* Compass + Chat side by side */}
+          <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:gap-10">
+            {/* Compass — full on lg+, compact horizontal bar on mobile */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="hidden shrink-0 lg:block"
             >
-              <span className="flex items-center gap-2">
-                <Command className="h-3 w-3 text-emerald-400/30" />
-                Zoek direct in alle artikelen
-              </span>
-              <span className="flex items-center gap-1 font-mono text-[9px]">
-                <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">⌘</kbd>
-                <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">K</kbd>
-              </span>
-            </button>
-          </motion.div>
+              <PhenologicalCompass />
+            </motion.div>
+
+            {/* Mobile season indicator */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="w-full lg:hidden"
+            >
+              <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="flex gap-0.5 flex-1">
+                  {Array.from({ length: 12 }).map((_, m) => {
+                    const isCurrent = m + 1 === (phenology?.month ?? new Date().getUTCMonth() + 1);
+                    return (
+                      <div
+                        key={m}
+                        className={`h-2 flex-1 rounded-full ${
+                          isCurrent ? 'bg-emerald-400' : m >= 2 && m <= 9 ? 'bg-white/15' : 'bg-white/[0.04]'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] text-white/40 shrink-0">
+                  {phase?.split('/')[0]}
+                </span>
+              </div>
+            </motion.div>
+
+            {/* Chat (takes remaining width) */}
+            <div className="w-full min-w-0 flex-1">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+              >
+                <KnowledgeChat
+                  onArticleClick={(id) => setDossierArticleId(id)}
+                />
+              </motion.div>
+
+              {/* ⌘K shortcut hint */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="mt-3"
+              >
+                <button
+                  type="button"
+                  onClick={() => setCommandOpen(true)}
+                  className="group flex w-full items-center justify-between rounded-xl border border-white/[0.04] bg-transparent px-4 py-2 text-left text-xs text-white/25 transition-colors hover:border-emerald-500/15 hover:text-white/40"
+                >
+                  <span className="flex items-center gap-2">
+                    <Command className="h-3 w-3 text-emerald-400/30" />
+                    Zoek direct in alle artikelen
+                  </span>
+                  <span className="flex items-center gap-1 font-mono text-[9px]">
+                    <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">⌘</kbd>
+                    <kbd className="rounded border border-white/[0.05] bg-white/[0.02] px-1 py-0.5">K</kbd>
+                  </span>
+                </button>
+              </motion.div>
+            </div>
+          </div>
         </div>
 
         {/* ===== DIVIDER: Show articles section ===== */}
