@@ -113,29 +113,36 @@ FRUITCONSULT_PASS=
 
 ## Database Migrations
 
-Migrations live in `supabase/migrations/` as numbered SQL files. A `schema_migrations` table in the database tracks which have been applied.
-
-**Running migrations:**
-```bash
-# Run a specific migration (skips if already applied)
-npx tsx scripts/run-migration.ts 052_my_new_migration.sql
-
-# Run ALL pending migrations in order
-npx tsx scripts/run-all-migrations.ts
-
-# Preview what would run without applying
-npx tsx scripts/run-all-migrations.ts --dry-run
-
-# Force re-run (ignores tracking)
-npx tsx scripts/run-migration.ts 052_my_new_migration.sql --force
-```
+Migrations live in `supabase/migrations/` as numbered SQL files (001-045+). Run via Supabase SQL Editor.
 
 **Creating a new migration:**
 1. Create `supabase/migrations/NNN_description.sql` (next number in sequence)
 2. Write idempotent SQL (use `IF NOT EXISTS`, `OR REPLACE`, `ON CONFLICT` where possible)
-3. Run it: `npx tsx scripts/run-migration.ts NNN_description.sql`
+3. Run in Supabase Dashboard > SQL Editor
 
-The script automatically records applied migrations — no manual bookkeeping needed.
+## Product Database Scripts
+
+```bash
+# Sync unified products table from source tables
+npx tsx scripts/sync-products.ts                    # All sources
+npx tsx scripts/sync-products.ts --source=ctgb      # Only CTGB
+
+# Full CTGB re-sync from MST API (2-phase, network-resilient)
+npx tsx scripts/enrich-ctgb-batch.ts --phase=1      # Fetch API → local .ctgb-enrichment-cache.json
+npx tsx scripts/enrich-ctgb-batch.ts --phase=2      # Write cache → Supabase
+
+# Meststoffen beschrijvingen genereren
+npx tsx scripts/enrich-fertilizers.ts
+
+# Parse restricties (BBCH, drift, bufferzone) uit GV opmerkingen
+npx tsx scripts/parse-gv-restrictions.ts
+
+# Data quality rapport
+npx tsx scripts/product-quality-report.ts
+
+# WhatsApp bot readiness test (8 voorbeeldvragen)
+npx tsx scripts/test-whatsapp-queries.ts
+```
 
 ## Knowledge Base RAG Pipeline (`src/lib/knowledge/`)
 
