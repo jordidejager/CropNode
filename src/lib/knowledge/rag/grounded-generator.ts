@@ -51,13 +51,16 @@ REGELGEVING:
 16. Voeg bij elk regelgevingsadvies toe: "Controleer altijd het actuele CTGB-etiket voor de meest recente toepassingsvoorwaarden."
 17. Zeg NOOIT "toegelaten" of "verboden" over een middel op basis van de context-artikelen alleen — de CTGB toelatingsstatus wordt automatisch apart gecontroleerd.
 
-HALLUCINATIE-PREVENTIE:
-18. Je MAG NOOIT je eigen kennis gebruiken om feiten aan te vullen die NIET in de context staan.
-    Maar als de context WEL levenscyclus-info, symptomen, of biologie bevat — geef die dan!
-    Lees de context GRONDIG voordat je zegt dat er "geen informatie" is.
-19. Combineer NOOIT feiten uit verschillende bronnen tot een nieuwe bewering die in geen
-    enkele individuele bron staat.
-20. Bij twijfel over details: citeer letterlijk uit de context.
+HALLUCINATIE-PREVENTIE (ABSOLUUT KRITIEK):
+18. Je MAG NOOIT je eigen kennis over biologie, levenscycli, overwinteringsvormen, of entomologie gebruiken.
+    ALLES wat je antwoordt MOET letterlijk in de context staan. Als de context zegt dat een insect als
+    volwassene overwintert, dan is DAT het antwoord — ook als jij denkt dat het anders is.
+19. Er zijn twee soorten context: GESTRUCTUREERDE KENNIS (bovenaan, uit onze database) en BRONARTIKELEN (eronder).
+    Bij tegenstrijdigheden: GESTRUCTUREERDE KENNIS WINT ALTIJD. Die is gecureerd en gevalideerd.
+20. Combineer NOOIT feiten uit verschillende bronnen tot een nieuwe bewering.
+21. VERBODEN te zeggen over dieren/schimmels: "overwintert als ei/larve/pop/spore" TENZIJ dat
+    LETTERLIJK EN EXACT zo in de context staat. Dit is de #1 hallucinatie die je maakt.
+22. Bij twijfel: citeer LETTERLIJK uit de context. Parafraseer NIET bij biologische details.
 
 ANTWOORDSTIJL:
 - Praktisch, direct, als een ervaren collega
@@ -148,10 +151,12 @@ function buildPrompt(options: GenerateOptions): string {
     '',
     '== RELEVANTE KENNIS UIT DE CROPNODE KENNISBANK ==',
     '',
-    // Inject structured data BEFORE the article chunks — this gives the model
-    // precise facts (dosages, timing, curative windows) that it can use
-    // alongside the richer narrative context from the article chunks.
-    options.structuredContext ? options.structuredContext + '\n' : '',
+    // Structured data is PRIMAIR — gecureerd en gevalideerd
+    options.structuredContext
+      ? '⚠️ PRIMAIRE BRON (gecureerd, altijd prioriteit boven artikelen):\n' + options.structuredContext + '\n'
+      : '',
+    '--- ONDERSTEUNENDE BRONARTIKELEN (gebruik ter aanvulling, NIET voor biologische details als die hierboven al staan) ---',
+    '',
     chunkBlocks,
     '',
     '== VRAAG VAN DE GEBRUIKER ==',
