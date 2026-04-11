@@ -56,15 +56,18 @@ function shouldRunNow(): { run: boolean; reason: string } {
   const now = new Date();
   const month = now.getUTCMonth() + 1; // 1-12
   const day = now.getUTCDate();
+  const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon
 
+  // Spuitseizoen (maart-oktober): dagelijks
   const inSeason = month >= 3 && month <= 10;
   if (inSeason) {
-    return { run: true, reason: `seizoen actief (${month})` };
+    return { run: true, reason: `spuitseizoen — dagelijks (${day}-${month})` };
   }
-  if (day === 1) {
-    return { run: true, reason: `winter, eerste van de maand (${day}-${month})` };
+  // Winter (november-februari): wekelijks op maandag
+  if (dayOfWeek === 1) {
+    return { run: true, reason: `winter — wekelijks maandag (${day}-${month})` };
   }
-  return { run: false, reason: `winter (${day}-${month}), geen 1e van de maand` };
+  return { run: false, reason: `winter (${day}-${month}), geen maandag` };
 }
 
 // ============================================

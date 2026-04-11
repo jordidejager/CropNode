@@ -19,16 +19,17 @@ import { resolveProductAliases } from './ctgb-postprocessor';
 import type { QueryIntent, RagContext, RetrievedChunk } from './types';
 
 const DEFAULT_THRESHOLD = 0.65;
-const MONTH_BOOST = 0.04;
-const PHASE_BOOST = 0.03;
-const PRODUCT_MATCH_BOOST = 0.08;
+const MONTH_BOOST = 0.08;          // was 0.04 — seizoensrelevantie moet zwaarder wegen
+const PHASE_BOOST = 0.06;          // was 0.03 — fenologische fase-match is belangrijk
+const PRODUCT_MATCH_BOOST = 0.10;  // was 0.08
+const HARVEST_YEAR_BOOST = 0.05;   // nieuw — recent advies > oud advies
 const MAX_CANDIDATES = 80;
 
 // Columns to select (INCLUDING content_embedding for in-memory similarity)
 const SELECT_WITH_EMBEDDING =
   'id, title, content, summary, category, subcategory, knowledge_type, ' +
   'crops, season_phases, relevant_months, products_mentioned, ' +
-  'is_public_source, public_source_ref, fusion_sources, content_embedding, image_urls';
+  'is_public_source, public_source_ref, fusion_sources, harvest_year, content_embedding, image_urls';
 
 export interface RetrieveOptions {
   supabase: SupabaseClient;
@@ -54,6 +55,7 @@ type CandidateRow = {
   is_public_source: boolean;
   public_source_ref: string | null;
   fusion_sources: number;
+  harvest_year: number | null;
   content_embedding: string | null;
   image_urls: string[] | null;
 };
@@ -121,6 +123,19 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
       ).length;
       if (matchCount > 0) {
         similarity += PRODUCT_MATCH_BOOST * Math.min(matchCount, 2);
+      }
+    }
+    // Boost recent content (current harvest year > older)
+    const currentYear = new Date().getUTCFullYear();
+    if (row.harvest_year) {
+      if (row.harvest_year === currentYear) {
+        similarity += HARVEST_YEAR_BOOST;
+      } else if (row.harvest_year === currentYear - 1) {
+        similarity += HARVEST_YEAR_BOOST * 0.5;
+      }
+      // Older than 2 years: slight penalty
+      if (row.harvest_year < currentYear - 2) {
+        similarity -= 0.02;
       }
     }
     similarity = Math.min(1, similarity);
