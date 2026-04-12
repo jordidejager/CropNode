@@ -9,7 +9,8 @@
  * All thresholds are based on published research for NW-European fruit growing.
  *
  * Sources:
- * - Bloei: Wageningen UR, "Bloeivoorspelling fruitgewassen" (GDD base 5°C from Jan 1)
+ * - Bloei: Wageningen UR / PPO fruitteelt, calibrated for Zeeland/coastal NL
+ *   Cross-checked with observed bloom dates 2026 (peer volle bloei ~10 apr, appel begin bloei ~12 apr)
  * - Fruitmot: Trapman (2005), codling moth biofix + flight model
  * - Schurft: A-scab model (already in disease-models/apple-scab/)
  */
@@ -45,12 +46,13 @@ export interface PhenologyStatus {
 
 export const PHENOLOGY_EVENTS: PhenologyEvent[] = [
   // === BLOEI (flowering) ===
+  // --- APPEL ---
   {
     id: 'appel_knopbreking',
     name: 'Bud break (apple)',
     nameNL: 'Knopbreking appel',
     crop: 'appel',
-    gddThreshold: 90,
+    gddThreshold: 75,
     gddBase: 5,
     category: 'bloei',
     icon: '🌿',
@@ -61,7 +63,7 @@ export const PHENOLOGY_EVENTS: PhenologyEvent[] = [
     name: 'Mouse ear (apple)',
     nameNL: 'Muizenoor appel',
     crop: 'appel',
-    gddThreshold: 140,
+    gddThreshold: 110,
     gddBase: 5,
     category: 'bloei',
     icon: '🌱',
@@ -69,11 +71,33 @@ export const PHENOLOGY_EVENTS: PhenologyEvent[] = [
     sprayAdvice: 'Eerste contactbespuiting overwegen (preventief tegen schurft).',
   },
   {
+    id: 'appel_groene_knop',
+    name: 'Green cluster (apple)',
+    nameNL: 'Groene knop appel',
+    crop: 'appel',
+    gddThreshold: 145,
+    gddBase: 5,
+    category: 'bloei',
+    icon: '💚',
+    description: 'BBCH 56. Bloemtrossen zichtbaar maar nog gesloten.',
+  },
+  {
+    id: 'appel_roze_knop',
+    name: 'Pink bud (apple)',
+    nameNL: 'Roze knop appel',
+    crop: 'appel',
+    gddThreshold: 175,
+    gddBase: 5,
+    category: 'bloei',
+    icon: '🩷',
+    description: 'BBCH 59. Bloemknoppen kleuren roze. Bloei aanstaande.',
+  },
+  {
     id: 'appel_eerste_bloei',
     name: 'First bloom (apple)',
     nameNL: 'Eerste bloei appel',
     crop: 'appel',
-    gddThreshold: 230,
+    gddThreshold: 200,
     gddBase: 5,
     category: 'bloei',
     icon: '🌸',
@@ -84,7 +108,7 @@ export const PHENOLOGY_EVENTS: PhenologyEvent[] = [
     name: 'Full bloom (apple)',
     nameNL: 'Volle bloei appel',
     crop: 'appel',
-    gddThreshold: 280,
+    gddThreshold: 240,
     gddBase: 5,
     category: 'bloei',
     icon: '🌺',
@@ -95,34 +119,70 @@ export const PHENOLOGY_EVENTS: PhenologyEvent[] = [
     name: 'Petal fall (apple)',
     nameNL: 'Bloemeinde appel',
     crop: 'appel',
-    gddThreshold: 350,
+    gddThreshold: 310,
     gddBase: 5,
     category: 'bloei',
     icon: '🍃',
     description: 'BBCH 67-69. Bloemblaadjes vallen. Herstart bespuitingen.',
     sprayAdvice: 'Herstart fungicideprogramma na bloei (schurft + meeldauw).',
   },
+
+  // --- PEER ---
+  {
+    id: 'peer_knopbreking',
+    name: 'Bud break (pear)',
+    nameNL: 'Knopbreking peer',
+    crop: 'peer',
+    gddThreshold: 55,
+    gddBase: 5,
+    category: 'bloei',
+    icon: '🌿',
+    description: 'Knoppen breken open. Peer loopt ~2 weken voor op appel.',
+  },
+  {
+    id: 'peer_witte_knop',
+    name: 'White bud (pear)',
+    nameNL: 'Witte knop peer',
+    crop: 'peer',
+    gddThreshold: 120,
+    gddBase: 5,
+    category: 'bloei',
+    icon: '🤍',
+    description: 'BBCH 57. Bloemknoppen wit, bloei aanstaande.',
+  },
   {
     id: 'peer_eerste_bloei',
     name: 'First bloom (pear)',
     nameNL: 'Eerste bloei peer',
     crop: 'peer',
-    gddThreshold: 190,
+    gddThreshold: 150,
     gddBase: 5,
     category: 'bloei',
     icon: '🌸',
-    description: 'BBCH 61. Peer bloeit ~2 weken eerder dan appel. Extra vorstgevoelig.',
+    description: 'BBCH 61. Eerste bloemen open. Extra vorstgevoelig bij peer.',
   },
   {
     id: 'peer_volle_bloei',
     name: 'Full bloom (pear)',
     nameNL: 'Volle bloei peer',
     crop: 'peer',
-    gddThreshold: 240,
+    gddThreshold: 190,
     gddBase: 5,
     category: 'bloei',
     icon: '🌺',
     description: 'BBCH 65. Volle bloei peer. Geen spuiten, bestuiving loopt.',
+  },
+  {
+    id: 'peer_bloemeinde',
+    name: 'Petal fall (pear)',
+    nameNL: 'Bloemeinde peer',
+    crop: 'peer',
+    gddThreshold: 250,
+    gddBase: 5,
+    category: 'bloei',
+    icon: '🍃',
+    description: 'BBCH 67-69. Bloemblaadjes vallen.',
+    sprayAdvice: 'Herstart fungicideprogramma na bloei.',
   },
 
   // === INSECTEN ===

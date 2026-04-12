@@ -6,6 +6,11 @@ import { calculatePhenologyStatus, calculateSeasonGDD } from '@/lib/weather/phen
  * GET /api/weather/phenology?stationId=X&crop=appel
  * Returns phenology status (bloom prediction, insect timing, etc.)
  * based on cumulative GDD from Jan 1 to today + forecast.
+ *
+ * Data sources (merged for complete season):
+ * - Jan 1 to station creation: KNMI observed daily (linked via knmi_station_id)
+ * - Station creation to today: weather_data_daily (Open-Meteo best_match)
+ * - Today onwards: weather_data_daily forecast (for estimated dates)
  */
 export async function GET(request: Request) {
   try {
@@ -23,10 +28,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'stationId is required' }, { status: 400 });
     }
 
-    // Verify user owns this station
+    // Get station with KNMI link
     const { data: station } = await supabase
       .from('weather_stations')
-      .select('id')
+      .select('id, knmi_station_id')
       .eq('id', stationId)
       .eq('user_id', user.id)
       .single();
@@ -35,12 +40,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Station not found' }, { status: 404 });
     }
 
-    // Get daily data from Jan 1 to today (past) + forecast (future)
     const year = new Date().getFullYear();
     const jan1 = `${year}-01-01`;
+    const today = new Date().toISOString().split('T')[0]!;
     const futureDate = new Date(Date.now() + 16 * 86400000).toISOString().split('T')[0];
 
-    const { data: dailyData } = await supabase
+    // 1. Get Open-Meteo daily data (station creation onwards + forecast)
+    const { data: ometeoDaily } = await supabase
       .from('weather_data_daily')
       .select('date, gdd_base5, gdd_base10')
       .eq('station_id', stationId)
@@ -48,14 +54,53 @@ export async function GET(request: Request) {
       .lte('date', futureDate)
       .order('date');
 
-    if (!dailyData?.length) {
+    const ometeoRows = ometeoDaily ?? [];
+    const firstOmeteoDate = ometeoRows[0]?.date;
+
+    // 2. If KNMI station linked and Open-Meteo data doesn't start at Jan 1,
+    //    backfill with KNMI observed daily for the gap period.
+    let knmiRows: Array<{ date: string; gdd_base5: number | null; gdd_base10: number | null }> = [];
+
+    if (station.knmi_station_id && firstOmeteoDate && firstOmeteoDate > jan1) {
+      // Get KNMI data from Jan 1 to the day before first Open-Meteo row
+      const knmiEnd = new Date(firstOmeteoDate);
+      knmiEnd.setDate(knmiEnd.getDate() - 1);
+      const knmiEndStr = knmiEnd.toISOString().split('T')[0];
+
+      if (knmiEndStr >= jan1) {
+        const { data: knmiDaily } = await supabase
+          .from('knmi_observations_daily' as any)
+          .select('date, gdd_base5, gdd_base10')
+          .eq('station_code', station.knmi_station_id)
+          .gte('date', jan1)
+          .lte('date', knmiEndStr)
+          .order('date');
+
+        knmiRows = (knmiDaily ?? []) as typeof knmiRows;
+      }
+    } else if (station.knmi_station_id && ometeoRows.length === 0) {
+      // No Open-Meteo data at all — use full KNMI range
+      const { data: knmiDaily } = await supabase
+        .from('knmi_observations_daily' as any)
+        .select('date, gdd_base5, gdd_base10')
+        .eq('station_code', station.knmi_station_id)
+        .gte('date', jan1)
+        .lte('date', today)
+        .order('date');
+
+      knmiRows = (knmiDaily ?? []) as typeof knmiRows;
+    }
+
+    // 3. Merge: KNMI first, then Open-Meteo (no overlap — KNMI ends before Open-Meteo starts)
+    const allDaily = [...knmiRows, ...ometeoRows];
+
+    if (allDaily.length === 0) {
       return NextResponse.json({ success: true, data: { events: [], gdd5: 0, gdd10: 0 } });
     }
 
     // Split into past (for cumulative) and future (for predictions)
-    const today = new Date().toISOString().split('T')[0]!;
-    const pastData = dailyData.filter(d => d.date <= today);
-    const futureData = dailyData.filter(d => d.date > today);
+    const pastData = allDaily.filter(d => d.date <= today);
+    const futureData = allDaily.filter(d => d.date > today);
 
     const { gdd5, gdd10 } = calculateSeasonGDD(
       pastData.map(d => ({

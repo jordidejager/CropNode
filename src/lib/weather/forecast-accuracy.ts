@@ -97,13 +97,23 @@ export async function getForecastAccuracy(
     .order('date');
 
   // 4. Fetch KNMI observed daily data
-  const { data: observedData } = await (db as any)
+  // Note: KNMI uses `precipitation_sum` (not `_mm`) and `wind_speed_max_ms` (not `wind_max_ms`)
+  const { data: observedRaw } = await (db as any)
     .from('knmi_observations_daily')
-    .select('date, temp_max_c, temp_min_c, precipitation_sum_mm, wind_max_ms')
+    .select('date, temp_max_c, temp_min_c, precipitation_sum, wind_speed_max_ms')
     .eq('station_code', station.knmi_station_id)
     .gte('date', startStr)
     .lte('date', endStr)
     .order('date');
+
+  // Normalize column names to match forecast data shape
+  const observedData = (observedRaw ?? []).map((d: any) => ({
+    date: d.date,
+    temp_max_c: d.temp_max_c,
+    temp_min_c: d.temp_min_c,
+    precipitation_sum_mm: d.precipitation_sum, // KNMI column name differs
+    wind_speed_max_ms: d.wind_speed_max_ms,
+  }));
 
   // 5. Get KNMI station name
   const { data: knmiStation } = await (db as any)
@@ -113,9 +123,9 @@ export async function getForecastAccuracy(
     .single();
 
   // 6. Merge by date
-  type DailyRow = { date: string; temp_max_c: number | null; temp_min_c: number | null; precipitation_sum_mm: number | null; wind_speed_max_ms?: number | null; wind_max_ms?: number | null };
+  type DailyRow = { date: string; temp_max_c: number | null; temp_min_c: number | null; precipitation_sum_mm: number | null; wind_speed_max_ms?: number | null };
   const forecastMap = new Map<string, DailyRow>((forecastData ?? []).map((d: DailyRow) => [d.date, d]));
-  const observedMap = new Map<string, DailyRow>((observedData ?? []).map((d: DailyRow) => [d.date, d]));
+  const observedMap = new Map<string, DailyRow>(observedData.map((d: DailyRow) => [d.date, d]));
 
   const allDates = new Set([...forecastMap.keys(), ...observedMap.keys()]);
   const sortedDates = Array.from(allDates).sort();
@@ -136,7 +146,7 @@ export async function getForecastAccuracy(
       observedTempMax: o?.temp_max_c ?? null,
       observedTempMin: o?.temp_min_c ?? null,
       observedPrecip: o?.precipitation_sum_mm ?? null,
-      observedWindMax: o?.wind_max_ms ?? null,
+      observedWindMax: o?.wind_speed_max_ms ?? null,
       tempMaxError: null,
       tempMinError: null,
       precipError: null,
