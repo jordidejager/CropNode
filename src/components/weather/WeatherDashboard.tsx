@@ -25,6 +25,8 @@ import { StationLocationBanner } from './StationLocationBanner';
 import { MultiModelPreview } from './MultiModelPreview';
 import { WaterBalanceWidget } from './WaterBalanceWidget';
 import { WindRoseWidget } from './WindRoseWidget';
+import { ForecastAccuracyWidget } from './ForecastAccuracyWidget';
+import { PhenologyWidget } from './PhenologyWidget';
 
 export function WeatherDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -230,6 +232,16 @@ export function WeatherDashboard() {
               <WindRoseWidget hourlyData={allHourlyData} />
             )}
           </div>
+
+          {/* Section: Phenology Timeline */}
+          {activeStationId && (
+            <PhenologyWidget stationId={activeStationId} />
+          )}
+
+          {/* Section: Forecast Accuracy */}
+          {activeStationId && (
+            <ForecastAccuracyWidget stationId={activeStationId} />
+          )}
 
           {/* Section 6: Upcoming Spray Windows */}
           {allHourlyData.length > 0 && (

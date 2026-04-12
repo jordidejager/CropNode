@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { Wind, Thermometer, Droplets, CloudRain, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   calculateSprayWindowScore,
+  calculateSprayWindowScoreForProduct,
   calculateDeltaT,
+  SPRAY_PROFILES,
 } from '@/lib/weather/weather-calculations';
+import type { SprayProductType } from '@/lib/weather/weather-types';
 import {
   Tooltip,
   TooltipContent,
@@ -16,6 +20,14 @@ import {
 interface SprayWindowIndicatorProps {
   currentData: Array<Record<string, unknown>>;
 }
+
+const PRODUCT_TABS: Array<{ type: SprayProductType | 'standaard'; label: string; short: string }> = [
+  { type: 'standaard', label: 'Standaard', short: 'Std' },
+  { type: 'contact', label: 'Contact', short: 'Con' },
+  { type: 'systemisch', label: 'Systemisch', short: 'Sys' },
+  { type: 'groeistof', label: 'Groeistof', short: 'Grs' },
+  { type: 'meststof', label: 'Bladvoeding', short: 'Blv' },
+];
 
 type FactorStatus = 'good' | 'warning' | 'bad';
 
@@ -59,6 +71,8 @@ const factorStatusColors: Record<FactorStatus, string> = {
 };
 
 export function SprayWindowIndicator({ currentData }: SprayWindowIndicatorProps) {
+  const [selectedProduct, setSelectedProduct] = useState<SprayProductType | 'standaard'>('standaard');
+
   // Find the current/most recent hour
   const now = Date.now();
   const sorted = [...currentData].sort(
@@ -86,7 +100,9 @@ export function SprayWindowIndicator({ currentData }: SprayWindowIndicatorProps)
     return sum + p;
   }, 0);
 
-  const score = calculateSprayWindowScore(windSpeed, temp, dewPoint, precip, precipNext2h);
+  const score = selectedProduct === 'standaard'
+    ? calculateSprayWindowScore(windSpeed, temp, dewPoint, precip, precipNext2h)
+    : calculateSprayWindowScoreForProduct(windSpeed, temp, dewPoint, precip, precipNext2h, selectedProduct);
   const config = statusConfig[score.label];
   const deltaT = calculateDeltaT(temp, dewPoint);
 
@@ -138,12 +154,35 @@ export function SprayWindowIndicator({ currentData }: SprayWindowIndicatorProps)
         config.glow
       )}
     >
+      {/* Product type selector */}
+      <div className="flex items-center justify-center gap-1 mb-4">
+        {PRODUCT_TABS.map((tab) => (
+          <button
+            key={tab.type}
+            onClick={() => setSelectedProduct(tab.type)}
+            className={cn(
+              'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all',
+              selectedProduct === tab.type
+                ? 'bg-white/15 text-white'
+                : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+            )}
+          >
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.short}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Main indicator */}
       <div className="text-center mb-5">
         <h2 className={cn('text-2xl md:text-3xl font-black', config.text)}>
           {config.label}
         </h2>
-        <p className="text-sm text-white/40 mt-1">{config.sublabel}</p>
+        <p className="text-sm text-white/40 mt-1">
+          {selectedProduct === 'standaard'
+            ? config.sublabel
+            : `${SPRAY_PROFILES[selectedProduct].label}: ${config.sublabel.toLowerCase()}`}
+        </p>
       </div>
 
       {/* Factor chips */}
