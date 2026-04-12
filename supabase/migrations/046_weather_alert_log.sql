@@ -18,8 +18,11 @@ CREATE INDEX IF NOT EXISTS idx_weather_alert_log_cooldown
 ALTER TABLE weather_alert_log ENABLE ROW LEVEL SECURITY;
 
 -- Allow service-role full access (used by cron job)
-CREATE POLICY IF NOT EXISTS "Service role full access" ON weather_alert_log
-  FOR ALL USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role full access" ON weather_alert_log
+    FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Cleanup: auto-delete alerts older than 30 days
 -- (run manually or via pg_cron if available)
