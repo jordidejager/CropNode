@@ -73,7 +73,26 @@ export async function* runChatPipeline(
     const intent = await withRetry('understanding', () => extractQueryIntent(query));
     yield { type: 'understanding_done', intent };
 
-    // 2. Build RAG context (phenology + today)
+    // 2. ENCYCLOPEDIE FAST-PATH: als de vraag gaat over de biologie/levenscyclus
+    // van een specifieke ziekte/plaag, haal het antwoord direct uit het profiel.
+    // Geen vector search, geen Gemini generation nodig — instant antwoord.
+    if (intent.specific_subjects.length > 0 && isEncyclopediaQuestion(query)) {
+      const profile = await lookupDiseaseProfile(supabase, intent.specific_subjects[0]);
+      if (profile && hasRelevantProfileContent(profile, query)) {
+        yield { type: 'retrieval_start' };
+        yield { type: 'retrieval_done', chunks: [], topSimilarity: 1.0 };
+        yield { type: 'generation_start' };
+
+        const answer = formatEncyclopediaAnswer(profile, query);
+        yield { type: 'answer_chunk', text: answer };
+        yield { type: 'generation_done', fullText: answer };
+        yield { type: 'sources', chunks: [{ id: '', title: `Encyclopedie: ${profile.name}`, category: profile.profile_type, subcategory: profile.name }] };
+        yield { type: 'done' };
+        return;
+      }
+    }
+
+    // 3. Build RAG context (phenology + today)
     const phenology = await withRetry('phenology', () => getCurrentPhenology(supabase));
     const context: RagContext = {
       intent,
@@ -83,7 +102,7 @@ export async function* runChatPipeline(
       today: phenology.today,
     };
 
-    // 3. Retrieval (v2: metadata pre-filter + in-memory cosine similarity)
+    // 4. Retrieval (v2: metadata pre-filter + in-memory cosine similarity)
     yield { type: 'retrieval_start' };
     let chunks: RetrievedChunk[] = [];
     let productAliases: Record<string, string> = {};
@@ -309,6 +328,129 @@ export async function* runChatPipeline(
     yield { type: 'error', message: userMessage };
     yield { type: 'done' };
   }
+}
+
+// ============================================
+// Encyclopedie fast-path helpers
+// ============================================
+
+/** Detect if the question is asking for encyclopedic info (biology, symptoms, lifecycle) */
+function isEncyclopediaQuestion(query: string): boolean {
+  const lower = query.toLowerCase();
+  const patterns = [
+    'levenscyclus', 'wat is', 'hoe herken', 'symptomen', 'schadebeeld',
+    'beschrijf', 'vertel over', 'informatie over', 'info over',
+    'hoe ziet', 'hoe overwintert', 'overwinter', 'biologie',
+    'kenmerken', 'waardplant', 'verspreiding', 'natuurlijke vijand',
+    'monitoring', 'hoe waarneem', 'hoe monitor', 'hoe detecteer',
+  ];
+  return patterns.some((p) => lower.includes(p));
+}
+
+/** Check if the profile has content relevant to the question */
+function hasRelevantProfileContent(profile: any, query: string): boolean {
+  const lower = query.toLowerCase();
+  // Check if the profile has the specific content being asked about
+  if ((lower.includes('levenscyclus') || lower.includes('overwinter')) && profile.lifecycle_notes) return true;
+  if ((lower.includes('symptom') || lower.includes('herken') || lower.includes('schade')) && profile.symptoms) return true;
+  if ((lower.includes('wat is') || lower.includes('info') || lower.includes('vertel')) && profile.description) return true;
+  if ((lower.includes('monitor') || lower.includes('waarneem')) && profile.monitoring_advice) return true;
+  if ((lower.includes('preventie') || lower.includes('voorkom')) && profile.prevention_strategy) return true;
+  if ((lower.includes('bestrijding') || lower.includes('curatief')) && profile.curative_strategy) return true;
+  if ((lower.includes('biologisch') || lower.includes('natuurlijk')) && profile.biological_options) return true;
+  if ((lower.includes('resistent') || lower.includes('afwissel')) && profile.resistance_management) return true;
+  // Generic "wat is X" / "info over X" → description is enough
+  if (profile.description) return true;
+  return false;
+}
+
+/** Format a direct encyclopedic answer from a disease profile */
+function formatEncyclopediaAnswer(profile: any, query: string): string {
+  const lower = query.toLowerCase();
+  const parts: string[] = [];
+
+  // Title
+  const latinPart = profile.latin_name ? ` (${profile.latin_name})` : '';
+  parts.push(`**${profile.name}**${latinPart}\n`);
+
+  // Include relevant sections based on the question
+  const isGeneral = lower.includes('wat is') || lower.includes('info') || lower.includes('vertel');
+  const wantsLifecycle = lower.includes('levenscyclus') || lower.includes('overwinter');
+  const wantsSymptoms = lower.includes('symptom') || lower.includes('herken') || lower.includes('schade');
+  const wantsMonitoring = lower.includes('monitor') || lower.includes('waarneem');
+  const wantsPrevention = lower.includes('preventie') || lower.includes('voorkom');
+  const wantsCurative = lower.includes('bestrijding') || lower.includes('curatief') || lower.includes('behandel');
+  const wantsBio = lower.includes('biologisch') || lower.includes('natuurlijk');
+  const wantsResistance = lower.includes('resistent') || lower.includes('afwissel');
+
+  // Description (altijd bij general, of als niets specifieks gevraagd wordt)
+  if ((isGeneral || (!wantsLifecycle && !wantsSymptoms && !wantsMonitoring)) && profile.description) {
+    parts.push(profile.description);
+    parts.push('');
+  }
+
+  if ((isGeneral || wantsSymptoms) && profile.symptoms) {
+    parts.push('**Symptomen:**');
+    parts.push(profile.symptoms);
+    parts.push('');
+  }
+
+  if ((isGeneral || wantsLifecycle) && profile.lifecycle_notes) {
+    parts.push('**Levenscyclus:**');
+    parts.push(profile.lifecycle_notes);
+    parts.push('');
+  }
+
+  if ((isGeneral || wantsMonitoring) && profile.monitoring_advice) {
+    parts.push('**Monitoring:**');
+    parts.push(profile.monitoring_advice);
+    parts.push('');
+  }
+
+  if ((isGeneral || wantsPrevention) && profile.prevention_strategy) {
+    parts.push('**Preventieve aanpak:**');
+    parts.push(profile.prevention_strategy);
+    parts.push('');
+  }
+
+  if ((isGeneral || wantsCurative) && profile.curative_strategy) {
+    parts.push('**Curatieve aanpak:**');
+    parts.push(profile.curative_strategy);
+    parts.push('');
+  }
+
+  if (wantsBio && profile.biological_options) {
+    parts.push('**Biologische bestrijding:**');
+    parts.push(profile.biological_options);
+    parts.push('');
+  }
+
+  if (wantsResistance && profile.resistance_management) {
+    parts.push('**Resistentiemanagement:**');
+    parts.push(profile.resistance_management);
+    parts.push('');
+  }
+
+  // Key products (als relevant)
+  if (isGeneral || wantsPrevention || wantsCurative) {
+    const prev = (profile.key_preventive_products ?? []).slice(0, 5);
+    const cur = (profile.key_curative_products ?? []).slice(0, 5);
+    if (prev.length > 0 || cur.length > 0) {
+      parts.push('**Middelen:**');
+      if (prev.length > 0) parts.push(`Preventief: ${prev.join(', ')}`);
+      if (cur.length > 0) parts.push(`Curatief: ${cur.join(', ')}`);
+      parts.push('');
+    }
+  }
+
+  // Seizoensinfo
+  if (profile.peak_months?.length > 0) {
+    const monthNames = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    const activeMonths = profile.peak_months.map((m: number) => monthNames[m - 1]).join(', ');
+    parts.push(`_Actief in: ${activeMonths}_`);
+  }
+
+  return parts.join('\n').trim();
 }
 
 /**
