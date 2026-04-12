@@ -3,7 +3,7 @@
 // Derived calculations: leaf wetness, GDD, Delta-T, spray window score.
 // ============================================================================
 
-import type { HourlyWeatherData, DeltaTResult, SprayWindowScore } from './weather-types';
+import type { HourlyWeatherData, DeltaTResult, SprayWindowScore, SprayProductType, SprayProfile } from './weather-types';
 
 // ---- Leaf Wetness ----
 
@@ -188,6 +188,131 @@ function calculateTemperatureScore(temperature: number | null): number {
   if (temperature >= 0 && temperature < 5) return 30;
   if (temperature > 30) return 30;
   return 0; // Below 0
+}
+
+// ---- Spray Window Profiles per Product Type ----
+
+/**
+ * Pre-defined spray profiles for different product categories.
+ *
+ * Key differences:
+ * - Contact fungicides (Captan, Delan): need dry time → precipitation weight high, wind matters for drift
+ * - Systemic fungicides (Scala, Score): absorbed quickly → less rain-sensitive, temp range narrower
+ * - Growth regulators (Regalis, Ethrel): very temp-sensitive (12-22°C) → temperature weight high
+ * - Foliar fertilizers: humidity matters for uptake → deltaT weight high
+ */
+export const SPRAY_PROFILES: Record<SprayProductType, SprayProfile> = {
+  contact: {
+    type: 'contact',
+    label: 'Contactmiddel',
+    weights: { wind: 0.35, deltaT: 0.20, precipitation: 0.30, temperature: 0.15 },
+    thresholds: { maxWindMs: 5, dryHoursAfter: 2 },
+  },
+  systemisch: {
+    type: 'systemisch',
+    label: 'Systemisch middel',
+    weights: { wind: 0.25, deltaT: 0.25, precipitation: 0.20, temperature: 0.30 },
+    thresholds: { maxWindMs: 7, minTempC: 8 },
+  },
+  groeistof: {
+    type: 'groeistof',
+    label: 'Groeistof',
+    weights: { wind: 0.30, deltaT: 0.15, precipitation: 0.25, temperature: 0.30 },
+    thresholds: { maxWindMs: 5, minTempC: 12, maxTempC: 22 },
+  },
+  meststof: {
+    type: 'meststof',
+    label: 'Bladvoeding',
+    weights: { wind: 0.20, deltaT: 0.35, precipitation: 0.25, temperature: 0.20 },
+    thresholds: { maxWindMs: 7 },
+  },
+};
+
+/**
+ * Calculate spray window score for a specific product type.
+ * Uses product-specific weight profiles and hard thresholds.
+ *
+ * When no productType is given, falls back to the standard balanced score.
+ */
+export function calculateSprayWindowScoreForProduct(
+  windSpeedMs: number | null,
+  temperature: number | null,
+  dewPoint: number | null,
+  precipitationCurrent: number | null,
+  precipitationNext2h: number | null,
+  productType: SprayProductType
+): SprayWindowScore {
+  const profile = SPRAY_PROFILES[productType];
+  const w = profile.weights;
+
+  const factors = {
+    wind: calculateWindScore(windSpeedMs),
+    deltaT: calculateDeltaTScore(temperature, dewPoint),
+    precipitation: calculatePrecipitationScore(precipitationCurrent, precipitationNext2h),
+    temperature: calculateTemperatureScoreForProduct(temperature, productType),
+  };
+
+  // Weighted average with product-specific weights
+  let score = Math.round(
+    factors.wind * w.wind +
+    factors.deltaT * w.deltaT +
+    factors.precipitation * w.precipitation +
+    factors.temperature * w.temperature
+  );
+
+  // Apply hard thresholds — instant red card
+  const t = profile.thresholds;
+  if (t) {
+    if (t.maxWindMs !== undefined && windSpeedMs !== null && windSpeedMs > t.maxWindMs) {
+      score = Math.min(score, 20);
+    }
+    if (t.minTempC !== undefined && temperature !== null && temperature < t.minTempC) {
+      score = Math.min(score, 25);
+    }
+    if (t.maxTempC !== undefined && temperature !== null && temperature > t.maxTempC) {
+      score = Math.min(score, 25);
+    }
+  }
+
+  let label: SprayWindowScore['label'];
+  if (score > 70) label = 'Groen';
+  else if (score >= 40) label = 'Oranje';
+  else label = 'Rood';
+
+  return { score, label, factors };
+}
+
+/**
+ * Temperature score adjusted for product type.
+ * Growth regulators have a very narrow window (12-22°C).
+ * Systemic products need warmer conditions for plant uptake (>8°C).
+ */
+function calculateTemperatureScoreForProduct(
+  temperature: number | null,
+  productType: SprayProductType
+): number {
+  if (temperature === null) return 50;
+
+  if (productType === 'groeistof') {
+    // Very narrow: 12-22°C ideal, 10-12 or 22-25 acceptable
+    if (temperature >= 12 && temperature <= 22) return 100;
+    if (temperature >= 10 && temperature < 12) return 60;
+    if (temperature > 22 && temperature <= 25) return 60;
+    if (temperature >= 8 && temperature < 10) return 30;
+    return 10;
+  }
+
+  if (productType === 'systemisch') {
+    // Needs warmer for uptake: 10-28°C ideal
+    if (temperature >= 10 && temperature <= 28) return 100;
+    if (temperature >= 8 && temperature < 10) return 60;
+    if (temperature > 28 && temperature <= 32) return 60;
+    if (temperature >= 5 && temperature < 8) return 30;
+    return 10;
+  }
+
+  // Default (contact + meststof): same as original
+  return calculateTemperatureScore(temperature);
 }
 
 // ---- Daily Aggregation ----

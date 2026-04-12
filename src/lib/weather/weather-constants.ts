@@ -58,7 +58,7 @@ export const BUIENRADAR_RADAR_URL =
   'https://image.buienradar.nl/2.0/image/single/RadarMapRainNL?height=512&width=500';
 
 // Data cleanup thresholds
-export const ENSEMBLE_MAX_AGE_DAYS = 3;
+export const ENSEMBLE_MAX_AGE_DAYS = 7;
 export const MULTIMODEL_FORECAST_MAX_AGE_DAYS = 7;
 
 // Test coordinates (Dutch fruit-growing regions)

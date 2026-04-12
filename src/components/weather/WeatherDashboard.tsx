@@ -23,6 +23,8 @@ import { WeatherDashboardSkeleton } from './WeatherDashboardSkeleton';
 import { WeatherEmptyState } from './WeatherEmptyState';
 import { StationLocationBanner } from './StationLocationBanner';
 import { MultiModelPreview } from './MultiModelPreview';
+import { WaterBalanceWidget } from './WaterBalanceWidget';
+import { WindRoseWidget } from './WindRoseWidget';
 
 export function WeatherDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -220,6 +222,14 @@ export function WeatherDashboard() {
               hourlyData={allHourlyData}
             />
           )}
+
+          {/* Section: Water Balance + Wind Rose side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <WaterBalanceWidget stationId={activeStationId} />
+            {allHourlyData.length > 0 && (
+              <WindRoseWidget hourlyData={allHourlyData} />
+            )}
+          </div>
 
           {/* Section 6: Upcoming Spray Windows */}
           {allHourlyData.length > 0 && (

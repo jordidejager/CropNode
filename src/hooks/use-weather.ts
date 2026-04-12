@@ -18,6 +18,8 @@ export const weatherKeys = {
   multimodel: (id: string) => ['weather', 'multimodel', id] as const,
   ensemble: (id: string, model: string, variable: string) =>
     ['weather', 'ensemble', id, model, variable] as const,
+  daily: (id: string, start: string, end: string) =>
+    ['weather', 'daily', id, start, end] as const,
   // KNMI observed data
   knmiStations: ['weather', 'knmi', 'stations'] as const,
   knmiDaily: (code: number, start: string, end: string) =>
@@ -138,6 +140,30 @@ export function useWeatherHourly(
     },
     enabled: !!stationId && !!startDate && !!endDate,
     staleTime: 30 * 60 * 1000,
+  });
+}
+
+/**
+ * Fetch daily weather data for a date range (past + forecast).
+ * Uses /api/weather/daily endpoint.
+ */
+export function useWeatherDailyRange(
+  stationId: string | null,
+  startDate: string,
+  endDate: string
+) {
+  return useQuery({
+    queryKey: weatherKeys.daily(stationId ?? '', startDate, endDate),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/weather/daily?stationId=${stationId}&start=${startDate}&end=${endDate}`
+      );
+      if (!res.ok) throw new Error('Dagelijkse data ophalen mislukt');
+      const json = await res.json();
+      return json.data as Array<Record<string, unknown>>;
+    },
+    enabled: !!stationId && !!startDate && !!endDate,
+    staleTime: 30 * 60 * 1000, // 30 minutes
   });
 }
 

@@ -121,6 +121,40 @@ export type SprayWindowScore = {
   };
 };
 
+/**
+ * Spray profile — different product types have different weather requirements.
+ *
+ * - contact:    Must dry on leaf (needs 1-2h dry after spray). Wind matters a lot (drift).
+ * - systemisch: Absorbed quickly, rain after 30min OK. Less wind-sensitive.
+ * - groeistof:  Temperature-sensitive (best 12-22°C). Wind matters for drift.
+ * - meststof:   Foliar feed. Humidity matters (uptake). Temperature moderate.
+ */
+export type SprayProductType = 'contact' | 'systemisch' | 'groeistof' | 'meststof';
+
+export type SprayProfile = {
+  type: SprayProductType;
+  label: string;
+  weights: {
+    wind: number;
+    deltaT: number;
+    precipitation: number;
+    temperature: number;
+  };
+  /** Custom thresholds that override defaults */
+  thresholds?: {
+    maxWindMs?: number;       // hard cutoff
+    minTempC?: number;        // hard cutoff
+    maxTempC?: number;        // hard cutoff
+    dryHoursAfter?: number;   // hours rain-free needed after application
+  };
+};
+
+/**
+ * Crop-specific spray adjustments.
+ * Appel and peer have slightly different optimals (e.g. peer is more frost-sensitive).
+ */
+export type SprayCropType = 'appel' | 'peer';
+
 // Delta-T interpretation
 export type DeltaTCategory = 'too_wet' | 'ideal' | 'acceptable' | 'too_dry';
 

@@ -845,7 +845,7 @@ export async function getEnsembleStats(
 
 /**
  * Clean up old weather data to prevent unbounded growth.
- * - Ensemble data: older than 3 days
+ * - Ensemble data: older than 7 days
  * - Multi-model forecast data: older than 7 days (keeps best_match for history)
  */
 export async function cleanupOldData(
