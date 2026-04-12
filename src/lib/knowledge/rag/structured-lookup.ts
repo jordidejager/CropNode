@@ -97,29 +97,72 @@ export interface DiseaseProfile {
   source_article_count: number;
 }
 
+// In-memory cache for disease profiles — prevents repeated DB calls
+// that fail due to flaky network. Cache refreshes every 30 minutes.
+let _profileCache: Map<string, DiseaseProfile> | null = null;
+let _profileCacheTime = 0;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+async function ensureProfileCache(supabase: SupabaseClient): Promise<Map<string, DiseaseProfile>> {
+  if (_profileCache && Date.now() - _profileCacheTime < CACHE_TTL_MS) {
+    return _profileCache;
+  }
+
+  // Try to load all profiles in one shot
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    try {
+      const { data, error } = await supabase
+        .from('knowledge_disease_profile')
+        .select('*')
+        .order('source_article_count', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      const map = new Map<string, DiseaseProfile>();
+      for (const row of (data ?? []) as DiseaseProfile[]) {
+        map.set(row.name.toLowerCase(), row);
+      }
+      _profileCache = map;
+      _profileCacheTime = Date.now();
+      console.log(`[structured] Disease profile cache geladen: ${map.size} profielen`);
+      return map;
+    } catch (err: any) {
+      if (attempt < 8) {
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+        continue;
+      }
+      console.warn('[structured] Cache load failed after 8 attempts');
+    }
+  }
+
+  // Return empty map if all attempts fail, but keep old cache if available
+  return _profileCache ?? new Map();
+}
+
 export async function lookupDiseaseProfile(
   supabase: SupabaseClient,
   diseaseName: string,
 ): Promise<DiseaseProfile | null> {
   try {
-    // Direct query ipv RPC (RPC timeoutt op ons Supabase plan)
-    // Use .limit(1) instead of .maybeSingle() because multiple names can match
-    const { data, error } = await supabase
-      .from('knowledge_disease_profile')
-      .select('*')
-      .ilike('name', `%${diseaseName}%`)
-      .order('source_article_count', { ascending: false })
-      .limit(1);
+    const cache = await ensureProfileCache(supabase);
+    const lower = diseaseName.toLowerCase();
 
-    if (error) {
-      console.warn('[structured] disease_profile lookup fout:', error.message);
-      return null;
+    // Exact match first
+    if (cache.has(lower)) {
+      const profile = cache.get(lower)!;
+      console.log(`[structured] Disease profile (cache): ${profile.name} (lifecycle: ${profile.lifecycle_notes ? 'ja' : 'nee'})`);
+      return profile;
     }
-    const rows = data as DiseaseProfile[] | null;
-    if (rows && rows.length > 0) {
-      console.log(`[structured] Disease profile gevonden: ${rows[0].name} (lifecycle: ${rows[0].lifecycle_notes ? 'ja' : 'nee'})`);
+
+    // Partial match
+    for (const [key, profile] of cache) {
+      if (key.includes(lower) || lower.includes(key)) {
+        console.log(`[structured] Disease profile (cache, partial): ${profile.name}`);
+        return profile;
+      }
     }
-    return rows && rows.length > 0 ? rows[0] : null;
+
+    console.log(`[structured] Geen profiel in cache voor: ${diseaseName}`);
+    return null;
   } catch (err) {
     console.warn('[structured] disease_profile exception:', err);
     return null;
