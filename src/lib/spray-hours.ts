@@ -7,7 +7,8 @@
  * hoeveel spuituren elk perceel kost.
  */
 
-import type { ProductEntry, SprayableParcel } from '@/lib/types';
+import type { ProductEntry } from '@/lib/types';
+import type { SprayableParcel } from '@/lib/supabase-store';
 
 const DEFAULT_SPRAY_MINUTES_PER_HA = 30;
 
