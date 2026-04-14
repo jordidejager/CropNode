@@ -65,12 +65,14 @@ interface ActiveSessionsProps {
     workSchedule: WorkScheduleDay[]
     onStop: (session: ActiveTaskSession) => void
     onDelete: (id: string) => void
-    onUpdateStartTime: (id: string, startTime: Date) => void
+    onUpdate: (id: string, updates: { startTime?: Date; peopleCount?: number; notes?: string | null }) => void
 }
 
-export function ActiveSessions({ sessions, workSchedule, onStop, onDelete, onUpdateStartTime }: ActiveSessionsProps) {
+export function ActiveSessions({ sessions, workSchedule, onStop, onDelete, onUpdate }: ActiveSessionsProps) {
     const [editingSession, setEditingSession] = React.useState<string | null>(null)
     const [editStartDateTime, setEditStartDateTime] = React.useState<string>("")
+    const [editPeopleCount, setEditPeopleCount] = React.useState<number>(1)
+    const [editNotes, setEditNotes] = React.useState<string>("")
 
     // Timer tick
     const [, setTick] = React.useState(0)
@@ -82,9 +84,20 @@ export function ActiveSessions({ sessions, workSchedule, onStop, onDelete, onUpd
 
     if (sessions.length === 0) return null
 
-    const handleSaveStartTime = (sessionId: string) => {
-        onUpdateStartTime(sessionId, dateTimeLocalToDate(editStartDateTime))
+    const handleSave = (sessionId: string) => {
+        onUpdate(sessionId, {
+            startTime: dateTimeLocalToDate(editStartDateTime),
+            peopleCount: editPeopleCount,
+            notes: editNotes || null,
+        })
         setEditingSession(null)
+    }
+
+    const startEditing = (session: ActiveTaskSession) => {
+        setEditingSession(session.id)
+        setEditStartDateTime(dateToDateTimeLocal(session.startTime))
+        setEditPeopleCount(session.peopleCount)
+        setEditNotes(session.notes || '')
     }
 
     return (
@@ -108,31 +121,42 @@ export function ActiveSessions({ sessions, workSchedule, onStop, onDelete, onUpd
                                             </Badge>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-3 text-[11px] text-white/40 mt-2">
-                                        <span className="flex items-center gap-1">
-                                            <Users className="h-3 w-3" />
-                                            {session.peopleCount} personen
-                                        </span>
-                                        {session.notes && (
-                                            <span className="text-white/30 truncate max-w-[150px]" title={session.notes}>
-                                                &ldquo;{session.notes}&rdquo;
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="mt-3">
-                                        {editingSession === session.id ? (
+                                    {editingSession === session.id ? (
+                                        <div className="mt-2 space-y-2">
                                             <div className="flex items-center gap-2">
+                                                <Calendar className="h-3 w-3 text-white/30 shrink-0" />
                                                 <Input
                                                     type="datetime-local"
                                                     value={editStartDateTime}
                                                     onChange={(e) => setEditStartDateTime(e.target.value)}
                                                     className="bg-white/10 border-white/20 text-white h-8 text-xs flex-1"
                                                 />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Users className="h-3 w-3 text-white/30 shrink-0" />
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    value={editPeopleCount}
+                                                    onChange={(e) => setEditPeopleCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                                    className="bg-white/10 border-white/20 text-white h-8 text-xs w-16"
+                                                />
+                                                <span className="text-[11px] text-white/30">personen</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Edit2 className="h-3 w-3 text-white/30 shrink-0" />
+                                                <Input
+                                                    value={editNotes}
+                                                    onChange={(e) => setEditNotes(e.target.value)}
+                                                    placeholder="Notitie..."
+                                                    className="bg-white/10 border-white/20 text-white h-8 text-xs flex-1"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-1 pt-1">
                                                 <Button
                                                     size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => handleSaveStartTime(session.id)}
-                                                    className="h-8 px-2 text-emerald-400 hover:text-emerald-300"
+                                                    onClick={() => handleSave(session.id)}
+                                                    className="h-7 px-3 text-xs bg-emerald-500 hover:bg-emerald-600 text-white"
                                                 >
                                                     Opslaan
                                                 </Button>
@@ -140,25 +164,35 @@ export function ActiveSessions({ sessions, workSchedule, onStop, onDelete, onUpd
                                                     size="sm"
                                                     variant="ghost"
                                                     onClick={() => setEditingSession(null)}
-                                                    className="h-8 px-2 text-white/40 hover:text-white"
+                                                    className="h-7 px-2 text-white/40 hover:text-white text-xs"
                                                 >
-                                                    <X className="h-3 w-3" />
+                                                    Annuleren
                                                 </Button>
                                             </div>
-                                        ) : (
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-3 text-[11px] text-white/40 mt-2">
+                                                <span className="flex items-center gap-1">
+                                                    <Users className="h-3 w-3" />
+                                                    {session.peopleCount} personen
+                                                </span>
+                                                {session.notes && (
+                                                    <span className="text-white/30 truncate max-w-[150px]" title={session.notes}>
+                                                        &ldquo;{session.notes}&rdquo;
+                                                    </span>
+                                                )}
+                                            </div>
                                             <button
-                                                onClick={() => {
-                                                    setEditingSession(session.id)
-                                                    setEditStartDateTime(dateToDateTimeLocal(session.startTime))
-                                                }}
-                                                className="flex items-center gap-1.5 text-[11px] text-white/50 hover:text-white/70 transition-colors"
+                                                onClick={() => startEditing(session)}
+                                                className="flex items-center gap-1.5 text-[11px] text-white/50 hover:text-white/70 transition-colors mt-2"
                                             >
                                                 <Calendar className="h-3 w-3" />
                                                 Gestart: {formatDateTime(session.startTime)}
                                                 <Edit2 className="h-2.5 w-2.5 opacity-50" />
                                             </button>
-                                        )}
-                                    </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
                                     <div className="text-right">

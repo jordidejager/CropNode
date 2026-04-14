@@ -7,7 +7,8 @@ import type { Parcel, SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -72,6 +73,8 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [mergeOnImport, setMergeOnImport] = useState(false);
   const [pendingSubParcels, setPendingSubParcels] = useState<Omit<SubParcel, 'id' | 'parcelId' | 'createdAt' | 'updatedAt'>[]>([]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [onboardingParcel, setOnboardingParcel] = useState<any>(null);
   const [mapOverlay, setMapOverlay] = useState<'standaard' | 'laatste_spray' | 'bodem_ph' | 'ziektedruk'>('standaard');
   const [formSource, setFormSource] = useState<"RVO_IMPORT" | "MANUAL">("RVO_IMPORT");
 
@@ -336,17 +339,11 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         source: formSource,
       });
 
-      // Instead of saving sub-parcels directly, we open the composer 
-      // with the pending sub-parcels so the user can finish the configuration.
-      setActiveParcelForComposer(newParcel);
-      setIsComposerOpen(true);
+      // Show onboarding wizard to explain block concept
+      setOnboardingParcel(newParcel);
+      setShowOnboardingWizard(true);
 
-      toast({
-        title: 'Perceel aangemaakt',
-        description: pendingSubParcels.length > 0
-          ? 'Configureer nu de details voor de samengevoegde blokken.'
-          : 'Stel nu de rassen verder samen.'
-      });
+      toast({ title: 'Perceel aangemaakt', description: 'Kies hoe je het perceel wilt indelen.' });
 
       invalidateParcels();
 
@@ -1109,7 +1106,30 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
               onUserParcelClick={(p) => setSelectedMainParcel(p)}
               isDrawingEnabled={isDrawingMode}
               onGeometryChange={handleDrawnGeometry}
+              overlayMode={mapOverlay}
             />
+            {/* Map overlay selector */}
+            <div className="absolute top-4 left-4 z-[1000]">
+              <div className="flex gap-1 bg-black/70 backdrop-blur-md rounded-full p-1 border border-white/10">
+                {([
+                  { value: 'standaard', label: 'Gewas' },
+                  { value: 'laatste_spray', label: 'Laatste spray' },
+                  { value: 'bodem_ph', label: 'Bodem pH' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setMapOverlay(opt.value)}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                      mapOverlay === opt.value
+                        ? 'bg-primary text-primary-foreground shadow-lg'
+                        : 'text-white/50 hover:text-white/80'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {/* Drawing mode toggle button */}
             <div className="absolute top-4 right-4 z-[1000]">
               {isDrawingMode ? (
@@ -1168,6 +1188,69 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
         onSubmit={handleFormSubmit}
         userParcels={parcels as unknown as Parcel[]}
       />
+
+      {/* Onboarding wizard na import */}
+      <Dialog open={showOnboardingWizard} onOpenChange={setShowOnboardingWizard}>
+        <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-white">
+              {onboardingParcel?.name || 'Perceel'} is aangemaakt
+            </DialogTitle>
+            <DialogDescription className="text-white/50">
+              Heeft dit perceel verschillende blokken met verschillende rassen of aanplantjaren?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-4">
+            <button
+              onClick={() => {
+                setShowOnboardingWizard(false);
+                if (onboardingParcel) {
+                  setActiveParcelForComposer(onboardingParcel);
+                  setIsComposerOpen(true);
+                }
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all group"
+            >
+              <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Boxes className="h-6 w-6 text-primary" />
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-white text-sm">Ja, opdelen</p>
+                <p className="text-[10px] text-white/30 mt-1">Meerdere rassen of blokken</p>
+              </div>
+            </button>
+            <button
+              onClick={async () => {
+                setShowOnboardingWizard(false);
+                if (onboardingParcel) {
+                  // Maak automatisch 1 sub_parcel met dezelfde data
+                  try {
+                    await addSubParcel({
+                      parcelId: onboardingParcel.id,
+                      crop: onboardingParcel.crop || 'Peer',
+                      variety: onboardingParcel.variety || '',
+                      area: onboardingParcel.area || 0,
+                    } as any);
+                    invalidateParcels();
+                    toast({ title: 'Blok aangemaakt', description: 'Perceel is klaar voor gebruik.' });
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20 transition-all group"
+            >
+              <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <TreePine className="h-6 w-6 text-white/50" />
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-white text-sm">Nee, één blok</p>
+                <p className="text-[10px] text-white/30 mt-1">Eén gewas, één ras</p>
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {activeParcelForComposer && (
         <ParcelComposer

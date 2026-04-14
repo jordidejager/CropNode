@@ -203,8 +203,8 @@ export default function UrenregistratieClientPage() {
                         workSchedule={workSchedule}
                         onStop={(session) => setStoppingSession(session)}
                         onDelete={(id) => deleteActiveTaskSessionMutation.mutate(id)}
-                        onUpdateStartTime={(id, startTime) =>
-                            updateActiveTaskSessionMutation.mutate({ id, updates: { startTime } })
+                        onUpdate={(id, updates) =>
+                            updateActiveTaskSessionMutation.mutate({ id, updates })
                         }
                     />
 
