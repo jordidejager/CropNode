@@ -53,6 +53,7 @@ export type WeatherDay = {
   tempMax: number | null;
   precipitationSum: number | null;
   leafWetnessHours: number | null;
+  isForecast?: boolean;
 };
 
 // ============================================================================

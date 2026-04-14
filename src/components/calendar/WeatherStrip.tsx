@@ -41,17 +41,22 @@ export function WeatherStrip({ weather, variant = 'compact' }: WeatherStripProps
   const iconColor = getWeatherIconColor(weather);
 
   if (variant === 'compact') {
+    const isForecast = weather.isForecast ?? false;
+
     return (
-      <div className="flex items-center gap-1 text-[9px] text-slate-500 mt-auto pt-1">
+      <div className={cn(
+        'flex items-center gap-1 text-[9px] mt-auto pt-1',
+        isForecast ? 'text-slate-600 italic' : 'text-slate-500',
+      )}>
         <WeatherIcon className={cn('h-2.5 w-2.5 flex-shrink-0', iconColor)} />
         {weather.tempMin !== null && weather.tempMax !== null && (
           <span className="tabular-nums">
-            <span className="text-slate-400">{Math.round(weather.tempMax)}°</span>
+            <span className={isForecast ? 'text-slate-500' : 'text-slate-400'}>{Math.round(weather.tempMax)}°</span>
             <span className="text-slate-600">/{Math.round(weather.tempMin)}°</span>
           </span>
         )}
         {hasRain && (
-          <span className="text-blue-400/60 tabular-nums">
+          <span className={cn('tabular-nums', isForecast ? 'text-blue-400/40' : 'text-blue-400/60')}>
             {weather.precipitationSum! < 10
               ? weather.precipitationSum!.toFixed(1)
               : Math.round(weather.precipitationSum!)

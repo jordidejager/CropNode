@@ -45,6 +45,7 @@ function ProfileSection({
   fields,
   values,
   defaultOpen = true,
+  motivation,
   children,
 }: {
   title: string;
@@ -52,6 +53,7 @@ function ProfileSection({
   fields: string[];
   values: FormData;
   defaultOpen?: boolean;
+  motivation?: string;
   children: React.ReactNode;
 }) {
   const filled = fields.filter(f => values[f] != null && values[f] !== '' && values[f] !== undefined).length;
@@ -69,6 +71,11 @@ function ProfileSection({
         <ChevronDown className="h-4 w-4 text-white/20 transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent>
+        {motivation && filled === 0 && (
+          <div className="mx-5 mt-4 mb-1 px-3 py-2 rounded-lg bg-primary/5 border-l-2 border-primary/30">
+            <p className="text-[11px] text-primary/60">{motivation}</p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-5 py-4">
           {children}
         </div>
@@ -418,6 +425,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 1. Aanplantgegevens */}
       <ProfileSection
         title="Aanplantgegevens"
+        motivation="Vul gewas en ras in voor correcte CTGB-validatie bij spuitregistraties en ras-specifiek advies."
         icon={Sprout}
         fields={['plantjaar', 'gewas', 'ras', 'onderstammen', 'bestuiversras', 'bestuiver_afstand', 'kloon_selectie']}
         values={values}
