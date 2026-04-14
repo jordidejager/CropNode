@@ -545,6 +545,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 5. Waterhuishouding */}
       <ProfileSection
         title="Waterhuishouding"
+        motivation="Belangrijk voor nachtvorst-strategie en fertigatie-planning."
         icon={Droplets}
         fields={['irrigatiesysteem', 'fertigatie_aansluiting', 'beregening', 'waterbron']}
         values={values}
@@ -574,6 +575,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 6. Bodemkenmerken */}
       <ProfileSection
         title="Bodemkenmerken"
+        motivation="Upload een grondmonster om deze velden automatisch in te vullen. Nodig voor bemestingsadvies."
         icon={Mountain}
         fields={['grondsoort', 'bodem_ph', 'organische_stof_pct', 'c_organisch_pct', 'klei_percentage', 'pw_getal']}
         values={values}
