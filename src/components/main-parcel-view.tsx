@@ -73,6 +73,7 @@ export function MainParcelView({
     lastSpray
 }: MainParcelViewProps) {
     const subParcels = parcel.subParcels || []
+    const { data: seasonKPIs } = useParcelSeasonKPIs(parcel.id)
     const [isEditing, setIsEditing] = React.useState(false)
     const [editSaving, setEditSaving] = React.useState(false)
     const [editCrop, setEditCrop] = React.useState(parcel.crop || '')
@@ -350,6 +351,25 @@ export function MainParcelView({
                         </div>
                     </div>
                     <p className="text-[10px] text-white/25">Wijzigingen worden direct doorgevoerd in slimme invoer, spuitschrift en CTGB validatie.</p>
+                </div>
+            )}
+
+            {/* Season KPI Strip */}
+            {seasonKPIs && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {[
+                        { label: 'Bespuitingen', value: String(seasonKPIs.sprayCount), sub: seasonKPIs.sprayCost > 0 ? `€${Math.round(seasonKPIs.sprayCost)}` : 'dit seizoen', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                        { label: 'Uren', value: seasonKPIs.totalHours > 0 ? `${seasonKPIs.totalHours.toFixed(0)}u` : '0', sub: seasonKPIs.hoursCost > 0 ? `€${Math.round(seasonKPIs.hoursCost)}` : 'dit seizoen', color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                        { label: 'Oogst', value: seasonKPIs.harvestKg > 0 ? `${(seasonKPIs.harvestKg / 1000).toFixed(1)}t` : '—', sub: seasonKPIs.harvestCrates > 0 ? `${seasonKPIs.harvestCrates} kisten` : 'dit seizoen', color: 'text-rose-400', bg: 'bg-rose-500/10' },
+                        { label: 'Notities', value: String(seasonKPIs.noteCount), sub: seasonKPIs.warningCount > 0 ? `${seasonKPIs.warningCount} waarschuwing${seasonKPIs.warningCount > 1 ? 'en' : ''}` : 'dit seizoen', color: seasonKPIs.warningCount > 0 ? 'text-amber-400' : 'text-emerald-400', bg: seasonKPIs.warningCount > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10' },
+                        { label: 'Seizoen', value: String(new Date().getFullYear()), sub: `${seasonKPIs.sprayCount + seasonKPIs.noteCount} activiteiten`, color: 'text-white/50', bg: 'bg-white/[0.03]' },
+                    ].map((kpi) => (
+                        <div key={kpi.label} className={`rounded-xl ${kpi.bg} border border-white/[0.04] px-4 py-3`}>
+                            <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{kpi.label}</p>
+                            <p className={`text-xl font-black ${kpi.color} mt-0.5 tabular-nums`}>{kpi.value}</p>
+                            <p className="text-[10px] text-white/20 mt-0.5">{kpi.sub}</p>
+                        </div>
+                    ))}
                 </div>
             )}
 

@@ -2572,6 +2572,27 @@ export async function getTaskStats(): Promise<{
 }
 
 // ============================================
+// User Settings (key-value)
+// ============================================
+
+export async function getUserSetting(key: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('user_settings')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle();
+  return data?.value || null;
+}
+
+export async function setUserSetting(key: string, value: string): Promise<void> {
+  const userId = await getCurrentUserId();
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({ user_id: userId, key, value }, { onConflict: 'user_id,key' });
+  if (error) throw new Error(error.message);
+}
+
+// ============================================
 // Work Schedule
 // ============================================
 
