@@ -117,8 +117,26 @@ export function SoilAnalysisPanel({ parcelId, subParcelId }: SoilAnalysisPanelPr
               <h3 className="font-bold text-white">{a.rapport_identificatie || 'Grondmonster'}</h3>
               <p className="text-xs text-white/30">{a.lab} &middot; {a.datum_monstername} &middot; Laag: {a.bemonsterde_laag_cm || '?'}</p>
             </div>
-            <StatusIcon status={a.extractie_status} />
+            <div className="flex items-center gap-2">
+              {a.extractie_confidence != null && a.extractie_status === 'completed' && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  a.extractie_confidence >= 0.8 ? 'bg-emerald-500/15 text-emerald-400' :
+                  a.extractie_confidence >= 0.5 ? 'bg-amber-500/15 text-amber-400' :
+                  'bg-red-500/15 text-red-400'
+                }`}>
+                  {Math.round(a.extractie_confidence * 100)}% betrouwbaar
+                </span>
+              )}
+              <StatusIcon status={a.extractie_status} />
+            </div>
           </div>
+
+          {a.extractie_status === 'processing' && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
+              <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+              <span className="text-xs text-amber-300 font-medium">Rapport wordt geanalyseerd... dit duurt 10-30 seconden.</span>
+            </div>
+          )}
 
           {a.extractie_status === 'completed' && (
             <>
