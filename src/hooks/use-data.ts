@@ -149,6 +149,9 @@ export const queryKeys = {
     // Dashboard aggregates
     dashboardStats: ['dashboard', 'stats'] as const,
 
+    // User Settings
+    userSetting: (key: string) => ['user-settings', key] as const,
+
     // Team & Tasks
     taskTypes: ['task-types'] as const,
     taskLogs: ['task-logs'] as const,
@@ -864,6 +867,30 @@ export function useUpdateWorkSchedule() {
         mutationFn: updateWorkSchedule,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.workSchedule });
+        },
+    });
+}
+
+// ============================================
+// User Settings Hooks
+// ============================================
+
+export function useUserSetting(key: string) {
+    return useQuery({
+        queryKey: queryKeys.userSetting(key),
+        queryFn: () => getUserSetting(key),
+        staleTime: 30 * 60 * 1000,
+    });
+}
+
+export function useSetUserSetting() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ key, value }: { key: string; value: string }) =>
+            setUserSetting(key, value),
+        onSuccess: (_, { key }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.userSetting(key) });
         },
     });
 }

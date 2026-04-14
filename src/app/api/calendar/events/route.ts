@@ -471,40 +471,45 @@ export async function GET(request: Request) {
       if (stationId) {
         const today = new Date().toISOString().split('T')[0]!;
 
-        // Fetch ALL weather rows for the date range (both forecast and actual)
-        // The unique index allows two rows per date: is_forecast=true and is_forecast=false
-        const { data: allWeatherData } = await supabase
-          .from('weather_data_daily')
-          .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs, is_forecast')
+        // Query HOURLY data directly and aggregate per day server-side.
+        // The weather_data_daily table is sparse (cron only aggregates today+yesterday).
+        // Hourly data covers full history + 16-day forecast via Open-Meteo.
+        const { data: hourlyRows } = await supabase
+          .from('weather_data_hourly')
+          .select('timestamp, temperature_c, precipitation_mm, leaf_wetness_pct, is_forecast')
           .eq('station_id', stationId)
-          .gte('date', start)
-          .lte('date', end)
-          .order('date', { ascending: true });
+          .eq('model_name', 'best_match')
+          .gte('timestamp', `${start}T00:00:00`)
+          .lte('timestamp', `${end}T23:59:59`)
+          .order('timestamp', { ascending: true });
 
-        // Deduplicate per date: prefer is_forecast=false (actuals) over is_forecast=true (forecast)
-        const weatherMap = new Map<string, any>();
-        for (const row of (allWeatherData || [])) {
-          const existing = weatherMap.get(row.date);
-          if (!existing) {
-            // First row for this date — use it
-            weatherMap.set(row.date, row);
-          } else if (row.is_forecast === false && existing.is_forecast === true) {
-            // Actual data replaces forecast data
-            weatherMap.set(row.date, row);
+        // Group hourly rows by date and aggregate
+        const dayMap = new Map<string, { temps: number[]; precip: number; wetHours: number; forecastCount: number; totalCount: number }>();
+
+        for (const row of (hourlyRows || [])) {
+          const dateStr = (row.timestamp as string).substring(0, 10); // YYYY-MM-DD
+          let day = dayMap.get(dateStr);
+          if (!day) {
+            day = { temps: [], precip: 0, wetHours: 0, forecastCount: 0, totalCount: 0 };
+            dayMap.set(dateStr, day);
           }
-          // Otherwise keep existing (either both are same type, or existing is already actual)
+          if (row.temperature_c !== null) day.temps.push(row.temperature_c);
+          if (row.precipitation_mm !== null) day.precip += row.precipitation_mm;
+          if (row.leaf_wetness_pct !== null && row.leaf_wetness_pct >= 50) day.wetHours += 1;
+          if (row.is_forecast) day.forecastCount++;
+          day.totalCount++;
         }
 
-        // Mark past dates with only forecast data as such
-        weather = Array.from(weatherMap.values())
-          .sort((a: any, b: any) => a.date.localeCompare(b.date))
-          .map((row: any) => ({
-            date: row.date,
-            tempMin: row.temp_min_c,
-            tempMax: row.temp_max_c,
-            precipitationSum: row.precipitation_sum,
-            leafWetnessHours: row.leaf_wetness_hrs,
-            isForecast: row.is_forecast ?? (row.date >= today),
+        weather = Array.from(dayMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, day]) => ({
+            date,
+            tempMin: day.temps.length > 0 ? Math.min(...day.temps) : null,
+            tempMax: day.temps.length > 0 ? Math.max(...day.temps) : null,
+            precipitationSum: Math.round(day.precip * 10) / 10,
+            leafWetnessHours: day.wetHours,
+            // Mostly forecast if >50% of hourly rows are forecast
+            isForecast: day.totalCount > 0 ? (day.forecastCount / day.totalCount) > 0.5 : date >= today,
           }));
       }
     }

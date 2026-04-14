@@ -72,6 +72,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [mergeOnImport, setMergeOnImport] = useState(false);
   const [pendingSubParcels, setPendingSubParcels] = useState<Omit<SubParcel, 'id' | 'parcelId' | 'createdAt' | 'updatedAt'>[]>([]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [mapOverlay, setMapOverlay] = useState<'standaard' | 'laatste_spray' | 'bodem_ph' | 'ziektedruk'>('standaard');
   const [formSource, setFormSource] = useState<"RVO_IMPORT" | "MANUAL">("RVO_IMPORT");
 
   // Groups

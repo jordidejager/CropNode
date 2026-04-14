@@ -53,6 +53,9 @@ if (typeof window !== "undefined") {
   });
 }
 
+export type MapOverlayMode = 'standaard' | 'laatste_spray' | 'bodem_ph' | 'ziektedruk';
+export type MapOverlayData = Record<string, { value: number | string | null; label?: string }>;
+
 interface RvoMapProps {
   onParcelSelect: (parcel: RvoParcel | null) => void;
   selectedParcel: RvoParcel | null;
@@ -64,6 +67,8 @@ interface RvoMapProps {
   initialGeometry?: any;
   userParcels?: Parcel[];
   onUserParcelClick?: (parcel: Parcel) => void;
+  overlayMode?: MapOverlayMode;
+  overlayData?: MapOverlayData;
 }
 
 export function RvoMap({
@@ -77,6 +82,8 @@ export function RvoMap({
   initialGeometry,
   userParcels = [],
   onUserParcelClick,
+  overlayMode = 'standaard',
+  overlayData = {},
 }: RvoMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -411,17 +418,55 @@ export function RvoMap({
         .filter(p => isValidGeometry(p.geometry))
         .map(p => {
           const primarySub = p.subParcels?.[0];
+          const overlay = overlayData[p.id];
           return {
             type: "Feature" as const,
             properties: {
               id: p.id,
               name: p.name,
-              crop: primarySub?.crop,
-              variety: primarySub?.variety
+              crop: primarySub?.crop || (p as any).crop,
+              variety: primarySub?.variety || (p as any).variety,
+              overlayValue: overlay?.value ?? null,
+              overlayLabel: overlay?.label ?? null,
             },
             geometry: p.geometry,
           };
         });
+
+      // Update style based on overlay mode
+      userParcelsLayerRef.current.options.style = (feature: any) => {
+        if (overlayMode === 'standaard') {
+          const crop = feature?.properties?.crop?.toLowerCase();
+          if (crop === 'appel') return APPEL_STYLE;
+          if (crop === 'peer') return PEER_STYLE;
+          return USER_PARCEL_STYLE;
+        }
+        // Overlay mode: color by value
+        const val = feature?.properties?.overlayValue;
+        if (val == null) return { ...USER_PARCEL_STYLE, fillColor: '#6b7280', color: '#6b7280', fillOpacity: 0.2 }; // gray for no data
+
+        if (overlayMode === 'laatste_spray') {
+          // Days since last spray: green=recent, red=long ago
+          const days = typeof val === 'number' ? val : 999;
+          if (days <= 7) return { ...USER_PARCEL_STYLE, fillColor: '#22c55e', color: '#22c55e', fillOpacity: 0.5 };
+          if (days <= 14) return { ...USER_PARCEL_STYLE, fillColor: '#eab308', color: '#eab308', fillOpacity: 0.4 };
+          if (days <= 30) return { ...USER_PARCEL_STYLE, fillColor: '#f97316', color: '#f97316', fillOpacity: 0.4 };
+          return { ...USER_PARCEL_STYLE, fillColor: '#ef4444', color: '#ef4444', fillOpacity: 0.4 };
+        }
+        if (overlayMode === 'bodem_ph') {
+          const ph = typeof val === 'number' ? val : 0;
+          if (ph >= 5.5 && ph <= 6.5) return { ...USER_PARCEL_STYLE, fillColor: '#22c55e', color: '#22c55e', fillOpacity: 0.5 };
+          if (ph >= 5.0 && ph <= 7.0) return { ...USER_PARCEL_STYLE, fillColor: '#eab308', color: '#eab308', fillOpacity: 0.4 };
+          return { ...USER_PARCEL_STYLE, fillColor: '#ef4444', color: '#ef4444', fillOpacity: 0.4 };
+        }
+        if (overlayMode === 'ziektedruk') {
+          const level = String(val);
+          if (level === 'geen' || level === 'laag') return { ...USER_PARCEL_STYLE, fillColor: '#22c55e', color: '#22c55e', fillOpacity: 0.5 };
+          if (level === 'gemiddeld') return { ...USER_PARCEL_STYLE, fillColor: '#eab308', color: '#eab308', fillOpacity: 0.4 };
+          return { ...USER_PARCEL_STYLE, fillColor: '#ef4444', color: '#ef4444', fillOpacity: 0.5 };
+        }
+        return USER_PARCEL_STYLE;
+      };
 
       if (features.length > 0) {
         userParcelsLayerRef.current.addData({
@@ -435,7 +480,7 @@ export function RvoMap({
         }
       }
     }
-  }, [userParcels, zoomLevel]);
+  }, [userParcels, zoomLevel, overlayMode, overlayData]);
 
   const handleLocationSelect = useCallback(
     (lat: number, lng: number) => {
