@@ -471,6 +471,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 2. Plantverband */}
       <ProfileSection
         title="Plantverband & dichtheid"
+        motivation="Nodig voor nauwkeurige dosering-berekeningen en bomentellingen."
         icon={Ruler}
         fields={['rijafstand_m', 'plantafstand_m', 'aantal_bomen']}
         values={values}
@@ -497,6 +498,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 3. Teeltsysteem */}
       <ProfileSection
         title="Teeltsysteem"
+        motivation="Teeltsysteem en boomhoogte bepalen snoei- en spuitadvies."
         icon={TreePine}
         fields={['teeltsysteem', 'boomhoogte_m', 'rijrichting']}
         values={values}

@@ -471,67 +471,31 @@ export async function GET(request: Request) {
       if (stationId) {
         const today = new Date().toISOString().split('T')[0]!;
 
-        // Two parallel queries:
-        // 1. Historical actuals for past dates (is_forecast=false) — accurate observed data
-        // 2. Forecast for today + future dates (is_forecast=true) — 14-day forecast
-        const [historicalResult, forecastResult] = await Promise.all([
-          supabase
-            .from('weather_data_daily')
-            .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs, is_forecast')
-            .eq('station_id', stationId)
-            .eq('is_forecast', false)
-            .gte('date', start)
-            .lt('date', today)
-            .order('date', { ascending: true }),
-          supabase
-            .from('weather_data_daily')
-            .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs, is_forecast')
-            .eq('station_id', stationId)
-            .eq('is_forecast', true)
-            .gte('date', today)
-            .lte('date', end)
-            .order('date', { ascending: true }),
-        ]);
-
-        // Merge: historical actuals for past, forecast for future
-        // Use a Map to deduplicate (actuals take priority)
-        const weatherMap = new Map<string, any>();
-
-        // First add forecast (lower priority)
-        for (const row of (forecastResult.data || [])) {
-          weatherMap.set(row.date, row);
-        }
-        // Then add historical actuals (overwrite forecast for same date)
-        for (const row of (historicalResult.data || [])) {
-          weatherMap.set(row.date, row);
-        }
-
-        // Also try to get today's actual if it exists (might have partial data)
-        const { data: todayActual } = await supabase
+        // Fetch ALL weather rows for the date range (both forecast and actual)
+        // The unique index allows two rows per date: is_forecast=true and is_forecast=false
+        const { data: allWeatherData } = await supabase
           .from('weather_data_daily')
           .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs, is_forecast')
           .eq('station_id', stationId)
-          .eq('date', today)
-          .eq('is_forecast', false)
-          .maybeSingle();
+          .gte('date', start)
+          .lte('date', end)
+          .order('date', { ascending: true });
 
-        if (todayActual) {
-          weatherMap.set(today, todayActual);
-        } else {
-          // Fall back to forecast for today if no actual exists yet
-          const { data: todayForecast } = await supabase
-            .from('weather_data_daily')
-            .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs, is_forecast')
-            .eq('station_id', stationId)
-            .eq('date', today)
-            .eq('is_forecast', true)
-            .maybeSingle();
-          if (todayForecast) {
-            weatherMap.set(today, todayForecast);
+        // Deduplicate per date: prefer is_forecast=false (actuals) over is_forecast=true (forecast)
+        const weatherMap = new Map<string, any>();
+        for (const row of (allWeatherData || [])) {
+          const existing = weatherMap.get(row.date);
+          if (!existing) {
+            // First row for this date — use it
+            weatherMap.set(row.date, row);
+          } else if (row.is_forecast === false && existing.is_forecast === true) {
+            // Actual data replaces forecast data
+            weatherMap.set(row.date, row);
           }
+          // Otherwise keep existing (either both are same type, or existing is already actual)
         }
 
-        // Convert to sorted array
+        // Mark past dates with only forecast data as such
         weather = Array.from(weatherMap.values())
           .sort((a: any, b: any) => a.date.localeCompare(b.date))
           .map((row: any) => ({
@@ -540,7 +504,7 @@ export async function GET(request: Request) {
             tempMax: row.temp_max_c,
             precipitationSum: row.precipitation_sum,
             leafWetnessHours: row.leaf_wetness_hrs,
-            isForecast: row.is_forecast ?? false,
+            isForecast: row.is_forecast ?? (row.date >= today),
           }));
       }
     }
