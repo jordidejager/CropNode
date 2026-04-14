@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ProductSelector } from './product-selector';
 import { DosageInput } from './dosage-input';
 import { ParcelMultiSelect } from './parcel-multi-select';
+import { useParcelGroups } from '@/hooks/use-data';
 import { ValidationFeedback, ValidationStatus, type ValidationFlag } from './validation-feedback';
 import type { SprayableParcel } from '@/lib/supabase-store';
 import type { CtgbProduct, ProductEntry } from '@/lib/types';
@@ -55,6 +56,7 @@ export function NewSprayDialog({
     onSuccess,
 }: NewSprayDialogProps) {
     const { toast } = useToast();
+    const { data: parcelGroups = [] } = useParcelGroups();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isValidating, setIsValidating] = React.useState(false);
 
@@ -345,6 +347,7 @@ export function NewSprayDialog({
                             selectedIds={selectedParcelIds}
                             onChange={setSelectedParcelIds}
                             placeholder="Selecteer één of meerdere percelen..."
+                            groups={parcelGroups}
                         />
                         {selectedParcelIds.length > 0 && (
                             <p className="text-xs text-muted-foreground">

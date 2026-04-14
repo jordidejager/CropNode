@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { SprayableParcel } from '@/lib/supabase-store';
+import type { ParcelGroup } from '@/lib/types';
 
 interface ParcelMultiSelectProps {
     parcels: SprayableParcel[];
@@ -28,6 +29,7 @@ interface ParcelMultiSelectProps {
     disabled?: boolean;
     placeholder?: string;
     className?: string;
+    groups?: ParcelGroup[];
 }
 
 type GroupedParcels = {
@@ -42,6 +44,7 @@ export function ParcelMultiSelect({
     disabled = false,
     placeholder = 'Selecteer percelen...',
     className,
+    groups = [],
 }: ParcelMultiSelectProps) {
     const [open, setOpen] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
@@ -192,6 +195,32 @@ export function ParcelMultiSelect({
                         </div>
                     </div>
                     <CommandList className="max-h-[300px]">
+                        {/* Perceelgroepen sectie */}
+                        {groups.length > 0 && !searchQuery && (
+                            <CommandGroup heading={<span className="text-[10px] font-bold text-primary/60 uppercase tracking-wider">Groepen</span>}>
+                                {groups.map((g) => {
+                                    const memberIds = g.subParcelIds || [];
+                                    const allSelected = memberIds.length > 0 && memberIds.every(id => selectedIds.includes(id));
+                                    return (
+                                        <CommandItem
+                                            key={g.id}
+                                            onSelect={() => {
+                                                if (allSelected) {
+                                                    onChange(selectedIds.filter(id => !memberIds.includes(id)));
+                                                } else {
+                                                    onChange(Array.from(new Set([...selectedIds, ...memberIds])));
+                                                }
+                                            }}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <Checkbox checked={allSelected} className="h-4 w-4" />
+                                            <span className="font-medium">{g.name}</span>
+                                            <span className="text-[10px] text-muted-foreground ml-auto">{memberIds.length} percelen</span>
+                                        </CommandItem>
+                                    );
+                                })}
+                            </CommandGroup>
+                        )}
                         {filteredGroups.length === 0 ? (
                             <CommandEmpty>Geen percelen gevonden</CommandEmpty>
                         ) : (
