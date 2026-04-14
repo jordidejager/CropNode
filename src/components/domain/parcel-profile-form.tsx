@@ -605,6 +605,7 @@ export function ParcelProfileForm({ parcelId, subParcelId, defaultGewas, default
       {/* 7. Perceelhistorie */}
       <ProfileSection
         title="Perceelhistorie"
+        motivation="Herinplant-info helpt bij bodemmoeheid-risico inschatting."
         icon={History}
         fields={['voorgaand_gewas', 'herinplant', 'verwachte_rooidatum']}
         values={values}

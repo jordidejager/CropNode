@@ -13,6 +13,7 @@ import {
   getSprayableParcelsById,
 } from '@/lib/supabase-store';
 import type { SpuitschriftEntry, LogbookEntry, ProductEntry } from '@/lib/types';
+import { createSprayTaskLogs } from '@/lib/spray-hours';
 
 // Import addParcelHistoryEntries dynamically to avoid circular dependency
 // (it's defined in actions.ts which imports from this file)
@@ -134,6 +135,19 @@ export async function confirmRegistration(
         });
         throw historyError;
       }
+    }
+
+    // Auto-create spray task logs (fire-and-forget, don't block confirmation)
+    if (params.registrationType === 'spraying' || !params.registrationType) {
+      createSprayTaskLogs({
+        userId: params.userId,
+        plotIds: params.plots,
+        date: entryDate,
+        products: finalProducts,
+        sprayableParcels: sprayableParcels.length > 0 ? sprayableParcels : await getSprayableParcelsById(params.plots),
+      }).catch(err => {
+        console.error('[confirmRegistration] Spray task logs failed (non-blocking):', err);
+      });
     }
 
     return {
