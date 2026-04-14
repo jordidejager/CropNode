@@ -9,6 +9,7 @@ import { WeatherSprayStrip } from '@/components/dashboard/WeatherSprayStrip';
 import { FieldNotesCard, TasksCard } from '@/components/dashboard/FieldNotesCard';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { DashboardShortcuts } from '@/components/dashboard/DashboardShortcuts';
+import { DashboardCalendar } from '@/components/dashboard/DashboardCalendar';
 import type { InputMode } from '@/components/mode-selector';
 
 const HINT_CHIPS = [
@@ -135,6 +136,11 @@ export function DashboardClient() {
                 {/* Weather & Spray Window */}
                 <div className="dashboard-fade-in dashboard-fade-in-3">
                     <WeatherSprayStrip />
+                </div>
+
+                {/* Calendar: Komende 7 dagen */}
+                <div className="dashboard-fade-in dashboard-fade-in-4">
+                    <DashboardCalendar />
                 </div>
 
                 {/* Field Notes + Tasks */}

@@ -56,8 +56,9 @@ export default function ZiektedrukPage() {
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedBiofixDate, setSuggestedBiofixDate] = useState<string | null>(null);
 
-  // Load parcels on mount
+  // Load parcels + phenology suggestion on mount
   useEffect(() => {
     async function loadParcels() {
       const supabase = createClient();
@@ -71,6 +72,31 @@ export default function ZiektedrukPage() {
 
       if (parcelList.length > 0 && !selectedParcelId) {
         setSelectedParcelId(parcelList[0].id);
+      }
+
+      // Get bloom date for biofix suggestion
+      // Green tip (groene punt) ≈ 22 days before full bloom
+      const { data: phenoData } = await supabase
+        .from('phenology_reference')
+        .select('bloom_date_f2')
+        .eq('year', harvestYear)
+        .maybeSingle();
+
+      if (phenoData?.bloom_date_f2) {
+        const bloom = new Date(phenoData.bloom_date_f2 + 'T12:00:00');
+        const greenTip = new Date(bloom.getTime() - 22 * 24 * 60 * 60 * 1000);
+        setSuggestedBiofixDate(greenTip.toISOString().slice(0, 10));
+      } else {
+        // Fallback: known bloom dates
+        const fallbackBlooms: Record<number, string> = {
+          2024: '2024-04-03', 2025: '2025-04-11', 2026: '2026-04-08',
+        };
+        const bloom = fallbackBlooms[harvestYear];
+        if (bloom) {
+          const bloomDate = new Date(bloom + 'T12:00:00');
+          const greenTip = new Date(bloomDate.getTime() - 22 * 24 * 60 * 60 * 1000);
+          setSuggestedBiofixDate(greenTip.toISOString().slice(0, 10));
+        }
       }
       setLoading(false);
     }
@@ -89,6 +115,13 @@ export default function ZiektedrukPage() {
         const res = await fetch(
           `/api/analytics/ziektedruk?parcel_id=${encodeURIComponent(parcelId)}&harvest_year=${harvestYear}${forceParam}`
         );
+
+        if (res.status === 401) {
+          // Session expired — reload page to trigger re-auth
+          window.location.reload();
+          return;
+        }
+
         const json = await res.json();
 
         if (!json.success) {
@@ -214,6 +247,7 @@ export default function ZiektedrukPage() {
         onRecalculate={async () => {
           await loadDiseaseData(selectedParcelId, true);
         }}
+        suggestedBiofixDate={suggestedBiofixDate}
       />
 
       {/* Error state */}

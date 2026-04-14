@@ -20,12 +20,17 @@ import {
     getTaskLogs,
     getTaskStats,
     addTaskLog,
+    addTaskType,
+    updateTaskType,
     deleteTaskLog,
     getActiveTaskSessions,
     startTaskSession,
     updateActiveTaskSession,
     stopTaskSession,
+    stopTaskSessionMultiDay,
     deleteActiveTaskSession,
+    getWorkSchedule,
+    updateWorkSchedule,
     // Storage (Koelcelbeheer)
     getStorageCells,
     getStorageCell,
@@ -147,6 +152,7 @@ export const queryKeys = {
     taskLogs: ['task-logs'] as const,
     taskStats: ['task-stats'] as const,
     activeTaskSessions: ['active-task-sessions'] as const,
+    workSchedule: ['work-schedule'] as const,
 
     // Conversations (Timeline)
     conversations: ['conversations'] as const,
@@ -692,6 +698,30 @@ export function useTaskTypes() {
     });
 }
 
+export function useAddTaskType() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: { name: string; defaultHourlyRate: number }) =>
+            addTaskType(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.taskTypes });
+        },
+    });
+}
+
+export function useUpdateTaskType() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: { name?: string; defaultHourlyRate?: number } }) =>
+            updateTaskType(id, updates),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.taskTypes });
+        },
+    });
+}
+
 export function useTaskLogs() {
     return useQuery({
         queryKey: queryKeys.taskLogs,
@@ -789,6 +819,43 @@ export function useDeleteActiveTaskSession() {
         mutationFn: deleteActiveTaskSession,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.activeTaskSessions });
+        },
+    });
+}
+
+export function useStopTaskSessionMultiDay() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ sessionId, entries }: { sessionId: string; entries: Array<{ date: string; hoursPerPerson: number; peopleCount: number }> }) =>
+            stopTaskSessionMultiDay(sessionId, entries),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.activeTaskSessions });
+            queryClient.invalidateQueries({ queryKey: queryKeys.taskLogs });
+            queryClient.invalidateQueries({ queryKey: queryKeys.taskStats });
+        },
+    });
+}
+
+// ============================================
+// Work Schedule Hooks
+// ============================================
+
+export function useWorkSchedule() {
+    return useQuery({
+        queryKey: queryKeys.workSchedule,
+        queryFn: getWorkSchedule,
+        staleTime: 30 * 60 * 1000, // 30 min - rarely changes
+    });
+}
+
+export function useUpdateWorkSchedule() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: updateWorkSchedule,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.workSchedule });
         },
     });
 }

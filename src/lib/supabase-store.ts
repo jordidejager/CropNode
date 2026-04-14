@@ -482,6 +482,10 @@ export async function getInventoryMovements(): Promise<InventoryMovement[]> {
     const { data, error } = await query.order('date', { ascending: false });
 
     if (error) {
+      // Table may not exist yet — return empty silently
+      if (error.code === '42P01' || error.message?.includes('does not exist') || !error.message) {
+        return [];
+      }
       // Throw to trigger retry for network errors
       if (error.message?.includes('fetch') || error.message?.includes('network')) {
         throw new Error(error.message);
@@ -489,8 +493,6 @@ export async function getInventoryMovements(): Promise<InventoryMovement[]> {
       console.error("Supabase Error (getInventoryMovements):", error);
       return [];
     }
-
-    console.log(`Supabase (getInventoryMovements): Found ${data?.length || 0} items.`);
     if (!data) return [];
 
     return data.map(item => ({
@@ -2339,6 +2341,19 @@ export async function deleteFieldSignalReaction(signalId: string, userId: string
 
 import type { TaskType, TaskLog, TaskLogEnriched } from './types';
 
+const DEFAULT_TASK_TYPES = [
+  { name: 'Snoeien', default_hourly_rate: 0 },
+  { name: 'Dunnen', default_hourly_rate: 0 },
+  { name: 'Plukken', default_hourly_rate: 0 },
+  { name: 'Sorteren', default_hourly_rate: 0 },
+  { name: 'Onderhoud', default_hourly_rate: 0 },
+  { name: 'Maaien', default_hourly_rate: 0 },
+  { name: 'Spuiten', default_hourly_rate: 0 },
+  { name: 'Boomverzorging', default_hourly_rate: 0 },
+  { name: 'Fertigatie', default_hourly_rate: 0 },
+  { name: 'Transport', default_hourly_rate: 0 },
+];
+
 export async function getTaskTypes(): Promise<TaskType[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
@@ -2351,7 +2366,33 @@ export async function getTaskTypes(): Promise<TaskType[]> {
       throw new Error(error.message);
     }
 
-    if (!data) return [];
+    // If user has no task types yet, seed defaults for this user
+    if (!data || data.length === 0) {
+      console.log('[getTaskTypes] No task types found, seeding defaults for user');
+      try {
+        const userId = await getCurrentUserId();
+        const { data: seeded, error: seedError } = await supabase
+          .from('task_types')
+          .upsert(DEFAULT_TASK_TYPES.map(t => ({ ...t, user_id: userId })), { onConflict: 'name', ignoreDuplicates: true })
+          .select('id, name, default_hourly_rate, created_at, updated_at');
+
+        if (seedError) {
+          console.error('[getTaskTypes] Seed error:', seedError.message);
+          return [];
+        }
+
+        return (seeded || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          defaultHourlyRate: item.default_hourly_rate,
+          createdAt: new Date(item.created_at),
+          updatedAt: new Date(item.updated_at),
+        }));
+      } catch (seedErr) {
+        console.error('[getTaskTypes] Seed failed:', seedErr);
+        return [];
+      }
+    }
 
     return data.map(item => ({
       id: item.id,
@@ -2386,13 +2427,26 @@ export async function addTaskType(taskType: Omit<TaskType, 'id' | 'createdAt' | 
   };
 }
 
+export async function updateTaskType(id: string, updates: { name?: string; defaultHourlyRate?: number }): Promise<void> {
+  const updateData: Record<string, unknown> = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.defaultHourlyRate !== undefined) updateData.default_hourly_rate = updates.defaultHourlyRate;
+
+  const { error } = await supabase
+    .from('task_types')
+    .update(updateData)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function getTaskLogs(): Promise<TaskLogEnriched[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_task_logs_enriched')
       .select('id, start_date, end_date, days, sub_parcel_id, sub_parcel_name, task_type_id, task_type_name, default_hourly_rate, people_count, hours_per_person, total_hours, estimated_cost, notes, created_at, updated_at')
       .order('start_date', { ascending: false })
-      .limit(100);
+      .limit(500);
 
     if (error) {
       console.error('[getTaskLogs] Supabase error:', error.message);
@@ -2469,7 +2523,9 @@ export async function deleteTaskLog(id: string): Promise<void> {
 
 export async function getTaskStats(): Promise<{
   todayHours: number;
+  weekHours: number;
   weekCost: number;
+  monthCost: number;
   topActivity: string | null;
 }> {
   const today = new Date().toISOString().split('T')[0];
@@ -2485,19 +2541,22 @@ export async function getTaskStats(): Promise<{
 
   const todayHours = todayData?.reduce((sum, item) => sum + (item.total_hours || 0), 0) || 0;
 
-  // Week's cost (using view)
+  // Week's data (using view)
   const { data: weekData } = await supabase
     .from('v_task_logs_enriched')
-    .select('estimated_cost')
+    .select('total_hours, estimated_cost')
     .gte('start_date', weekAgo);
 
+  const weekHours = weekData?.reduce((sum, item) => sum + (item.total_hours || 0), 0) || 0;
   const weekCost = weekData?.reduce((sum, item) => sum + (item.estimated_cost || 0), 0) || 0;
 
-  // Top activity this month
+  // Month's data
   const { data: monthData } = await supabase
     .from('v_task_logs_enriched')
-    .select('task_type_name, total_hours')
+    .select('task_type_name, total_hours, estimated_cost')
     .gte('start_date', monthAgo);
+
+  const monthCost = monthData?.reduce((sum, item) => sum + (item.estimated_cost || 0), 0) || 0;
 
   const activityHours: Record<string, number> = {};
   monthData?.forEach(item => {
@@ -2509,7 +2568,83 @@ export async function getTaskStats(): Promise<{
   const topActivity = Object.entries(activityHours)
     .sort(([, a], [, b]) => b - a)[0]?.[0] || null;
 
-  return { todayHours, weekCost, topActivity };
+  return { todayHours, weekHours, weekCost, monthCost, topActivity };
+}
+
+// ============================================
+// Work Schedule
+// ============================================
+
+import type { WorkScheduleDay, BreakPeriod } from '@/lib/types';
+import { DEFAULT_WORK_SCHEDULE, calcNettoHoursWithBreaks, totalBreakMinutes } from '@/lib/types';
+
+export async function getWorkSchedule(): Promise<WorkScheduleDay[]> {
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .select('id, user_id, day_of_week, is_workday, start_time, end_time, breaks, break_minutes')
+    .order('day_of_week');
+
+  if (error) {
+    console.error('[getWorkSchedule] Error:', error.message);
+    return DEFAULT_WORK_SCHEDULE.map((d, i) => ({
+      ...d,
+      id: `default-${i}`,
+      userId: '',
+    }));
+  }
+
+  if (!data || data.length === 0) {
+    return DEFAULT_WORK_SCHEDULE.map((d, i) => ({
+      ...d,
+      id: `default-${i}`,
+      userId: '',
+    }));
+  }
+
+  return data.map(item => {
+    // Prefer breaks JSONB, fallback to break_minutes for legacy
+    const breaks: BreakPeriod[] = Array.isArray(item.breaks) && item.breaks.length > 0
+      ? item.breaks
+      : item.break_minutes > 0 && item.start_time
+        ? [{ start: '12:00', end: `12:${String(item.break_minutes).padStart(2, '0')}` }]
+        : [];
+
+    return {
+      id: item.id,
+      userId: item.user_id,
+      dayOfWeek: item.day_of_week,
+      isWorkday: item.is_workday,
+      startTime: item.start_time,
+      endTime: item.end_time,
+      breaks,
+      nettoHours: calcNettoHoursWithBreaks(item.start_time, item.end_time, breaks, item.is_workday),
+    };
+  });
+}
+
+export async function updateWorkSchedule(
+  days: Array<{ dayOfWeek: number; isWorkday: boolean; startTime: string | null; endTime: string | null; breaks: BreakPeriod[] }>
+): Promise<void> {
+  const userId = await getCurrentUserId();
+
+  const rows = days.map(d => ({
+    user_id: userId,
+    day_of_week: d.dayOfWeek,
+    is_workday: d.isWorkday,
+    start_time: d.isWorkday ? d.startTime : null,
+    end_time: d.isWorkday ? d.endTime : null,
+    breaks: d.isWorkday ? d.breaks : [],
+    break_minutes: d.isWorkday ? totalBreakMinutes(d.breaks) : 0,
+  }));
+
+  const { error } = await supabase
+    .from('work_schedules')
+    .upsert(rows, { onConflict: 'user_id,day_of_week' });
+
+  if (error) {
+    console.error('[updateWorkSchedule] Error:', error.message);
+    throw new Error(error.message);
+  }
 }
 
 // ============================================
@@ -2675,6 +2810,58 @@ export async function stopTaskSession(
       hours_per_person: hoursPerPerson,
       notes: session.notes,
     });
+
+  if (insertError) throw new Error(insertError.message);
+
+  // 4. Verwijder de actieve sessie
+  const { error: deleteError } = await supabase
+    .from('active_task_sessions')
+    .delete()
+    .eq('id', sessionId);
+
+  if (deleteError) throw new Error(deleteError.message);
+}
+
+/**
+ * Stop een multi-dag taak: maakt per werkdag een aparte task_log aan.
+ */
+export async function stopTaskSessionMultiDay(
+  sessionId: string,
+  entries: Array<{ date: string; hoursPerPerson: number; peopleCount: number }>
+): Promise<void> {
+  // 1. Haal de actieve sessie op
+  const { data: session, error: fetchError } = await supabase
+    .from('v_active_task_sessions_enriched')
+    .select('id, task_type_id, sub_parcel_id, notes')
+    .eq('id', sessionId)
+    .single();
+
+  if (fetchError || !session) {
+    throw new Error(fetchError?.message || 'Session not found');
+  }
+
+  // 2. Filter: alleen dagen met uren > 0
+  const validEntries = entries.filter(e => e.hoursPerPerson > 0);
+
+  if (validEntries.length === 0) {
+    throw new Error('Geen werkdagen met uren gevonden');
+  }
+
+  // 3. Batch insert: 1 task_log per dag
+  const rows = validEntries.map(e => ({
+    start_date: e.date,
+    end_date: e.date,
+    days: 1,
+    sub_parcel_id: session.sub_parcel_id,
+    task_type_id: session.task_type_id,
+    people_count: e.peopleCount,
+    hours_per_person: e.hoursPerPerson,
+    notes: session.notes,
+  }));
+
+  const { error: insertError } = await supabase
+    .from('task_logs')
+    .insert(rows);
 
   if (insertError) throw new Error(insertError.message);
 

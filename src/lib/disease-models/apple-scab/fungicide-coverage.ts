@@ -329,11 +329,17 @@ export function evaluateCoverageForInfections(
 
     const coveragePct = coverageResult?.coveragePct ?? 0;
 
+    // Use consistent source: if coverage was found, show its product; otherwise use last spray
+    const sprayProduct = lastSpray
+      ? lastSpray.products.map((p) => p.name).join(' + ')
+      : null;
+    const sprayDate = lastSpray?.date.toISOString() ?? null;
+
     result.set(ip.wetPeriodStart, {
       coverageAtInfection: coveragePct,
       coverageStatus: coverageToStatus(coveragePct),
-      lastSprayProduct: coverageResult?.product ?? lastSpray?.products[0]?.name ?? null,
-      lastSprayDate: lastSpray?.date.toISOString() ?? null,
+      lastSprayProduct: sprayProduct,
+      lastSprayDate: sprayDate,
       curativeWindowOpen,
       curativeRemainingDH,
     });

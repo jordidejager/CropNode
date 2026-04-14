@@ -39,6 +39,7 @@ import { RAS_SUGGESTIES } from "@/lib/parcel-profile-constants"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
 import { GewasrotatieTimeline } from "@/components/domain/gewas-rotatie-timeline"
+import { ParcelTimeline } from "@/components/domain/parcel-timeline"
 import { ParcelProfileForm } from "@/components/domain/parcel-profile-form"
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -360,6 +361,9 @@ export function MainParcelView({
                     <TabsTrigger value="analyses" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                         Grondmonsters
                     </TabsTrigger>
+                    <TabsTrigger value="timeline" className="rounded-lg font-bold px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                        Tijdlijn
+                    </TabsTrigger>
                     <TabsTrigger value="overview" className="rounded-lg font-bold px-6 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                         Overzicht
                     </TabsTrigger>
@@ -369,6 +373,9 @@ export function MainParcelView({
                 </TabsContent>
                 <TabsContent value="analyses" className="mt-4">
                     <SoilAnalysisPanel subParcelId={parcel.id} />
+                </TabsContent>
+                <TabsContent value="timeline" className="mt-4">
+                    <ParcelTimeline parcelId={parcel.id} />
                 </TabsContent>
                 <TabsContent value="overview" className="mt-4 space-y-6">
 

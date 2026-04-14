@@ -686,6 +686,91 @@ export type ActiveTaskSession = {
 };
 
 // ============================================
+// Work Schedule Types
+// ============================================
+
+export interface BreakPeriod {
+  start: string; // "12:00"
+  end: string;   // "12:30"
+}
+
+export type WorkScheduleDay = {
+  id: string;
+  userId: string;
+  dayOfWeek: number; // 0=zo, 1=ma, 2=di, 3=wo, 4=do, 5=vr, 6=za
+  isWorkday: boolean;
+  startTime: string | null; // "07:30"
+  endTime: string | null;   // "17:00"
+  breaks: BreakPeriod[];
+  nettoHours: number; // computed client-side: werkuren minus alle pauzes
+};
+
+/**
+ * Bereken netto werkuren voor een dag, rekening houdend met pauzes.
+ * Als endOverride is opgegeven (bijv. taak stopt om 15:00), worden alleen
+ * pauzes die vóór dat tijdstip vallen meegerekend.
+ */
+export function calcNettoHoursWithBreaks(
+  startTime: string | null,
+  endTime: string | null,
+  breaks: BreakPeriod[],
+  isWorkday: boolean,
+  endOverride?: string // "15:00" — voor partial day berekening
+): number {
+  if (!isWorkday || !startTime || !endTime) return 0;
+  const effectiveEnd = endOverride || endTime;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = effectiveEnd.split(':').map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  if (endMin <= startMin) return 0;
+
+  let breakMin = 0;
+  for (const b of breaks) {
+    const [bs, bsm] = b.start.split(':').map(Number);
+    const [be, bem] = b.end.split(':').map(Number);
+    const bStart = bs * 60 + bsm;
+    const bEnd = be * 60 + bem;
+    // Alleen pauzes die (deels) binnen de werkperiode vallen
+    const overlapStart = Math.max(bStart, startMin);
+    const overlapEnd = Math.min(bEnd, endMin);
+    if (overlapEnd > overlapStart) {
+      breakMin += overlapEnd - overlapStart;
+    }
+  }
+
+  return Math.max(0, (endMin - startMin - breakMin) / 60);
+}
+
+export function totalBreakMinutes(breaks: BreakPeriod[]): number {
+  let total = 0;
+  for (const b of breaks) {
+    const [bs, bsm] = b.start.split(':').map(Number);
+    const [be, bem] = b.end.split(':').map(Number);
+    total += (be * 60 + bem) - (bs * 60 + bsm);
+  }
+  return Math.max(0, total);
+}
+
+export const DEFAULT_WORK_SCHEDULE: Omit<WorkScheduleDay, 'id' | 'userId'>[] = [
+  { dayOfWeek: 0, isWorkday: false, startTime: null, endTime: null, breaks: [], nettoHours: 0 },
+  { dayOfWeek: 1, isWorkday: true, startTime: '07:30', endTime: '17:00', breaks: [{ start: '12:00', end: '12:30' }], nettoHours: 9 },
+  { dayOfWeek: 2, isWorkday: true, startTime: '07:30', endTime: '17:00', breaks: [{ start: '12:00', end: '12:30' }], nettoHours: 9 },
+  { dayOfWeek: 3, isWorkday: true, startTime: '07:30', endTime: '17:00', breaks: [{ start: '12:00', end: '12:30' }], nettoHours: 9 },
+  { dayOfWeek: 4, isWorkday: true, startTime: '07:30', endTime: '17:00', breaks: [{ start: '12:00', end: '12:30' }], nettoHours: 9 },
+  { dayOfWeek: 5, isWorkday: true, startTime: '07:30', endTime: '17:00', breaks: [{ start: '12:00', end: '12:30' }], nettoHours: 9 },
+  { dayOfWeek: 6, isWorkday: true, startTime: '07:30', endTime: '12:00', breaks: [], nettoHours: 4.5 },
+];
+
+export interface StopDayEntry {
+  date: string;           // YYYY-MM-DD
+  dayLabel: string;       // "Ma 7 apr"
+  hoursPerPerson: number;
+  peopleCount: number;
+  isWorkday: boolean;
+}
+
+// ============================================
 // Pest & Disease Library Types
 // ============================================
 

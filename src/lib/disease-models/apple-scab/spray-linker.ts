@@ -34,25 +34,30 @@ export async function fetchSprayEventsForParcel(
   harvestYear: number,
   supabase: SupabaseClient
 ): Promise<SprayEvent[]> {
-  // 1. Get sub-parcel IDs for this parcel (spuitschrift.plots contains sub-parcel IDs)
+  // 1. Get sub-parcel IDs for this parcel
   const { data: subParcels } = await supabase
     .from('sub_parcels')
     .select('id')
     .eq('parcel_id', parcelId);
 
-  const plotIds = [parcelId, ...(subParcels?.map((sp) => sp.id) ?? [])];
+  // plots can contain either parcel IDs or sub-parcel IDs depending on the input method
+  const matchIds = new Set([parcelId, ...(subParcels?.map((sp) => sp.id) ?? [])]);
 
-  // 2. Fetch spuitschrift records that include this parcel or any of its sub-parcels
-  // Supabase .contains() checks if array contains ALL values, but we need ANY match
-  // So we use .overlaps() which checks for ANY intersection
-  const { data: sprays } = await supabase
+  // 2. Fetch ALL sprays for this harvest year, then filter client-side
+  // (.overlaps() on TEXT[] can be unreliable with mixed ID types)
+  const { data: allSprays } = await supabase
     .from('spuitschrift')
     .select('id, date, plots, products, harvest_year')
     .eq('harvest_year', harvestYear)
-    .overlaps('plots', plotIds)
     .order('date');
 
-  if (!sprays || sprays.length === 0) return [];
+  // Filter: keep sprays where any plot ID matches our parcel or sub-parcels
+  const sprays = (allSprays ?? []).filter((s) => {
+    const plots = (s.plots as string[]) ?? [];
+    return plots.some((plotId) => matchIds.has(plotId));
+  });
+
+  if (sprays.length === 0) return [];
 
   // 2. Fetch all fungicide properties (small table, cache-friendly)
   const { data: fungicideRows } = await supabase

@@ -25,8 +25,13 @@ export async function GET(request: Request) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user)
-      return apiError('Unauthorized', ErrorCodes.UNAUTHORIZED, 401);
+    if (!user) {
+      // Fallback: try session (getUser can fail on edge cases with expired tokens)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        return apiError('Unauthorized', ErrorCodes.UNAUTHORIZED, 401);
+      }
+    }
 
     const { searchParams } = new URL(request.url);
     const parcelId = searchParams.get('parcel_id');

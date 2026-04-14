@@ -264,8 +264,9 @@ export async function calculateDiseaseResults(
     infectionPeriods,
     kpis,
     coverageTimeline: coverageTimeline.map((p) => ({
-      ...p,
-      timestamp: p.timestamp as unknown as Date, // Already Date objects
+      timestamp: p.timestamp instanceof Date ? p.timestamp.toISOString() : String(p.timestamp),
+      coveragePct: p.coveragePct,
+      product: p.product,
     })),
     infectionCoverage,
     sprayEvents: sprayEvents.map((s) => ({
@@ -476,7 +477,11 @@ async function loadCachedResults(
     seasonProgress,
     infectionPeriods,
     kpis,
-    coverageTimeline,
+    coverageTimeline: coverageTimeline.map((p) => ({
+      timestamp: p.timestamp instanceof Date ? p.timestamp.toISOString() : String(p.timestamp),
+      coveragePct: p.coveragePct,
+      product: p.product,
+    })),
     infectionCoverage,
     sprayEvents: sprayEvents.map((s) => ({
       date: s.date.toISOString(),

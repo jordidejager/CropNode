@@ -21,14 +21,14 @@ import type {
   SeasonProgressEntry,
   InfectionPeriod,
   MillsSeverity,
-  CoveragePoint,
+  CoveragePointSerialized,
   InfectionCoverage,
 } from '@/lib/disease-models/types';
 
 interface InfectionTimelineProps {
   seasonProgress: SeasonProgressEntry[];
   infectionPeriods: InfectionPeriod[];
-  coverageTimeline?: CoveragePoint[];
+  coverageTimeline?: CoveragePointSerialized[];
   infectionCoverage?: Record<string, InfectionCoverage>;
   sprayEvents?: { date: string; product: string }[];
 }
@@ -107,8 +107,7 @@ export function InfectionTimeline({
     const coverageByDate = new Map<string, number>();
     if (coverageTimeline) {
       for (const cp of coverageTimeline) {
-        const ts = typeof cp.timestamp === 'string' ? new Date(cp.timestamp) : cp.timestamp;
-        const date = format(ts, 'yyyy-MM-dd');
+        const date = cp.timestamp.split('T')[0];
         // Keep the latest value per day
         coverageByDate.set(date, cp.coveragePct);
       }

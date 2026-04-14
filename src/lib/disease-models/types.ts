@@ -84,7 +84,7 @@ export interface ZiektedrukResult {
   infectionPeriods: InfectionPeriod[];
   kpis: ZiektedrukKPIs;
   // Coverage data (Niveau 2)
-  coverageTimeline: CoveragePoint[];
+  coverageTimeline: CoveragePointSerialized[];
   infectionCoverage: Record<string, InfectionCoverage>; // keyed by wetPeriodStart
   sprayEvents: { date: string; product: string }[];
 }
@@ -121,8 +121,15 @@ export interface SprayEvent {
 }
 
 export interface CoveragePoint {
-  timestamp: Date;
+  timestamp: Date;               // Used internally during calculation
   coveragePct: number;           // 0-100
+  product: string;
+}
+
+/** Serialized version for API responses */
+export interface CoveragePointSerialized {
+  timestamp: string;             // ISO string
+  coveragePct: number;
   product: string;
 }
 

@@ -21,6 +21,7 @@ import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditL
 import { detectProductQuery, handleProductQuery } from './product-query-handler';
 import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
 import { isRagQueryIntent, handleRagQuery } from './rag-handler';
+import { isLikelyHoursRegistration, handleHoursRegistration } from './hours-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
   formatUnknownNumberMessage,
@@ -328,6 +329,12 @@ export async function handleIncomingMessage(
       const productQueryParams = detectProductQuery(messageText);
       if (productQueryParams) {
         await handleProductQuery(userId, e164Phone, messageText, productQueryParams);
+        return;
+      }
+
+      // Hours registration: "4 uur gesnoeid", "start snoeien", "stop"
+      if (isLikelyHoursRegistration(messageText)) {
+        await handleHoursRegistration(userId, e164Phone, messageText, waMessageId);
         return;
       }
 

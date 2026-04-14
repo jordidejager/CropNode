@@ -3,11 +3,11 @@
 import { Bug, ShieldAlert, Shield, Thermometer, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import type { ZiektedrukKPIs, CoveragePoint } from '@/lib/disease-models/types';
+import type { ZiektedrukKPIs, CoveragePointSerialized } from '@/lib/disease-models/types';
 
 interface SeasonSummaryProps {
   kpis: ZiektedrukKPIs;
-  coverageTimeline?: CoveragePoint[];
+  coverageTimeline?: CoveragePointSerialized[];
 }
 
 interface KPICardProps {

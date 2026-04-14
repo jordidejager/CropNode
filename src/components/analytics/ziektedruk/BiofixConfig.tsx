@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Calendar, Leaf, Settings2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Calendar, Leaf, Settings2, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
@@ -28,6 +28,7 @@ interface BiofixConfigProps {
   config: DiseaseModelConfig | null;
   onSave: (biofixDate: string, inoculumPressure: InoculumPressure) => Promise<void>;
   onRecalculate?: () => Promise<void>;
+  suggestedBiofixDate?: string | null; // YYYY-MM-DD, from phenology
 }
 
 const INOCULUM_LABELS: Record<InoculumPressure, string> = {
@@ -50,6 +51,7 @@ export function BiofixConfig({
   config,
   onSave,
   onRecalculate,
+  suggestedBiofixDate,
 }: BiofixConfigProps) {
   const [biofixDate, setBiofixDate] = useState<Date | undefined>(
     config?.biofix_date ? new Date(config.biofix_date + 'T12:00:00') : undefined
@@ -87,6 +89,17 @@ export function BiofixConfig({
             </p>
           </div>
         </div>
+
+        {/* Suggested date from phenology */}
+        {suggestedBiofixDate && !biofixDate && (
+          <button
+            onClick={() => setBiofixDate(new Date(suggestedBiofixDate + 'T12:00:00'))}
+            className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-400 hover:bg-emerald-500/15 transition-colors"
+          >
+            <Sparkles className="size-3.5" />
+            Suggestie op basis van bloeidata: {format(new Date(suggestedBiofixDate + 'T12:00:00'), 'd MMMM yyyy', { locale: nl })}
+          </button>
+        )}
 
         <div className="flex flex-wrap items-end gap-3">
           {/* Parcel selector */}

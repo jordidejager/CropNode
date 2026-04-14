@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Lock, MessageCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import Link from 'next/link';
+import { WorkScheduleSettings } from '@/components/urenregistratie/WorkScheduleSettings';
 
 export default function InstellingenPage() {
   const [showLocked, setShowLocked] = useState(false);
@@ -50,6 +51,9 @@ export default function InstellingenPage() {
             />
           </div>
         </div>
+
+        {/* Werkschema */}
+        <WorkScheduleSettings />
 
         {/* WhatsApp link */}
         <Link
