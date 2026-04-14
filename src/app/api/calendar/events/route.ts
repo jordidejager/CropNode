@@ -417,23 +417,20 @@ export async function GET(request: Request) {
     let weather: WeatherDay[] = [];
     if (includeWeather) {
       // Find user's first weather station via parcels → parcel_weather_stations
-      const { data: parcels, error: parcelsErr } = await supabase
+      const { data: parcels } = await supabase
         .from('parcels')
         .select('id')
         .eq('user_id', user.id)
         .limit(1);
 
-      console.log('[calendar/weather] parcels found:', parcels?.length ?? 0, parcelsErr?.message ?? '');
-
       let stationId: string | null = null;
       if (parcels && parcels.length > 0) {
-        const { data: link, error: linkErr } = await supabase
+        const { data: link } = await supabase
           .from('parcel_weather_stations')
           .select('station_id')
           .eq('parcel_id', parcels[0].id)
           .limit(1)
           .maybeSingle();
-        console.log('[calendar/weather] station link for parcel', parcels[0].id, ':', link?.station_id ?? 'none', linkErr?.message ?? '');
         stationId = link?.station_id ?? null;
       }
 
@@ -454,14 +451,13 @@ export async function GET(request: Request) {
               .maybeSingle();
             if (link2?.station_id) {
               stationId = link2.station_id;
-              console.log('[calendar/weather] found station via parcel', p.id, ':', stationId);
               break;
             }
           }
         }
       }
 
-      // Fallback: try weather_stations table directly (some users have stations without parcel link)
+      // Fallback: try weather_stations table directly
       if (!stationId) {
         const { data: directStations } = await supabase
           .from('weather_stations')
@@ -469,22 +465,17 @@ export async function GET(request: Request) {
           .limit(1);
         if (directStations && directStations.length > 0) {
           stationId = directStations[0].id;
-          console.log('[calendar/weather] fallback to direct station:', stationId);
         }
       }
 
-      console.log('[calendar/weather] final stationId:', stationId);
-
       if (stationId) {
-        const { data: weatherData, error: weatherErr } = await supabase
+        const { data: weatherData } = await supabase
           .from('weather_data_daily')
           .select('date, temp_min_c, temp_max_c, precipitation_sum, leaf_wetness_hrs')
           .eq('station_id', stationId)
           .gte('date', start)
           .lte('date', end)
           .order('date', { ascending: true });
-
-        console.log('[calendar/weather] weather rows:', weatherData?.length ?? 0, weatherErr?.message ?? '');
 
         weather = (weatherData || []).map((row: any) => ({
           date: row.date,

@@ -317,6 +317,12 @@ export function useSoilAnalyses(id: string | undefined, type: 'parcel' | 'sub_pa
         },
         enabled: !!id,
         staleTime: 60 * 1000,
+        // Poll elke 3s als er een analyse in 'processing' staat
+        refetchInterval: (query) => {
+            const data = query.state.data as any[] | undefined;
+            if (data?.some((a: any) => a.extractie_status === 'processing')) return 3000;
+            return false;
+        },
     });
 }
 
