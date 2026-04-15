@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import {
   ChevronDown, Save, Loader2, TreePine, Ruler, Settings2,
   Shield, Droplets, Mountain, Award, History, FileText, Sprout, X, Bug, Bird,
@@ -272,39 +273,70 @@ function WeightedComboboxField({
 
   return (
     <div className="space-y-2">
+      {/* Visual distribution bar */}
+      {value.length > 1 && (
+        <div className="flex h-3 rounded-full overflow-hidden bg-white/[0.04]">
+          {value.map((entry, i) => (
+            <div
+              key={i}
+              className="transition-all duration-300"
+              style={{
+                width: `${Math.max(entry.percentage, 2)}%`,
+                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'][i % 5],
+                opacity: entry.value ? 0.7 : 0.2,
+              }}
+              title={`${entry.value || '?'}: ${entry.percentage}%`}
+            />
+          ))}
+        </div>
+      )}
+
       {value.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2">
-          {/* Percentage */}
-          <div className="w-20 shrink-0">
-            <Input
-              type="number"
-              min={0}
+        <div key={i} className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            {/* Combobox */}
+            <div className="flex-1">
+              <ComboboxField
+                value={entry.value}
+                onChange={(v) => updateEntry(i, 'value', v)}
+                suggestions={suggestions}
+                placeholder={placeholder}
+              />
+            </div>
+
+            {/* Percentage input */}
+            <div className="w-16 shrink-0">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={entry.percentage}
+                onChange={(e) => updateEntry(i, 'percentage', e.target.value)}
+                className="bg-white/[0.03] border-white/[0.08] h-9 text-center text-sm font-mono"
+              />
+            </div>
+            <span className="text-[10px] text-white/30 shrink-0 w-3">%</span>
+
+            {/* Remove */}
+            <button
+              type="button"
+              onClick={() => removeEntry(i)}
+              className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Slider */}
+          <div className="pl-1 pr-10">
+            <Slider
+              value={[entry.percentage]}
+              onValueChange={(v) => updateEntry(i, 'percentage', v[0])}
               max={100}
-              value={entry.percentage}
-              onChange={(e) => updateEntry(i, 'percentage', e.target.value)}
-              className="bg-white/[0.03] border-white/[0.08] h-9 text-center text-sm font-mono"
+              step={5}
+              className="w-full"
             />
           </div>
-          <span className="text-xs text-white/30 shrink-0">%</span>
-
-          {/* Combobox */}
-          <div className="flex-1">
-            <ComboboxField
-              value={entry.value}
-              onChange={(v) => updateEntry(i, 'value', v)}
-              suggestions={suggestions}
-              placeholder={placeholder}
-            />
-          </div>
-
-          {/* Remove */}
-          <button
-            type="button"
-            onClick={() => removeEntry(i)}
-            className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         </div>
       ))}
 
