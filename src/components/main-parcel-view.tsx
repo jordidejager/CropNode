@@ -33,8 +33,7 @@ import {
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateSubParcel } from "@/lib/supabase-store"
-import { supabase } from "@/lib/supabase-client"
+// updateSubParcel + supabase client replaced by server-side API route
 import { RAS_SUGGESTIES } from "@/lib/parcel-profile-constants"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
@@ -85,37 +84,14 @@ export function MainParcelView({
     const handleSaveEdit = React.useCallback(async () => {
         setEditSaving(true)
         try {
-            const oldVariety = parcel.variety
-            const oldCrop = parcel.crop
-
-            // 1. Update sub_parcels (bron van waarheid)
-            await updateSubParcel({
-                id: parcel.id,
-                crop: editCrop,
-                variety: editVariety,
-                area: Number(editArea) || 0,
+            // Server-side cascade: update sub_parcel + parcel_history + cell_sub_parcels in één API call
+            const res = await fetch(`/api/parcels/${parcel.id}/update-details`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ crop: editCrop, variety: editVariety, area: Number(editArea) || 0 }),
             })
-
-            // 2. Cascade: update ALLE tabellen die variety/crop als string kopie opslaan
-            if (oldVariety !== editVariety || oldCrop !== editCrop) {
-                // Spuitregistratie history
-                await supabase
-                    .from('parcel_history')
-                    .update({ variety: editVariety, crop: editCrop })
-                    .eq('parcel_id', parcel.id)
-
-                // Opslag registraties
-                await supabase
-                    .from('cell_sub_parcels')
-                    .update({ variety: editVariety })
-                    .eq('sub_parcel_id', parcel.id)
-
-                // Productie/oogst samenvattingen
-                await supabase
-                    .from('production_summaries')
-                    .update({ variety: editVariety })
-                    .eq('sub_parcel_id', parcel.id)
-            }
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.error || 'Opslaan mislukt')
 
             await invalidateParcels()
             toast({ title: 'Opgeslagen', description: 'Perceel gegevens zijn overal bijgewerkt.' })
