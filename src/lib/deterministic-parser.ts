@@ -50,6 +50,11 @@ export interface DeterministicParseResult {
 // Crop / variety keywords that should NOT be treated as product names
 // ============================================================================
 
+/** Strip diacritics/accents for fuzzy matching: "Doyenné" → "Doyenne" */
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 // Words that should NOT be treated as product names (used in extractProducts)
 const PRODUCT_STOP_WORDS = new Set([
   'alle', 'de', 'mijn', 'het', 'op', 'voor', 'met', 'en', 'ook',
@@ -677,14 +682,14 @@ export function resolveParcelsByText(
   if (result.ids.length === 0) {
     const locationVarietyMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(\w+)\s+(\w[\w\s]*?)$/);
     if (locationVarietyMatch) {
-      const varietySearch = locationVarietyMatch[1].toLowerCase();
+      const varietySearch = stripAccents(locationVarietyMatch[1].toLowerCase());
       const locName = locationVarietyMatch[2].trim();
       const locParcels = locations.get(locName);
       if (locParcels && locParcels.length > 0) {
-        const varietyHits = locParcels.filter(p =>
-          p.variety?.toLowerCase() === varietySearch ||
-          p.variety?.toLowerCase().includes(varietySearch)
-        );
+        const varietyHits = locParcels.filter(p => {
+          const v = stripAccents(p.variety?.toLowerCase() || '');
+          return v === varietySearch || v.includes(varietySearch);
+        });
         if (varietyHits.length > 0) {
           result.ids = varietyHits.map(p => p.id);
           result.matchType = `location_variety:${locName}:${varietySearch}`;
@@ -721,17 +726,17 @@ export function resolveParcelsByText(
     }
   }
   else {
-    // Try variety match: "alle conference" / "de elstar"
+    // Try variety match: "alle conference" / "de elstar" / "alle doyenne"
     // BUT: skip if text has "en"-separated parts (e.g., "alle tessa en thuis appels en jonagold spoor")
     // In that case, the name prefix search below handles multi-part resolution correctly.
     const hasEnSeparator = /\s+en\s+/.test(baseText);
     const varietyMatch = baseText.match(/\b(?:alle?|de|mijn)\s+(\w+)\b/);
     if (varietyMatch && !hasEnSeparator) {
-      const search = varietyMatch[1].toLowerCase();
-      const varietyHits = parcels.filter(p =>
-        p.variety?.toLowerCase() === search ||
-        p.variety?.toLowerCase().includes(search)
-      );
+      const search = stripAccents(varietyMatch[1].toLowerCase());
+      const varietyHits = parcels.filter(p => {
+        const v = stripAccents(p.variety?.toLowerCase() || '');
+        return v === search || v.includes(search);
+      });
       if (varietyHits.length > 0) {
         result.ids = varietyHits.map(p => p.id);
         result.matchType = `variety:${search}`;
@@ -755,15 +760,15 @@ export function resolveParcelsByText(
       const parts = baseText.split(/\s+en\s+|\s*\+\s*|\s*,\s*/).map(s => s.replace(/^(?:de|het|alle?)\s+/i, '').trim()).filter(s => s.length >= 3);
 
       for (const part of parts) {
-        // Split multi-word part into individual search words (e.g., "steketee tessa" → ["steketee", "tessa"])
+        // Split multi-word part into search words, strip accents for matching
         // Use PARCEL_SEARCH_STOP_WORDS (NOT PRODUCT_STOP_WORDS!) to keep parcel/variety names
-        const searchWords = part.split(/\s+/).filter(w => w.length >= 3 && !PARCEL_SEARCH_STOP_WORDS.has(w));
+        const searchWords = part.split(/\s+/).filter(w => w.length >= 3 && !PARCEL_SEARCH_STOP_WORDS.has(w)).map(w => stripAccents(w));
 
         const hits = parcels.filter(p => {
-          const name = p.name.toLowerCase();
+          const name = stripAccents(p.name.toLowerCase());
           const firstWord = name.split(' ')[0];
-          const variety = p.variety?.toLowerCase() || '';
-          const parcelName = (p as any).parcelName?.toLowerCase() || '';
+          const variety = stripAccents(p.variety?.toLowerCase() || '');
+          const parcelName = stripAccents((p as any).parcelName?.toLowerCase() || '');
 
           // Helper: word-boundary-aware match to prevent "murre 1" matching "murre 10"
           const wordMatch = (haystack: string, needle: string) => {
