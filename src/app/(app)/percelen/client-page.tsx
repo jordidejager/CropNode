@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel";
+import { ParcelComparisonModal } from "@/components/domain/parcel-comparison-modal";
 import { ParcelFormDialog, type RvoData } from "@/components/parcel-form-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TableSkeleton, ErrorState, EmptyState } from "@/components/ui/data-states";
@@ -74,6 +75,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [pendingSubParcels, setPendingSubParcels] = useState<Omit<SubParcel, 'id' | 'parcelId' | 'createdAt' | 'updatedAt'>[]>([]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const [onboardingParcel, setOnboardingParcel] = useState<any>(null);
   const [mapOverlay, setMapOverlay] = useState<'standaard' | 'laatste_spray' | 'bodem_ph' | 'ziektedruk'>('standaard');
   const [formSource, setFormSource] = useState<"RVO_IMPORT" | "MANUAL">("RVO_IMPORT");
@@ -1075,6 +1077,14 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                   <div className="w-px h-5 bg-white/10" />
 
                   {/* Actions */}
+                  {selectedParcelIds.size >= 2 && selectedParcelIds.size <= 4 && (
+                    <button
+                      onClick={() => setShowComparison(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/15 text-blue-400 text-xs font-bold hover:bg-blue-500/25 transition-all"
+                    >
+                      Vergelijk
+                    </button>
+                  )}
                   <button
                     onClick={() => { setGroupInitialSelectedIds(new Set(selectedParcelIds)); setIsGroupDialogOpen(true); }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/15 text-primary text-xs font-bold hover:bg-primary/25 transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
@@ -1288,6 +1298,12 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
           invalidateParcels();
           toast({ title: 'Percelen samengevoegd', description: 'De percelenlijst is bijgewerkt.' });
         }}
+      />
+
+      <ParcelComparisonModal
+        open={showComparison}
+        onOpenChange={setShowComparison}
+        parcels={parcels.filter(p => selectedParcelIds.has(p.id))}
       />
     </div>
   );
