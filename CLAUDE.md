@@ -525,6 +525,76 @@ Collapsible accordion per hoofdperceel:
 - Eye-knop → hoofdperceel overview met grondmonster upload
 - Checkbox selectie op groep- en individueel niveau
 
+## WhatsApp Bot (`src/lib/whatsapp/`)
+
+CropNode WhatsApp bot via Meta Cloud API. Farmers register sprays, take field notes, and query product info — all via WhatsApp.
+
+### Architecture
+```
+Webhook (POST /api/whatsapp/webhook)
+  → HMAC-SHA256 signature verification
+  → message-handler.ts (state machine)
+    → registration-processor.ts (spray/fertilizer → shared V3 pipeline)
+    → field-note-processor.ts (notes, photos, GPS)
+    → product-query-handler.ts (product info lookup)
+    → weather-query-handler.ts (14-day forecast)
+    → edit-handler.ts (interactive list menus for editing)
+    → confirmation-handler.ts (save to spuitschrift + parcel_history)
+```
+
+### State Machine
+| State | Trigger | Next |
+|-------|---------|------|
+| `idle` | text message | → intent routing (spray/note/product/weather) |
+| `awaiting_confirmation` | Verzenden/Wijzigen/Annuleren | → send_choice/edit/cancelled |
+| `awaiting_send_choice` | Veldnotitie/Spuitschrift | → save note / save both |
+| `awaiting_edit_choice` | Datum/Middelen/Percelen | → awaiting_edit_input |
+| `awaiting_edit_input` | list reply or free text | → awaiting_confirmation |
+| `awaiting_product_selection` | product button | → awaiting_confirmation |
+| `awaiting_gps` | location message | → attach GPS to note |
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `message-handler.ts` | State machine + intent routing |
+| `registration-processor.ts` | Spray parsing via shared `registration-pipeline.ts` |
+| `field-note-processor.ts` | Field notes + GPS + photo upload + AI classification |
+| `product-query-handler.ts` | Product info via `fn_search_products` RPC |
+| `weather-query-handler.ts` | 14-day forecast with chart image |
+| `edit-handler.ts` | Interactive list menus for datum/middelen/percelen |
+| `confirmation-handler.ts` | Save to spuitschrift + parcel_history + cache invalidation |
+| `product-selection-handler.ts` | CTGB product fuzzy match buttons |
+| `client.ts` | Meta Cloud API: text, buttons, list, location request |
+| `store.ts` | Supabase admin client: conversations, message log, parcels |
+| `format.ts` | WhatsApp message formatting (1024 char limit for buttons) |
+| `media.ts` | Photo download from Meta + upload to Supabase Storage |
+
+### Intent Routing (no AI needed)
+1. `isFieldNoteIntent()` — keyword prefixes (notitie:, herinnering:), observation words, reminder words, future dates without dosage
+2. `detectProductQuery()` — "wat is X", "info X", "dosering X op appel"
+3. `isWeatherQueryIntent()` — "weersverwachting", "14 daagse"
+4. Fallback → `processNewRegistration()` → shared V3 pipeline
+
+### Database Tables
+- `whatsapp_linked_numbers` — phone→user mapping, max 5 per account
+- `whatsapp_conversations` — state machine, pending registration JSONB, expires_at
+- `whatsapp_message_log` — audit trail, no RLS (service_role only)
+
+### Env Variables
+```env
+WHATSAPP_ACCESS_TOKEN=     # Meta permanent system user token
+WHATSAPP_PHONE_NUMBER_ID=  # Meta phone number ID
+WHATSAPP_VERIFY_TOKEN=     # Webhook verification token
+WHATSAPP_APP_SECRET=       # HMAC-SHA256 signature verification
+```
+
+### Key Constraints
+- Interactive button body: max **1024 chars**
+- Button title: max **20 chars**
+- List message: max **10 rows total** across all sections
+- EXIF GPS stripped by WhatsApp → use `location_request_message` for one-tap GPS
+- In-memory state doesn't survive Vercel serverless → use DB queries
+
 ## Development Commands
 
 ```bash
