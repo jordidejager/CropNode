@@ -1,31 +1,192 @@
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
+import { DEFAULT_WORK_SCHEDULE, calcNettoHoursWithBreaks, type ActiveTaskSession, type WorkScheduleDay } from "@/lib/types"
 
 /**
- * Bereken werkdagen tussen twee datums
- * - Zondag = 0 dagen
- * - Zaterdag = 0.5 dag
- * - Ma-Vr = 1 dag
+ * Haal dag-gewicht uit werkschema: netto-uren gedeeld door de langste werkdag
+ * in het schema. Zo is een halve werkdag 0,5 en een rustdag 0.
+ *
+ * Als er geen schema is meegegeven, valt het terug op DEFAULT_WORK_SCHEDULE
+ * (ma-vr = 1, za = 0,5, zo = 0 — de oude vaste regel).
  */
-export function calculateWorkDays(startDate: Date, endDate: Date): number {
+export function getDayWeight(
+    dayOfWeek: number,
+    schedule?: WorkScheduleDay[],
+): number {
+    const sched = (schedule && schedule.length > 0) ? schedule : DEFAULT_WORK_SCHEDULE
+    const day = sched.find(s => s.dayOfWeek === dayOfWeek)
+        ?? DEFAULT_WORK_SCHEDULE.find(s => s.dayOfWeek === dayOfWeek)
+
+    if (!day || !day.isWorkday) return 0
+
+    const maxNetto = Math.max(
+        ...sched
+            .filter(s => s.isWorkday)
+            .map(s => s.nettoHours || 0),
+        0,
+    )
+
+    if (maxNetto <= 0) return day.isWorkday ? 1 : 0
+
+    // Rond naar 0.25 voor nette gewichten (0, 0.25, 0.5, 0.75, 1)
+    const weight = (day.nettoHours || 0) / maxNetto
+    return Math.round(weight * 4) / 4
+}
+
+/**
+ * Bereken werkdagen tussen twee datums, op basis van werkschema.
+ * Zonder schema: default-regel (ma-vr=1, za=0,5, zo=0).
+ */
+export function calculateWorkDays(
+    startDate: Date,
+    endDate: Date,
+    schedule?: WorkScheduleDay[],
+): number {
     if (startDate > endDate) return 0
 
     let days = 0
     const current = new Date(startDate)
 
     while (current <= endDate) {
-        const dayOfWeek = current.getDay()
-        if (dayOfWeek === 0) {
-            days += 0
-        } else if (dayOfWeek === 6) {
-            days += 0.5
-        } else {
-            days += 1
-        }
+        days += getDayWeight(current.getDay(), schedule)
         current.setDate(current.getDate() + 1)
     }
 
     return days
+}
+
+const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag']
+const DAY_SHORT = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za']
+
+/**
+ * Genereer een leesbare regel die laat zien hoe dagen gewogen worden
+ * volgens het schema. Voorbeeld: "ma-vr: 1 · za: 0,5 · zo: —"
+ */
+export function describeSchedule(schedule?: WorkScheduleDay[]): string {
+    const weights: number[] = []
+    for (let i = 0; i < 7; i++) {
+        weights.push(getDayWeight(i, schedule))
+    }
+    // dayOfWeek 0 = zondag; we tonen ma-zo voor leesbaarheid.
+    const order = [1, 2, 3, 4, 5, 6, 0]
+    const labels = order.map(i => weights[i])
+
+    // Detecteer "ma-vr gelijk" → samenvatten
+    const weekdays = labels.slice(0, 5)
+    const allSame = weekdays.every(w => w === weekdays[0])
+
+    const parts: string[] = []
+    const fmt = (w: number) => w === 0 ? '—' : w.toString().replace('.', ',')
+
+    if (allSame) {
+        parts.push(`ma-vr: ${fmt(weekdays[0])}`)
+    } else {
+        for (let i = 0; i < 5; i++) {
+            parts.push(`${DAY_SHORT[order[i]]}: ${fmt(labels[i])}`)
+        }
+    }
+    parts.push(`za: ${fmt(labels[5])}`)
+    parts.push(`zo: ${fmt(labels[6])}`)
+    return parts.join(' · ')
+}
+
+// Houd DAY_NAMES export mogelijk voor hergebruik
+export { DAY_NAMES }
+
+/**
+ * Bereken verstreken netto werkuren per bucket voor één actieve sessie.
+ *
+ * Nodig omdat `getTaskStats()` in de DB alleen afgeronde `task_logs` telt —
+ * een lopende timer van 40+ uur blijft dan onzichtbaar in de KPI's. Met deze
+ * helper tellen we de live-verstreken werkuren (per persoon × aantal personen)
+ * mee op het dashboard.
+ *
+ * - `todayHours`: uren gemaakt vandaag (incl. netto per schema, tot nu)
+ * - `weekHours`:  uren over de afgelopen 7 dagen (rollend, inclusief vandaag)
+ * - `monthCost`:  geschatte kosten over de afgelopen 30 dagen (rollend)
+ *
+ * Werkt per kalenderdag, met dezelfde logica als de live-meter in
+ * ActiveSessions (startdag vanaf start_time, huidige dag afgekapt op nu).
+ */
+export interface ActiveSessionContribution {
+    todayHours: number
+    weekHours: number
+    monthCost: number
+}
+
+function pad2(n: number): string {
+    return n.toString().padStart(2, '0')
+}
+
+export function calcActiveSessionContribution(
+    session: ActiveTaskSession,
+    schedule: WorkScheduleDay[],
+): ActiveSessionContribution {
+    const now = new Date()
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+
+    const weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 6) // 7 dagen inclusief vandaag
+
+    const monthAgo = new Date(today)
+    monthAgo.setDate(monthAgo.getDate() - 29) // 30 dagen inclusief vandaag
+
+    const startTime = new Date(session.startTime)
+    const startDay = new Date(startTime)
+    startDay.setHours(0, 0, 0, 0)
+
+    let todayHours = 0
+    let weekHours = 0
+    let monthCost = 0
+
+    const cur = new Date(startDay)
+    while (cur <= today) {
+        const dow = cur.getDay()
+        const sched = schedule.find(s => s.dayOfWeek === dow)
+            ?? DEFAULT_WORK_SCHEDULE.find(s => s.dayOfWeek === dow)
+
+        if (sched?.isWorkday && sched.startTime && sched.endTime) {
+            const isStartDay = cur.getTime() === startDay.getTime()
+            const isToday = cur.getTime() === today.getTime()
+
+            const effectiveStart = isStartDay
+                ? `${pad2(startTime.getHours())}:${pad2(startTime.getMinutes())}`
+                : sched.startTime
+
+            let hours = 0
+            if (isToday) {
+                const nowStr = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+                const endCap = nowStr < sched.endTime ? nowStr : sched.endTime
+                if (endCap > effectiveStart) {
+                    hours = calcNettoHoursWithBreaks(
+                        effectiveStart,
+                        sched.endTime,
+                        sched.breaks || [],
+                        true,
+                        endCap,
+                    )
+                }
+            } else {
+                hours = calcNettoHoursWithBreaks(
+                    effectiveStart,
+                    sched.endTime,
+                    sched.breaks || [],
+                    true,
+                )
+            }
+            hours = Math.max(0, Math.round(hours * 2) / 2)
+            const dayTotalHours = session.peopleCount * hours
+            const dayCost = dayTotalHours * (session.defaultHourlyRate || 0)
+
+            if (isToday) todayHours += dayTotalHours
+            if (cur.getTime() >= weekAgo.getTime()) weekHours += dayTotalHours
+            if (cur.getTime() >= monthAgo.getTime()) monthCost += dayCost
+        }
+        cur.setDate(cur.getDate() + 1)
+    }
+
+    return { todayHours, weekHours, monthCost }
 }
 
 /**

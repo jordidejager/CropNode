@@ -76,6 +76,29 @@ import {
     deleteHarvestRegistration,
     linkCellSubParcelToHarvest,
     getHarvestSeasons,
+    // Afzetstromen (migration 057)
+    getBatches,
+    getBatchById,
+    createBatch,
+    updateBatch,
+    deleteBatch,
+    getBatchEvents,
+    getBatchEventsByType,
+    createBatchEvent,
+    updateBatchEvent,
+    deleteBatchEvent,
+    getBatchDocuments,
+    createBatchDocumentRecord,
+    updateBatchDocument,
+    deleteBatchDocument,
+    getBatchDocumentSignedUrl,
+    getBatchSeasons,
+    getKnownVarieties,
+    getKnownHarvestYears,
+    getBatchParcels,
+    addBatchParcels,
+    updateBatchParcel,
+    deleteBatchParcel,
     type SprayableParcel,
 } from '@/lib/supabase-store';
 import {
@@ -107,6 +130,16 @@ import type {
     PositionStack,
     HarvestRegistration,
     HarvestRegistrationInput,
+    Batch,
+    BatchInput,
+    BatchStatus,
+    BatchEvent,
+    BatchEventInput,
+    BatchEventType,
+    BatchDocument,
+    BatchParcelLink,
+    BatchParcelLinkInput,
+    BatchDocumentInput,
 } from '@/lib/types';
 
 // ============================================
@@ -197,6 +230,21 @@ export const queryKeys = {
     harvestRegistration: (id: string) => ['harvest-registrations', id] as const,
     availableHarvestsForStorage: ['harvest-registrations', 'available'] as const,
     harvestSeasons: ['harvest-seasons'] as const,
+
+    // Afzetstromen (migration 057)
+    batches: ['batches'] as const,
+    batchesFiltered: (filter: Record<string, unknown>) => ['batches', 'filter', filter] as const,
+    batch: (id: string) => ['batches', id] as const,
+    batchEvents: (batchId: string) => ['batch-events', batchId] as const,
+    batchEventsByType: (type: string, filter?: Record<string, unknown>) =>
+        ['batch-events', 'type', type, filter] as const,
+    batchDocuments: (batchId: string | null) =>
+        ['batch-documents', batchId ?? 'inbox'] as const,
+    batchDocumentsInbox: ['batch-documents', 'inbox'] as const,
+    batchSeasons: ['batch-seasons'] as const,
+    knownVarieties: ['known-varieties'] as const,
+    knownHarvestYears: ['known-harvest-years'] as const,
+    batchParcels: (batchId: string) => ['batch-parcels', batchId] as const,
 };
 
 // ============================================
@@ -1565,5 +1613,346 @@ export function useLinkCellSubParcelToHarvest() {
             queryClient.invalidateQueries({ queryKey: queryKeys.availableHarvestsForStorage });
             queryClient.invalidateQueries({ queryKey: queryKeys.cellSubParcels(cellId) });
         },
+    });
+}
+
+// ============================================
+// Afzetstromen Hooks (migration 057)
+// ============================================
+
+export function useBatches(options?: {
+    season?: string;
+    harvestYear?: number;
+    status?: BatchStatus;
+    search?: string;
+}) {
+    return useQuery({
+        queryKey: options && Object.keys(options).length > 0
+            ? queryKeys.batchesFiltered(options as Record<string, unknown>)
+            : queryKeys.batches,
+        queryFn: () => getBatches(options),
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useBatch(id: string | undefined) {
+    return useQuery({
+        queryKey: queryKeys.batch(id || ''),
+        queryFn: () => (id ? getBatchById(id) : null),
+        enabled: !!id,
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useBatchSeasons() {
+    return useQuery({
+        queryKey: queryKeys.batchSeasons,
+        queryFn: getBatchSeasons,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useKnownVarieties() {
+    return useQuery({
+        queryKey: queryKeys.knownVarieties,
+        queryFn: getKnownVarieties,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useKnownHarvestYears() {
+    return useQuery({
+        queryKey: queryKeys.knownHarvestYears,
+        queryFn: getKnownHarvestYears,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+// ----- batch_parcels (m:m partij ↔ (sub)perceel) -----
+
+export function useBatchParcels(batchId: string | null | undefined) {
+    return useQuery<BatchParcelLink[]>({
+        queryKey: queryKeys.batchParcels(batchId ?? ''),
+        queryFn: () => getBatchParcels(batchId as string),
+        enabled: !!batchId,
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useAddBatchParcels() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            batchId,
+            items,
+        }: {
+            batchId: string;
+            items: BatchParcelLinkInput[];
+        }) => addBatchParcels(batchId, items),
+        onSuccess: (_, { batchId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchParcels(batchId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batch(batchId) });
+        },
+    });
+}
+
+export function useUpdateBatchParcel() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            id,
+            batchId,
+            updates,
+        }: {
+            id: string;
+            batchId: string;
+            updates: Partial<BatchParcelLinkInput>;
+        }) => updateBatchParcel(id, updates),
+        onSuccess: (_, { batchId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchParcels(batchId) });
+        },
+    });
+}
+
+export function useDeleteBatchParcel() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id }: { id: string; batchId: string }) => deleteBatchParcel(id),
+        onSuccess: (_, { batchId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchParcels(batchId) });
+        },
+    });
+}
+
+// ----- Sorteerrapport upload + AI-extractie → batch in één stap -----
+
+export interface ExtractSorteerrapportResult {
+    batchId: string;
+    label: string | null;
+    matchedParcel: {
+        parcelId: string;
+        subParcelId: string | null;
+        parcelName: string;
+        subParcelName: string | null;
+    } | null;
+    confidence: number;
+    sizesFound: number;
+    totalKg: number | null;
+    totalRevenueEur: number | null;
+    sortCostEur: number | null;
+    extraction: unknown;
+}
+
+export function useExtractSorteerrapport() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (file: File) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch('/api/afzetstromen/extract-sorteerrapport', {
+                method: 'POST',
+                body: formData,
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'AI-extractie mislukt');
+            return json.data as ExtractSorteerrapportResult;
+        },
+        onSuccess: (result) => {
+            // Nieuwe partij + events + koppeling → invalideer alles rond batches
+            queryClient.invalidateQueries({ queryKey: ['batches'], refetchType: 'all' });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchSeasons });
+            queryClient.invalidateQueries({ queryKey: queryKeys.knownVarieties });
+            queryClient.invalidateQueries({ queryKey: queryKeys.knownHarvestYears });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchEvents(result.batchId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchParcels(result.batchId) });
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.batchDocuments(result.batchId),
+            });
+        },
+    });
+}
+
+export function useCreateBatch() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (input: BatchInput) => createBatch(input),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batches });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchSeasons });
+        },
+    });
+}
+
+export function useUpdateBatch() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<BatchInput> }) =>
+            updateBatch(id, updates),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batches });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batch(id) });
+        },
+    });
+}
+
+export function useDeleteBatch() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => deleteBatch(id),
+        onSuccess: (_, id) => {
+            // Remove from all cached batch lists immediately (covers filtered variants too)
+            queryClient.setQueriesData<Batch[] | undefined>(
+                { queryKey: ['batches'] },
+                (old) => {
+                    if (!Array.isArray(old)) return old;
+                    return old.filter((b) => b.id !== id);
+                }
+            );
+            // Drop the single-batch cache entry
+            queryClient.removeQueries({ queryKey: queryKeys.batch(id) });
+            // Force refetch of any active list queries
+            queryClient.invalidateQueries({ queryKey: ['batches'], refetchType: 'all' });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchSeasons });
+            queryClient.invalidateQueries({ queryKey: queryKeys.knownVarieties });
+            queryClient.invalidateQueries({ queryKey: queryKeys.knownHarvestYears });
+        },
+    });
+}
+
+export function useBatchEvents(batchId: string | undefined) {
+    return useQuery({
+        queryKey: queryKeys.batchEvents(batchId || ''),
+        queryFn: () => (batchId ? getBatchEvents(batchId) : Promise.resolve([])),
+        enabled: !!batchId,
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useBatchEventsByType(
+    type: BatchEventType,
+    options?: { season?: string; harvestYear?: number }
+) {
+    return useQuery({
+        queryKey: queryKeys.batchEventsByType(type, options as Record<string, unknown> | undefined),
+        queryFn: () => getBatchEventsByType(type, options),
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useCreateBatchEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (input: BatchEventInput) => createBatchEvent(input),
+        onSuccess: (_, input) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchEvents(input.batchId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batches });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batch(input.batchId) });
+            queryClient.invalidateQueries({ queryKey: ['batch-events', 'type'] });
+        },
+    });
+}
+
+export function useUpdateBatchEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            id,
+            batchId,
+            updates,
+        }: {
+            id: string;
+            batchId: string;
+            updates: Partial<Omit<BatchEventInput, 'batchId'>>;
+        }) => updateBatchEvent(id, updates),
+        onSuccess: (_, { batchId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchEvents(batchId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batches });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batch(batchId) });
+            queryClient.invalidateQueries({ queryKey: ['batch-events', 'type'] });
+        },
+    });
+}
+
+export function useDeleteBatchEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, batchId }: { id: string; batchId: string }) => deleteBatchEvent(id),
+        onSuccess: (_, { batchId }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchEvents(batchId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batches });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batch(batchId) });
+            queryClient.invalidateQueries({ queryKey: ['batch-events', 'type'] });
+        },
+    });
+}
+
+export function useBatchDocuments(options?: { batchId?: string | null; onlyInbox?: boolean }) {
+    const key = options?.onlyInbox
+        ? queryKeys.batchDocumentsInbox
+        : queryKeys.batchDocuments(options?.batchId ?? null);
+    return useQuery({
+        queryKey: key,
+        queryFn: () => getBatchDocuments(options),
+        staleTime: 30 * 1000,
+    });
+}
+
+export function useUploadBatchDocument() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (params: {
+            file: File;
+            batchId?: string | null;
+            documentType?: BatchDocumentInput['documentType'];
+            notes?: string | null;
+        }) => {
+            const formData = new FormData();
+            formData.append('file', params.file);
+            if (params.batchId) formData.append('batchId', params.batchId);
+            if (params.documentType) formData.append('documentType', params.documentType);
+            if (params.notes) formData.append('notes', params.notes);
+            const res = await fetch('/api/afzetstromen/documents/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || 'Upload mislukt');
+            return json.data as BatchDocument;
+        },
+        onSuccess: (_, params) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchDocuments(params.batchId ?? null) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchDocumentsInbox });
+        },
+    });
+}
+
+export function useUpdateBatchDocument() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string; updates: Partial<BatchDocumentInput> }) =>
+            updateBatchDocument(id, updates),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchDocumentsInbox });
+            if (data.batchId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.batchDocuments(data.batchId) });
+            }
+        },
+    });
+}
+
+export function useDeleteBatchDocument() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => deleteBatchDocument(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.batchDocumentsInbox });
+            queryClient.invalidateQueries({ queryKey: ['batch-documents'] });
+        },
+    });
+}
+
+export function useBatchDocumentDownload() {
+    return useMutation({
+        mutationFn: (storagePath: string) => getBatchDocumentSignedUrl(storagePath),
     });
 }

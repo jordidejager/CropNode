@@ -35,13 +35,13 @@ const modules = [
   {
     id: 'whatsapp',
     icon: MessageCircle,
-    title: 'WhatsApp Bot',
+    title: 'CropNode Assistent',
     color: 'green',
     description: 'Registreer via WhatsApp — stuur, valideer, bevestig',
-    detail: 'De CropNode Assistent verwerkt je berichten in natuurlijke taal. Stuur een bespuiting of veldnotitie, ontvang een CTGB-gevalideerd overzicht, en bevestig met één tap. Gratis via Meta Cloud API.',
+    detail: 'AI-assistent via WhatsApp: bespuitingen, veldnotities met foto/GPS, productinfo-queries en 14-daagse weersverwachting met grafiek. Stuur een bericht, ontvang CTGB-gevalideerd overzicht, bevestig met één tap.',
     metrics: [
       { label: 'Kosten', value: 'Gratis' },
-      { label: 'Validatie', value: 'CTGB ✓' },
+      { label: 'Functies', value: '4 intents' },
       { label: 'Nummers', value: '5 per account' },
     ],
   },
@@ -64,11 +64,11 @@ const modules = [
     title: 'Percelen',
     color: 'amber',
     description: 'Kaart met blokindeling en RVO-import',
-    detail: 'Twee-laags hiërarchie met ras, onderstam, plantjaar en gewogen samenstellingen. Lijst- en kaartweergave. Importeer direct vanuit RVO/PDOK.',
+    detail: 'Twee-laags perceelhiërarchie op luchtfoto met 10-secties profiel: ras, onderstam, plantverband, teeltsysteem, bodemkenmerken en meer. Grondmonster-upload (Eurofins PDF → AI-extractie). Directe RVO/PDOK import.',
     metrics: [
-      { label: 'Kaart precisie', value: 'GPS exact' },
+      { label: 'Profiel secties', value: '10 secties' },
       { label: 'Import bron', value: 'RVO / PDOK' },
-      { label: 'Blok niveaus', value: '2 lagen' },
+      { label: 'Grondmonster', value: 'AI extractie' },
     ],
   },
   {
@@ -102,12 +102,12 @@ const modules = [
     icon: Database,
     title: 'Analytics',
     color: 'teal',
-    description: 'Seizoensdashboard, kosten & ziektedruk',
-    detail: 'Inputkosten, kosten per hectare, behandeloverzichten en kostenverdeling per perceel. Plus ziektedrukanalyse voor slimmere beslissingen.',
+    description: 'Seizoensdashboard, kosten, ziektedruk & AI inzichten',
+    detail: 'Inputkosten, kosten/ha, productietrends, bodemkwaliteit uit grondmonsters, ziektedrukmodellering (appelschurft) en AI-correlatie-engine die automatisch verbanden vindt in al je bedrijfsdata.',
     metrics: [
-      { label: 'Overzicht', value: 'Per seizoen' },
-      { label: 'Kosten', value: 'Per ha' },
-      { label: 'Ziektedruk', value: 'Real-time' },
+      { label: 'Subpaginas', value: '5 dashboards' },
+      { label: 'AI inzichten', value: 'Gemini' },
+      { label: 'Ziektedruk', value: 'Mills + PAM' },
     ],
   },
   {
@@ -115,12 +115,12 @@ const modules = [
     icon: BookOpen,
     title: 'Kennisbank',
     color: 'purple',
-    description: 'Ziekten & plagen, papers & artikelen',
-    detail: 'Encyclopedie met 20+ ziekten en plagen inclusief lifecycle-timelines, risiconiveaus en bestrijdingsmethoden. Plus wetenschappelijke papers en praktijkartikelen.',
+    description: 'Encyclopedie, RAG-artikelen & papers',
+    detail: 'Encyclopedie met 20+ ziekten & plagen met lifecycle-timelines en risiconiveaus. RAG-powered artikelen (wekelijks gescraped en geëmbed) met semantisch zoeken. Papers met AI-samenvattingen.',
     metrics: [
       { label: 'Encyclopedie', value: '20+ items' },
-      { label: 'Seizoensfilter', value: 'Automatisch' },
-      { label: 'Updates', value: 'Continu' },
+      { label: 'Artikelen', value: 'RAG zoeken' },
+      { label: 'Updates', value: 'Wekelijks' },
     ],
   },
   {
@@ -128,12 +128,38 @@ const modules = [
     icon: Users,
     title: 'Urenregistratie',
     color: 'blue',
-    description: 'Live timer met kostenberekening',
-    detail: 'Registreer uren per taak, per perceel, per persoon. Met automatische pauze-aftrek, werkdag-weging en kostenrapportages per periode.',
+    description: 'Live timer, werkschema & kostenanalyse',
+    detail: 'Quick-start timer met taaktypen, perceelkoppeling en personeelstelling. Werkschema met pauzes berekent automatisch netto werkuren. Analyse met grafieken per week, per taaktype en per perceel.',
     metrics: [
       { label: 'Timer', value: 'Real-time' },
-      { label: 'Kosten', value: 'Per uur' },
-      { label: 'Rapportage', value: 'Per periode' },
+      { label: 'Werkschema', value: 'Netto uren' },
+      { label: 'Export', value: 'CSV' },
+    ],
+  },
+  {
+    id: 'fieldnotes',
+    icon: MessageSquareText,
+    title: 'Veldnotities',
+    color: 'emerald',
+    description: 'Waarnemingen met foto, GPS & AI-classificatie',
+    detail: 'Leg veldwaarnemingen vast met foto, GPS-locatie en AI-classificatie (schimmel, insect, ziekte). Taken met deadlines en herinneringen. Eén tap om bespuitingsnotities door te zetten naar Slimme Invoer.',
+    metrics: [
+      { label: 'AI classificatie', value: '5 types' },
+      { label: 'GPS', value: 'One-tap' },
+      { label: 'Transfer', value: 'Slimme Invoer' },
+    ],
+  },
+  {
+    id: 'sales',
+    icon: Package,
+    title: 'Afzetstromen',
+    color: 'amber',
+    description: 'Partijbeheer, sortering & marge-analyse',
+    detail: 'Compleet partijbeheer van pluk tot aflevering. AI-extractie uit sorteerrapportjes, kosten-batenanalyse per partij, document-inbox en marge-berekening per koper.',
+    metrics: [
+      { label: 'AI extractie', value: 'Sorteerrapport' },
+      { label: 'Marge', value: 'Per partij' },
+      { label: 'Inbox', value: 'Auto-link' },
     ],
   },
 ];
@@ -334,7 +360,7 @@ export function PlatformOverview() {
             Modules
           </motion.span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-white mb-4">
-            10 modules,{' '}
+            11 modules,{' '}
             <span className="text-slate-400">één ecosysteem</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
@@ -386,7 +412,7 @@ export function PlatformOverview() {
           className="mt-12 flex flex-wrap justify-center gap-8 sm:gap-12"
         >
           {[
-            { icon: Zap, value: '10', label: 'Geïntegreerde modules' },
+            { icon: Zap, value: '11', label: 'Geïntegreerde modules' },
             { icon: Database, value: '1.000+', label: 'CTGB producten' },
             { icon: Sparkles, value: '<3s', label: 'AI responstijd' },
           ].map((stat, i) => (

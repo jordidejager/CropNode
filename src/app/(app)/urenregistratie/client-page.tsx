@@ -12,8 +12,6 @@ import {
     useTaskLogs,
     useTaskStats,
     useAddTaskLog,
-    useAddTaskType,
-    useUpdateTaskType,
     useDeleteTaskLog,
     useParcels,
     useActiveTaskSessions,
@@ -24,7 +22,7 @@ import {
     useDeleteActiveTaskSession,
     useWorkSchedule,
 } from '@/hooks/use-data'
-import type { ActiveTaskSession } from '@/lib/types'
+import type { ActiveTaskSession, ParcelGroupOption } from '@/lib/types'
 import { KPICard } from '@/components/analytics/shared/KPICard'
 import { QuickStartChips } from '@/components/urenregistratie/QuickStartChips'
 import { ActiveSessions } from '@/components/urenregistratie/ActiveSessions'
@@ -32,7 +30,12 @@ import { StopSessionDialog } from '@/components/urenregistratie/StopSessionDialo
 import { RegistrationForm } from '@/components/urenregistratie/RegistrationForm'
 import { TaskLogsList } from '@/components/urenregistratie/TaskLogsList'
 import { HoursAnalytics } from '@/components/urenregistratie/HoursAnalytics'
-import { TaskTypeManager } from '@/components/urenregistratie/TaskTypeManager'
+import { LongRunningBanner } from '@/components/urenregistratie/LongRunningBanner'
+import { QuickStartSheet } from '@/components/urenregistratie/QuickStartSheet'
+import { WorkScheduleOnboarding } from '@/components/urenregistratie/WorkScheduleOnboarding'
+import { EmptyTaskTypesCard } from '@/components/urenregistratie/EmptyTaskTypesCard'
+import { calcActiveSessionContribution } from '@/components/urenregistratie/utils'
+import { useToast } from '@/hooks/use-toast'
 
 type TabKey = 'invoer' | 'overzicht' | 'analyse'
 
@@ -56,47 +59,152 @@ export default function UrenregistratieClientPage() {
     const stopMultiDayMutation = useStopTaskSessionMultiDay()
     const updateActiveTaskSessionMutation = useUpdateActiveTaskSession()
     const deleteActiveTaskSessionMutation = useDeleteActiveTaskSession()
-    const addTaskTypeMutation = useAddTaskType()
-    const updateTaskTypeMutation = useUpdateTaskType()
     const { data: workSchedule = [] } = useWorkSchedule()
 
     const [activeTab, setActiveTab] = React.useState<TabKey>('invoer')
     const [stoppingSession, setStoppingSession] = React.useState<ActiveTaskSession | null>(null)
-    const [showTaskTypeManager, setShowTaskTypeManager] = React.useState(false)
+    const [quickStartTaskTypeId, setQuickStartTaskTypeId] = React.useState<string | null>(null)
+    const { toast } = useToast()
+
+    // Tick elke minuut om augmentedStats (live KPI's) te laten bijwerken
+    // zolang er actieve sessies zijn. Zonder tick "bevriezen" Vandaag/Week op
+    // de initiële render-tijd.
+    const [, setTick] = React.useState(0)
+    React.useEffect(() => {
+        if (activeSessions.length === 0) return
+        const interval = setInterval(() => setTick(t => t + 1), 60_000)
+        return () => clearInterval(interval)
+    }, [activeSessions.length])
+
+    /**
+     * Helper voor korte succes-toasts. Oudere gebruikers twijfelen vaak of
+     * hun actie is doorgekomen — korte bevestiging voorkomt dubbele klikken.
+     */
+    const notify = React.useCallback(
+        (title: string, description?: string) => {
+            toast({ title, description, duration: 3000 })
+        },
+        [toast],
+    )
 
     const isLoading = typesLoading || logsLoading || statsLoading || activeLoading
 
-    const handleQuickStart = async (taskTypeId: string) => {
-        await startTaskSessionMutation.mutateAsync({
-            taskTypeId,
-            subParcelId: null,
-            startTime: new Date(),
-            peopleCount: 1,
-            notes: null,
-        })
+    /**
+     * `stats` uit useTaskStats() telt alleen afgeronde task_logs. Een lopende
+     * timer (die uren kan verzamelen) komt daar nooit in terug — met als gevolg
+     * dat "Vandaag 0u" en "Deze week 2u" staan terwijl er een timer al 40u loopt.
+     *
+     * We augmenteren de stats hier met de live-verstreken werkuren per actieve
+     * sessie, net zoals de meter op de Actieve-taken kaart zelf doet.
+     */
+    const augmentedStats = React.useMemo(() => {
+        const base = stats ?? { todayHours: 0, weekHours: 0, weekCost: 0, monthCost: 0, topActivity: null }
+        let todayHours = base.todayHours
+        let weekHours = base.weekHours
+        let monthCost = base.monthCost
+
+        for (const session of activeSessions) {
+            const contrib = calcActiveSessionContribution(session, workSchedule)
+            todayHours += contrib.todayHours
+            weekHours += contrib.weekHours
+            monthCost += contrib.monthCost
+        }
+
+        return { ...base, todayHours, weekHours, monthCost }
+    }, [stats, activeSessions, workSchedule])
+
+    // Tik op een QuickStart-chip opent eerst de bevestiging-sheet zodat
+    // de gebruiker personen/perceel/starttijd kan aanpassen — voorkomt
+    // accidentele timers en missende context.
+    const handleQuickStart = (taskTypeId: string) => {
+        setQuickStartTaskTypeId(taskTypeId)
     }
+
+    const quickStartTaskType = React.useMemo(
+        () => taskTypes.find(t => t.id === quickStartTaskTypeId) ?? null,
+        [taskTypes, quickStartTaskTypeId],
+    )
 
     const handleStopSimple = async (sessionId: string, endTime: Date, hoursPerPerson: number) => {
         await stopTaskSessionMutation.mutateAsync({ sessionId, endTime, hoursPerPerson })
         setStoppingSession(null)
+        notify('Taak afgerond', `${hoursPerPerson.toFixed(1)} uur per persoon opgeslagen`)
     }
 
     const handleStopMultiDay = async (sessionId: string, entries: Array<{ date: string; hoursPerPerson: number; peopleCount: number }>) => {
         await stopMultiDayMutation.mutateAsync({ sessionId, entries })
         setStoppingSession(null)
+        const totalHours = entries.reduce((sum, e) => sum + e.hoursPerPerson * e.peopleCount, 0)
+        notify('Taak afgerond', `${entries.length} dagen · ${totalHours.toFixed(1)} uur totaal opgeslagen`)
     }
 
-    const parcelOptions = React.useMemo(() =>
-        parcels.map(p => ({ id: p.id, name: p.name })),
-        [parcels]
-    )
+    /**
+     * Group sprayable parcels (= sub-parcels with parent reference) into
+     * hoofdperceel → subpercelen trees for the hierarchical selector.
+     *
+     * Hoofdpercelen are sorted alphabetically. Within a hoofdperceel,
+     * sub-parcels are sorted by shortLabel (ras/variety).
+     */
+    const parcelGroups = React.useMemo<ParcelGroupOption[]>(() => {
+        const byParcel = new Map<string, ParcelGroupOption>()
+
+        for (const sp of parcels) {
+            const key = sp.parcelId || sp.id
+            const parentName = sp.parcelName || sp.name
+
+            // Derive a short label that is unique WITHIN the parent parcel.
+            // Input examples:
+            //   sp.name         = "Jachthoek Oude Conference (Conference)"
+            //   sp.parcelName   = "Jachthoek"
+            //   sp.variety      = "Conference"
+            // Strategy: strip parent-name prefix + trailing "(variety)" — what
+            // remains is the human-meaningful unique name ("Oude Conference").
+            // If nothing meaningful remains, fall back to variety, then full name.
+            let shortLabel = sp.name
+            if (parentName) {
+                const prefix = parentName.toLowerCase()
+                if (shortLabel.toLowerCase().startsWith(prefix)) {
+                    shortLabel = shortLabel.slice(parentName.length).trim()
+                }
+            }
+            shortLabel = shortLabel.replace(/\s*\([^)]*\)\s*$/, '').trim()
+            if (!shortLabel) {
+                shortLabel = sp.variety || sp.name
+            }
+
+            let group = byParcel.get(key)
+            if (!group) {
+                group = {
+                    parcelId: key,
+                    parcelName: parentName,
+                    subParcels: [],
+                }
+                byParcel.set(key, group)
+            }
+            group.subParcels.push({
+                id: sp.id,
+                name: sp.name,
+                shortLabel,
+                variety: sp.variety || null,
+                crop: sp.crop,
+                area: sp.area ?? null,
+            })
+        }
+
+        const groups = Array.from(byParcel.values())
+        for (const g of groups) {
+            g.subParcels.sort((a, b) => a.shortLabel.localeCompare(b.shortLabel, 'nl'))
+        }
+        groups.sort((a, b) => a.parcelName.localeCompare(b.parcelName, 'nl'))
+        return groups
+    }, [parcels])
 
     if (isLoading) {
         return (
             <div className="p-8 flex items-center justify-center min-h-[400px]">
                 <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                    <p className="text-white/40 font-bold uppercase tracking-widest text-[10px]">Gegevens laden...</p>
+                    <p className="text-white/70 font-medium text-base">Gegevens laden...</p>
                 </div>
             </div>
         )
@@ -111,7 +219,7 @@ export default function UrenregistratieClientPage() {
                         <Users className="h-8 w-8 text-primary" />
                         Urenregistratie
                     </h1>
-                    <p className="text-white/40 font-medium mt-1">Registreer, bekijk en analyseer gewerkte uren</p>
+                    <p className="text-white/70 text-base mt-1">Registreer, bekijk en analyseer gewerkte uren</p>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1 font-bold w-fit flex items-center gap-1.5">
                     <Tractor className="h-3.5 w-3.5" />
@@ -123,31 +231,35 @@ export default function UrenregistratieClientPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <KPICard
                     label="Vandaag"
-                    value={stats?.todayHours || 0}
+                    value={augmentedStats.todayHours}
                     suffix=" uur"
                     decimals={1}
                 />
                 <KPICard
                     label="Deze week"
-                    value={stats?.weekHours || 0}
+                    value={augmentedStats.weekHours}
                     suffix=" uur"
                     decimals={0}
                 />
                 <KPICard
                     label="Maandkosten"
-                    value={stats?.monthCost || 0}
+                    value={augmentedStats.monthCost}
                     prefix="€"
                     decimals={0}
                 />
                 <div className="flex flex-col gap-1 rounded-xl border border-white/5 bg-white/[0.03] p-4 min-w-[160px] backdrop-blur-sm">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Actief nu</span>
-                    <span className="text-2xl font-semibold text-slate-100">
-                        {activeSessions.reduce((sum, s) => sum + s.peopleCount, 0)}
+                    <span className="text-sm font-semibold text-white/70">
+                        {activeSessions.length > 0 ? 'Nu aan het werk' : 'Actieve timers'}
                     </span>
-                    <span className="text-xs text-slate-600">
+                    <span className="text-2xl font-bold text-white">
                         {activeSessions.length > 0
-                            ? `${activeSessions.length} ${activeSessions.length === 1 ? 'taak' : 'taken'} actief`
-                            : '\u2014'
+                            ? activeSessions.reduce((sum, s) => sum + s.peopleCount, 0)
+                            : 0}
+                    </span>
+                    <span className="text-sm text-white/60">
+                        {activeSessions.length > 0
+                            ? `${activeSessions.reduce((sum, s) => sum + s.peopleCount, 0) === 1 ? 'persoon' : 'personen'} over ${activeSessions.length} ${activeSessions.length === 1 ? 'taak' : 'taken'}`
+                            : 'Geen timers actief'
                         }
                     </span>
                 </div>
@@ -166,17 +278,21 @@ export default function UrenregistratieClientPage() {
                             <button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
+                                aria-current={active ? 'page' : undefined}
                                 className={cn(
-                                    'flex items-center gap-2.5 px-5 py-3.5 text-[15px] font-semibold whitespace-nowrap rounded-t-xl border-b-[3px] transition-all duration-150',
+                                    'flex items-center gap-2.5 px-5 py-3.5 text-base font-semibold whitespace-nowrap rounded-t-xl border-b-[3px] transition-all duration-150 min-h-[48px]',
                                     active
-                                        ? 'text-emerald-400 border-emerald-400 bg-emerald-500/[0.07]'
-                                        : 'text-white/40 border-transparent hover:text-white/70 hover:bg-white/[0.04]'
+                                        ? 'text-emerald-300 border-emerald-400 bg-emerald-500/[0.08]'
+                                        : 'text-white/65 border-transparent hover:text-white hover:bg-white/[0.05]'
                                 )}
                             >
-                                <Icon className={cn('h-[18px] w-[18px]', active ? 'text-emerald-400' : 'text-white/30')} />
+                                <Icon className={cn('h-5 w-5', active ? 'text-emerald-300' : 'text-white/50')} />
                                 {tab.label}
                                 {badge !== null && (
-                                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                                    <span
+                                        aria-label={`${badge} actieve ${badge === 1 ? 'timer' : 'timers'}`}
+                                        className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold"
+                                    >
                                         {badge}
                                     </span>
                                 )}
@@ -189,11 +305,19 @@ export default function UrenregistratieClientPage() {
             {/* Tab Content */}
             {activeTab === 'invoer' && (
                 <div className="space-y-6">
+                    {/* Onboarding-nudge als schema nog leeg is */}
+                    <WorkScheduleOnboarding workSchedule={workSchedule} />
+
+                    {/* Waarschuwing: vergeten timers */}
+                    <LongRunningBanner sessions={activeSessions} />
+
+                    {/* Empty-state: nog geen taaktypes aangemaakt */}
+                    {taskTypes.length === 0 && <EmptyTaskTypesCard />}
+
                     {/* Quick Start Chips */}
                     <QuickStartChips
                         taskTypes={taskTypes}
                         onStartTimer={handleQuickStart}
-                        onManageTypes={() => setShowTaskTypeManager(true)}
                         disabled={startTaskSessionMutation.isPending}
                     />
 
@@ -202,24 +326,49 @@ export default function UrenregistratieClientPage() {
                         sessions={activeSessions}
                         workSchedule={workSchedule}
                         onStop={(session) => setStoppingSession(session)}
-                        onDelete={(id) => deleteActiveTaskSessionMutation.mutate(id)}
-                        onUpdate={(id, updates) =>
+                        onDelete={(id) => {
+                            deleteActiveTaskSessionMutation.mutate(id)
+                            notify('Timer geannuleerd', 'De actieve taak is verwijderd zonder uren op te slaan')
+                        }}
+                        onUpdate={(id, updates) => {
                             updateActiveTaskSessionMutation.mutate({ id, updates })
-                        }
+                            notify('Aangepast', 'Wijzigingen zijn opgeslagen')
+                        }}
                     />
 
-                    {/* Registration Form */}
-                    <RegistrationForm
-                        taskTypes={taskTypes}
-                        parcels={parcelOptions}
-                        onRegister={async (data) => {
-                            await addTaskLogMutation.mutateAsync(data)
-                        }}
-                        onStartSession={async (data) => {
-                            await startTaskSessionMutation.mutateAsync(data)
-                        }}
-                        isSubmitting={addTaskLogMutation.isPending || startTaskSessionMutation.isPending}
-                    />
+                    {/* Scheider tussen snelle timer-flow en uitgebreide invoer */}
+                    {taskTypes.length > 0 && (
+                        <div className="flex items-center gap-3 pt-2">
+                            <div className="h-px flex-1 bg-white/10" />
+                            <span className="text-sm text-white/55 font-medium">
+                                of voer uren achteraf in
+                            </span>
+                            <div className="h-px flex-1 bg-white/10" />
+                        </div>
+                    )}
+
+                    {/* Registration Form — alleen als er taaktypes zijn;
+                        anders volstaat de EmptyTaskTypesCard hierboven. */}
+                    {taskTypes.length > 0 && (
+                        <RegistrationForm
+                            taskTypes={taskTypes}
+                            parcelGroups={parcelGroups}
+                            workSchedule={workSchedule}
+                            lastLog={taskLogs[0] ?? null}
+                            onRegister={async (data) => {
+                                await addTaskLogMutation.mutateAsync(data)
+                                const taskName = taskTypes.find(t => t.id === data.taskTypeId)?.name ?? 'Registratie'
+                                const total = data.peopleCount * data.hoursPerPerson * data.days
+                                notify(`${taskName} opgeslagen`, `${total.toFixed(1)} uur totaal`)
+                            }}
+                            onStartSession={async (data) => {
+                                await startTaskSessionMutation.mutateAsync(data)
+                                const taskName = taskTypes.find(t => t.id === data.taskTypeId)?.name ?? 'Timer'
+                                notify(`Timer gestart: ${taskName}`, 'Zichtbaar onder "Actieve taken"')
+                            }}
+                            isSubmitting={addTaskLogMutation.isPending || startTaskSessionMutation.isPending}
+                        />
+                    )}
                 </div>
             )}
 
@@ -227,7 +376,10 @@ export default function UrenregistratieClientPage() {
                 <TaskLogsList
                     logs={taskLogs}
                     taskTypes={taskTypes}
-                    onDelete={(id) => deleteTaskLogMutation.mutate(id)}
+                    onDelete={(id) => {
+                        deleteTaskLogMutation.mutate(id)
+                        notify('Registratie verwijderd')
+                    }}
                 />
             )}
 
@@ -247,19 +399,18 @@ export default function UrenregistratieClientPage() {
                 />
             )}
 
-            {/* Task Type Manager */}
-            {showTaskTypeManager && (
-                <TaskTypeManager
-                    taskTypes={taskTypes}
-                    onAdd={async (name, hourlyRate) => {
-                        await addTaskTypeMutation.mutateAsync({ name, defaultHourlyRate: hourlyRate })
+            {/* QuickStart confirmation sheet — zichtbaar ná chip-tik */}
+            {quickStartTaskType && (
+                <QuickStartSheet
+                    taskType={quickStartTaskType}
+                    parcelGroups={parcelGroups}
+                    onCancel={() => setQuickStartTaskTypeId(null)}
+                    onStart={async (data) => {
+                        await startTaskSessionMutation.mutateAsync(data)
+                        setQuickStartTaskTypeId(null)
+                        notify(`Timer gestart: ${quickStartTaskType.name}`, 'Zichtbaar onder "Actieve taken"')
                     }}
-                    onUpdate={async (id, updates) => {
-                        await updateTaskTypeMutation.mutateAsync({ id, updates })
-                    }}
-                    onClose={() => setShowTaskTypeManager(false)}
-                    isAdding={addTaskTypeMutation.isPending}
-                    isUpdating={updateTaskTypeMutation.isPending}
+                    isPending={startTaskSessionMutation.isPending}
                 />
             )}
         </div>

@@ -2444,7 +2444,7 @@ export async function getTaskLogs(): Promise<TaskLogEnriched[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_task_logs_enriched')
-      .select('id, start_date, end_date, days, sub_parcel_id, sub_parcel_name, task_type_id, task_type_name, default_hourly_rate, people_count, hours_per_person, total_hours, estimated_cost, notes, created_at, updated_at')
+      .select('id, start_date, end_date, days, sub_parcel_id, sub_parcel_name, parcel_id, parcel_name, is_whole_parcel, task_type_id, task_type_name, default_hourly_rate, people_count, hours_per_person, total_hours, estimated_cost, notes, created_at, updated_at')
       .order('start_date', { ascending: false })
       .limit(500);
 
@@ -2462,6 +2462,9 @@ export async function getTaskLogs(): Promise<TaskLogEnriched[]> {
       days: item.days,
       subParcelId: item.sub_parcel_id,
       subParcelName: item.sub_parcel_name,
+      parcelId: item.parcel_id ?? null,
+      parcelName: item.parcel_name ?? null,
+      isWholeParcel: Boolean(item.is_whole_parcel),
       taskTypeId: item.task_type_id,
       taskTypeName: item.task_type_name,
       defaultHourlyRate: item.default_hourly_rate,
@@ -2486,6 +2489,7 @@ export async function addTaskLog(taskLog: Omit<TaskLog, 'id' | 'totalHours' | 'c
       end_date: taskLog.endDate instanceof Date ? taskLog.endDate.toISOString().split('T')[0] : taskLog.endDate,
       days: taskLog.days,
       sub_parcel_id: taskLog.subParcelId,
+      parcel_id: taskLog.parcelId,
       task_type_id: taskLog.taskTypeId,
       people_count: taskLog.peopleCount,
       hours_per_person: taskLog.hoursPerPerson,
@@ -2502,6 +2506,7 @@ export async function addTaskLog(taskLog: Omit<TaskLog, 'id' | 'totalHours' | 'c
     endDate: new Date(data.end_date),
     days: data.days,
     subParcelId: data.sub_parcel_id,
+    parcelId: data.parcel_id ?? null,
     taskTypeId: data.task_type_id,
     peopleCount: data.people_count,
     hoursPerPerson: data.hours_per_person,
@@ -2676,7 +2681,7 @@ export async function getActiveTaskSessions(): Promise<ActiveTaskSession[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('v_active_task_sessions_enriched')
-      .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, start_time, people_count, notes, created_at')
+      .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, parcel_id, parcel_name, is_whole_parcel, start_time, people_count, notes, created_at')
       .order('start_time', { ascending: false });
 
     if (error) {
@@ -2693,6 +2698,9 @@ export async function getActiveTaskSessions(): Promise<ActiveTaskSession[]> {
       defaultHourlyRate: item.default_hourly_rate,
       subParcelId: item.sub_parcel_id,
       subParcelName: item.sub_parcel_name,
+      parcelId: item.parcel_id ?? null,
+      parcelName: item.parcel_name ?? null,
+      isWholeParcel: Boolean(item.is_whole_parcel),
       startTime: new Date(item.start_time),
       peopleCount: item.people_count,
       notes: item.notes,
@@ -2704,6 +2712,7 @@ export async function getActiveTaskSessions(): Promise<ActiveTaskSession[]> {
 export async function startTaskSession(session: {
   taskTypeId: string;
   subParcelId: string | null;
+  parcelId: string | null;
   startTime: Date;
   peopleCount: number;
   notes: string | null;
@@ -2715,6 +2724,7 @@ export async function startTaskSession(session: {
       user_id: userId,
       task_type_id: session.taskTypeId,
       sub_parcel_id: session.subParcelId,
+      parcel_id: session.parcelId,
       start_time: session.startTime.toISOString(),
       people_count: session.peopleCount,
       notes: session.notes,
@@ -2727,7 +2737,7 @@ export async function startTaskSession(session: {
   // Fetch enriched data
   const { data: enriched } = await supabase
     .from('v_active_task_sessions_enriched')
-    .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, start_time, people_count, notes, created_at')
+    .select('id, task_type_id, task_type_name, default_hourly_rate, sub_parcel_id, sub_parcel_name, parcel_id, parcel_name, is_whole_parcel, start_time, people_count, notes, created_at')
     .eq('id', data.id)
     .single();
 
@@ -2738,6 +2748,9 @@ export async function startTaskSession(session: {
     defaultHourlyRate: enriched?.default_hourly_rate || 0,
     subParcelId: data.sub_parcel_id,
     subParcelName: enriched?.sub_parcel_name || null,
+    parcelId: data.parcel_id ?? null,
+    parcelName: enriched?.parcel_name ?? null,
+    isWholeParcel: Boolean(enriched?.is_whole_parcel),
     startTime: new Date(data.start_time),
     peopleCount: data.people_count,
     notes: data.notes,
@@ -2803,7 +2816,7 @@ export async function stopTaskSession(
   // 1. Haal de actieve sessie op
   const { data: session, error: fetchError } = await supabase
     .from('v_active_task_sessions_enriched')
-    .select('id, task_type_id, sub_parcel_id, start_time, people_count, notes')
+    .select('id, task_type_id, sub_parcel_id, parcel_id, start_time, people_count, notes')
     .eq('id', sessionId)
     .single();
 
@@ -2826,6 +2839,7 @@ export async function stopTaskSession(
       end_date: endDate,
       days: workDays,
       sub_parcel_id: session.sub_parcel_id,
+      parcel_id: session.parcel_id,
       task_type_id: session.task_type_id,
       people_count: session.people_count,
       hours_per_person: hoursPerPerson,
@@ -2853,7 +2867,7 @@ export async function stopTaskSessionMultiDay(
   // 1. Haal de actieve sessie op
   const { data: session, error: fetchError } = await supabase
     .from('v_active_task_sessions_enriched')
-    .select('id, task_type_id, sub_parcel_id, notes')
+    .select('id, task_type_id, sub_parcel_id, parcel_id, notes')
     .eq('id', sessionId)
     .single();
 
@@ -2874,6 +2888,7 @@ export async function stopTaskSessionMultiDay(
     end_date: e.date,
     days: 1,
     sub_parcel_id: session.sub_parcel_id,
+    parcel_id: session.parcel_id,
     task_type_id: session.task_type_id,
     people_count: e.peopleCount,
     hours_per_person: e.hoursPerPerson,
@@ -4123,12 +4138,18 @@ export async function updateHarvestRegistration(
  * Delete a harvest registration
  */
 export async function deleteHarvestRegistration(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('harvest_registrations')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error(
+      'Oogstregistratie kon niet verwijderd worden (0 rijen). De row hoort niet bij je huidige account (RLS). Check user_id-mismatch.'
+    );
+  }
 }
 
 /**
@@ -4161,6 +4182,573 @@ export async function getHarvestSeasons(): Promise<string[]> {
   // Get unique seasons
   const seasons = [...new Set(data.map(d => d.season))];
   return seasons;
+}
+
+// ============================================================================
+// Afzetstromen CRUD (migration 057) — Batches, BatchEvents, BatchDocuments
+// ============================================================================
+
+import type {
+  Batch,
+  BatchInput,
+  BatchStatus,
+  BatchEvent,
+  BatchEventInput,
+  BatchEventType,
+  BatchEventDetails,
+  BatchDocument,
+  BatchDocumentInput,
+  BatchDocumentType,
+  BatchDocumentStatus,
+} from './types';
+
+function mapBatchRow(row: Record<string, any>): Batch {
+  return {
+    id: row.id,
+    harvestRegistrationId: row.harvest_registration_id ?? null,
+    label: row.label ?? null,
+    variety: row.variety ?? null,
+    season: row.season ?? null,
+    harvestYear: row.harvest_year ?? null,
+    status: (row.status as BatchStatus) ?? 'active',
+    reservedFor: row.reserved_for ?? null,
+    notes: row.notes ?? null,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+    // Enriched fields (only present when querying v_batches_enriched)
+    harvestDate: row.harvest_date ? new Date(row.harvest_date) : null,
+    pickNumber: (row.pick_number as PickNumber) ?? null,
+    totalCrates: row.total_crates ?? null,
+    batchTotalCrates: row.batch_total_crates ?? null,
+    weightPerCrate: row.weight_per_crate ? parseFloat(row.weight_per_crate) : null,
+    qualityClass: (row.quality_class as QualityClass) ?? null,
+    parcelId: row.parcel_id ?? null,
+    subParcelId: row.sub_parcel_id ?? null,
+    parcelName: row.parcel_name ?? null,
+    subParcelName: row.sub_parcel_name ?? null,
+    currentStorageCellId: row.current_storage_cell_id ?? null,
+    currentStorageCellName: row.current_storage_cell_name ?? null,
+    lastStorageEventType: (row.last_storage_event_type as BatchEventType) ?? null,
+    lastStorageEventDate: row.last_storage_event_date ? new Date(row.last_storage_event_date) : null,
+    totalKgIn: row.total_kg_in ? parseFloat(row.total_kg_in) : 0,
+    totalKgOut: row.total_kg_out ? parseFloat(row.total_kg_out) : 0,
+    totalCostEur: row.total_cost_eur ? parseFloat(row.total_cost_eur) : 0,
+    totalRevenueEur: row.total_revenue_eur ? parseFloat(row.total_revenue_eur) : 0,
+    marginEur: row.margin_eur ? parseFloat(row.margin_eur) : 0,
+    eventCount: row.event_count ?? 0,
+  };
+}
+
+function mapBatchEventRow(row: Record<string, any>): BatchEvent {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    eventType: row.event_type as BatchEventType,
+    eventDate: row.event_date ? new Date(row.event_date) : null,
+    kg: row.kg !== null && row.kg !== undefined ? parseFloat(row.kg) : null,
+    costEur: row.cost_eur !== null && row.cost_eur !== undefined ? parseFloat(row.cost_eur) : null,
+    revenueEur: row.revenue_eur !== null && row.revenue_eur !== undefined ? parseFloat(row.revenue_eur) : null,
+    storageCellId: row.storage_cell_id ?? null,
+    storageCellName: row.storage_cell_name ?? null,
+    details: (row.details as BatchEventDetails) ?? {},
+    sourceDocumentId: row.source_document_id ?? null,
+    notes: row.notes ?? null,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+function mapBatchDocumentRow(row: Record<string, any>): BatchDocument {
+  return {
+    id: row.id,
+    batchId: row.batch_id ?? null,
+    linkedEventId: row.linked_event_id ?? null,
+    storagePath: row.storage_path,
+    filename: row.filename ?? null,
+    mimeType: row.mime_type ?? null,
+    sizeBytes: row.size_bytes ?? null,
+    documentType: (row.document_type as BatchDocumentType) ?? 'overig',
+    processingStatus: (row.processing_status as BatchDocumentStatus) ?? 'pending',
+    notes: row.notes ?? null,
+    uploadedAt: new Date(row.uploaded_at),
+    processedAt: row.processed_at ? new Date(row.processed_at) : null,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+/**
+ * Fetch all batches for the current user (via v_batches_enriched).
+ */
+export async function getBatches(options?: {
+  season?: string;
+  harvestYear?: number;
+  status?: BatchStatus;
+  search?: string;
+}): Promise<Batch[]> {
+  let query = supabase
+    .from('v_batches_enriched')
+    .select('*')
+    .order('harvest_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+
+  if (options?.season) query = query.eq('season', options.season);
+  if (options?.harvestYear) query = query.eq('harvest_year', options.harvestYear);
+  if (options?.status) query = query.eq('status', options.status);
+  if (options?.search) query = query.ilike('label', `%${options.search}%`);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapBatchRow);
+}
+
+/**
+ * Fetch a single batch by id (enriched).
+ */
+export async function getBatchById(id: string): Promise<Batch | null> {
+  const { data, error } = await supabase
+    .from('v_batches_enriched')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return mapBatchRow(data);
+}
+
+export async function createBatch(input: BatchInput): Promise<Batch> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('batches')
+    .insert({
+      user_id: userId,
+      harvest_registration_id: input.harvestRegistrationId ?? null,
+      label: input.label ?? null,
+      variety: input.variety ?? null,
+      season: input.season ?? null,
+      harvest_year: input.harvestYear ?? null,
+      pick_number: input.pickNumber ?? null,
+      total_crates: input.totalCrates ?? null,
+      status: input.status ?? 'active',
+      reserved_for: input.reservedFor ?? null,
+      notes: input.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  const full = await getBatchById(data.id);
+  return full ?? mapBatchRow(data);
+}
+
+export async function updateBatch(id: string, updates: Partial<BatchInput>): Promise<Batch> {
+  const updateData: Record<string, unknown> = {};
+  if (updates.harvestRegistrationId !== undefined) updateData.harvest_registration_id = updates.harvestRegistrationId;
+  if (updates.label !== undefined) updateData.label = updates.label;
+  if (updates.variety !== undefined) updateData.variety = updates.variety;
+  if (updates.season !== undefined) updateData.season = updates.season;
+  if (updates.harvestYear !== undefined) updateData.harvest_year = updates.harvestYear;
+  if (updates.pickNumber !== undefined) updateData.pick_number = updates.pickNumber;
+  if (updates.totalCrates !== undefined) updateData.total_crates = updates.totalCrates;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.reservedFor !== undefined) updateData.reserved_for = updates.reservedFor;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { error } = await supabase
+    .from('batches')
+    .update(updateData)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+  const full = await getBatchById(id);
+  if (!full) throw new Error('Batch not found after update');
+  return full;
+}
+
+export async function deleteBatch(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('batches')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error(
+      'Partij kon niet verwijderd worden (0 rijen). De row hoort niet bij je huidige account (RLS). Check Supabase SQL Editor voor user_id-mismatch.'
+    );
+  }
+}
+
+// ----- Batch Events -----
+
+export async function getBatchEvents(batchId: string): Promise<BatchEvent[]> {
+  const { data, error } = await supabase
+    .from('batch_events')
+    .select('*, storage_cells:storage_cell_id(name)')
+    .eq('batch_id', batchId)
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row: any) =>
+    mapBatchEventRow({
+      ...row,
+      storage_cell_name: row.storage_cells?.name ?? null,
+    })
+  );
+}
+
+export async function getBatchEventsByType(
+  type: BatchEventType,
+  options?: { season?: string; harvestYear?: number }
+): Promise<Array<BatchEvent & { batchLabel: string | null; variety: string | null }>> {
+  // Note: join via inner select to get batch context
+  let query = supabase
+    .from('batch_events')
+    .select('*, batches!inner(label, variety, season, harvest_year), storage_cells:storage_cell_id(name)')
+    .eq('event_type', type)
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+
+  if (options?.season) query = query.eq('batches.season', options.season);
+  if (options?.harvestYear) query = query.eq('batches.harvest_year', options.harvestYear);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row: any) => ({
+    ...mapBatchEventRow({
+      ...row,
+      storage_cell_name: row.storage_cells?.name ?? null,
+    }),
+    batchLabel: row.batches?.label ?? null,
+    variety: row.batches?.variety ?? null,
+  }));
+}
+
+export async function createBatchEvent(input: BatchEventInput): Promise<BatchEvent> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('batch_events')
+    .insert({
+      user_id: userId,
+      batch_id: input.batchId,
+      event_type: input.eventType,
+      event_date: input.eventDate ? input.eventDate.toISOString().split('T')[0] : null,
+      kg: input.kg ?? null,
+      cost_eur: input.costEur ?? null,
+      revenue_eur: input.revenueEur ?? null,
+      storage_cell_id: input.storageCellId ?? null,
+      details: input.details ?? {},
+      source_document_id: input.sourceDocumentId ?? null,
+      notes: input.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapBatchEventRow(data);
+}
+
+export async function updateBatchEvent(
+  id: string,
+  updates: Partial<Omit<BatchEventInput, 'batchId'>>
+): Promise<BatchEvent> {
+  const updateData: Record<string, unknown> = {};
+  if (updates.eventType !== undefined) updateData.event_type = updates.eventType;
+  if (updates.eventDate !== undefined) {
+    updateData.event_date = updates.eventDate ? updates.eventDate.toISOString().split('T')[0] : null;
+  }
+  if (updates.kg !== undefined) updateData.kg = updates.kg;
+  if (updates.costEur !== undefined) updateData.cost_eur = updates.costEur;
+  if (updates.revenueEur !== undefined) updateData.revenue_eur = updates.revenueEur;
+  if (updates.storageCellId !== undefined) updateData.storage_cell_id = updates.storageCellId;
+  if (updates.details !== undefined) updateData.details = updates.details;
+  if (updates.sourceDocumentId !== undefined) updateData.source_document_id = updates.sourceDocumentId;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { data, error } = await supabase
+    .from('batch_events')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapBatchEventRow(data);
+}
+
+export async function deleteBatchEvent(id: string): Promise<void> {
+  const { error } = await supabase.from('batch_events').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ----- Batch Documents -----
+
+export async function getBatchDocuments(options?: {
+  batchId?: string | null; // pass null for inbox (unlinked)
+  onlyInbox?: boolean;
+}): Promise<BatchDocument[]> {
+  let query = supabase
+    .from('batch_documents')
+    .select('*')
+    .order('uploaded_at', { ascending: false });
+
+  if (options?.onlyInbox) {
+    query = query.is('batch_id', null);
+  } else if (options?.batchId) {
+    query = query.eq('batch_id', options.batchId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapBatchDocumentRow);
+}
+
+export async function createBatchDocumentRecord(input: BatchDocumentInput): Promise<BatchDocument> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('batch_documents')
+    .insert({
+      user_id: userId,
+      batch_id: input.batchId ?? null,
+      linked_event_id: input.linkedEventId ?? null,
+      storage_path: input.storagePath,
+      filename: input.filename ?? null,
+      mime_type: input.mimeType ?? null,
+      size_bytes: input.sizeBytes ?? null,
+      document_type: input.documentType ?? 'overig',
+      processing_status: input.processingStatus ?? 'pending',
+      notes: input.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapBatchDocumentRow(data);
+}
+
+export async function updateBatchDocument(
+  id: string,
+  updates: Partial<BatchDocumentInput>
+): Promise<BatchDocument> {
+  const updateData: Record<string, unknown> = {};
+  if (updates.batchId !== undefined) updateData.batch_id = updates.batchId;
+  if (updates.linkedEventId !== undefined) updateData.linked_event_id = updates.linkedEventId;
+  if (updates.documentType !== undefined) updateData.document_type = updates.documentType;
+  if (updates.processingStatus !== undefined) updateData.processing_status = updates.processingStatus;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  // If moving from inbox to linked, set processed_at
+  if (updates.batchId && updates.processingStatus === 'linked') {
+    updateData.processed_at = new Date().toISOString();
+  }
+
+  const { data, error } = await supabase
+    .from('batch_documents')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapBatchDocumentRow(data);
+}
+
+export async function deleteBatchDocument(id: string): Promise<void> {
+  // Look up storage path first so we can also delete the storage object
+  const { data: doc, error: fetchErr } = await supabase
+    .from('batch_documents')
+    .select('storage_path')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchErr) throw new Error(fetchErr.message);
+
+  // Delete DB row
+  const { error } = await supabase.from('batch_documents').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+
+  // Best-effort storage cleanup
+  if (doc?.storage_path) {
+    await supabase.storage.from('partij-documenten').remove([doc.storage_path]);
+  }
+}
+
+/**
+ * Get a signed URL for downloading a document (valid for 1 hour).
+ */
+export async function getBatchDocumentSignedUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('partij-documenten')
+    .createSignedUrl(storagePath, 60 * 60);
+
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+/**
+ * Distinct seasons available from batches.
+ */
+export async function getBatchSeasons(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('batches')
+    .select('season')
+    .not('season', 'is', null)
+    .order('season', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!data) return [];
+  return [...new Set(data.map((d: any) => d.season).filter(Boolean))] as string[];
+}
+
+/**
+ * Distinct varieties the user already works with.
+ * Pulls from harvest_registrations AND batches AND sub_parcels to give a complete list.
+ */
+export async function getKnownVarieties(): Promise<string[]> {
+  const [harvests, batchesResult, subParcels] = await Promise.all([
+    supabase.from('harvest_registrations').select('variety').not('variety', 'is', null),
+    supabase.from('batches').select('variety').not('variety', 'is', null),
+    supabase.from('sub_parcels').select('variety').not('variety', 'is', null),
+  ]);
+
+  const all: string[] = [];
+  if (!harvests.error && harvests.data) all.push(...harvests.data.map((d: any) => d.variety));
+  if (!batchesResult.error && batchesResult.data)
+    all.push(...batchesResult.data.map((d: any) => d.variety));
+  if (!subParcels.error && subParcels.data)
+    all.push(...subParcels.data.map((d: any) => d.variety));
+
+  // Normaliseer via alias-map (bv. "Fengapi" + "Tessa" → "Tessa/Fengapi") en dedupe.
+  const { normalizeVariety } = await import('@/components/afzetstromen/constants');
+  const normalized = all
+    .filter(Boolean)
+    .map((s) => normalizeVariety(s))
+    .filter((s): s is string => s !== null && s.length > 0);
+  const unique = [...new Set(normalized)];
+  return unique.sort((a, b) => a.localeCompare(b, 'nl'));
+}
+
+/**
+ * Distinct harvest_year integers used anywhere in the system (batches OR harvest_registrations).
+ */
+export async function getKnownHarvestYears(): Promise<number[]> {
+  const [batchYears, harvestYears] = await Promise.all([
+    supabase.from('batches').select('harvest_year').not('harvest_year', 'is', null),
+    supabase.from('harvest_registrations').select('harvest_year').not('harvest_year', 'is', null),
+  ]);
+
+  const all: number[] = [];
+  if (!batchYears.error && batchYears.data)
+    all.push(...batchYears.data.map((d: any) => d.harvest_year as number));
+  if (!harvestYears.error && harvestYears.data)
+    all.push(...harvestYears.data.map((d: any) => d.harvest_year as number));
+
+  return [...new Set(all.filter((y): y is number => typeof y === 'number'))].sort((a, b) => b - a);
+}
+
+// ============================================
+// BATCH PARCELS (m:m partij ↔ (sub)perceel)
+// Migration 057 (table) + 060 (enriched view)
+// ============================================
+
+import type { BatchParcelLink, BatchParcelLinkInput } from './types';
+
+function mapBatchParcelRow(row: any): BatchParcelLink {
+  const parseNumOrNull = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null;
+    const n = typeof v === 'number' ? v : parseFloat(String(v));
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    parcelId: row.parcel_id,
+    subParcelId: row.sub_parcel_id,
+    estimatedKg: parseNumOrNull(row.estimated_kg),
+    crates: row.crates !== null && row.crates !== undefined ? parseInt(String(row.crates), 10) : null,
+    kgPerCrate: parseNumOrNull(row.kg_per_crate),
+    createdAt: new Date(row.created_at),
+    parcelName: row.parcel_name ?? null,
+    subParcelName: row.sub_parcel_name ?? null,
+    subParcelVariety: row.sub_parcel_variety ?? null,
+    subParcelArea: parseNumOrNull(row.sub_parcel_area),
+    subParcelParentId: row.sub_parcel_parent_id ?? null,
+  };
+}
+
+export async function getBatchParcels(batchId: string): Promise<BatchParcelLink[]> {
+  const { data, error } = await supabase
+    .from('v_batch_parcels_enriched')
+    .select('*')
+    .eq('batch_id', batchId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapBatchParcelRow);
+}
+
+export async function addBatchParcels(
+  batchId: string,
+  items: BatchParcelLinkInput[]
+): Promise<void> {
+  if (items.length === 0) return;
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Not authenticated');
+
+  const rows = items.map((item) => ({
+    batch_id: batchId,
+    user_id: userId,
+    parcel_id: item.parcelId ?? null,
+    sub_parcel_id: item.subParcelId ?? null,
+    estimated_kg: item.estimatedKg ?? null,
+    crates: item.crates ?? null,
+    kg_per_crate: item.kgPerCrate ?? null,
+  }));
+
+  const { error } = await supabase.from('batch_parcels').insert(rows);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateBatchParcel(
+  id: string,
+  updates: Partial<BatchParcelLinkInput>
+): Promise<void> {
+  const updateData: Record<string, unknown> = {};
+  if (updates.parcelId !== undefined) updateData.parcel_id = updates.parcelId;
+  if (updates.subParcelId !== undefined) updateData.sub_parcel_id = updates.subParcelId;
+  if (updates.estimatedKg !== undefined) updateData.estimated_kg = updates.estimatedKg;
+  if (updates.crates !== undefined) updateData.crates = updates.crates;
+  if (updates.kgPerCrate !== undefined) updateData.kg_per_crate = updates.kgPerCrate;
+
+  const { error } = await supabase
+    .from('batch_parcels')
+    .update(updateData)
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteBatchParcel(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('batch_parcels')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('Koppeling kon niet verwijderd worden (0 rijen).');
+  }
 }
 
 // ============================================================================

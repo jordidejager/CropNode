@@ -655,6 +655,8 @@ export type TaskLog = {
   endDate: Date;
   days: number;
   subParcelId: string | null;
+  /** Present when a whole parcel (not a specific sub-parcel) is selected. Mutually exclusive with subParcelId. */
+  parcelId: string | null;
   taskTypeId: string;
   peopleCount: number;
   hoursPerPerson: number;
@@ -665,7 +667,12 @@ export type TaskLog = {
 };
 
 export type TaskLogEnriched = TaskLog & {
+  /** Display name: sub-parcel naam of "<hoofdperceel> — heel perceel". Null als geen perceel. */
   subParcelName: string | null;
+  /** Naam van het hoofdperceel (zowel bij sub-parcel als whole-parcel selectie). */
+  parcelName: string | null;
+  /** True als het hele hoofdperceel is geselecteerd (parcelId gevuld, subParcelId null). */
+  isWholeParcel: boolean;
   taskTypeName: string;
   defaultHourlyRate: number;
   estimatedCost: number;
@@ -678,11 +685,45 @@ export type ActiveTaskSession = {
   taskTypeName: string;
   defaultHourlyRate: number;
   subParcelId: string | null;
+  /** Present when a whole parcel is selected. Mutually exclusive with subParcelId. */
+  parcelId: string | null;
+  /** Display name: sub-parcel naam of "<hoofdperceel> — heel perceel". */
   subParcelName: string | null;
+  parcelName: string | null;
+  isWholeParcel: boolean;
   startTime: Date;
   peopleCount: number;
   notes: string | null;
   createdAt: Date;
+};
+
+/**
+ * Selection result from the parcel selector.
+ * Either a specific sub-parcel, the whole parcel, or nothing.
+ */
+export type ParcelSelection =
+  | { kind: 'none' }
+  | { kind: 'sub'; subParcelId: string; parcelId: string; label: string }
+  | { kind: 'whole'; parcelId: string; label: string };
+
+/**
+ * Grouped parcel option for the selector UI.
+ * Derived from SprayableParcel[] by grouping on parcelId.
+ */
+export type ParcelGroupOption = {
+  parcelId: string;
+  parcelName: string;
+  subParcels: Array<{
+    id: string;
+    /** Full display name, e.g. "Jachthoek Oude (Conference)". */
+    name: string;
+    /** Unique sub-parcel name within its parent, e.g. "Oude" or "Nieuwe Conference". Falls back to variety/full name. */
+    shortLabel: string;
+    variety: string | null;
+    crop: string;
+    /** Hectares — used for display in the selector. */
+    area: number | null;
+  }>;
 };
 
 // ============================================
@@ -1072,4 +1113,234 @@ export type HarvestRegistrationInput = {
   weightPerCrate?: number | null;
   season: string;
   notes?: string | null;
+};
+
+// ============================================================================
+// Afzetstromen Types (Post-harvest: transport, sortering, afzet, koelcel-events)
+// Migration 057
+// ============================================================================
+
+export type BatchStatus =
+  | 'active'
+  | 'gereserveerd_voor_afnemer'
+  | 'closed'
+  | 'archived';
+
+export type BatchEventType =
+  | 'inslag'
+  | 'uitslag'
+  | 'verplaatsing'
+  | 'transport'
+  | 'sortering_extern'
+  | 'sortering_eigen'
+  | 'afzet'
+  | 'correctie'
+  | 'kwaliteitsmeting';
+
+export type BatchDocumentType =
+  | 'sorteer_overzicht'
+  | 'factuur'
+  | 'klant_order'
+  | 'overig';
+
+export type BatchDocumentStatus = 'pending' | 'linked' | 'needs_review';
+
+export type Batch = {
+  id: string;
+  harvestRegistrationId: string | null;
+  label: string | null;
+  variety: string | null;
+  season: string | null;
+  harvestYear: number | null;
+  status: BatchStatus;
+  reservedFor: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  // Enriched (from v_batches_enriched)
+  harvestDate?: Date | null;
+  pickNumber?: PickNumber | null;
+  totalCrates?: number | null; // from harvest_registration (legacy, read-only)
+  batchTotalCrates?: number | null; // from batches.total_crates (user-editable)
+  weightPerCrate?: number | null;
+  qualityClass?: QualityClass | null;
+  parcelId?: string | null;
+  subParcelId?: string | null;
+  parcelName?: string | null;
+  subParcelName?: string | null;
+  currentStorageCellId?: string | null;
+  currentStorageCellName?: string | null;
+  lastStorageEventType?: BatchEventType | null;
+  lastStorageEventDate?: Date | null;
+  totalKgIn?: number;
+  totalKgOut?: number;
+  totalCostEur?: number;
+  totalRevenueEur?: number;
+  marginEur?: number;
+  eventCount?: number;
+};
+
+export type BatchInput = {
+  harvestRegistrationId?: string | null;
+  label?: string | null;
+  variety?: string | null;
+  season?: string | null;
+  harvestYear?: number | null;
+  pickNumber?: PickNumber | null;
+  totalCrates?: number | null; // writes to batches.total_crates
+  status?: BatchStatus;
+  reservedFor?: string | null;
+  notes?: string | null;
+};
+
+// Type-specific details schemas for JSONB payloads.
+// All fields are optional — retroactive/partial entry is always allowed.
+
+export type TransportDetails = {
+  carrier?: string;
+  from?: string;
+  to?: string;
+  distance_km?: number;
+  invoice_number?: string;
+};
+
+export type SorteringSizeRow = {
+  size?: string; // e.g. "70-80", "80-90"
+  class?: 'Klasse I' | 'Klasse II' | 'Industrie' | string;
+  kg?: number;
+  price_per_kg?: number;
+};
+
+export type SorteringExternDetails = {
+  sorter_name?: string;
+  invoice_number?: string;
+  sorteerkosten_eur?: number;
+  transportkosten_inbegrepen?: boolean;
+  sizes?: SorteringSizeRow[];
+};
+
+export type SorteringEigenDetails = {
+  sizes?: SorteringSizeRow[];
+  rot_percentage?: number;
+  industrie_kg?: number;
+  klant_order?: string;
+};
+
+export type AfzetDetails = {
+  buyer?: string;
+  price_per_kg?: number;
+  bonus_eur?: number;
+  deduction_eur?: number;
+  payment_date?: string; // ISO date
+  contract_reference?: string;
+};
+
+export type VerplaatsingDetails = {
+  from_cell_id?: string;
+  from_cell_name?: string;
+};
+
+export type KwaliteitsmetingDetails = {
+  brix?: number;
+  firmness?: number;
+  starch_index?: number;
+  storage_scald?: number;
+  bitter_pit?: number;
+  notes?: string;
+  [key: string]: unknown; // flexibel voor extra velden later
+};
+
+export type BatchEventDetails =
+  | TransportDetails
+  | SorteringExternDetails
+  | SorteringEigenDetails
+  | AfzetDetails
+  | VerplaatsingDetails
+  | KwaliteitsmetingDetails
+  | Record<string, unknown>;
+
+export type BatchEvent = {
+  id: string;
+  batchId: string;
+  eventType: BatchEventType;
+  eventDate: Date | null;
+  kg: number | null;
+  costEur: number | null;
+  revenueEur: number | null;
+  storageCellId: string | null;
+  storageCellName?: string | null;
+  details: BatchEventDetails;
+  sourceDocumentId: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type BatchEventInput = {
+  batchId: string;
+  eventType: BatchEventType;
+  eventDate?: Date | null;
+  kg?: number | null;
+  costEur?: number | null;
+  revenueEur?: number | null;
+  storageCellId?: string | null;
+  details?: BatchEventDetails;
+  sourceDocumentId?: string | null;
+  notes?: string | null;
+};
+
+export type BatchDocument = {
+  id: string;
+  batchId: string | null;
+  linkedEventId: string | null;
+  storagePath: string;
+  filename: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  documentType: BatchDocumentType;
+  processingStatus: BatchDocumentStatus;
+  notes: string | null;
+  uploadedAt: Date;
+  processedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type BatchDocumentInput = {
+  batchId?: string | null;
+  linkedEventId?: string | null;
+  storagePath: string;
+  filename?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  documentType?: BatchDocumentType;
+  processingStatus?: BatchDocumentStatus;
+  notes?: string | null;
+};
+
+// ----- batch_parcels (m:m partij ↔ (sub)perceel) -----
+
+export type BatchParcelLink = {
+  id: string;
+  batchId: string;
+  parcelId: string | null;
+  subParcelId: string | null;
+  estimatedKg: number | null;
+  crates: number | null;
+  kgPerCrate: number | null;
+  createdAt: Date;
+  // Enriched (from v_batch_parcels_enriched)
+  parcelName?: string | null;
+  subParcelName?: string | null;
+  subParcelVariety?: string | null;
+  subParcelArea?: number | null;
+  subParcelParentId?: string | null;
+};
+
+export type BatchParcelLinkInput = {
+  parcelId?: string | null;
+  subParcelId?: string | null;
+  estimatedKg?: number | null;
+  crates?: number | null;
+  kgPerCrate?: number | null;
 };

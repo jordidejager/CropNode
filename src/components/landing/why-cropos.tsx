@@ -11,7 +11,7 @@ const cards = [
     title: 'Van uren naar seconden',
     problem: 'Administratie kost je avonden en weekenden',
     solution:
-      'Eén zin typen is genoeg. AI herkent percelen, middelen en doseringen — registreer in minder dan 3 seconden.',
+      'Eén zin typen of WhatsApp-bericht sturen is genoeg. AI herkent percelen, middelen en doseringen — registreer in minder dan 3 seconden.',
   },
   {
     icon: Brain,
@@ -19,7 +19,7 @@ const cards = [
     title: 'Eén platform, nul chaos',
     problem: 'Alles staat overal: Excel, papier, WhatsApp',
     solution:
-      'Percelen, registraties, weer, oogst, uren en voorraad — eindelijk op één plek. Volledig geïntegreerd.',
+      'Percelen, registraties, weer, oogst, uren, voorraad, kennisbank en analytics — 10 modules op één plek. Data stroomt automatisch door het hele platform.',
   },
   {
     icon: ShieldCheck,

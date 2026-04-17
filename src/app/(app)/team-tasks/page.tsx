@@ -225,6 +225,7 @@ export default function TeamTasksPage() {
                 await startTaskSessionMutation.mutateAsync({
                     taskTypeId: selectedTaskType,
                     subParcelId: selectedSubParcel || null,
+                    parcelId: null,
                     startTime: dateTimeLocalToDate(startDateTime),
                     peopleCount,
                     notes: notes || null,
@@ -237,6 +238,7 @@ export default function TeamTasksPage() {
                     endDate: new Date(endDate),
                     days,
                     subParcelId: selectedSubParcel || null,
+                    parcelId: null,
                     taskTypeId: selectedTaskType,
                     peopleCount,
                     hoursPerPerson,

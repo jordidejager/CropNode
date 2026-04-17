@@ -11,7 +11,7 @@ import { nl } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import type { ActiveTaskSession, WorkScheduleDay, StopDayEntry } from '@/lib/types'
 import { DEFAULT_WORK_SCHEDULE, calcNettoHoursWithBreaks } from '@/lib/types'
-import { formatDateTime, dateTimeLocalToDate, getDefaultEndDateTime, getStandardHoursForDay, calculateWorkedHours, WORK_END_HOUR } from './utils'
+import { formatDateTime, dateTimeLocalToDate, getDefaultEndDateTime, getStandardHoursForDay } from './utils'
 
 interface StopSessionDialogProps {
     session: ActiveTaskSession
@@ -141,22 +141,22 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <Card className="bg-slate-900 border-white/10 w-full max-w-lg shadow-2xl max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <Card className="bg-slate-900 border-white/10 w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
                 <CardHeader className="shrink-0">
-                    <CardTitle className="text-white flex items-center gap-2">
+                    <CardTitle className="text-white text-xl flex items-center gap-2">
                         <Square className="h-5 w-5 text-emerald-400" />
-                        Taak Afronden
+                        Taak afronden
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 overflow-y-auto">
                     {/* Session info */}
                     <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                        <div className="font-bold text-white">{session.taskTypeName}</div>
-                        <div className="text-sm text-white/40 mt-1">
+                        <div className="font-bold text-white text-base">{session.taskTypeName}</div>
+                        <div className="text-sm text-white/70 mt-1">
                             Gestart: {formatDateTime(session.startTime)}
                         </div>
-                        <div className="text-sm text-white/40">
+                        <div className="text-sm text-white/70">
                             {session.peopleCount} {session.peopleCount === 1 ? 'persoon' : 'personen'}
                         </div>
                     </div>
@@ -166,17 +166,21 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
                         <>
                             <div className="flex items-center gap-2 px-1">
                                 <CalendarDays className="h-4 w-4 text-emerald-400" />
-                                <span className="text-xs font-bold text-white/50 uppercase tracking-wider">
-                                    Dag-voor-dag ({workDayCount} werkdagen)
+                                <span className="text-sm font-semibold text-white/80">
+                                    Per dag uitgesplitst ({workDayCount} {workDayCount === 1 ? 'werkdag' : 'werkdagen'})
                                 </span>
                             </div>
 
+                            <p className="text-sm text-white/70 bg-white/[0.03] rounded-lg px-3 py-2 border border-white/10">
+                                Zet uren op 0 om een dag over te slaan. Pas personen aan als je die dag extra hulp had.
+                            </p>
+
                             <div className="space-y-1">
                                 {/* Header */}
-                                <div className="grid grid-cols-[1fr_80px_65px_60px] gap-2 px-2 text-[10px] font-bold text-white/30 uppercase tracking-wider">
+                                <div className="grid grid-cols-[1fr_80px_70px_64px] gap-2 px-2 text-xs font-semibold text-white/70">
                                     <span>Datum</span>
-                                    <span>Uren/pp</span>
-                                    <span>Pers.</span>
+                                    <span className="text-center">Uren/pp</span>
+                                    <span className="text-center">Pers.</span>
                                     <span className="text-right">Totaal</span>
                                 </div>
 
@@ -184,13 +188,13 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
                                     <div
                                         key={entry.date}
                                         className={cn(
-                                            "grid grid-cols-[1fr_80px_65px_60px] gap-2 items-center px-2 py-1 rounded-lg",
+                                            "grid grid-cols-[1fr_80px_70px_64px] gap-2 items-center px-2 py-1.5 rounded-lg",
                                             entry.isWorkday && entry.hoursPerPerson > 0
-                                                ? "bg-white/[0.03]"
-                                                : "bg-white/[0.01] opacity-40"
+                                                ? "bg-white/[0.04]"
+                                                : "bg-white/[0.02] opacity-60"
                                         )}
                                     >
-                                        <span className="text-xs text-white/70 font-medium">{entry.dayLabel}</span>
+                                        <span className="text-sm text-white font-medium">{entry.dayLabel}</span>
                                         {entry.isWorkday ? (
                                             <>
                                                 <Input
@@ -199,70 +203,68 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
                                                     step={0.5}
                                                     value={entry.hoursPerPerson}
                                                     onChange={(e) => handleDayChange(i, 'hoursPerPerson', Math.max(0, parseFloat(e.target.value) || 0))}
-                                                    className="bg-white/5 border-white/10 text-white h-7 text-xs text-center"
+                                                    aria-label={`Uren per persoon op ${entry.dayLabel}`}
+                                                    className="bg-white/10 border-white/20 text-white h-9 text-sm text-center"
                                                 />
                                                 <Input
                                                     type="number"
                                                     min={1}
                                                     value={entry.peopleCount}
                                                     onChange={(e) => handleDayChange(i, 'peopleCount', Math.max(1, parseInt(e.target.value) || 1))}
-                                                    className="bg-white/5 border-white/10 text-white h-7 text-xs text-center"
+                                                    aria-label={`Aantal personen op ${entry.dayLabel}`}
+                                                    className="bg-white/10 border-white/20 text-white h-9 text-sm text-center"
                                                 />
-                                                <span className="text-xs font-semibold text-white/60 text-right">
+                                                <span className="text-sm font-semibold text-white text-right">
                                                     {(entry.hoursPerPerson * entry.peopleCount).toFixed(1)}u
                                                 </span>
                                             </>
                                         ) : (
                                             <>
-                                                <span className="text-xs text-white/20 text-center">&mdash;</span>
-                                                <span className="text-xs text-white/20 text-center">&mdash;</span>
-                                                <span className="text-xs text-white/20 text-right">vrij</span>
+                                                <span className="text-sm text-white/40 text-center">—</span>
+                                                <span className="text-sm text-white/40 text-center">—</span>
+                                                <span className="text-sm text-white/40 text-right">vrij</span>
                                             </>
                                         )}
                                     </div>
                                 ))}
 
                                 {/* Totaal */}
-                                <div className="grid grid-cols-[1fr_80px_65px_60px] gap-2 px-2 py-2 border-t border-white/10 mt-1">
-                                    <span className="text-xs font-bold text-white/50">Totaal</span>
+                                <div className="grid grid-cols-[1fr_80px_70px_64px] gap-2 px-2 py-2 border-t-2 border-white/15 mt-2">
+                                    <span className="text-sm font-bold text-white">Totaal</span>
                                     <span></span>
                                     <span></span>
-                                    <span className="text-sm font-black text-emerald-400 text-right">
+                                    <span className="text-base font-black text-emerald-400 text-right">
                                         {totalHoursMultiDay.toFixed(1)}u
                                     </span>
                                 </div>
                             </div>
-
-                            <p className="text-[11px] text-white/30 px-1">
-                                Tip: zet uren op 0 om een dag over te slaan. Pas personen aan als je die dag extra hulp had.
-                            </p>
                         </>
                     ) : (
                         /* ===== SIMPLE (SAME-DAY) ===== */
                         <>
                             <div className="space-y-2">
-                                <Label className="text-white/60 text-xs font-bold uppercase tracking-wider">Eindtijd</Label>
+                                <Label className="text-white/80 text-sm font-semibold">Eindtijd</Label>
                                 <Input
                                     type="datetime-local"
                                     value={stopEndDateTime}
                                     onChange={(e) => setStopEndDateTime(e.target.value)}
-                                    className="bg-white/5 border-white/10 text-white h-12"
+                                    className="bg-white/5 border-white/10 text-white h-12 text-base"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label className="text-white/60 text-xs font-bold uppercase tracking-wider">Uren per persoon</Label>
+                                <Label className="text-white/80 text-sm font-semibold">Uren per persoon</Label>
                                 <Input
                                     type="number"
                                     min={0.5}
                                     step={0.5}
                                     value={stopHoursPerPerson}
                                     onChange={(e) => setStopHoursPerPerson(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                                    className="bg-white/5 border-white/10 text-white h-12"
+                                    className="bg-white/5 border-white/10 text-white h-12 text-base"
                                 />
-                                <div className="flex justify-between text-[11px] text-white/30">
-                                    <span>Totaal: {(session.peopleCount * stopHoursPerPerson).toFixed(1)} uur</span>
-                                    <span>Op basis van werkschema</span>
+                                <div className="flex justify-between text-sm text-white/60">
+                                    <span>Totaal: <span className="font-semibold text-white/80">{(session.peopleCount * stopHoursPerPerson).toFixed(1)} uur</span></span>
+                                    <span>Voorstel uit werkschema</span>
                                 </div>
                             </div>
                         </>
@@ -273,14 +275,14 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
                         <Button
                             variant="ghost"
                             onClick={onCancel}
-                            className="flex-1 text-white/60 hover:text-white"
+                            className="flex-1 text-white/80 hover:text-white hover:bg-white/10 h-12 text-base font-semibold"
                         >
                             Annuleren
                         </Button>
                         <Button
                             onClick={multiDay ? handleSubmitMultiDay : handleSubmitSimple}
                             disabled={isPending}
-                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold"
+                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-12 text-base"
                         >
                             {isPending ? (
                                 <div className="flex items-center gap-2">
@@ -288,9 +290,9 @@ export function StopSessionDialog({ session, workSchedule, onStopSimple, onStopM
                                     Opslaan...
                                 </div>
                             ) : multiDay ? (
-                                `${workDayCount} dagen opslaan`
+                                `${workDayCount} ${workDayCount === 1 ? 'dag' : 'dagen'} opslaan`
                             ) : (
-                                "Afronden & Opslaan"
+                                "Afronden & opslaan"
                             )}
                         </Button>
                     </div>

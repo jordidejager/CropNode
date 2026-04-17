@@ -12,9 +12,14 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
-     * - api routes (for now)
+     * - static image assets
+     * - api/whatsapp/webhook (HMAC-authed, no user session)
+     * - api/weather/cron (CRON_SECRET-authed, no user session)
+     * - api/knowledge/scrape (CRON_SECRET-authed, no user session)
+     *
+     * API routes with user auth (like /api/afzetstromen/*) ARE included so
+     * Supabase can refresh the session cookie before getUser() runs in the route.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/whatsapp/webhook|api/weather/cron|api/knowledge/scrape).*)',
   ],
 }

@@ -7,8 +7,19 @@ import {
     ResponsiveContainer, Legend,
 } from 'recharts'
 import { BarChart3, PieChart as PieChartIcon, MapPin } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { TaskLogEnriched } from '@/lib/types'
 import { getTaskTypeColor } from './utils'
+
+type PeriodKey = 'week' | 'month' | 'quarter' | 'year' | 'all'
+
+const PERIOD_OPTIONS: { key: PeriodKey; label: string; days: number | null }[] = [
+    { key: 'week',    label: 'Deze week',  days: 7 },
+    { key: 'month',   label: 'Maand',      days: 30 },
+    { key: 'quarter', label: 'Kwartaal',   days: 90 },
+    { key: 'year',    label: 'Jaar',       days: 365 },
+    { key: 'all',     label: 'Alles',      days: null },
+]
 
 interface HoursAnalyticsProps {
     logs: TaskLogEnriched[]
@@ -21,15 +32,15 @@ function ChartCard({ title, icon: Icon, isEmpty, children }: {
     children: React.ReactNode
 }) {
     return (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-center gap-2 mb-4">
-                <Icon className="h-4 w-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+                <Icon className="h-5 w-5 text-emerald-400" />
+                <h3 className="text-base font-semibold text-white">{title}</h3>
             </div>
             {isEmpty ? (
-                <div className="flex flex-col items-center justify-center h-[200px] text-white/20">
-                    <Icon className="h-10 w-10 mb-2 opacity-40" />
-                    <p className="text-xs">Nog geen data beschikbaar</p>
+                <div className="flex flex-col items-center justify-center h-[200px] text-white/40">
+                    <Icon className="h-10 w-10 mb-2 opacity-50" />
+                    <p className="text-sm">Nog geen data beschikbaar</p>
                 </div>
             ) : children}
         </div>
@@ -39,13 +50,13 @@ function ChartCard({ title, icon: Icon, isEmpty, children }: {
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
     if (!active || !payload?.length) return null
     return (
-        <div className="rounded-lg border border-white/10 bg-slate-900/95 px-3 py-2 shadow-xl backdrop-blur-xl">
-            <p className="text-xs font-semibold text-slate-300 mb-1">{label}</p>
+        <div className="rounded-lg border border-white/15 bg-slate-900/95 px-3 py-2 shadow-xl backdrop-blur-xl">
+            <p className="text-sm font-semibold text-white mb-1">{label}</p>
             {payload.map((entry, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-slate-400">{entry.name}:</span>
-                    <span className="text-slate-200 font-medium">{entry.value.toFixed(1)}u</span>
+                <div key={i} className="flex items-center gap-2 text-sm">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-white/75">{entry.name}:</span>
+                    <span className="text-white font-semibold">{entry.value.toFixed(1)}u</span>
                 </div>
             ))}
         </div>
@@ -56,15 +67,27 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ n
     if (!active || !payload?.length) return null
     const item = payload[0]
     return (
-        <div className="rounded-lg border border-white/10 bg-slate-900/95 px-3 py-2 shadow-xl backdrop-blur-xl">
-            <p className="text-xs font-semibold text-slate-200">{item.name}</p>
-            <p className="text-xs text-slate-400">{item.value.toFixed(1)} uur ({item.payload.percentage.toFixed(0)}%)</p>
-            <p className="text-xs text-emerald-400">&euro;{item.payload.cost.toFixed(0)}</p>
+        <div className="rounded-lg border border-white/15 bg-slate-900/95 px-3 py-2 shadow-xl backdrop-blur-xl">
+            <p className="text-sm font-semibold text-white">{item.name}</p>
+            <p className="text-sm text-white/75">{item.value.toFixed(1)} uur ({item.payload.percentage.toFixed(0)}%)</p>
+            <p className="text-sm text-emerald-300 font-medium">&euro;{item.payload.cost.toFixed(0)}</p>
         </div>
     )
 }
 
-export function HoursAnalytics({ logs }: HoursAnalyticsProps) {
+export function HoursAnalytics({ logs: rawLogs }: HoursAnalyticsProps) {
+    const [period, setPeriod] = React.useState<PeriodKey>('all')
+
+    // Filter logs op gekozen periode — "Alles" toont alle registraties.
+    const logs = React.useMemo(() => {
+        const option = PERIOD_OPTIONS.find(o => o.key === period)
+        if (!option || option.days === null) return rawLogs
+        const cutoff = new Date()
+        cutoff.setHours(0, 0, 0, 0)
+        cutoff.setDate(cutoff.getDate() - option.days + 1)
+        return rawLogs.filter(l => l.startDate >= cutoff)
+    }, [rawLogs, period])
+
     // Weekly trend data (last 12 weeks)
     const weeklyData = React.useMemo(() => {
         const now = new Date()
@@ -155,21 +178,45 @@ export function HoursAnalytics({ logs }: HoursAnalyticsProps) {
 
     return (
         <div className="space-y-6">
+            {/* Periode-keuze */}
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-white/80 mr-1">Periode:</span>
+                {PERIOD_OPTIONS.map(opt => {
+                    const active = opt.key === period
+                    return (
+                        <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => setPeriod(opt.key)}
+                            aria-pressed={active}
+                            className={cn(
+                                'px-3.5 py-2 rounded-full text-sm font-semibold transition-colors min-h-[40px] border',
+                                active
+                                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
+                                    : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white',
+                            )}
+                        >
+                            {opt.label}
+                        </button>
+                    )
+                })}
+            </div>
+
             {/* Summary */}
-            <div className="flex items-center gap-6 px-1">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-1">
                 <div>
-                    <div className="text-2xl font-black text-white">{totalHours.toFixed(0)}</div>
-                    <div className="text-[10px] text-white/30 uppercase font-bold tracking-wider">Totaal uren</div>
+                    <div className="text-3xl font-black text-white">{totalHours.toFixed(0)}</div>
+                    <div className="text-sm text-white/65 font-medium">Totaal uren</div>
                 </div>
                 <div>
-                    <div className="text-2xl font-black text-emerald-400">
+                    <div className="text-3xl font-black text-emerald-400">
                         {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalCost)}
                     </div>
-                    <div className="text-[10px] text-white/30 uppercase font-bold tracking-wider">Totaal kosten</div>
+                    <div className="text-sm text-white/65 font-medium">Totaal kosten</div>
                 </div>
                 <div>
-                    <div className="text-2xl font-black text-white">{logs.length}</div>
-                    <div className="text-[10px] text-white/30 uppercase font-bold tracking-wider">Registraties</div>
+                    <div className="text-3xl font-black text-white">{logs.length}</div>
+                    <div className="text-sm text-white/65 font-medium">Registraties</div>
                 </div>
             </div>
 
@@ -181,12 +228,12 @@ export function HoursAnalytics({ logs }: HoursAnalyticsProps) {
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
                             <XAxis
                                 dataKey="name"
-                                tick={{ fill: '#64748b', fontSize: 11 }}
-                                axisLine={{ stroke: 'rgba(255,255,255,0.05)' }}
+                                tick={{ fill: '#94a3b8', fontSize: 13 }}
+                                axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                             />
                             <YAxis
-                                tick={{ fill: '#64748b', fontSize: 11 }}
-                                axisLine={{ stroke: 'rgba(255,255,255,0.05)' }}
+                                tick={{ fill: '#94a3b8', fontSize: 13 }}
+                                axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             {taskTypeNames.map((name, i) => (
@@ -226,10 +273,10 @@ export function HoursAnalytics({ logs }: HoursAnalyticsProps) {
                         </ResponsiveContainer>
                         <div className="flex-1 space-y-2">
                             {costBreakdown.map((entry) => (
-                                <div key={entry.name} className="flex items-center gap-2 text-xs">
-                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                                    <span className="text-slate-300 truncate">{entry.name}</span>
-                                    <span className="text-slate-500 ml-auto">{entry.percentage.toFixed(0)}%</span>
+                                <div key={entry.name} className="flex items-center gap-2 text-sm">
+                                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                                    <span className="text-white/85 truncate">{entry.name}</span>
+                                    <span className="text-white/65 ml-auto font-medium">{entry.percentage.toFixed(0)}%</span>
                                 </div>
                             ))}
                         </div>
@@ -245,23 +292,23 @@ export function HoursAnalytics({ logs }: HoursAnalyticsProps) {
                         const pct = (parcel.hours / maxHours) * 100
                         return (
                             <div key={parcel.name} className="flex items-center gap-3">
-                                <span className="text-xs text-slate-400 w-[120px] truncate shrink-0" title={parcel.name}>
+                                <span className="text-sm text-white/80 w-[140px] truncate shrink-0" title={parcel.name}>
                                     {parcel.name}
                                 </span>
-                                <div className="flex-1 h-6 bg-white/[0.03] rounded-md overflow-hidden relative">
+                                <div className="flex-1 h-7 bg-white/[0.04] rounded-md overflow-hidden relative">
                                     <div
                                         className="h-full rounded-md transition-all duration-500"
                                         style={{
                                             width: `${pct}%`,
                                             backgroundColor: getTaskTypeColor(parcel.name, i),
-                                            opacity: 0.6,
+                                            opacity: 0.7,
                                         }}
                                     />
-                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-300 font-medium">
+                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-white font-semibold">
                                         {parcel.hours.toFixed(1)}u
                                     </span>
                                 </div>
-                                <span className="text-[11px] text-emerald-400/60 font-medium w-[60px] text-right">
+                                <span className="text-sm text-emerald-300/90 font-medium w-[70px] text-right">
                                     &euro;{parcel.cost.toFixed(0)}
                                 </span>
                             </div>

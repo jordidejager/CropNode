@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { motion, useInView } from 'framer-motion';
 import {
   Cloud,
@@ -23,6 +23,9 @@ import {
   Phone,
   Check,
   Send,
+  FileText,
+  Truck,
+  Camera,
 } from 'lucide-react';
 
 /* ─── Weather Hub Visual ─── */
@@ -300,41 +303,54 @@ function ResearchVisual({ isInView }: { isInView: boolean }) {
 
 /* ─── Perceelbeheer Map Visual ─── */
 function ParcelMapVisual({ isInView }: { isInView: boolean }) {
-  // Organic irregular polygons matching real Dutch orchard aerial boundaries
-  // Each parcel uses 6-8 vertices for natural-looking field edges
+  // Traced from real Dutch orchard aerial — irregular L-shapes, notches, concave edges
   const parcels = [
+    // Bottom-left: large L-shaped parcel (biggest — complex concave shape)
     {
-      d: 'M248,5 L290,4 L322,10 L342,20 L336,46 L310,52 L278,50 L250,42 L244,24 Z',
-      verts: [[248,5],[290,4],[322,10],[342,20],[336,46],[310,52],[278,50],[250,42],[244,24]],
-      label: 'Betuwe Noord', ras: 'Elstar', ha: '5,20', cx: 292, cy: 26, selected: true,
+      d: 'M14,58 L38,52 L62,48 L80,46 L94,50 L96,62 L88,68 L90,78 L84,88 L70,96 L48,100 L28,102 L14,96 L8,80 Z',
+      verts: [[14,58],[38,52],[62,48],[80,46],[94,50],[96,62],[88,68],[90,78],[84,88],[70,96],[48,100],[28,102],[14,96],[8,80]],
+      label: 'Rivierzicht', ras: 'Cox Orange', ha: '5,80', cx: 52, cy: 74, selected: true,
     },
+    // Center-left: narrow vertical strip 1
     {
-      d: 'M304,54 L338,46 L362,42 L380,50 L382,72 L372,84 L344,88 L312,84 L302,68 Z',
-      label: 'Kerkpad', ras: 'Conference', ha: '4,50', cx: 344, cy: 64,
+      d: 'M118,38 L136,34 L142,46 L146,64 L148,82 L144,96 L132,100 L124,88 L120,68 L116,50 Z',
+      label: 'Kerkpad', ras: 'Conference', ha: '2,40', cx: 134, cy: 66,
     },
+    // Center: narrow vertical strip 2
     {
-      d: 'M156,26 L198,18 L232,20 L242,30 L240,52 L224,62 L178,64 L158,54 Z',
-      label: 'De Hoek', ras: 'Conference', ha: '4,80', cx: 200, cy: 40,
+      d: 'M150,34 L166,30 L172,40 L176,58 L178,76 L174,88 L162,92 L154,80 L148,58 L146,44 Z',
+      label: 'Zandweg', ras: 'Jonagold', ha: '1,80', cx: 163, cy: 60,
     },
+    // Center: narrow vertical strip 3 (with notch)
     {
-      d: 'M74,40 L112,30 L142,32 L152,42 L154,62 L140,74 L104,76 L78,68 Z',
-      label: 'Zandweg', ras: 'Jonagold', ha: '3,80', cx: 118, cy: 53,
+      d: 'M180,28 L194,25 L198,36 L196,48 L200,52 L198,66 L194,78 L186,82 L180,70 L178,52 L176,38 Z',
+      label: 'Molenweg', ras: 'Elstar', ha: '1,60', cx: 189, cy: 52,
     },
+    // Top-center: medium tilted parcel
     {
-      d: 'M126,76 L174,68 L216,64 L238,70 L244,88 L234,102 L196,108 L138,106 L128,92 Z',
-      label: 'Langgaard', ras: 'Elstar', ha: '3,40', cx: 186, cy: 86,
+      d: 'M202,6 L234,2 L252,6 L258,16 L254,30 L240,36 L218,34 L204,28 L198,18 Z',
+      label: 'Hoogveld', ras: 'Boskoop', ha: '3,20', cx: 228, cy: 18,
     },
+    // Top-right: large complex L-shaped parcel
     {
-      d: 'M12,64 L44,54 L70,56 L82,66 L80,86 L66,96 L30,98 L14,86 Z',
-      label: 'Rivierzicht', ras: 'Cox Orange', ha: '3,50', cx: 50, cy: 76,
+      d: 'M268,4 L308,2 L338,6 L354,14 L358,30 L352,42 L336,46 L318,40 L304,36 L292,40 L278,38 L266,28 L262,16 Z',
+      verts: [[268,4],[308,2],[338,6],[354,14],[358,30],[352,42],[336,46],[318,40],[304,36],[292,40],[278,38],[266,28],[262,16]],
+      label: 'Betuwe Noord', ras: 'Elstar', ha: '5,20', cx: 310, cy: 22,
     },
+    // Right: medium irregular parcel
     {
-      d: 'M26,12 L54,6 L78,8 L88,18 L86,34 L72,42 L40,40 L28,30 Z',
-      label: 'Hoogveld', ras: 'Boskoop', ha: '2,10', cx: 58, cy: 24,
+      d: 'M340,48 L366,42 L384,48 L390,62 L386,78 L374,86 L354,84 L338,76 L332,62 Z',
+      label: 'De Hoek', ras: 'Conference', ha: '4,80', cx: 362, cy: 64,
     },
+    // Bottom-center: wider irregular parcel
     {
-      d: 'M320,82 L348,76 L372,78 L384,86 L382,100 L370,110 L340,112 L322,102 Z',
-      label: 'Nieuwe Weg', ras: 'Conference', ha: '3,35', cx: 352, cy: 93,
+      d: 'M200,56 L228,50 L258,52 L272,60 L276,76 L268,90 L244,98 L216,100 L198,92 L192,76 Z',
+      label: 'Langgaard', ras: 'Elstar', ha: '3,40', cx: 236, cy: 74,
+    },
+    // Far bottom-right: small pentagon
+    {
+      d: 'M348,88 L372,84 L386,90 L388,104 L380,112 L360,114 L344,108 L340,96 Z',
+      label: 'Nieuwe Weg', ras: 'Conference', ha: '3,35', cx: 364, cy: 99,
     },
   ];
 
@@ -480,7 +496,7 @@ function ParcelMapVisual({ isInView }: { isInView: boolean }) {
           className="absolute top-2 right-2 px-2 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-orange-500/20"
         >
           <div className="text-[7px] text-slate-500 uppercase tracking-wider">Totaal</div>
-          <span className="text-[11px] text-orange-400 font-bold">30,65 ha</span>
+          <span className="text-[11px] text-orange-400 font-bold">31,55 ha</span>
         </motion.div>
 
         {/* Selected parcel detail popup */}
@@ -488,7 +504,7 @@ function ParcelMapVisual({ isInView }: { isInView: boolean }) {
           initial={{ opacity: 0, y: 4, scale: 0.9 }}
           animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
           transition={{ delay: 1.3, type: 'spring', stiffness: 150 }}
-          className="absolute bottom-[38px] right-[90px] px-2.5 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-orange-500/25 shadow-lg shadow-orange-500/5"
+          className="absolute bottom-[38px] left-[12px] px-2.5 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm border border-orange-500/25 shadow-lg shadow-orange-500/5"
         >
           <div className="flex items-center gap-1.5 mb-1">
             <motion.div
@@ -496,12 +512,12 @@ function ParcelMapVisual({ isInView }: { isInView: boolean }) {
               animate={isInView ? { scale: [1, 1.3, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity }}
             />
-            <span className="text-[8px] text-orange-300 font-bold">Betuwe Noord</span>
+            <span className="text-[8px] text-orange-300 font-bold">Rivierzicht</span>
           </div>
           <div className="flex items-center gap-3 text-[7px]">
-            <div><span className="text-slate-500">Ras</span><div className="text-white/80 font-medium">Elstar</div></div>
-            <div><span className="text-slate-500">Opp.</span><div className="text-white/80 font-medium">5,20 ha</div></div>
-            <div><span className="text-slate-500">Blokken</span><div className="text-white/80 font-medium">A — D</div></div>
+            <div><span className="text-slate-500">Ras</span><div className="text-white/80 font-medium">Cox Orange</div></div>
+            <div><span className="text-slate-500">Opp.</span><div className="text-white/80 font-medium">5,80 ha</div></div>
+            <div><span className="text-slate-500">Blokken</span><div className="text-white/80 font-medium">A — E</div></div>
           </div>
         </motion.div>
 
@@ -1072,39 +1088,193 @@ function WhatsAppVisual({ isInView }: { isInView: boolean }) {
   );
 }
 
+/* ─── Veldnotities Visual ─── */
+function FieldNotesVisual({ isInView }: { isInView: boolean }) {
+  const notes = [
+    { text: 'Verdachte schurftplekken op bladeren blok A-C', tag: 'Schimmel', tagColor: 'bg-amber-500/15 text-amber-400 border-amber-500/20', parcel: 'Betuwe Noord', time: '14:22', photo: true, gps: true },
+    { text: 'Perenbladvlo waargenomen, lichte aantasting', tag: 'Insect', tagColor: 'bg-red-500/15 text-red-400 border-red-500/20', parcel: 'Kerkpad', time: '11:05', photo: false, gps: true },
+  ];
+
+  return (
+    <div className="mt-4 space-y-2">
+      {notes.map((note, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, x: -12 }}
+          animate={isInView ? { opacity: 1, x: 0 } : {}}
+          transition={{ delay: 0.3 + i * 0.2, ease: 'easeOut' }}
+          className="rounded-xl bg-slate-800/30 border border-lime-500/10 p-3"
+        >
+          <div className="flex items-start gap-2.5">
+            {note.photo && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={isInView ? { scale: 1 } : {}}
+                transition={{ delay: 0.5 + i * 0.2, type: 'spring' }}
+                className="w-10 h-10 rounded-lg bg-lime-500/10 border border-lime-500/15 flex items-center justify-center flex-shrink-0"
+              >
+                <Camera className="w-4 h-4 text-lime-400/60" />
+              </motion.div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-slate-200 leading-relaxed">{note.text}</p>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-medium border ${note.tagColor}`}>{note.tag}</span>
+                <span className="text-[8px] text-slate-500">{note.parcel}</span>
+                {note.gps && <MapPin className="w-2.5 h-2.5 text-lime-400/50" />}
+                <span className="text-[8px] text-slate-600 ml-auto">{note.time}</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      ))}
+
+      {/* Task preview */}
+      <motion.div
+        initial={{ opacity: 0, x: -12 }}
+        animate={isInView ? { opacity: 1, x: 0 } : {}}
+        transition={{ delay: 0.7 }}
+        className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-800/20 border border-white/[0.04]"
+      >
+        <motion.div
+          animate={isInView ? { scale: [1, 1.2, 1] } : {}}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0"
+        />
+        <span className="text-[9px] text-slate-400">Taak: Dunnen Kerkpad — <span className="text-lime-400/80">15 apr</span></span>
+      </motion.div>
+
+      {/* Transfer action */}
+      <motion.div
+        initial={{ opacity: 0, y: 5 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ delay: 0.9 }}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15"
+      >
+        <Send className="w-3 h-3 text-emerald-400/70" />
+        <span className="text-[9px] text-emerald-400/70">Verwerk bespuiting via Slimme Invoer →</span>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─── Afzetstromen Visual ─── */
+function SalesVisual({ isInView }: { isInView: boolean }) {
+  const sizes = [
+    { label: '60-65', pct: 12 },
+    { label: '65-70', pct: 28 },
+    { label: '70-75', pct: 35 },
+    { label: '75-80', pct: 18 },
+    { label: '80+', pct: 7 },
+  ];
+
+  return (
+    <div className="mt-4 space-y-2.5">
+      {/* Batch card */}
+      <div className="rounded-xl bg-slate-800/30 border border-indigo-500/10 p-3">
+        <div className="flex items-center justify-between mb-2.5">
+          <div>
+            <span className="text-[11px] text-slate-200 font-medium">Elstar Klasse I</span>
+            <div className="text-[9px] text-slate-500">Van der Berg Fruit · 12.450 kg</div>
+          </div>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={isInView ? { scale: 1 } : {}}
+            transition={{ delay: 0.6, type: 'spring' }}
+            className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-semibold"
+          >
+            +€9.250
+          </motion.div>
+        </div>
+
+        {/* Size distribution */}
+        <div>
+          <span className="text-[8px] text-slate-500 uppercase tracking-wider font-medium">Sorteerverdeling (mm)</span>
+          <div className="flex items-end gap-1.5 h-10 mt-1.5">
+            {sizes.map((s, i) => (
+              <div key={s.label} className="flex-1 flex flex-col items-center gap-0.5">
+                <motion.div
+                  className="w-full rounded-t-sm bg-gradient-to-t from-indigo-500/40 to-indigo-400/20 border border-indigo-500/20"
+                  initial={{ height: 0 }}
+                  animate={isInView ? { height: `${(s.pct / 35) * 100}%` } : {}}
+                  transition={{ duration: 0.6, delay: 0.8 + i * 0.08, ease: 'easeOut' }}
+                  style={{ minHeight: 2 }}
+                />
+                <span className="text-[7px] text-slate-600">{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Financial KPIs */}
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          { label: 'Opbrengst', value: '€12.450', cls: 'text-white' },
+          { label: 'Kosten', value: '€3.200', cls: 'text-slate-400' },
+          { label: 'Marge', value: '74%', cls: 'text-emerald-400' },
+        ].map((kpi, i) => (
+          <motion.div
+            key={kpi.label}
+            initial={{ opacity: 0, y: 6 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 1.2 + i * 0.1 }}
+            className="text-center py-2 rounded-lg bg-slate-800/30 border border-white/[0.04]"
+          >
+            <div className={`text-[11px] font-bold ${kpi.cls}`}>{kpi.value}</div>
+            <div className="text-[8px] text-slate-600 mt-0.5">{kpi.label}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Document inbox hint */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={isInView ? { opacity: 1 } : {}}
+        transition={{ delay: 1.5 }}
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-indigo-500/[0.05] border border-indigo-500/10"
+      >
+        <FileText className="w-3 h-3 text-indigo-400/60 flex-shrink-0" />
+        <span className="text-[9px] text-indigo-400/60">Inbox: 3 sorteerrapportjes wachten op verwerking</span>
+      </motion.div>
+    </div>
+  );
+}
+
+// Order optimized for 3-column grid: Large(2)+Medium(1) per row, no gaps
 const features = [
   {
     id: 'whatsapp',
     icon: MessageCircle,
-    title: 'WhatsApp Bot',
-    description: 'Registreer bespuitingen en veldnotities direct via WhatsApp. Stuur een bericht, ontvang een CTGB-gevalideerd overzicht, en bevestig met één tap.',
+    title: 'CropNode Assistent',
+    description: 'Registreer bespuitingen, veldnotities en productinfo direct via WhatsApp. AI herkent middelen en percelen, valideert CTGB, en bevestig met één tap. Gratis via Meta Cloud API.',
     size: 'large' as const,
     color: 'green',
     Visual: WhatsAppVisual,
   },
   {
-    id: 'weather',
-    icon: Cloud,
-    title: 'Weather Hub',
-    description: '5-model ensemble vergelijking met 48-uurs Expert Forecast, spuitvenster-advies, Delta-T, bladnat-uren en GDD tracking.',
-    size: 'large' as const,
-    color: 'sky',
-    Visual: WeatherVisual,
-  },
-  {
     id: 'parcels',
     icon: MapPin,
     title: 'Perceelbeheer',
-    description: 'Percelen op de kaart met blokindeling, ras, onderstam, plantjaar en RVO-import.',
+    description: 'Percelen op luchtfoto met blokindeling, ras, onderstam, plantjaar, grondmonsteranalyse en directe RVO-import. 10-secties perceelprofiel.',
     size: 'medium' as const,
     color: 'amber',
     Visual: ParcelMapVisual,
   },
   {
+    id: 'weather',
+    icon: Cloud,
+    title: 'Weather Hub',
+    description: '5-model ensemble (GFS, ECMWF, ICON, Harmonie, KNMI) met 48-uurs Expert Forecast, spuitvenster-advies, Delta-T, Buienradar radar en GDD seizoenstracking.',
+    size: 'large' as const,
+    color: 'sky',
+    Visual: WeatherVisual,
+  },
+  {
     id: 'ctgb',
     icon: Shield,
     title: 'CTGB Validatie',
-    description: '6-staps validatie: toelating, dosering, spuitinterval, maximale seizoenstoepassingen, werkzame stof som en veiligheidstermijn.',
+    description: 'Deterministische 6-staps validatie — geen AI, pure logica. Toelating, dosering, spuitinterval, seizoensmaximum, werkzame stof som en veiligheidstermijn.',
     size: 'medium' as const,
     color: 'emerald',
     Visual: ValidationVisual,
@@ -1113,25 +1283,43 @@ const features = [
     id: 'research',
     icon: BookOpen,
     title: 'Kennisbank',
-    description: '20+ ziekten & plagen encyclopedie met lifecycle-timeline, risiconiveau, seizoensactiviteit en CTGB-aanbevelingen.',
+    description: '20+ ziekten & plagen encyclopedie met lifecycle, risiconiveau en seizoenskalender. RAG-powered artikelen en wetenschappelijke papers met AI-samenvattingen.',
     size: 'large' as const,
     color: 'purple',
     Visual: ResearchVisual,
   },
   {
+    id: 'fieldnotes',
+    icon: FileText,
+    title: 'Veldnotities',
+    description: 'Waarnemingen met foto, GPS-locatie en AI-classificatie. Taken met deadlines en herinneringen. Eén tap om een bespuitingsnotitie door te zetten naar Slimme Invoer.',
+    size: 'medium' as const,
+    color: 'lime',
+    Visual: FieldNotesVisual,
+  },
+  {
     id: 'harvest',
     icon: Apple,
-    title: 'Harvest Hub',
-    description: 'Plukregistratie met kwaliteitsklassen en koelcel-visualisatie. Track kistposities per cel.',
+    title: 'Oogst & Opslag',
+    description: 'Plukregistratie met kwaliteitsklassen, visueel koelcelbeheer met kistposities en meerjarige productiegeschiedenis per perceel.',
     size: 'small' as const,
     color: 'orange',
     Visual: HarvestVisual,
   },
   {
+    id: 'sales',
+    icon: Truck,
+    title: 'Afzetstromen',
+    description: 'Partijbeheer van pluk tot aflevering. Sorteerverdelingen, kosten-batenanalyse per partij, document-inbox en marge-berekening per koper.',
+    size: 'small' as const,
+    color: 'indigo',
+    Visual: SalesVisual,
+  },
+  {
     id: 'team',
     icon: Users,
-    title: 'Team & Tasks',
-    description: 'Taakbeheer met urenregistratie per activiteit, per perceel en per medewerker met live timer en kostenberekening.',
+    title: 'Urenregistratie',
+    description: 'Live timer met taaktypen, perceelkoppeling, netto werkuren op basis van werkschema en kostenanalyse per activiteit.',
     size: 'small' as const,
     color: 'blue',
     Visual: TeamVisual,
@@ -1140,7 +1328,7 @@ const features = [
     id: 'inventory',
     icon: Package,
     title: 'Voorraad',
-    description: 'Automatische voorraadverwerking bij bevestigde registraties met alerting.',
+    description: 'Automatische voorraadverwerking na elke bevestigde registratie. Lage-voorraad alerts en verpakkingsoverzicht.',
     size: 'small' as const,
     color: 'teal',
     Visual: InventoryVisual,
@@ -1148,8 +1336,8 @@ const features = [
   {
     id: 'analytics',
     icon: BarChart3,
-    title: 'Analytics',
-    description: 'Seizoensdashboard met inputkosten, kosten/ha, behandeloverzicht, kostenverdeling per perceel en ziektedrukanalyse.',
+    title: 'Analytics & AI Inzichten',
+    description: 'Seizoensdashboard, kosten/ha, productietrends, bodemkwaliteit uit grondmonsters, ziektedrukmodellering en AI-correlatie-engine die verbanden vindt in al je bedrijfsdata.',
     size: 'large' as const,
     color: 'cyan',
     Visual: AnalyticsVisual,
@@ -1167,6 +1355,8 @@ const iconColors: Record<string, string> = {
   teal: 'text-teal-400',
   cyan: 'text-cyan-400',
   green: 'text-green-400',
+  lime: 'text-lime-400',
+  indigo: 'text-indigo-400',
 };
 
 const bgColors: Record<string, string> = {
@@ -1179,6 +1369,8 @@ const bgColors: Record<string, string> = {
   teal: 'bg-teal-500/10 border-teal-500/15',
   cyan: 'bg-cyan-500/10 border-cyan-500/15',
   green: 'bg-green-500/10 border-green-500/15',
+  lime: 'bg-lime-500/10 border-lime-500/15',
+  indigo: 'bg-indigo-500/10 border-indigo-500/15',
 };
 
 const hoverBorders: Record<string, string> = {
@@ -1191,6 +1383,37 @@ const hoverBorders: Record<string, string> = {
   teal: 'hover:border-teal-500/25',
   cyan: 'hover:border-cyan-500/25',
   green: 'hover:border-green-500/25',
+  lime: 'hover:border-lime-500/25',
+  indigo: 'hover:border-indigo-500/25',
+};
+
+/* ─── Glow color lookup ─── */
+const glowColors: Record<string, string> = {
+  sky: 'rgba(56,189,248,0.12)',
+  amber: 'rgba(245,158,11,0.12)',
+  emerald: 'rgba(16,185,129,0.12)',
+  purple: 'rgba(168,85,247,0.12)',
+  orange: 'rgba(249,115,22,0.12)',
+  blue: 'rgba(96,165,250,0.12)',
+  teal: 'rgba(45,212,191,0.12)',
+  cyan: 'rgba(34,211,238,0.12)',
+  green: 'rgba(74,222,128,0.12)',
+  lime: 'rgba(163,230,53,0.12)',
+  indigo: 'rgba(129,140,248,0.12)',
+};
+
+const glowColorsSolid: Record<string, string> = {
+  sky: 'bg-sky-400',
+  amber: 'bg-amber-400',
+  emerald: 'bg-emerald-400',
+  purple: 'bg-purple-400',
+  orange: 'bg-orange-400',
+  blue: 'bg-blue-400',
+  teal: 'bg-teal-400',
+  cyan: 'bg-cyan-400',
+  green: 'bg-green-400',
+  lime: 'bg-lime-400',
+  indigo: 'bg-indigo-400',
 };
 
 /* ─── Feature Card ─── */
@@ -1203,6 +1426,12 @@ function FeatureCard({
 }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-40px' });
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  }, []);
 
   const isLarge = feature.size === 'large';
 
@@ -1214,33 +1443,58 @@ function FeatureCard({
       transition={{ duration: 0.5, delay: index * 0.05 }}
       className={isLarge ? 'md:col-span-2' : ''}
     >
+      {/* Outer wrapper for gradient border + spotlight */}
       <div
-        className={`group relative h-full rounded-2xl bg-slate-900/40 border border-white/[0.06] p-5 sm:p-6 overflow-hidden transition-all duration-500 hover:bg-slate-900/60 ${hoverBorders[feature.color]}`}
+        className="group relative h-full rounded-2xl p-px overflow-hidden"
+        onMouseMove={handleMouseMove}
       >
-        {/* Hover gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        {/* Animated gradient border — hidden until hover */}
+        <div
+          className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"
+          style={{
+            background: `linear-gradient(135deg, ${glowColors[feature.color]}, transparent 40%, transparent 60%, ${glowColors[feature.color]})`,
+          }}
+        />
 
-        {/* Corner accent */}
-        <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl translate-x-20 -translate-y-20 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity duration-500 ${feature.color === 'sky' ? 'bg-sky-400' : feature.color === 'amber' ? 'bg-amber-400' : feature.color === 'emerald' ? 'bg-emerald-400' : feature.color === 'purple' ? 'bg-purple-400' : feature.color === 'orange' ? 'bg-orange-400' : feature.color === 'blue' ? 'bg-blue-400' : 'bg-teal-400'}`} />
+        {/* Inner card */}
+        <div
+          className="relative h-full rounded-2xl bg-[#0a0f1a]/80 border border-white/[0.06] p-5 sm:p-6 overflow-hidden transition-all duration-500 group-hover:border-transparent group-hover:bg-[#0a0f1a]/90"
+        >
+          {/* Mouse-following spotlight */}
+          <div
+            className="pointer-events-none absolute inset-0 z-[5] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            style={{
+              background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, ${glowColors[feature.color]}, transparent 40%)`,
+            }}
+          />
 
-        <div className="relative z-10">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-2">
-            <div
-              className={`w-9 h-9 rounded-xl border flex items-center justify-center ${bgColors[feature.color]} group-hover:scale-105 transition-transform duration-300`}
-            >
-              <feature.icon className={`w-4.5 h-4.5 ${iconColors[feature.color]}`} />
+          {/* Top-right glow orb */}
+          <div
+            className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-[80px] translate-x-24 -translate-y-24 opacity-[0.04] group-hover:opacity-[0.10] transition-opacity duration-700 ${glowColorsSolid[feature.color]}`}
+          />
+
+          {/* Noise texture overlay */}
+          <div className="absolute inset-0 opacity-[0.015] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")' }} />
+
+          <div className="relative z-10">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center ${bgColors[feature.color]} group-hover:scale-110 transition-transform duration-300`}
+              >
+                <feature.icon className={`w-4.5 h-4.5 ${iconColors[feature.color]}`} />
+              </div>
+              <h3 className="text-base font-semibold text-slate-100 group-hover:text-white transition-colors duration-300">
+                {feature.title}
+              </h3>
             </div>
-            <h3 className="text-base font-semibold text-slate-100 group-hover:text-white transition-colors">
-              {feature.title}
-            </h3>
+
+            {/* Description */}
+            <p className="text-sm text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors duration-500">{feature.description}</p>
+
+            {/* Visual */}
+            <feature.Visual isInView={isInView} />
           </div>
-
-          {/* Description */}
-          <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
-
-          {/* Visual */}
-          <feature.Visual isInView={isInView} />
         </div>
       </div>
     </motion.div>
@@ -1253,9 +1507,10 @@ export function FeatureBento() {
   const isInView = useInView(ref, { once: true, margin: '-100px' });
 
   return (
-    <section id="features" className="relative py-24 sm:py-32 px-4 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/[0.05] to-transparent" />
+    <section id="features" className="relative py-24 sm:py-36 px-4 overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/[0.04] to-transparent" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full bg-emerald-500/[0.02] blur-[120px]" />
 
       <div className="relative z-10 max-w-7xl mx-auto">
         {/* Section Header */}
@@ -1263,23 +1518,25 @@ export function FeatureBento() {
           ref={ref}
           initial={{ opacity: 0, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-16"
+          transition={{ duration: 0.6 }}
+          className="text-center mb-20"
         >
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={isInView ? { opacity: 1, scale: 1 } : {}}
             transition={{ duration: 0.4 }}
-            className="inline-block text-emerald-400 text-sm font-medium tracking-widest uppercase mb-4"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 mb-6"
           >
-            Platform
-          </motion.span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl text-white mb-4">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-emerald-400 text-xs font-medium tracking-widest uppercase">Platform</span>
+          </motion.div>
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl xl:text-6xl text-white mb-5 tracking-tight">
             Alles wat je nodig hebt.{' '}
-            <span className="text-slate-400">Niets dat je niet nodig hebt.</span>
+            <br className="hidden sm:block" />
+            <span className="bg-gradient-to-r from-slate-400 to-slate-500 bg-clip-text text-transparent">Niets dat je niet nodig hebt.</span>
           </h2>
-          <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            9 geïntegreerde modules die naadloos samenwerken — van WhatsApp tot het spuitschrift.
+          <p className="text-slate-400 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
+            11 geïntegreerde modules die naadloos samenwerken — van WhatsApp-registratie tot AI-inzichten.
           </p>
         </motion.div>
 
