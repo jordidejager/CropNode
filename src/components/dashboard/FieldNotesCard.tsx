@@ -221,53 +221,85 @@ export function TasksCard() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[11px] font-semibold text-white/30 uppercase tracking-widest flex items-center gap-2">
-          <ListTodo className="h-3.5 w-3.5" />
-          Taken
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest flex items-center gap-2">
+          <ListTodo className="h-3.5 w-3.5 text-amber-300/70" />
+          <span className="bg-gradient-to-r from-white/80 to-amber-200/80 bg-clip-text text-transparent">
+            Taken
+          </span>
           {overdueCount > 0 && (
-            <span className="text-[9px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded-full font-bold">
+            <span className="text-[9px] inline-flex items-center gap-1 bg-red-500/15 text-red-300 border border-red-500/25 px-1.5 py-0.5 rounded-full font-bold">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
               {overdueCount} te laat
             </span>
           )}
         </h2>
         <Link
           href="/veldnotities"
-          className="text-xs text-white/25 hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
+          className="text-xs text-white/25 hover:text-amber-300 transition-colors flex items-center gap-1.5 group"
         >
           Alles
           <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       </div>
 
-      <div className="dashboard-card dashboard-shimmer rounded-2xl overflow-hidden">
+      <div className="relative dashboard-card dashboard-shimmer rounded-2xl overflow-hidden">
+        {/* Subtiele amber glow orb rechtsboven — taak-kleur uit landings-palet */}
+        <div
+          className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full blur-[80px] bg-amber-500 opacity-[0.06]"
+          aria-hidden
+        />
+
         {openTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-            <Check className="h-5 w-5 text-emerald-400/30 mb-2" />
-            <p className="text-xs text-white/25">Geen openstaande taken</p>
+          <div className="relative flex flex-col items-center justify-center py-6 px-4 text-center">
+            <div className="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-2">
+              <Check className="h-4 w-4 text-emerald-400/70" />
+            </div>
+            <p className="text-xs text-white/35 font-medium">Geen openstaande taken</p>
+            <p className="text-[10px] text-white/20 mt-0.5">Lekker bezig</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/[0.04]">
+          <div className="relative divide-y divide-white/[0.04]">
             {openTasks.map(task => {
               const dateInfo = task.due_date ? formatTaskDate(task.due_date) : null;
+              const parcelName = task.sub_parcels?.[0]?.parcel_name || task.sub_parcels?.[0]?.name;
               return (
                 <button
                   key={task.id}
                   onClick={() => router.push('/veldnotities')}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-all text-left"
+                  className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/[0.03] transition-all text-left group/task min-h-[56px]"
                 >
-                  <div className="flex-shrink-0 h-4 w-4 rounded border-[1.5px] border-white/20 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white/60 truncate">{task.content}</p>
-                    {dateInfo && (
-                      <span className={cn(
-                        'text-[9px] font-medium inline-flex items-center gap-1 mt-0.5',
-                        dateInfo.isOverdue ? 'text-red-400' : 'text-white/25'
-                      )}>
-                        {dateInfo.isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
-                        <CalendarDays className="h-2.5 w-2.5" />
-                        {dateInfo.label}
-                      </span>
+                  {/* Checkbox met amber kleur-indicator — taak-kleur */}
+                  <div className="flex-shrink-0 mt-0.5 h-4 w-4 rounded-[5px] border-[1.5px] border-white/20 group-hover/task:border-amber-400/50 transition-colors relative">
+                    {dateInfo?.isOverdue && (
+                      <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
                     )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white/70 truncate group-hover/task:text-white transition-colors">
+                      {task.content}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {dateInfo && (
+                        <span className={cn(
+                          'text-[10px] font-semibold inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border',
+                          dateInfo.isOverdue
+                            ? 'text-red-300 bg-red-500/10 border-red-500/25'
+                            : 'text-amber-300/80 bg-amber-500/[0.08] border-amber-500/20'
+                        )}>
+                          {dateInfo.isOverdue ? (
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                          ) : (
+                            <CalendarDays className="h-2.5 w-2.5" />
+                          )}
+                          {dateInfo.label}
+                        </span>
+                      )}
+                      {parcelName && (
+                        <span className="text-[10px] text-white/30 font-medium truncate max-w-[120px]">
+                          {parcelName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );

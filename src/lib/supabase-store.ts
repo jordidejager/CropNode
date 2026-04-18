@@ -2358,7 +2358,7 @@ export async function getTaskTypes(): Promise<TaskType[]> {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('task_types')
-      .select('id, name, default_hourly_rate, created_at, updated_at')
+      .select('id, name, default_hourly_rate, color, created_at, updated_at')
       .order('name');
 
     if (error) {
@@ -2374,7 +2374,7 @@ export async function getTaskTypes(): Promise<TaskType[]> {
         const { data: seeded, error: seedError } = await supabase
           .from('task_types')
           .upsert(DEFAULT_TASK_TYPES.map(t => ({ ...t, user_id: userId })), { onConflict: 'name', ignoreDuplicates: true })
-          .select('id, name, default_hourly_rate, created_at, updated_at');
+          .select('id, name, default_hourly_rate, color, created_at, updated_at');
 
         if (seedError) {
           console.error('[getTaskTypes] Seed error:', seedError.message);
@@ -2385,6 +2385,7 @@ export async function getTaskTypes(): Promise<TaskType[]> {
           id: item.id,
           name: item.name,
           defaultHourlyRate: item.default_hourly_rate,
+          color: (item as { color?: string | null }).color ?? null,
           createdAt: new Date(item.created_at),
           updatedAt: new Date(item.updated_at),
         }));
@@ -2398,6 +2399,7 @@ export async function getTaskTypes(): Promise<TaskType[]> {
       id: item.id,
       name: item.name,
       defaultHourlyRate: item.default_hourly_rate,
+      color: (item as { color?: string | null }).color ?? null,
       createdAt: new Date(item.created_at),
       updatedAt: new Date(item.updated_at),
     }));
@@ -2412,6 +2414,7 @@ export async function addTaskType(taskType: Omit<TaskType, 'id' | 'createdAt' | 
       user_id: userId,
       name: taskType.name,
       default_hourly_rate: taskType.defaultHourlyRate,
+      ...(taskType.color ? { color: taskType.color } : {}),
     })
     .select()
     .single();
@@ -2422,15 +2425,20 @@ export async function addTaskType(taskType: Omit<TaskType, 'id' | 'createdAt' | 
     id: data.id,
     name: data.name,
     defaultHourlyRate: data.default_hourly_rate,
+    color: (data as { color?: string | null }).color ?? null,
     createdAt: new Date(data.created_at),
     updatedAt: new Date(data.updated_at),
   };
 }
 
-export async function updateTaskType(id: string, updates: { name?: string; defaultHourlyRate?: number }): Promise<void> {
+export async function updateTaskType(
+  id: string,
+  updates: { name?: string; defaultHourlyRate?: number; color?: string | null }
+): Promise<void> {
   const updateData: Record<string, unknown> = {};
   if (updates.name !== undefined) updateData.name = updates.name;
   if (updates.defaultHourlyRate !== undefined) updateData.default_hourly_rate = updates.defaultHourlyRate;
+  if (updates.color !== undefined) updateData.color = updates.color;
 
   const { error } = await supabase
     .from('task_types')

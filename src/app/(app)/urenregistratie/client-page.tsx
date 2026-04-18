@@ -23,10 +23,12 @@ import {
     useWorkSchedule,
 } from '@/hooks/use-data'
 import type { ActiveTaskSession, ParcelGroupOption } from '@/lib/types'
-import { KPICard } from '@/components/analytics/shared/KPICard'
+import { UrenKPI } from '@/components/urenregistratie/primitives/UrenKPI'
+import { SectionHeader } from '@/components/urenregistratie/primitives/SectionHeader'
 import { QuickStartChips } from '@/components/urenregistratie/QuickStartChips'
 import { ActiveSessions } from '@/components/urenregistratie/ActiveSessions'
-import { StopSessionDialog } from '@/components/urenregistratie/StopSessionDialog'
+import { StopSessionWizard } from '@/components/urenregistratie/StopSessionWizard'
+import { colorForTaskType } from '@/lib/urenregistratie/task-colors'
 import { RegistrationForm } from '@/components/urenregistratie/RegistrationForm'
 import { TaskLogsList } from '@/components/urenregistratie/TaskLogsList'
 import { HoursAnalytics } from '@/components/urenregistratie/HoursAnalytics'
@@ -213,61 +215,64 @@ export default function UrenregistratieClientPage() {
     return (
         <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-black text-white flex items-center gap-3">
-                        <Users className="h-8 w-8 text-primary" />
-                        Urenregistratie
-                    </h1>
-                    <p className="text-white/70 text-base mt-1">Registreer, bekijk en analyseer gewerkte uren</p>
-                </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1 font-bold w-fit flex items-center gap-1.5">
-                    <Tractor className="h-3.5 w-3.5" />
-                    Team & Tasks
-                </Badge>
-            </div>
+            <SectionHeader
+                pill="Team & Tasks"
+                color="emerald"
+                title="Urenregistratie"
+                description="Registreer, bekijk en analyseer gewerkte uren"
+                action={
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1.5 font-bold flex items-center gap-1.5">
+                        <Tractor className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Team & Tasks</span>
+                    </Badge>
+                }
+            />
 
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KPICard
+                <UrenKPI
                     label="Vandaag"
                     value={augmentedStats.todayHours}
                     suffix=" uur"
                     decimals={1}
+                    color="emerald"
+                    icon={Clock}
+                    live={activeSessions.length > 0}
                 />
-                <KPICard
+                <UrenKPI
                     label="Deze week"
                     value={augmentedStats.weekHours}
                     suffix=" uur"
                     decimals={0}
+                    color="cyan"
+                    icon={Timer}
                 />
-                <KPICard
+                <UrenKPI
                     label="Maandkosten"
                     value={augmentedStats.monthCost}
                     prefix="€"
                     decimals={0}
+                    color="amber"
+                    icon={Euro}
                 />
-                <div className="flex flex-col gap-1 rounded-xl border border-white/5 bg-white/[0.03] p-4 min-w-[160px] backdrop-blur-sm">
-                    <span className="text-sm font-semibold text-white/70">
-                        {activeSessions.length > 0 ? 'Nu aan het werk' : 'Actieve timers'}
-                    </span>
-                    <span className="text-2xl font-bold text-white">
-                        {activeSessions.length > 0
-                            ? activeSessions.reduce((sum, s) => sum + s.peopleCount, 0)
-                            : 0}
-                    </span>
-                    <span className="text-sm text-white/60">
-                        {activeSessions.length > 0
+                <UrenKPI
+                    label={activeSessions.length > 0 ? 'Nu aan het werk' : 'Actieve timers'}
+                    value={activeSessions.reduce((sum, s) => sum + s.peopleCount, 0)}
+                    decimals={0}
+                    color="lime"
+                    icon={Users}
+                    live={activeSessions.length > 0}
+                    detail={
+                        activeSessions.length > 0
                             ? `${activeSessions.reduce((sum, s) => sum + s.peopleCount, 0) === 1 ? 'persoon' : 'personen'} over ${activeSessions.length} ${activeSessions.length === 1 ? 'taak' : 'taken'}`
                             : 'Geen timers actief'
-                        }
-                    </span>
-                </div>
+                    }
+                />
             </div>
 
-            {/* Tab Navigation */}
-            <div className="overflow-x-auto scrollbar-hide -mx-4 md:-mx-8 px-4 md:px-8 border-b border-white/[0.06]">
-                <nav className="flex gap-1 min-w-max" aria-label="Tabs">
+            {/* Tab Navigation — pill-style met grotere tap targets */}
+            <div className="overflow-x-auto scrollbar-hide -mx-4 md:-mx-0 px-4 md:px-0">
+                <nav className="flex gap-2 min-w-max rounded-2xl border border-white/[0.06] bg-white/[0.02] p-1.5" aria-label="Tabs">
                     {TABS.map((tab) => {
                         const active = tab.key === activeTab
                         const Icon = tab.icon
@@ -280,18 +285,18 @@ export default function UrenregistratieClientPage() {
                                 onClick={() => setActiveTab(tab.key)}
                                 aria-current={active ? 'page' : undefined}
                                 className={cn(
-                                    'flex items-center gap-2.5 px-5 py-3.5 text-base font-semibold whitespace-nowrap rounded-t-xl border-b-[3px] transition-all duration-150 min-h-[48px]',
+                                    'flex items-center gap-2.5 px-5 py-3 text-base font-semibold whitespace-nowrap rounded-xl transition-all duration-200 min-h-[56px] flex-1',
                                     active
-                                        ? 'text-emerald-300 border-emerald-400 bg-emerald-500/[0.08]'
-                                        : 'text-white/65 border-transparent hover:text-white hover:bg-white/[0.05]'
+                                        ? 'text-emerald-200 bg-emerald-500/15 border border-emerald-500/30 shadow-[0_0_24px_rgba(16,185,129,0.08)]'
+                                        : 'text-white/55 border border-transparent hover:text-white hover:bg-white/[0.04]'
                                 )}
                             >
-                                <Icon className={cn('h-5 w-5', active ? 'text-emerald-300' : 'text-white/50')} />
-                                {tab.label}
+                                <Icon className={cn('h-5 w-5 flex-shrink-0', active ? 'text-emerald-300' : 'text-white/50')} />
+                                <span>{tab.label}</span>
                                 {badge !== null && (
                                     <span
                                         aria-label={`${badge} actieve ${badge === 1 ? 'timer' : 'timers'}`}
-                                        className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold"
+                                        className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-xs font-bold animate-pulse"
                                     >
                                         {badge}
                                     </span>
@@ -325,6 +330,7 @@ export default function UrenregistratieClientPage() {
                     <ActiveSessions
                         sessions={activeSessions}
                         workSchedule={workSchedule}
+                        taskTypes={taskTypes}
                         onStop={(session) => setStoppingSession(session)}
                         onDelete={(id) => {
                             deleteActiveTaskSessionMutation.mutate(id)
@@ -387,17 +393,21 @@ export default function UrenregistratieClientPage() {
                 <HoursAnalytics logs={taskLogs} />
             )}
 
-            {/* Stop Session Dialog */}
-            {stoppingSession && (
-                <StopSessionDialog
-                    session={stoppingSession}
-                    workSchedule={workSchedule}
-                    onStopSimple={handleStopSimple}
-                    onStopMultiDay={handleStopMultiDay}
-                    onCancel={() => setStoppingSession(null)}
-                    isPending={stopTaskSessionMutation.isPending || stopMultiDayMutation.isPending}
-                />
-            )}
+            {/* Stop Session Wizard — stap-voor-stap ipv editable table */}
+            {stoppingSession && (() => {
+                const tt = taskTypes.find(t => t.id === stoppingSession.taskTypeId)
+                return (
+                    <StopSessionWizard
+                        session={stoppingSession}
+                        workSchedule={workSchedule}
+                        taskColor={colorForTaskType(stoppingSession.taskTypeId, tt?.color ?? null)}
+                        onStopSimple={handleStopSimple}
+                        onStopMultiDay={handleStopMultiDay}
+                        onCancel={() => setStoppingSession(null)}
+                        isPending={stopTaskSessionMutation.isPending || stopMultiDayMutation.isPending}
+                    />
+                )
+            })()}
 
             {/* QuickStart confirmation sheet — zichtbaar ná chip-tik */}
             {quickStartTaskType && (

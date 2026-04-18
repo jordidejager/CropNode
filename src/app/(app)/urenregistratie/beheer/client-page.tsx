@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Settings } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import {
     useTaskTypes,
     useAddTaskType,
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast'
 import { TaskTypesPanel } from '@/components/urenregistratie/TaskTypesPanel'
 import { WorkScheduleSettings } from '@/components/urenregistratie/WorkScheduleSettings'
 import { SprayMinutesPanel } from '@/components/urenregistratie/SprayMinutesPanel'
+import { SectionHeader } from '@/components/urenregistratie/primitives/SectionHeader'
 
 /**
  * Beheer-pagina voor alle uren-gerelateerde instellingen:
@@ -41,22 +42,17 @@ export default function BeheerClientPage() {
             <div className="space-y-3">
                 <Link
                     href="/urenregistratie"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white transition-colors"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white transition-colors min-h-[44px]"
                 >
                     <ArrowLeft className="h-4 w-4" />
                     Terug naar urenregistratie
                 </Link>
-                <div className="flex items-center gap-3">
-                    <div className="h-11 w-11 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                        <Settings className="h-5 w-5 text-emerald-300" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-white">Beheer</h1>
-                        <p className="text-base text-white/70 mt-0.5">
-                            Taaktypes, werkschema en spuituren instellen
-                        </p>
-                    </div>
-                </div>
+                <SectionHeader
+                    pill="Beheer"
+                    color="emerald"
+                    title="Instellingen"
+                    description="Taaktypes & tarieven, werkschema en spuituren"
+                />
             </div>
 
             {/* Taaktypes & tarieven */}
@@ -67,8 +63,8 @@ export default function BeheerClientPage() {
             ) : (
                 <TaskTypesPanel
                     taskTypes={taskTypes}
-                    onAdd={async (name, hourlyRate) => {
-                        await addTaskTypeMutation.mutateAsync({ name, defaultHourlyRate: hourlyRate })
+                    onAdd={async (name, hourlyRate, color) => {
+                        await addTaskTypeMutation.mutateAsync({ name, defaultHourlyRate: hourlyRate, color } as Parameters<typeof addTaskTypeMutation.mutateAsync>[0])
                         notify(`Taaktype "${name}" toegevoegd`)
                     }}
                     onUpdate={async (id, updates) => {

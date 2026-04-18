@@ -761,7 +761,7 @@ export function useAddTaskType() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (data: { name: string; defaultHourlyRate: number }) =>
+        mutationFn: (data: { name: string; defaultHourlyRate: number; color?: string | null }) =>
             addTaskType(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.taskTypes });
@@ -773,7 +773,7 @@ export function useUpdateTaskType() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, updates }: { id: string; updates: { name?: string; defaultHourlyRate?: number } }) =>
+        mutationFn: ({ id, updates }: { id: string; updates: { name?: string; defaultHourlyRate?: number; color?: string | null } }) =>
             updateTaskType(id, updates),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.taskTypes });

@@ -127,7 +127,7 @@ export function ParcelSelector({
                     aria-expanded={open}
                     disabled={disabled}
                     className={cn(
-                        'w-full justify-between h-12 bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white',
+                        'w-full justify-between h-14 bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white text-base min-h-[56px]',
                         isPlaceholder && 'text-white/40',
                         className,
                     )}

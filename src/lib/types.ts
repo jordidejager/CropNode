@@ -645,6 +645,8 @@ export type TaskType = {
   id: string;
   name: string;
   defaultHourlyRate: number;
+  /** Optional kleur-override uit 11-kleurenpalet. NULL = frontend bepaalt via hash. */
+  color?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

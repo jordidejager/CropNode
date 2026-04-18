@@ -160,40 +160,52 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-[#020617] relative overflow-hidden">
-      {/* Animated background effects */}
+      {/* Animated aurora background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* Primary aurora orb — slow drift top-left → center */}
+        {/* Large primary orb — emerald, drifts slowly */}
         <motion.div
-          className="absolute w-[700px] h-[500px] rounded-full blur-[150px]"
-          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.04) 50%, transparent 70%)' }}
+          className="absolute -top-[200px] -left-[200px] w-[900px] h-[700px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.18) 0%, rgba(6,95,70,0.10) 40%, transparent 70%)', filter: 'blur(80px)' }}
           animate={{
-            x: ['-10%', '15%', '-5%', '10%', '-10%'],
-            y: ['-15%', '5%', '-10%', '15%', '-15%'],
-            scale: [1, 1.2, 0.9, 1.1, 1],
+            x: [0, 150, 50, 200, 0],
+            y: [0, 100, -50, 80, 0],
+            scale: [1, 1.15, 0.95, 1.1, 1],
           }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
         />
-        {/* Secondary aurora orb — drift bottom-right */}
+        {/* Secondary orb — darker green, bottom-right */}
         <motion.div
-          className="absolute right-0 bottom-0 w-[600px] h-[450px] rounded-full blur-[130px]"
-          style={{ background: 'radial-gradient(circle, rgba(52,211,153,0.06) 0%, rgba(16,185,129,0.03) 50%, transparent 70%)' }}
+          className="absolute -bottom-[150px] -right-[150px] w-[800px] h-[600px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(5,150,105,0.14) 0%, rgba(4,120,87,0.07) 45%, transparent 70%)', filter: 'blur(90px)' }}
           animate={{
-            x: ['10%', '-15%', '5%', '-10%', '10%'],
-            y: ['10%', '-10%', '15%', '-5%', '10%'],
-            scale: [1.1, 0.9, 1.15, 0.95, 1.1],
+            x: [0, -180, -40, -140, 0],
+            y: [0, -120, 60, -80, 0],
+            scale: [1.05, 0.9, 1.12, 0.95, 1.05],
           }}
-          transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
         />
-        {/* Accent orb — teal, smaller, faster */}
+        {/* Accent orb — teal, center, pulses opacity */}
         <motion.div
-          className="absolute left-1/3 top-1/2 w-[350px] h-[350px] rounded-full blur-[120px]"
-          style={{ background: 'radial-gradient(circle, rgba(45,212,191,0.05) 0%, transparent 60%)' }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(20,184,166,0.12) 0%, rgba(13,148,136,0.05) 50%, transparent 70%)', filter: 'blur(70px)' }}
           animate={{
-            x: ['-20%', '30%', '-10%', '25%', '-20%'],
-            y: ['10%', '-25%', '20%', '-15%', '10%'],
-            opacity: [0.4, 0.8, 0.5, 0.9, 0.4],
+            x: [-100, 120, -60, 100, -100],
+            y: [50, -80, 70, -60, 50],
+            opacity: [0.5, 1, 0.6, 0.9, 0.5],
+            scale: [0.9, 1.1, 0.85, 1.05, 0.9],
           }}
-          transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        {/* Small bright accent — emerald flash */}
+        <motion.div
+          className="absolute top-1/4 right-1/3 w-[300px] h-[300px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(52,211,153,0.10) 0%, transparent 60%)', filter: 'blur(60px)' }}
+          animate={{
+            x: [0, -80, 60, -40, 0],
+            y: [0, 60, -40, 80, 0],
+            opacity: [0.3, 0.7, 0.4, 0.8, 0.3],
+          }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
         />
         {/* Dot grid */}
         <div

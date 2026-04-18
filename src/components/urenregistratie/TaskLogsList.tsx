@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import type { TaskLogEnriched, TaskType } from '@/lib/types'
 import { formatDateShort } from './utils'
 import { ConfirmDialog } from './ConfirmDialog'
+import { colorForTaskType, tokensFor } from '@/lib/urenregistratie/task-colors'
 
 interface TaskLogsListProps {
     logs: TaskLogEnriched[]
@@ -154,7 +155,7 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Zoek op notitie, taak of perceel..."
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/45 text-base pl-10 h-11"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/45 text-base pl-11 h-14 min-h-[56px]"
                         />
                     </div>
                     <Button
@@ -162,7 +163,7 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                         size="sm"
                         onClick={handleCSVExport}
                         disabled={filteredLogs.length === 0}
-                        className="text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/20 h-11 px-4 text-sm font-semibold whitespace-nowrap"
+                        className="text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/20 h-14 px-4 text-sm font-semibold whitespace-nowrap min-h-[56px]"
                         aria-label="Exporteer zichtbare registraties als Excel/CSV bestand"
                     >
                         <Download className="h-4 w-4 mr-1.5" />
@@ -264,17 +265,30 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                                     </span>
                                 </div>
                                 <div className="space-y-2">
-                                    {groupLogs.map((log: TaskLogEnriched) => (
+                                    {groupLogs.map((log: TaskLogEnriched) => {
+                                        const ttOverride = taskTypes.find(t => t.id === log.taskTypeId)?.color ?? null
+                                        const color = colorForTaskType(log.taskTypeId, ttOverride)
+                                        const tokens = tokensFor(color)
+                                        return (
                         <Card
                             key={log.id}
-                            className="bg-white/5 border-white/10 hover:bg-white/[0.08] transition-all"
+                            className={cn(
+                                'relative bg-white/[0.03] border-white/10 hover:bg-white/[0.06] transition-all overflow-hidden',
+                                'border-l-[4px]',
+                            )}
+                            style={{ borderLeftColor: tokens.hex }}
                         >
-                            <CardContent className="p-4">
+                            <CardContent className="p-4 min-h-[72px]">
                                 <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                                            <Clock className="h-5 w-5 text-white/40" />
-                                        </div>
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <span
+                                            className={cn(
+                                                'h-11 w-11 rounded-xl flex items-center justify-center shrink-0 border',
+                                                tokens.bgSubtle, tokens.border,
+                                            )}
+                                        >
+                                            <Clock className={cn('h-5 w-5', tokens.text)} />
+                                        </span>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-bold text-white text-base">{log.taskTypeName}</span>
@@ -313,7 +327,7 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                                     </div>
                                     <div className="flex items-center gap-3 shrink-0">
                                         <div className="text-right">
-                                            <div className="text-xl font-black text-white">{log.totalHours}u</div>
+                                            <div className={cn('text-xl font-black tabular-nums', tokens.text)}>{log.totalHours}u</div>
                                             <div className="text-xs text-emerald-300/80 font-semibold">
                                                 {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(log.estimatedCost)}
                                             </div>
@@ -324,7 +338,7 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                                             size="icon"
                                             onClick={() => setDeletingLog(log)}
                                             aria-label={`Registratie "${log.taskTypeName}" van ${formatDateShort(log.startDate)} verwijderen`}
-                                            className="h-11 w-11 text-red-300 hover:text-red-200 hover:bg-red-500/15 border border-transparent hover:border-red-500/30"
+                                            className="h-12 w-12 text-red-300 hover:text-red-200 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 min-h-[48px]"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -332,7 +346,8 @@ export function TaskLogsList({ logs, taskTypes, onDelete }: TaskLogsListProps) {
                                 </div>
                             </CardContent>
                         </Card>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
                             </div>
                         )

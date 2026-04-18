@@ -6,16 +6,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { Calculator, Play, Plus, Euro, Info, Copy } from 'lucide-react'
+import { Calculator, Play, Plus, Euro, Info, Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TaskType, ParcelGroupOption, ParcelSelection, WorkScheduleDay, TaskLogEnriched } from '@/lib/types'
 import { ParcelSelector } from './ParcelSelector'
 import { DateShortcuts } from './DateShortcuts'
 import { TimeShortcuts } from './TimeShortcuts'
 import { calculateWorkDays, describeSchedule, getDefaultStartDateTime, dateTimeLocalToDate } from './utils'
+import { SpotlightCard } from './primitives/SpotlightCard'
+import { SectionHeader } from './primitives/SectionHeader'
+import { BigStepper } from './primitives/BigStepper'
+import { SmartDateField } from './primitives/SmartDateField'
+import { colorForTaskType, tokensFor } from '@/lib/urenregistratie/task-colors'
 
 interface RegistrationFormProps {
     taskTypes: TaskType[]
@@ -216,132 +218,142 @@ export function RegistrationForm({ taskTypes, parcelGroups, workSchedule, lastLo
     }
 
     return (
-        <Card className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-md border-white/10 shadow-xl">
-            <CardHeader className="pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <CardTitle className="flex items-center gap-2 text-white text-xl">
-                        <Calculator className="h-5 w-5 text-primary" />
-                        Nieuwe registratie
-                    </CardTitle>
-                    <div
-                        role="tablist"
-                        aria-label="Kies invoermodus"
-                        className="flex bg-white/5 rounded-lg p-1 self-start sm:self-auto"
-                    >
-                        <button
-                            role="tab"
-                            aria-selected={mode === 'register'}
-                            type="button"
-                            onClick={() => setMode("register")}
-                            className={cn(
-                                "px-4 py-2.5 text-sm font-bold rounded-md transition-all min-h-[44px]",
-                                mode === "register"
-                                    ? "bg-primary text-white"
-                                    : "text-white/60 hover:text-white"
-                            )}
-                        >
-                            Uren invoeren
-                        </button>
-                        <button
-                            role="tab"
-                            aria-selected={mode === 'start'}
-                            type="button"
-                            onClick={() => {
-                                setMode("start")
-                                setStartDateTime(getDefaultStartDateTime())
-                            }}
-                            className={cn(
-                                "px-4 py-2.5 text-sm font-bold rounded-md transition-all flex items-center gap-1.5 min-h-[44px]",
-                                mode === "start"
-                                    ? "bg-orange-500 text-white"
-                                    : "text-white/60 hover:text-white"
-                            )}
-                        >
-                            <Play className="h-3.5 w-3.5" />
-                            Timer starten
-                        </button>
-                    </div>
-                </div>
-                {/* Uitleg van de gekozen modus — expliciet i.p.v. jargon */}
-                <p className="text-sm text-white/60 mt-1">
-                    {mode === 'register'
-                        ? 'Voer achteraf in hoeveel uren er gewerkt is (één of meerdere dagen).'
-                        : 'Start nu een timer en rond af zodra de taak klaar is.'}
-                </p>
-                {/* "Kopieer vorige" — zichtbaar wanneer er een vorige registratie is.
-                    Voorkomt dat de gebruiker alles opnieuw invoert voor seriewerk. */}
-                {lastLog && (
+        <SpotlightCard variant="section" color="emerald" className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <SectionHeader
+                    pill={mode === 'register' ? 'Achteraf' : 'Nu starten'}
+                    color={mode === 'register' ? 'emerald' : 'orange'}
+                    title="Nieuwe registratie"
+                    description={
+                        mode === 'register'
+                            ? 'Voer achteraf in hoeveel uren er gewerkt is (één of meerdere dagen).'
+                            : 'Start nu een timer en rond af zodra de taak klaar is.'
+                    }
+                    compact
+                />
+
+                {/* Mode-toggle: 2 grote pill-knoppen */}
+                <div
+                    role="tablist"
+                    aria-label="Kies invoermodus"
+                    className="flex items-center gap-1 rounded-2xl bg-white/[0.03] border border-white/[0.08] p-1 self-start flex-shrink-0"
+                >
                     <button
+                        role="tab"
+                        aria-selected={mode === 'register'}
                         type="button"
-                        onClick={handleCopyFromLast}
-                        className="mt-2 inline-flex items-center gap-2 self-start text-sm font-medium text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 rounded-full px-3.5 py-2 min-h-[40px] transition-colors"
-                        aria-label={`Instellingen overnemen uit vorige registratie: ${lastLog.taskTypeName}`}
+                        onClick={() => setMode('register')}
+                        className={cn(
+                            'flex items-center gap-2 px-5 rounded-xl text-sm font-semibold transition-all min-h-[52px]',
+                            mode === 'register'
+                                ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 shadow-[0_0_24px_rgba(16,185,129,0.08)]'
+                                : 'text-white/55 border border-transparent hover:text-white hover:bg-white/[0.04]',
+                        )}
                     >
-                        <Copy className="h-3.5 w-3.5" />
-                        <span>
-                            Neem vorige over: <span className="font-semibold">{lastLog.taskTypeName}</span>
-                            {lastLog.subParcelName && (
-                                <span className="text-emerald-200/80"> ({lastLog.subParcelName})</span>
-                            )}
-                        </span>
+                        <Calculator className="h-4 w-4" />
+                        Uren invoeren
                     </button>
-                )}
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Row 1: Task + Parcel */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label className={LABEL_CLASS}>Taak</Label>
-                            {taskTypes.length === 0 ? (
-                                <div className="flex items-center gap-2 h-12 px-3 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm">
-                                    Geen taaktypes gevonden. Voeg er een toe via Beheer.
-                                </div>
-                            ) : (
-                                <>
-                                    <Select value={selectedTaskType} onValueChange={setSelectedTaskType}>
-                                        <SelectTrigger className="bg-white/5 border-white/10 text-white h-12 text-base">
-                                            <SelectValue placeholder="Selecteer taak..." />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-slate-900 border-white/10">
-                                            {taskTypes.map(type => (
-                                                <SelectItem
-                                                    key={type.id}
-                                                    value={type.id}
-                                                    className="text-white hover:bg-white/10 text-base min-h-[44px]"
-                                                >
-                                                    {type.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {/* Uurtarief zichtbaar — voorheen verborgen in TaskTypeManager */}
-                                    {selectedTaskTypeData && (
-                                        <p className="flex items-center gap-1.5 text-sm text-emerald-300/80">
-                                            <Euro className="h-3.5 w-3.5" />
-                                            {selectedTaskTypeData.defaultHourlyRate > 0
-                                                ? `${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(selectedTaskTypeData.defaultHourlyRate)} per uur`
-                                                : 'Geen tarief ingesteld'}
-                                        </p>
-                                    )}
-                                </>
+                    <button
+                        role="tab"
+                        aria-selected={mode === 'start'}
+                        type="button"
+                        onClick={() => {
+                            setMode('start')
+                            setStartDateTime(getDefaultStartDateTime())
+                        }}
+                        className={cn(
+                            'flex items-center gap-2 px-5 rounded-xl text-sm font-semibold transition-all min-h-[52px]',
+                            mode === 'start'
+                                ? 'bg-orange-500/20 text-orange-200 border border-orange-500/30 shadow-[0_0_24px_rgba(249,115,22,0.08)]'
+                                : 'text-white/55 border border-transparent hover:text-white hover:bg-white/[0.04]',
+                        )}
+                    >
+                        <Play className="h-4 w-4 fill-current" />
+                        Timer starten
+                    </button>
+                </div>
+            </div>
+
+            {/* "Kopieer vorige" — zichtbaar wanneer er een vorige registratie is */}
+            {lastLog && (
+                <button
+                    type="button"
+                    onClick={handleCopyFromLast}
+                    className="inline-flex items-center gap-2 self-start text-sm font-medium text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 rounded-full px-4 py-2 min-h-[44px] transition-colors"
+                    aria-label={`Instellingen overnemen uit vorige registratie: ${lastLog.taskTypeName}`}
+                >
+                    <Copy className="h-4 w-4" />
+                    <span>
+                        Neem vorige over: <span className="font-semibold">{lastLog.taskTypeName}</span>
+                        {lastLog.subParcelName && (
+                            <span className="text-emerald-200/80"> ({lastLog.subParcelName})</span>
+                        )}
+                    </span>
+                </button>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Taakselectie — kleur-chips i.p.v. Select dropdown */}
+                <div className="space-y-2.5">
+                    <Label className={LABEL_CLASS}>Taak</Label>
+                    {taskTypes.length === 0 ? (
+                        <div className="flex items-center gap-2 h-14 px-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm">
+                            Geen taaktypes gevonden. Voeg er een toe via Beheer.
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                                {taskTypes.map(type => {
+                                    const color = colorForTaskType(type.id, type.color)
+                                    const tokens = tokensFor(color)
+                                    const active = selectedTaskType === type.id
+                                    return (
+                                        <button
+                                            key={type.id}
+                                            type="button"
+                                            onClick={() => setSelectedTaskType(type.id)}
+                                            className={cn(
+                                                'relative flex items-center justify-center gap-2 rounded-2xl border transition-all font-semibold text-sm min-h-[56px] px-4',
+                                                active
+                                                    ? cn('border-2', tokens.bgSubtle, tokens.text, tokens.border, 'shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]')
+                                                    : 'border-white/[0.08] bg-white/[0.02] text-white/65 hover:bg-white/[0.05] hover:text-white',
+                                            )}
+                                            aria-pressed={active}
+                                        >
+                                            {active && <Check className="h-4 w-4" strokeWidth={3} />}
+                                            <span className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', tokens.orb, !active && 'opacity-60')} />
+                                            <span className="truncate">{type.name}</span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            {/* Uurtarief zichtbaar — voorheen verborgen in TaskTypeManager */}
+                            {selectedTaskTypeData && (
+                                <p className="flex items-center gap-1.5 text-sm text-emerald-300/80">
+                                    <Euro className="h-3.5 w-3.5" />
+                                    {selectedTaskTypeData.defaultHourlyRate > 0
+                                        ? `${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(selectedTaskTypeData.defaultHourlyRate)} per uur`
+                                        : 'Geen tarief ingesteld'}
+                                </p>
                             )}
-                        </div>
+                        </>
+                    )}
+                </div>
 
-                        <div className="space-y-2">
-                            <Label className={LABEL_CLASS}>
-                                Perceel <span className="font-normal text-white/50">(optioneel)</span>
-                            </Label>
-                            <ParcelSelector
-                                parcelGroups={parcelGroups}
-                                value={parcelSelection}
-                                onChange={setParcelSelection}
-                            />
-                        </div>
-                    </div>
+                {/* Perceel */}
+                <div className="space-y-2">
+                    <Label className={LABEL_CLASS}>
+                        Perceel <span className="font-normal text-white/50">(optioneel)</span>
+                    </Label>
+                    <ParcelSelector
+                        parcelGroups={parcelGroups}
+                        value={parcelSelection}
+                        onChange={setParcelSelection}
+                    />
+                </div>
 
-                    {mode === "start" ? (
-                        <div className="space-y-4">
+                    {mode === 'start' ? (
+                        <div className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label className={LABEL_CLASS}>Starttijd</Label>
@@ -349,133 +361,119 @@ export function RegistrationForm({ taskTypes, parcelGroups, workSchedule, lastLo
                                         type="datetime-local"
                                         value={startDateTime}
                                         onChange={(e) => setStartDateTime(e.target.value)}
-                                        className="bg-white/5 border-white/10 text-white h-12 text-base"
+                                        className="bg-white/5 border-white/10 text-white h-14 text-base"
+                                    />
+                                    <TimeShortcuts
+                                        currentValue={startDateTime}
+                                        onSelect={setStartDateTime}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className={LABEL_CLASS}>Aantal personen</Label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        value={peopleCount}
-                                        onChange={(e) => setPeopleCount(Math.max(1, parseInt(e.target.value) || 1))}
-                                        className="bg-white/5 border-white/10 text-white h-12 text-base"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <p className="text-sm text-white/60 mb-2">
-                                    Vergeten te starten? Kies een moment terug:
-                                </p>
-                                <TimeShortcuts
-                                    currentValue={startDateTime}
-                                    onSelect={setStartDateTime}
+                                <BigStepper
+                                    label="Aantal personen"
+                                    value={peopleCount}
+                                    onChange={setPeopleCount}
+                                    min={1}
+                                    max={50}
+                                    step={1}
+                                    suffix={peopleCount === 1 ? 'persoon' : 'personen'}
                                 />
                             </div>
                         </div>
                     ) : (
                         <>
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className={LABEL_CLASS}>Begindatum</Label>
-                                        <Input
-                                            type="date"
-                                            value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
-                                            className="bg-white/5 border-white/10 text-white h-12 text-base"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className={LABEL_CLASS}>Einddatum</Label>
+                            <div className="space-y-5">
+                                <SmartDateField
+                                    label="Begindatum"
+                                    value={startDate}
+                                    onChange={(v) => {
+                                        setStartDate(v)
+                                        // Als einddatum voor begindatum, sync einddatum
+                                        if (v > endDate) setEndDate(v)
+                                    }}
+                                />
+                                {/* Einddatum alleen tonen als gebruiker multi-day wil */}
+                                <div className="flex flex-col gap-2">
+                                    <Label className={LABEL_CLASS}>
+                                        Einddatum <span className="font-normal text-white/50">(optioneel — voor meerdere dagen)</span>
+                                    </Label>
+                                    <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                                         <Input
                                             type="date"
                                             value={endDate}
                                             min={startDate}
                                             onChange={(e) => setEndDate(e.target.value)}
-                                            className="bg-white/5 border-white/10 text-white h-12 text-base"
+                                            className="bg-white/5 border-white/10 text-white h-14 text-base flex-1"
+                                        />
+                                        <DateShortcuts
+                                            currentStart={startDate}
+                                            currentEnd={endDate}
+                                            mode="range"
+                                            onSelect={(s, e) => {
+                                                setStartDate(s)
+                                                setEndDate(e)
+                                            }}
                                         />
                                     </div>
                                 </div>
-                                {/* Snelkeuze chips — veel natuurlijker voor "ik heb gisteren gewerkt" */}
-                                <DateShortcuts
-                                    currentStart={startDate}
-                                    currentEnd={endDate}
-                                    mode="range"
-                                    onSelect={(s, e) => {
-                                        setStartDate(s)
-                                        setEndDate(e)
-                                    }}
-                                />
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <BigStepper
+                                        label="Aantal personen"
+                                        value={peopleCount}
+                                        onChange={setPeopleCount}
+                                        min={1}
+                                        max={50}
+                                        step={1}
+                                        suffix={peopleCount === 1 ? 'persoon' : 'personen'}
+                                    />
+                                    <BigStepper
+                                        label="Uren per persoon"
+                                        value={hoursPerPerson}
+                                        onChange={setHoursPerPerson}
+                                        min={0.5}
+                                        max={16}
+                                        step={0.5}
+                                        suffix="uur"
+                                    />
+                                </div>
                             </div>
 
-                            <div className="bg-white/5 rounded-2xl p-4 md:p-6 border border-white/10">
-                                <div className="flex flex-wrap items-center gap-3 md:gap-4 text-white">
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            value={peopleCount}
-                                            onChange={(e) => setPeopleCount(Math.max(1, parseInt(e.target.value) || 1))}
-                                            className="w-16 md:w-20 h-12 md:h-14 text-xl md:text-2xl font-black text-center bg-white/10 border-white/20"
-                                            aria-label="Aantal personen"
-                                        />
-                                        <span className="text-white/70 font-semibold text-sm">pers.</span>
+                            {/* Totalen — live preview */}
+                            <div className="relative overflow-hidden rounded-2xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.05] to-emerald-500/[0.01] p-4 md:p-5">
+                                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-white">
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className="text-3xl font-black text-white tabular-nums">{peopleCount}</span>
+                                        <span className="text-sm text-white/60 font-medium">pers</span>
                                     </div>
-
-                                    <span className="text-2xl md:text-3xl font-black text-white/30">&times;</span>
-
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            min={0.5}
-                                            step={0.5}
-                                            value={hoursPerPerson}
-                                            onChange={(e) => setHoursPerPerson(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                                            className="w-16 md:w-20 h-12 md:h-14 text-xl md:text-2xl font-black text-center bg-white/10 border-white/20"
-                                            aria-label="Uren per persoon"
-                                        />
-                                        <span className="text-white/70 font-semibold text-sm">uur</span>
+                                    <span className="text-xl font-black text-white/20">×</span>
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className="text-3xl font-black text-white tabular-nums">{hoursPerPerson.toFixed(1).replace('.', ',')}</span>
+                                        <span className="text-sm text-white/60 font-medium">uur</span>
                                     </div>
-
-                                    <span className="text-2xl md:text-3xl font-black text-white/30">&times;</span>
-
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            min={0.5}
-                                            step={0.5}
-                                            value={days}
-                                            onChange={(e) => setDays(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
-                                            className="w-16 md:w-20 h-12 md:h-14 text-xl md:text-2xl font-black text-center bg-amber-500/20 border-amber-500/40 text-amber-300"
-                                            aria-label="Aantal werkdagen (zaterdag telt als 0,5)"
-                                        />
-                                        <div className="flex flex-col">
-                                            <span className="text-amber-300 font-semibold text-sm">dag</span>
-                                        </div>
+                                    <span className="text-xl font-black text-white/20">×</span>
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className="text-3xl font-black text-amber-300 tabular-nums">{days.toFixed(1).replace('.', ',')}</span>
+                                        <span className="text-sm text-amber-200/70 font-medium">dag</span>
                                     </div>
-
-                                    <span className="text-2xl md:text-3xl font-black text-white/30">=</span>
-
-                                    <div className="flex items-center gap-2 bg-primary/20 px-4 md:px-6 py-2 md:py-3 rounded-xl border border-primary/30">
-                                        <span className="text-2xl md:text-3xl font-black text-primary">{totalHours.toFixed(1)}</span>
-                                        <span className="text-primary/80 font-semibold text-sm">uur</span>
+                                    <span className="text-xl font-black text-white/20">=</span>
+                                    <div className="flex items-baseline gap-1.5 bg-emerald-500/15 px-4 py-2 rounded-xl border border-emerald-500/30">
+                                        <span className="text-3xl font-black text-emerald-300 tabular-nums">{totalHours.toFixed(1).replace('.', ',')}</span>
+                                        <span className="text-sm text-emerald-200/80 font-semibold">uur</span>
                                     </div>
-
                                     {estimatedCost > 0 && (
                                         <div className="ml-auto text-right">
-                                            <div className="text-lg font-black text-emerald-400">
+                                            <div className="text-2xl font-black text-emerald-400">
                                                 {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(estimatedCost)}
                                             </div>
                                             <div className="text-xs text-white/50 font-semibold">geschat</div>
                                         </div>
                                     )}
                                 </div>
-                                <p className="flex items-start gap-1.5 text-sm text-white/60 mt-3">
+                                <p className="flex items-start gap-1.5 text-sm text-white/55 mt-3">
                                     <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                                     <span>
                                         Dagverdeling uit je werkschema —{' '}
-                                        <span className="font-medium text-white/80">{scheduleDescription}</span>
+                                        <span className="font-medium text-white/75">{scheduleDescription}</span>
                                     </span>
                                 </p>
                             </div>
@@ -490,13 +488,13 @@ export function RegistrationForm({ taskTypes, parcelGroups, workSchedule, lastLo
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Bijv. 'Hoog blok afgerond'"
-                            className="bg-white/5 border-white/10 text-white text-base min-h-[56px]"
+                            className="bg-white/5 border-white/10 text-white text-base min-h-[80px]"
                         />
                     </div>
 
                     {/* Inline validatie: maakt duidelijk WAAROM de knop uit staat */}
                     {validationMessage && (
-                        <div className="flex items-center gap-2 text-sm text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2 text-sm text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3.5 py-2.5">
                             <Info className="h-4 w-4 shrink-0" />
                             {validationMessage}
                         </div>
@@ -507,18 +505,20 @@ export function RegistrationForm({ taskTypes, parcelGroups, workSchedule, lastLo
                             type="submit"
                             disabled={!!validationMessage || isSubmitting}
                             className={cn(
-                                "flex-1 h-14 text-lg font-black disabled:opacity-50",
-                                mode === "start" ? "bg-orange-500 hover:bg-orange-600" : "bg-primary hover:bg-primary/90"
+                                'flex-1 min-h-[64px] text-lg font-black disabled:opacity-50 shadow-lg',
+                                mode === 'start'
+                                    ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20'
+                                    : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20',
                             )}
                         >
                             {isSubmitting ? (
                                 <div className="flex items-center gap-2">
                                     <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                    {mode === "start" ? "Starten..." : "Opslaan..."}
+                                    {mode === 'start' ? 'Starten...' : 'Opslaan...'}
                                 </div>
-                            ) : mode === "start" ? (
+                            ) : mode === 'start' ? (
                                 <div className="flex items-center gap-2">
-                                    <Play className="h-5 w-5" />
+                                    <Play className="h-5 w-5 fill-white" />
                                     Timer starten
                                 </div>
                             ) : (
@@ -529,21 +529,20 @@ export function RegistrationForm({ taskTypes, parcelGroups, workSchedule, lastLo
                             )}
                         </Button>
                         {/* Serie-registratie: bewaar taak + uren + personen, schuif datum. */}
-                        {mode === "register" && (
+                        {mode === 'register' && (
                             <Button
                                 type="button"
                                 variant="outline"
                                 disabled={!!validationMessage || isSubmitting}
                                 onClick={() => void submitRegistration(true)}
                                 aria-label="Opslaan en doorgaan met volgende dag, zelfde taak en uren"
-                                className="sm:w-auto h-14 px-5 text-base font-semibold bg-white/5 border-white/15 text-white hover:bg-white/10 hover:text-white disabled:opacity-50"
+                                className="sm:w-auto min-h-[64px] px-5 text-base font-semibold bg-white/5 border-white/15 text-white hover:bg-white/10 hover:text-white disabled:opacity-50"
                             >
                                 Opslaan & volgende dag
                             </Button>
                         )}
                     </div>
                 </form>
-            </CardContent>
-        </Card>
+        </SpotlightCard>
     )
 }

@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Play, Settings, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TaskType } from '@/lib/types'
+import { colorForTaskType, tokensFor } from '@/lib/urenregistratie/task-colors'
 
 interface QuickStartChipsProps {
     taskTypes: TaskType[]
@@ -15,13 +16,13 @@ interface QuickStartChipsProps {
 
 /**
  * Snel-start chips voor het direct starten van een timer.
- * Respecteert `prefers-reduced-motion`. Elke chip is min. 44px hoog.
  *
- * Tik op een chip opent een bevestigingssheet waarin je aantal personen,
- * perceel en starttijd kunt aanpassen voor de timer echt start.
+ * Elke chip krijgt de kleur van het taaktype (uit `color` kolom of
+ * deterministische hash). Min 64px hoog — makkelijk tikbaar voor oudere
+ * gebruikers. Glow-orb + gradient border op hover (landing-page design taal).
  *
- * De "Beheer"-knop leidt naar /urenregistratie/beheer (taaktypes, tarieven,
- * werkschema, spuituren). Prominenter dan voorheen met duidelijke emerald-stijl.
+ * Tik op een chip opent een bevestigingssheet (QuickStartSheet) waarin
+ * aantal personen, perceel en starttijd aangepast kunnen worden.
  */
 export function QuickStartChips({ taskTypes, onStartTimer, disabled }: QuickStartChipsProps) {
     const reduceMotion = useReducedMotion()
@@ -52,7 +53,7 @@ export function QuickStartChips({ taskTypes, onStartTimer, disabled }: QuickStar
                     href="/urenregistratie/beheer"
                     aria-label="Taaktypes, tarieven en werkschema beheren"
                     className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 min-h-[40px]',
+                        'inline-flex items-center gap-1.5 rounded-full px-4 py-2 min-h-[48px]',
                         'text-sm font-semibold text-emerald-200',
                         'bg-emerald-500/10 border border-emerald-500/30',
                         'hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-100',
@@ -63,37 +64,68 @@ export function QuickStartChips({ taskTypes, onStartTimer, disabled }: QuickStar
                     Beheer
                 </Link>
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar px-1">
-                {taskTypes.map((type, i) => (
-                    <motion.button
-                        key={type.id}
-                        {...getMotionProps(i)}
-                        onClick={() => onStartTimer(type.id)}
-                        disabled={disabled}
-                        aria-label={`Timer starten voor ${type.name}`}
-                        className={cn(
-                            'flex items-center gap-2 px-4 py-2.5 rounded-full',
-                            'bg-orange-500/15 border border-orange-500/30',
-                            'text-sm font-semibold text-orange-200 transition-all whitespace-nowrap',
-                            'hover:bg-orange-500/25 hover:border-orange-500/50 hover:text-orange-100 hover:shadow-lg',
-                            'active:scale-95',
-                            'disabled:opacity-50 disabled:cursor-not-allowed',
-                            'min-h-[44px]'
-                        )}
-                    >
-                        <Play className="h-3.5 w-3.5" />
-                        {type.name}
-                    </motion.button>
-                ))}
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-1 no-scrollbar px-1">
+                {taskTypes.map((type, i) => {
+                    const color = colorForTaskType(type.id, type.color)
+                    const tokens = tokensFor(color)
+                    return (
+                        <motion.button
+                            key={type.id}
+                            {...getMotionProps(i)}
+                            onClick={() => onStartTimer(type.id)}
+                            disabled={disabled}
+                            aria-label={`Timer starten voor ${type.name}`}
+                            className={cn(
+                                // shrink-0 voorkomt dat flex-items in de horizontale
+                                // scroll-strook samengeknepen worden — zonder dit werd
+                                // "Boomverzorging" afgekapt tot "Boomv"
+                                'group relative overflow-hidden flex shrink-0 items-center gap-2.5 px-5 py-3 rounded-2xl',
+                                tokens.bgSubtle,
+                                'border', tokens.border,
+                                'text-base font-semibold transition-all whitespace-nowrap',
+                                tokens.text,
+                                tokens.borderHover,
+                                'hover:shadow-lg',
+                                'active:scale-[0.97]',
+                                'disabled:opacity-50 disabled:cursor-not-allowed',
+                                'min-h-[64px]',
+                            )}
+                            style={
+                                !disabled
+                                    ? { boxShadow: `inset 0 0 0 1px transparent` }
+                                    : undefined
+                            }
+                        >
+                            {/* Glow orb rechts — subtiel zichtbaar, op hover sterker */}
+                            <span
+                                className={cn(
+                                    'pointer-events-none absolute -top-6 -right-6 w-16 h-16 rounded-full blur-[30px]',
+                                    'opacity-[0.15] group-hover:opacity-[0.35] transition-opacity',
+                                    tokens.orb,
+                                )}
+                                aria-hidden
+                            />
+                            <span
+                                className={cn(
+                                    'relative flex h-8 w-8 items-center justify-center rounded-xl',
+                                    tokens.bgSolid, 'text-white shadow-inner',
+                                )}
+                            >
+                                <Play className="h-3.5 w-3.5 fill-white" />
+                            </span>
+                            <span className="relative">{type.name}</span>
+                        </motion.button>
+                    )
+                })}
                 <Link
                     href="/urenregistratie/beheer"
                     aria-label="Nieuw taaktype toevoegen"
                     className={cn(
-                        'flex items-center gap-2 px-4 py-2.5 rounded-full',
+                        'flex shrink-0 items-center gap-2 px-5 py-3 rounded-2xl',
                         'bg-white/5 border border-dashed border-white/20',
-                        'text-sm font-medium text-white/70 transition-all whitespace-nowrap',
+                        'text-base font-medium text-white/70 transition-all whitespace-nowrap',
                         'hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300',
-                        'min-h-[44px]'
+                        'min-h-[64px]',
                     )}
                 >
                     <Plus className="h-4 w-4" />

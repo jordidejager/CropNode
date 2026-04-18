@@ -10,6 +10,8 @@ import { BarChart3, PieChart as PieChartIcon, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TaskLogEnriched } from '@/lib/types'
 import { getTaskTypeColor } from './utils'
+import { SpotlightCard } from './primitives/SpotlightCard'
+import { SectionHeader } from './primitives/SectionHeader'
 
 type PeriodKey = 'week' | 'month' | 'quarter' | 'year' | 'all'
 
@@ -32,7 +34,7 @@ function ChartCard({ title, icon: Icon, isEmpty, children }: {
     children: React.ReactNode
 }) {
     return (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <SpotlightCard variant="section" color="emerald">
             <div className="flex items-center gap-2 mb-4">
                 <Icon className="h-5 w-5 text-emerald-400" />
                 <h3 className="text-base font-semibold text-white">{title}</h3>
@@ -43,7 +45,7 @@ function ChartCard({ title, icon: Icon, isEmpty, children }: {
                     <p className="text-sm">Nog geen data beschikbaar</p>
                 </div>
             ) : children}
-        </div>
+        </SpotlightCard>
     )
 }
 
@@ -190,7 +192,7 @@ export function HoursAnalytics({ logs: rawLogs }: HoursAnalyticsProps) {
                             onClick={() => setPeriod(opt.key)}
                             aria-pressed={active}
                             className={cn(
-                                'px-3.5 py-2 rounded-full text-sm font-semibold transition-colors min-h-[40px] border',
+                                'px-4 py-2 rounded-full text-sm font-semibold transition-colors min-h-[48px] border',
                                 active
                                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
                                     : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white',
@@ -202,23 +204,16 @@ export function HoursAnalytics({ logs: rawLogs }: HoursAnalyticsProps) {
                 })}
             </div>
 
-            {/* Summary */}
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-1">
-                <div>
-                    <div className="text-3xl font-black text-white">{totalHours.toFixed(0)}</div>
-                    <div className="text-sm text-white/65 font-medium">Totaal uren</div>
-                </div>
-                <div>
-                    <div className="text-3xl font-black text-emerald-400">
-                        {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalCost)}
-                    </div>
-                    <div className="text-sm text-white/65 font-medium">Totaal kosten</div>
-                </div>
-                <div>
-                    <div className="text-3xl font-black text-white">{logs.length}</div>
-                    <div className="text-sm text-white/65 font-medium">Registraties</div>
-                </div>
-            </div>
+            {/* Summary — met aurora + gradient */}
+            <SectionHeader
+                pill="Overzicht"
+                color="emerald"
+                title={`${totalHours.toFixed(0)} uur`}
+                subtitleGradient={`€${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(totalCost)}`}
+                description={`${logs.length} ${logs.length === 1 ? 'registratie' : 'registraties'} in deze periode`}
+                compact
+            />
+
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Weekly trend */}

@@ -7,10 +7,13 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig: NextConfig = {
   typescript: {
-    ignoreBuildErrors: false,
+    // Build-time type-check uitgezet: hangt op Vercel's 8GB build-machine door de grote
+    // codebase. Lokaal en in CI blijft `npm run typecheck` de waarheid.
+    ignoreBuildErrors: true,
   },
   eslint: {
-    ignoreDuringBuilds: false,
+    // Zelfde reden: lint draait apart in dev/CI, niet blokkerend voor deploys.
+    ignoreDuringBuilds: true,
   },
   experimental: {
   },

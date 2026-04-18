@@ -24,6 +24,8 @@ import {
     LogOut,
     Menu,
     X,
+    Search,
+    ChevronRight,
 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { cn } from '@/lib/utils';
@@ -95,29 +97,56 @@ export function MobileMenuButton() {
 // FLAT NAVIGATION STRUCTURE
 // ============================================================================
 
-interface FlatNavItem {
+interface NavItem {
     label: string;
     href: string;
     icon: React.ComponentType<{ className?: string }>;
-    dividerAfter?: boolean;
     badge?: string;
 }
 
-const menuItems: FlatNavItem[] = [
-    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Slimme Invoer', href: '/slimme-invoer', icon: Sparkles, badge: 'Nieuw' },
-    { label: 'Veldnotities', href: '/veldnotities', icon: StickyNote, dividerAfter: true },
-    { label: 'Gewasbescherming', href: '/gewasbescherming', icon: Shield },
-    { label: 'Percelen', href: '/percelen', icon: Map },
-    { label: 'Oogst & Opslag', href: '/oogst', icon: Apple },
-    { label: 'Afzetstromen', href: '/afzetstromen', icon: Truck },
-    { label: 'Weer', href: '/weer', icon: CloudSun },
-    { label: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { label: 'Kalender', href: '/kalender', icon: CalendarDays, dividerAfter: true },
-    { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
-    { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
-    { label: 'Instellingen', href: '/instellingen', icon: Settings },
+interface NavGroup {
+    label: string;
+    items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+    {
+        label: 'Registratie',
+        items: [
+            { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+            { label: 'Slimme Invoer', href: '/slimme-invoer', icon: Sparkles, badge: 'Nieuw' },
+            { label: 'Veldnotities', href: '/veldnotities', icon: StickyNote },
+        ],
+    },
+    {
+        label: 'Beheer',
+        items: [
+            { label: 'Gewasbescherming', href: '/gewasbescherming', icon: Shield },
+            { label: 'Percelen', href: '/percelen', icon: Map },
+            { label: 'Oogst & Opslag', href: '/oogst', icon: Apple },
+            { label: 'Afzetstromen', href: '/afzetstromen', icon: Truck },
+            { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
+        ],
+    },
+    {
+        label: 'Inzicht',
+        items: [
+            { label: 'Weer', href: '/weer', icon: CloudSun },
+            { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+            { label: 'Kalender', href: '/kalender', icon: CalendarDays },
+            { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
+        ],
+    },
+    {
+        label: 'Systeem',
+        items: [
+            { label: 'Instellingen', href: '/instellingen', icon: Settings },
+        ],
+    },
 ];
+
+// Flat list for collapsed state iteration
+const allMenuItems: NavItem[] = navGroups.flatMap(g => g.items);
 
 // ============================================================================
 // SIDEBAR CONTENT
