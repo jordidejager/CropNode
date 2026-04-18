@@ -608,11 +608,14 @@ export function resolveParcelsByText(
             .map(s => s.replace(/^(?:de|het)\s+/i, '').trim())
             .filter(s => s.length >= 2);
           for (const ep of excludeParts2) {
-            const excludeWords = ep.split(/\s+/).filter((w: string) => w.length >= 2 && !PARCEL_SEARCH_STOP_WORDS.has(w));
+            const excludeWords = ep.split(/\s+/)
+              .filter((w: string) => w.length >= 2 && !PARCEL_SEARCH_STOP_WORDS.has(w))
+              .map(w => stripAccents(w));
             const excludeHits = parcels.filter(p => {
-              const name = p.name.toLowerCase();
-              const parcelName = (p as any).parcelName?.toLowerCase() || '';
-              const combined = name + ' ' + parcelName;
+              const name = stripAccents(p.name.toLowerCase());
+              const parcelName = stripAccents((p as any).parcelName?.toLowerCase() || '');
+              const variety = stripAccents(p.variety?.toLowerCase() || '');
+              const combined = name + ' ' + parcelName + ' ' + variety;
               return excludeWords.length > 0 && excludeWords.every((w: string) => combined.includes(w));
             });
             excludeHits.forEach(h => {

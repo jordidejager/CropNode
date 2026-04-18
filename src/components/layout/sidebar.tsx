@@ -109,13 +109,16 @@ interface NavGroup {
     items: NavItem[];
 }
 
+// Dashboard — the home/hub of CropNode, shown prominently above groups
+const dashboardItem: NavItem = { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard };
+
 const navGroups: NavGroup[] = [
     {
         label: 'Registratie',
         items: [
-            { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
             { label: 'Slimme Invoer', href: '/slimme-invoer', icon: Sparkles, badge: 'Nieuw' },
             { label: 'Veldnotities', href: '/veldnotities', icon: StickyNote },
+            { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
         ],
     },
     {
@@ -125,7 +128,6 @@ const navGroups: NavGroup[] = [
             { label: 'Percelen', href: '/percelen', icon: Map },
             { label: 'Oogst & Opslag', href: '/oogst', icon: Apple },
             { label: 'Afzetstromen', href: '/afzetstromen', icon: Truck },
-            { label: 'Urenregistratie', href: '/urenregistratie', icon: Clock },
         ],
     },
     {
@@ -145,8 +147,8 @@ const navGroups: NavGroup[] = [
     },
 ];
 
-// Flat list for collapsed state iteration
-const allMenuItems: NavItem[] = navGroups.flatMap(g => g.items);
+// Flat list for collapsed state iteration (dashboard first)
+const allMenuItems: NavItem[] = [dashboardItem, ...navGroups.flatMap(g => g.items)];
 
 // ============================================================================
 // SIDEBAR CONTENT
@@ -219,16 +221,29 @@ function SidebarContent() {
         <TooltipProvider delayDuration={0}>
             <aside
                 className={cn(
-                    "h-screen bg-[#020617] border-r border-white/5 transition-all duration-300 ease-in-out flex flex-col z-50 shrink-0",
+                    "h-screen bg-[#020617] transition-all duration-300 ease-in-out flex flex-col z-50 shrink-0 relative",
                     "md:sticky md:top-0",
-                    isCollapsed ? "md:w-[72px]" : "md:w-[220px]",
+                    isCollapsed ? "md:w-[72px]" : "md:w-[240px]",
                     "w-72"
                 )}
             >
-                {/* Header */}
+                {/* Premium atmospheric effects — subtle emerald glow at top */}
+                <div className="absolute top-0 left-0 right-0 h-[300px] pointer-events-none overflow-hidden">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[280px] h-[200px] rounded-full bg-emerald-500/[0.06] blur-[80px]" />
+                </div>
+
+                {/* Right-edge gradient line (replaces solid border) */}
+                <div className="absolute top-0 right-0 w-px h-full pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/[0.08] to-transparent" />
+                </div>
+
+                {/* Noise texture overlay */}
+                <div className="absolute inset-0 opacity-[0.015] mix-blend-overlay pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")' }} />
+
+                {/* Header — Logo + Collapse toggle */}
                 <div className={cn(
-                    "h-16 flex items-center gap-3 mb-2 shrink-0 relative",
-                    isCollapsed ? "px-4 justify-center" : "px-5"
+                    "h-16 flex items-center shrink-0 relative z-10",
+                    isCollapsed ? "px-4 justify-center" : "pl-5 pr-3 justify-between"
                 )}>
                     {isCollapsed ? (
                         <LogoIcon theme="dark" size={32} />
@@ -242,10 +257,20 @@ function SidebarContent() {
                         </motion.div>
                     )}
 
+                    {!isCollapsed && (
+                        <button
+                            onClick={toggleCollapse}
+                            className="size-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-all"
+                            aria-label="Sidebar inklappen"
+                        >
+                            <PanelLeftClose className="size-4" />
+                        </button>
+                    )}
+
                     {isCollapsed && (
                         <button
                             onClick={toggleCollapse}
-                            className="absolute -right-3 top-1/2 -translate-y-1/2 z-[60] size-6 flex items-center justify-center rounded-full bg-slate-800 border border-white/10 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-lg"
+                            className="absolute -right-3 top-1/2 -translate-y-1/2 z-[60] size-6 flex items-center justify-center rounded-full bg-slate-900 border border-white/10 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all text-slate-400 hover:text-emerald-400 shadow-lg shadow-black/40"
                             aria-label="Sidebar uitklappen"
                         >
                             <PanelLeftOpen className="size-3.5" />
@@ -253,29 +278,141 @@ function SidebarContent() {
                     )}
                 </div>
 
-                {/* Navigation - flat list */}
+                {/* Search / Command palette button */}
+                {!isCollapsed ? (
+                    <div className="px-3 mb-4 relative z-10">
+                        <button
+                            onClick={() => {
+                                // Placeholder for future command palette — could dispatch a global event
+                                const evt = new CustomEvent('open-command-palette');
+                                window.dispatchEvent(evt);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.10] transition-all group"
+                        >
+                            <Search className="size-3.5 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                            <span className="text-[12px] text-slate-500 group-hover:text-slate-300 flex-1 text-left transition-colors">Zoeken</span>
+                            <kbd className="text-[9px] font-mono text-slate-500 px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06] font-semibold">⌘K</kbd>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="px-2 mb-4 relative z-10">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => {
+                                        const evt = new CustomEvent('open-command-palette');
+                                        window.dispatchEvent(evt);
+                                    }}
+                                    className="w-full size-10 flex items-center justify-center rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.10] transition-all text-slate-500 hover:text-slate-200"
+                                >
+                                    <Search className="size-4" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
+                                Zoeken (⌘K)
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                )}
+
+                {/* Prominent Dashboard button — the "home" of CropNode */}
+                {!isCollapsed ? (
+                    <div className="px-3 mb-4 relative z-10">
+                        <Link
+                            href={dashboardItem.href}
+                            className={cn(
+                                "relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl overflow-hidden transition-all duration-300 group",
+                                isLinkActive(dashboardItem.href)
+                                    ? "bg-gradient-to-br from-emerald-500/[0.18] via-emerald-500/[0.08] to-emerald-500/[0.04] border border-emerald-500/30 shadow-[0_0_30px_-8px_rgba(16,185,129,0.4)]"
+                                    : "bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.10]"
+                            )}
+                        >
+                            {/* Glow effect when active */}
+                            {isLinkActive(dashboardItem.href) && (
+                                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/[0.08] to-transparent pointer-events-none" />
+                            )}
+                            <div className={cn(
+                                "relative size-7 rounded-lg flex items-center justify-center transition-all",
+                                isLinkActive(dashboardItem.href)
+                                    ? "bg-emerald-500/20 border border-emerald-500/40 shadow-[0_0_12px_-2px_rgba(52,211,153,0.6)]"
+                                    : "bg-white/[0.04] border border-white/[0.08] group-hover:bg-emerald-500/10 group-hover:border-emerald-500/20"
+                            )}>
+                                <LayoutDashboard className={cn(
+                                    "size-[15px] transition-colors",
+                                    isLinkActive(dashboardItem.href) ? "text-emerald-300" : "text-slate-400 group-hover:text-emerald-400"
+                                )} />
+                            </div>
+                            <div className="relative flex flex-col flex-1 min-w-0">
+                                <span className={cn(
+                                    "text-[13px] font-semibold truncate transition-colors",
+                                    isLinkActive(dashboardItem.href) ? "text-white" : "text-slate-200 group-hover:text-white"
+                                )}>
+                                    Dashboard
+                                </span>
+                                <span className="text-[9px] text-slate-500 font-medium truncate">
+                                    Overzicht & snelstart
+                                </span>
+                            </div>
+                            <ChevronRight className={cn(
+                                "relative size-3.5 transition-all",
+                                isLinkActive(dashboardItem.href) ? "text-emerald-400" : "text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5"
+                            )} />
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="px-2 mb-4 relative z-10">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link
+                                    href={dashboardItem.href}
+                                    className={cn(
+                                        "relative flex items-center justify-center w-full size-10 rounded-xl transition-all duration-300 group",
+                                        isLinkActive(dashboardItem.href)
+                                            ? "bg-gradient-to-br from-emerald-500/[0.20] to-emerald-500/[0.05] border border-emerald-500/40 shadow-[0_0_16px_-2px_rgba(52,211,153,0.5)]"
+                                            : "bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.10]"
+                                    )}
+                                >
+                                    <LayoutDashboard className={cn(
+                                        "size-[18px] transition-colors",
+                                        isLinkActive(dashboardItem.href) ? "text-emerald-300" : "text-slate-400 group-hover:text-emerald-400"
+                                    )} />
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
+                                Dashboard
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                )}
+
+                {/* Navigation — grouped sections */}
                 <nav className={cn(
-                    "flex-1 flex flex-col overflow-y-auto custom-scrollbar",
+                    "flex-1 flex flex-col overflow-y-auto custom-scrollbar relative z-10",
                     isCollapsed ? "px-2" : "px-3"
                 )}>
-                    <div className="space-y-0.5">
-                        {menuItems.map((item) => (
-                            <React.Fragment key={item.label}>
-                                {isCollapsed ? (
-                                    <Tooltip>
+                    {isCollapsed ? (
+                        // Collapsed: flat list of all items (dashboard already shown above)
+                        <div className="space-y-1">
+                            {navGroups.flatMap(g => g.items).map((item) => {
+                                const active = isLinkActive(item.href);
+                                return (
+                                    <Tooltip key={item.label}>
                                         <TooltipTrigger asChild>
                                             <Link
                                                 href={item.href}
                                                 className={cn(
-                                                    "flex items-center justify-center w-full px-3 py-2.5 rounded-xl transition-all duration-200",
-                                                    isLinkActive(item.href)
-                                                        ? "bg-emerald-500/10 text-emerald-400"
-                                                        : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
+                                                    "relative flex items-center justify-center w-full size-10 rounded-xl transition-all duration-200 group",
+                                                    active
+                                                        ? "bg-emerald-500/[0.10] text-emerald-400"
+                                                        : "hover:bg-white/[0.04] text-slate-500 hover:text-slate-200"
                                                 )}
                                             >
+                                                {active && (
+                                                    <div className="absolute inset-0 rounded-xl ring-1 ring-emerald-500/20 shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]" />
+                                                )}
                                                 <item.icon className={cn(
-                                                    "size-5 shrink-0",
-                                                    isLinkActive(item.href) ? "text-emerald-500" : ""
+                                                    "size-[18px] shrink-0 relative",
+                                                    active ? "text-emerald-400" : ""
                                                 )} />
                                             </Link>
                                         </TooltipTrigger>
@@ -283,62 +420,88 @@ function SidebarContent() {
                                             {item.label}
                                         </TooltipContent>
                                     </Tooltip>
-                                ) : (
-                                    <Link
-                                        href={item.href}
-                                        className={cn(
-                                            "flex items-center w-full gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
-                                            isLinkActive(item.href)
-                                                ? "bg-emerald-500/10 text-emerald-400"
-                                                : "hover:bg-white/5 text-slate-400 hover:text-slate-200"
-                                        )}
-                                    >
-                                        <item.icon className={cn(
-                                            "size-[18px] shrink-0 transition-colors",
-                                            isLinkActive(item.href) ? "text-emerald-500" : "text-slate-400 group-hover:text-slate-200"
-                                        )} />
-                                        <span className={cn(
-                                            "text-[13px] font-semibold truncate",
-                                            isLinkActive(item.href) ? "text-emerald-400" : ""
-                                        )}>
-                                            {item.label}
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        // Expanded: grouped with section labels
+                        <div className="space-y-5">
+                            {navGroups.map((group) => (
+                                <div key={group.label}>
+                                    <div className="px-2.5 mb-1.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600">
+                                            {group.label}
                                         </span>
-                                        {item.badge && (
-                                            <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                                                {item.badge}
-                                            </span>
-                                        )}
-                                    </Link>
-                                )}
-
-                                {/* Divider */}
-                                {item.dividerAfter && (
-                                    <div className={cn("py-1.5", isCollapsed ? "mx-1" : "mx-2")}>
-                                        <div className="h-px bg-white/[0.06]" />
                                     </div>
-                                )}
-                            </React.Fragment>
-                        ))}
-                    </div>
+                                    <div className="space-y-0.5">
+                                        {group.items.map((item) => {
+                                            const active = isLinkActive(item.href);
+                                            return (
+                                                <Link
+                                                    key={item.label}
+                                                    href={item.href}
+                                                    className={cn(
+                                                        "relative flex items-center w-full gap-3 px-2.5 py-2 rounded-lg transition-all duration-200 group",
+                                                        active
+                                                            ? "bg-white/[0.06] text-white"
+                                                            : "hover:bg-white/[0.03] text-slate-400 hover:text-slate-100"
+                                                    )}
+                                                >
+                                                    {/* Active indicator — emerald bar with glow */}
+                                                    {active && (
+                                                        <motion.div
+                                                            layoutId="activeIndicator"
+                                                            className="absolute -left-1 top-1.5 bottom-1.5 w-[2px] rounded-full bg-emerald-400"
+                                                            style={{ boxShadow: '0 0 10px rgba(52,211,153,0.6), 0 0 20px rgba(52,211,153,0.3)' }}
+                                                            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                                                        />
+                                                    )}
+
+                                                    <item.icon className={cn(
+                                                        "size-[17px] shrink-0 transition-colors",
+                                                        active
+                                                            ? "text-emerald-400"
+                                                            : "text-slate-500 group-hover:text-slate-300"
+                                                    )} />
+                                                    <span className={cn(
+                                                        "text-[13px] font-medium truncate flex-1",
+                                                        active ? "text-white" : ""
+                                                    )}>
+                                                        {item.label}
+                                                    </span>
+                                                    {item.badge && (
+                                                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                                            {item.badge}
+                                                        </span>
+                                                    )}
+                                                    {!item.badge && !active && (
+                                                        <ChevronRight className="size-3 text-slate-700 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                                                    )}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Wegwijzer - pushed to bottom */}
-                    <div className={cn("mt-auto pt-2 border-t border-white/[0.06]", isCollapsed ? "mx-1" : "mx-1")}>
+                    <div className={cn("mt-auto pt-4", isCollapsed ? "" : "")}>
+                        <div className={cn("h-px bg-white/[0.06] mb-3", isCollapsed ? "mx-1" : "mx-1")} />
                         {isCollapsed ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Link
                                         href="/wegwijzer"
                                         className={cn(
-                                            "flex items-center justify-center w-full px-3 py-2.5 rounded-xl transition-all duration-200",
+                                            "relative flex items-center justify-center w-full size-10 rounded-xl transition-all duration-200",
                                             isLinkActive('/wegwijzer')
-                                                ? "bg-emerald-500/10 text-emerald-400"
-                                                : "hover:bg-white/5 text-slate-500 hover:text-slate-300"
+                                                ? "bg-emerald-500/[0.10] text-emerald-400"
+                                                : "hover:bg-white/[0.04] text-slate-500 hover:text-slate-200"
                                         )}
                                     >
-                                        <Compass className={cn(
-                                            "size-5 shrink-0",
-                                            isLinkActive('/wegwijzer') ? "text-emerald-500" : ""
-                                        )} />
+                                        <Compass className="size-[18px] shrink-0" />
                                     </Link>
                                 </TooltipTrigger>
                                 <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
@@ -349,20 +512,17 @@ function SidebarContent() {
                             <Link
                                 href="/wegwijzer"
                                 className={cn(
-                                    "flex items-center w-full gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group",
+                                    "flex items-center w-full gap-3 px-2.5 py-2 rounded-lg transition-all duration-200 group",
                                     isLinkActive('/wegwijzer')
-                                        ? "bg-emerald-500/10 text-emerald-400"
-                                        : "hover:bg-white/5 text-slate-500 hover:text-slate-300"
+                                        ? "bg-white/[0.06] text-white"
+                                        : "hover:bg-white/[0.03] text-slate-500 hover:text-slate-300"
                                 )}
                             >
                                 <Compass className={cn(
-                                    "size-[18px] shrink-0 transition-colors",
-                                    isLinkActive('/wegwijzer') ? "text-emerald-500" : "text-slate-500 group-hover:text-slate-300"
+                                    "size-[17px] shrink-0 transition-colors",
+                                    isLinkActive('/wegwijzer') ? "text-emerald-400" : "text-slate-600 group-hover:text-slate-400"
                                 )} />
-                                <span className={cn(
-                                    "text-[13px] font-medium truncate",
-                                    isLinkActive('/wegwijzer') ? "text-emerald-400" : ""
-                                )}>
+                                <span className="text-[13px] font-medium truncate">
                                     Wegwijzer
                                 </span>
                             </Link>
@@ -370,110 +530,91 @@ function SidebarContent() {
                     </div>
                 </nav>
 
-                {/* Footer / User + Toggle */}
+                {/* Footer — User card */}
                 <div className={cn(
-                    "border-t border-white/5 shrink-0",
+                    "shrink-0 relative z-10",
                     isCollapsed ? "p-2" : "p-3"
                 )}>
-                    {/* User Card */}
-                    <div className={cn(
-                        "flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 mb-2 transition-all duration-300",
-                        isCollapsed ? "justify-center p-2" : "p-2.5"
-                    )}>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
+                    {/* Subtle divider above user card */}
+                    <div className={cn("h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent mb-3", isCollapsed ? "mx-0" : "mx-0")} />
+
+                    {!isCollapsed ? (
+                        <div className="relative rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden hover:border-white/[0.10] transition-colors group">
+                            {/* Subtle glow on hover */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 via-transparent to-emerald-500/0 group-hover:from-emerald-500/[0.03] group-hover:to-emerald-500/[0.02] transition-all duration-500 pointer-events-none" />
+
+                            <div className="relative flex items-center gap-2.5 p-2.5">
                                 <Link
                                     href="/profile"
-                                    className={cn(
-                                        "flex items-center gap-3 flex-1 min-w-0 group",
-                                        isCollapsed ? "justify-center" : ""
-                                    )}
+                                    className="flex items-center gap-2.5 flex-1 min-w-0"
                                 >
-                                    <div className="size-8 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-red-500/30 group-hover:border-red-500/50 transition-all">
-                                        <span className="text-[10px] font-black text-red-400">{userInitials || '?'}</span>
+                                    <div className="relative shrink-0">
+                                        <div className="size-8 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 flex items-center justify-center shadow-inner">
+                                            <span className="text-[10px] font-black text-emerald-300">{userInitials || '?'}</span>
+                                        </div>
+                                        {/* Online indicator dot */}
+                                        <div className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-400 border-[1.5px] border-[#020617] shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
                                     </div>
-                                    {!isCollapsed && (
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            className="flex flex-col overflow-hidden flex-1"
-                                        >
-                                            <span className="text-xs font-bold text-white truncate group-hover:text-emerald-400 transition-colors">{userEmail?.split('@')[0] || 'Gebruiker'}</span>
-                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider truncate">Profiel bekijken</span>
-                                        </motion.div>
-                                    )}
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="flex flex-col overflow-hidden flex-1 min-w-0"
+                                    >
+                                        <span className="text-[12px] font-semibold text-white truncate">{userEmail?.split('@')[0] || 'Gebruiker'}</span>
+                                        <span className="text-[9px] text-slate-500 font-medium truncate">Pro account</span>
+                                    </motion.div>
                                 </Link>
-                            </TooltipTrigger>
-                            {isCollapsed && (
-                                <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
-                                    Mijn Profiel
+                                <form action={logout}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                type="submit"
+                                                className="size-7 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all"
+                                            >
+                                                <LogOut className="size-3.5" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="bg-slate-800 text-white font-medium border-white/10">
+                                            Uitloggen
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-2">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link
+                                        href="/profile"
+                                        className="relative"
+                                    >
+                                        <div className="size-9 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 flex items-center justify-center shadow-inner hover:border-emerald-500/50 transition-all">
+                                            <span className="text-[10px] font-black text-emerald-300">{userInitials || '?'}</span>
+                                        </div>
+                                        <div className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-400 border-[1.5px] border-[#020617] shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+                                    </Link>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
+                                    {userEmail?.split('@')[0] || 'Mijn Profiel'}
                                 </TooltipContent>
-                            )}
-                        </Tooltip>
-                        {!isCollapsed && (
+                            </Tooltip>
                             <form action={logout}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <button
                                             type="submit"
-                                            className="size-7 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all"
+                                            className="size-7 rounded-lg flex items-center justify-center hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all"
                                         >
                                             <LogOut className="size-3.5" />
                                         </button>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="bg-slate-800 text-white font-bold border-white/10">
+                                    <TooltipContent side="right" className="bg-slate-800 text-white font-medium border-white/10">
                                         Uitloggen
                                     </TooltipContent>
                                 </Tooltip>
                             </form>
-                        )}
-                    </div>
-
-                    {/* Logout button when collapsed */}
-                    {isCollapsed && (
-                        <form action={logout} className="mb-2">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="submit"
-                                        className="w-full h-8 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 transition-all text-slate-400 hover:text-red-400"
-                                    >
-                                        <LogOut className="size-3.5" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
-                                    Uitloggen
-                                </TooltipContent>
-                            </Tooltip>
-                        </form>
-                    )}
-
-                    {/* Toggle Button */}
-                    {!isCollapsed ? (
-                        <Button
-                            variant="ghost"
-                            onClick={toggleCollapse}
-                            className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
-                        >
-                            <PanelLeftClose className="size-4 mr-2" />
-                            <span className="text-xs font-bold">Inklappen</span>
-                        </Button>
-                    ) : (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={toggleCollapse}
-                                    className="w-full h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-slate-400 hover:text-emerald-400 shadow-sm"
-                                >
-                                    <PanelLeftOpen className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="bg-slate-800 text-white font-bold border-white/10">
-                                Menu uitklappen
-                            </TooltipContent>
-                        </Tooltip>
+                        </div>
                     )}
                 </div>
             </aside>
@@ -518,13 +659,17 @@ function SidebarContent() {
 // Sidebar skeleton for Suspense fallback
 function SidebarSkeleton() {
     return (
-        <aside className="h-screen sticky top-0 bg-[#020617] border-r border-white/5 w-[220px] flex flex-col z-50 shrink-0">
-            <div className="h-16 flex items-center gap-3 mb-2 px-5">
+        <aside className="h-screen sticky top-0 bg-[#020617] w-[240px] flex flex-col z-50 shrink-0 relative">
+            <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-transparent via-white/[0.08] to-transparent" />
+            <div className="h-16 flex items-center gap-3 px-5">
                 <div className="h-8 w-28 bg-white/5 rounded animate-pulse" />
+            </div>
+            <div className="px-3 mb-4">
+                <div className="h-9 bg-white/[0.03] rounded-xl animate-pulse" />
             </div>
             <nav className="flex-1 px-3 space-y-1">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
-                    <div key={i} className="h-10 bg-white/5 rounded-xl animate-pulse" />
+                    <div key={i} className="h-8 bg-white/[0.03] rounded-lg animate-pulse" />
                 ))}
             </nav>
         </aside>
