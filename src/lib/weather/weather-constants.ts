@@ -23,12 +23,21 @@ export const HOURLY_PARAMS = [
 ] as const;
 
 // Daily parameters requested from Open-Meteo
+// Expanded set — captures everything we actually want to expose in the UI
+// without re-aggregating from hourly data every time.
 export const DAILY_PARAMS = [
   'temperature_2m_max',
   'temperature_2m_min',
   'precipitation_sum',
+  'rain_sum',
+  'precipitation_hours',
   'et0_fao_evapotranspiration',
   'wind_speed_10m_max',
+  'wind_gusts_10m_max',
+  'uv_index_max',
+  'sunshine_duration',
+  'daylight_duration',
+  'shortwave_radiation_sum',
 ] as const;
 
 // Refresh intervals (ms)

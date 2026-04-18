@@ -13,6 +13,7 @@ import {
   fetchForecastData,
   fetchHistoricalData,
   parseHourlyResponse,
+  parseDailyResponse,
   fetchMultiModelData,
   parseMultiModelResponse,
   fetchEnsembleData,
@@ -196,10 +197,157 @@ export async function fetchAndStoreForecast(
 
   const count = await upsertHourlyData(rows, supabase);
 
+  // 1) Snapshot the best_match forecast into history so we can measure accuracy later.
+  //    Only forecast rows — no point snapshotting past observations.
+  const forecastRows = rows.filter(r => r.is_forecast === true);
+  if (forecastRows.length > 0) {
+    await snapshotForecastHistory(
+      stationId,
+      'best_match',
+      now,
+      forecastRows.map(r => ({
+        valid_at: r.timestamp,
+        temperature_c: r.temperature_c,
+        precipitation_mm: r.precipitation_mm,
+        wind_speed_ms: r.wind_speed_ms,
+        wind_gusts_ms: r.wind_gusts_ms,
+        humidity_pct: r.humidity_pct,
+      })),
+      supabase
+    ).catch(err => console.warn('[WeatherService] Forecast history snapshot failed:', err));
+  }
+
+  // 2) Store Open-Meteo's native daily values directly — more accurate than
+  //    our own aggregation (uses full-res model grid, includes sunshine/UV).
+  const todayIso = now.toISOString().split('T')[0]!;
+  const dailyRows = parseDailyResponse(response, stationId, todayIso);
+  if (dailyRows.length > 0) {
+    const { error: dailyErr } = await supabase
+      .from('weather_data_daily')
+      .upsert(dailyRows, { onConflict: 'station_id,date', ignoreDuplicates: false });
+    if (dailyErr) {
+      console.warn('[WeatherService] Daily upsert failed:', dailyErr.message);
+    }
+  }
+
+  // 3) Recompute derived daily fields (gdd, frost_hours, leaf_wetness_hrs) from
+  //    freshly-stored hourly data. These aren't in Open-Meteo's daily block.
+  //    Do this in the background — never block the main response on it.
+  const affectedDates = new Set(rows.map(r => r.timestamp.slice(0, 10)));
+  refreshDerivedDailyFields(stationId, Array.from(affectedDates), supabase).catch(err =>
+    console.warn('[WeatherService] Derived daily recompute failed:', err)
+  );
+
   // Log the fetch
   await logFetch(stationId, 'forecast', null, null, 'success', count, undefined, supabase);
 
   return count;
+}
+
+/**
+ * Recompute only the fields that Open-Meteo daily doesn't provide natively
+ * (gdd_base5/10, frost_hours, leaf_wetness_hrs, temp_avg_c, humidity_avg_pct,
+ * wind_speed_avg_ms). The rest is written directly by parseDailyResponse.
+ */
+async function refreshDerivedDailyFields(
+  stationId: string,
+  dates: string[],
+  supabase: SupabaseClient
+): Promise<void> {
+  for (const date of dates) {
+    const startOfDay = `${date}T00:00:00`;
+    const endOfDay = `${date}T23:59:59`;
+
+    const { data: hourly } = await supabase
+      .from('weather_data_hourly')
+      .select('temperature_c, humidity_pct, wind_speed_ms, leaf_wetness_pct')
+      .eq('station_id', stationId)
+      .eq('model_name', 'best_match')
+      .gte('timestamp', startOfDay)
+      .lte('timestamp', endOfDay)
+      .limit(48);
+
+    if (!hourly || hourly.length === 0) continue;
+
+    const temps = hourly.map(r => r.temperature_c).filter((v): v is number => v != null);
+    const hums = hourly.map(r => r.humidity_pct).filter((v): v is number => v != null);
+    const winds = hourly.map(r => r.wind_speed_ms).filter((v): v is number => v != null);
+    const wetness = hourly.map(r => r.leaf_wetness_pct).filter((v): v is number => v != null);
+
+    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+    const tempAvg = avg(temps);
+    const frostHours = temps.filter(t => t < 0).length;
+    const leafWetnessHrs = wetness.filter(w => w >= 50).length;
+
+    // GDD base 5 / 10 (using avg temp method — simpler than max/min/2)
+    const gddBase5 = tempAvg !== null ? Math.max(0, tempAvg - 5) : null;
+    const gddBase10 = tempAvg !== null ? Math.max(0, tempAvg - 10) : null;
+
+    await supabase
+      .from('weather_data_daily')
+      .update({
+        temp_avg_c: tempAvg,
+        humidity_avg_pct: avg(hums),
+        wind_speed_avg_ms: avg(winds),
+        gdd_base5: gddBase5,
+        gdd_base10: gddBase10,
+        frost_hours: frostHours,
+        leaf_wetness_hrs: leafWetnessHrs,
+      })
+      .eq('station_id', stationId)
+      .eq('date', date);
+  }
+}
+
+/**
+ * Insert forecast snapshots into weather_forecast_history for later accuracy
+ * analysis. Uses natural key (station_id, model_name, forecast_made_at, valid_at)
+ * so repeated snapshots of the same run are idempotent.
+ */
+async function snapshotForecastHistory(
+  stationId: string,
+  modelName: string,
+  forecastMadeAt: Date,
+  items: Array<{
+    valid_at: string;
+    temperature_c: number | null;
+    precipitation_mm: number | null;
+    wind_speed_ms: number | null;
+    wind_gusts_ms: number | null;
+    humidity_pct: number | null;
+  }>,
+  supabase: SupabaseClient
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const madeAtIso = forecastMadeAt.toISOString();
+  const rows = items.map(item => ({
+    station_id: stationId,
+    model_name: modelName,
+    forecast_made_at: madeAtIso,
+    valid_at: item.valid_at,
+    temperature_c: item.temperature_c,
+    precipitation_mm: item.precipitation_mm,
+    wind_speed_ms: item.wind_speed_ms,
+    wind_gusts_ms: item.wind_gusts_ms,
+    humidity_pct: item.humidity_pct,
+  }));
+
+  // Chunked insert — 500 rows per call
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const { error } = await supabase
+      .from('weather_forecast_history' as any)
+      .upsert(batch, {
+        onConflict: 'station_id,model_name,forecast_made_at,valid_at',
+        ignoreDuplicates: true,
+      });
+    if (error) {
+      console.warn('[WeatherService] Forecast history insert failed:', error.message);
+      return;
+    }
+  }
 }
 
 /**
@@ -277,7 +425,9 @@ async function upsertHourlyData(
     const { error, count } = await supabase
       .from('weather_data_hourly')
       .upsert(batch, {
-        onConflict: 'station_id,timestamp,model_name,is_forecast',
+        // Natural key WITHOUT is_forecast — same timestamp shouldn't exist twice
+        // just because it flipped from forecast to observed. Fixed in migration 064.
+        onConflict: 'station_id,timestamp,model_name',
         ignoreDuplicates: false,
       })
       .select('id');
@@ -334,7 +484,8 @@ export async function aggregateDaily(
       is_forecast: isForecast,
       data_source: 'open-meteo',
     }, {
-      onConflict: 'station_id,date,is_forecast',
+      // Same fix as hourly: is_forecast is a descriptor, not part of identity
+      onConflict: 'station_id,date',
     });
 }
 

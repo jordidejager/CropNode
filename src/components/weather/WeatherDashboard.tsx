@@ -28,6 +28,7 @@ import { WaterBalanceWidget } from './WaterBalanceWidget';
 import { WindRoseWidget } from './WindRoseWidget';
 import { ForecastAccuracyWidget } from './ForecastAccuracyWidget';
 import { PhenologyWidget } from './PhenologyWidget';
+import { DataFreshnessBadge } from './DataFreshnessBadge';
 
 type DashboardTab = 'dashboard' | 'seizoen';
 
@@ -132,7 +133,7 @@ export function WeatherDashboard() {
 
   return (
     <div className="space-y-4">
-      {/* Station selector */}
+      {/* Station selector + freshness badge */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <StationSelector
           stations={stations}
@@ -140,6 +141,13 @@ export function WeatherDashboard() {
           onChange={setSelectedStationId}
         />
         {activeStation && <StationLocationBanner station={activeStation} />}
+        <div className="sm:ml-auto">
+          <DataFreshnessBadge
+            stationId={activeStationId}
+            onRefresh={handleRefresh}
+            refreshing={refreshMutation.isPending}
+          />
+        </div>
       </div>
 
       {/* Tab navigation: Dashboard / Seizoen / Expert */}

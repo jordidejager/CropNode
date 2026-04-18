@@ -145,14 +145,83 @@ export function parseHourlyResponse(
   });
 }
 
+/**
+ * Parse the Open-Meteo `daily` block into rows ready for weather_data_daily.
+ *
+ * We prefer these native Open-Meteo daily values over aggregating from hourly
+ * ourselves — they come from the model's own high-res grid and include things
+ * we can't easily compute client-side (sunshine_duration, uv_index_max).
+ *
+ * Returned row shape matches the expanded weather_data_daily schema in
+ * migration 064, minus the derived columns (gdd, frost_hours, etc.) which
+ * are still computed server-side from hourly data.
+ */
+export function parseDailyResponse(
+  response: OpenMeteoHourlyResponse,
+  stationId: string,
+  todayIso: string
+): Array<Record<string, unknown>> {
+  const daily = (response as any).daily as Record<string, unknown[]> | undefined;
+  if (!daily || !daily.time) return [];
+
+  const times = daily.time as string[];
+  const n = times.length;
+  const rows: Array<Record<string, unknown>> = [];
+
+  for (let i = 0; i < n; i++) {
+    const date = times[i];
+    rows.push({
+      station_id: stationId,
+      date,
+      temp_max_c: (daily.temperature_2m_max as (number | null)[])?.[i] ?? null,
+      temp_min_c: (daily.temperature_2m_min as (number | null)[])?.[i] ?? null,
+      precipitation_sum: (daily.precipitation_sum as (number | null)[])?.[i] ?? null,
+      rain_sum_mm: (daily.rain_sum as (number | null)[])?.[i] ?? null,
+      precipitation_hours: (daily.precipitation_hours as (number | null)[])?.[i] ?? null,
+      et0_sum_mm: (daily.et0_fao_evapotranspiration as (number | null)[])?.[i] ?? null,
+      wind_speed_max_ms: (daily.wind_speed_10m_max as (number | null)[])?.[i] ?? null,
+      wind_gusts_max_ms: (daily.wind_gusts_10m_max as (number | null)[])?.[i] ?? null,
+      uv_index_max: (daily.uv_index_max as (number | null)[])?.[i] ?? null,
+      sunshine_duration_s:
+        (daily.sunshine_duration as (number | null)[])?.[i] != null
+          ? Math.round((daily.sunshine_duration as number[])[i])
+          : null,
+      daylight_duration_s:
+        (daily.daylight_duration as (number | null)[])?.[i] != null
+          ? Math.round((daily.daylight_duration as number[])[i])
+          : null,
+      solar_radiation_sum:
+        (daily.shortwave_radiation_sum as (number | null)[])?.[i] ?? null,
+      is_forecast: date >= todayIso,
+      data_source: 'open-meteo',
+    });
+  }
+
+  return rows;
+}
+
 // ---- Multi-Model Forecast ----
 
-/** Open-Meteo model suffixes → our model_name mapping */
+/** Open-Meteo model suffixes → our model_name mapping
+ * Global models (25km+) for 14-day outlook:
+ *   ecmwf_ifs025, ecmwf_aifs025, gfs_seamless, meteofrance_arpege_seamless
+ * Regional HiRes models (2-7km) for short-term accuracy over NL:
+ *   knmi_seamless     — native KNMI HARMONIE (2.5km, the best single model for NL)
+ *   icon_d2           — DWD ICON-D2 (2.2km, covers Benelux)
+ *   icon_eu           — DWD ICON-EU (7km, covers Europe, backup for 3-5d)
+ *   dmi_seamless      — Danish HARMONIE DINI (2km, good for maritime NL)
+ */
 const MODEL_SUFFIX_MAP: Record<string, string> = {
-  'ecmwf_ifs025': 'ecmwf_ifs',
+  // Regional HiRes — most accurate for short-term (0-3 days)
+  'knmi_seamless': 'knmi_harmonie',
+  'icon_d2': 'icon_d2',
+  'dmi_seamless': 'dmi_harmonie',
+  // Mid-range regional
   'icon_eu': 'icon_eu',
-  'gfs_seamless': 'gfs',
+  // Global models — mid to long range
+  'ecmwf_ifs025': 'ecmwf_ifs',
   'meteofrance_arpege_seamless': 'meteofrance_arpege',
+  'gfs_seamless': 'gfs',
   'ecmwf_aifs025': 'ecmwf_aifs',
 };
 
