@@ -831,24 +831,25 @@ export function resolveParcelsByText(
     const excludedIds: string[] = [];
 
     for (const part of excludeParts) {
-      const partLower = part.toLowerCase();
+      const partLower = stripAccents(part.toLowerCase());
 
-      // Try variety match first
-      const excludeByVariety = parcels.filter(p =>
-        p.variety?.toLowerCase() === partLower ||
-        (p.variety && p.variety.toLowerCase().includes(partLower))
-      );
+      // Try variety match first (accent-insensitive)
+      const excludeByVariety = parcels.filter(p => {
+        const v = stripAccents(p.variety?.toLowerCase() || '');
+        return v === partLower || (v && v.includes(partLower));
+      });
       if (excludeByVariety.length > 0) {
         excludedIds.push(...excludeByVariety.map(p => p.id));
       } else {
-        // Try name match with word-order-independent matching
+        // Try name match with word-order-independent matching (accent-insensitive)
         // "nieuwe conference jachthoek" should match "Jachthoek Nieuwe Conference (Conference)"
         const excludeWords = partLower.split(/\s+/).filter(w => w.length >= 2 && !PARCEL_SEARCH_STOP_WORDS.has(w));
         const excludeByName = parcels.filter(p => {
-          const name = p.name.toLowerCase();
-          const parcelName = (p as any).parcelName?.toLowerCase() || '';
-          const combined = name + ' ' + parcelName;
-          // All exclude words must appear somewhere in the parcel name (order-independent)
+          const name = stripAccents(p.name.toLowerCase());
+          const parcelName = stripAccents((p as any).parcelName?.toLowerCase() || '');
+          const variety = stripAccents(p.variety?.toLowerCase() || '');
+          const combined = name + ' ' + parcelName + ' ' + variety;
+          // All exclude words must appear somewhere (order-independent)
           return excludeWords.length > 0 && excludeWords.every(w => combined.includes(w));
         });
         excludedIds.push(...excludeByName.map(p => p.id));

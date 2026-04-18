@@ -147,9 +147,6 @@ const navGroups: NavGroup[] = [
     },
 ];
 
-// Flat list for collapsed state iteration (dashboard first)
-const allMenuItems: NavItem[] = [dashboardItem, ...navGroups.flatMap(g => g.items)];
-
 // ============================================================================
 // SIDEBAR CONTENT
 // ============================================================================
