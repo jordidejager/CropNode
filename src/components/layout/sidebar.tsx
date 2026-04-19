@@ -20,8 +20,6 @@ import {
     Clock,
     Settings,
     Compass,
-    PanelLeftClose,
-    PanelLeftOpen,
     LogOut,
     Menu,
     X,
@@ -256,26 +254,36 @@ function SidebarContent() {
                         </motion.div>
                     )}
 
-                    {!isCollapsed && (
-                        <button
-                            onClick={toggleCollapse}
-                            className="size-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-all"
-                            aria-label="Sidebar inklappen"
-                        >
-                            <PanelLeftClose className="size-4" />
-                        </button>
-                    )}
-
-                    {isCollapsed && (
-                        <button
-                            onClick={toggleCollapse}
-                            className="absolute -right-3 top-1/2 -translate-y-1/2 z-[60] size-6 flex items-center justify-center rounded-full bg-slate-900 border border-white/10 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all text-slate-400 hover:text-emerald-400 shadow-lg shadow-black/40"
-                            aria-label="Sidebar uitklappen"
-                        >
-                            <PanelLeftOpen className="size-3.5" />
-                        </button>
-                    )}
                 </div>
+
+                {/* Premium edge toggle — pill tab on the right edge, works for both states */}
+                <motion.button
+                    onClick={toggleCollapse}
+                    aria-label={isCollapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
+                    className="group absolute right-0 top-[96px] z-[70] flex items-center justify-center h-14 w-5 translate-x-1/2"
+                    whileHover={{ x: '65%' }}
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+                >
+                    {/* Ambient emerald glow on hover */}
+                    <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-125" />
+
+                    {/* Pill body — glass / gradient with subtle border */}
+                    <div className="relative h-12 w-[18px] rounded-full bg-gradient-to-b from-slate-800/95 via-[#0a0f1a] to-slate-800/95 border border-white/[0.10] group-hover:border-emerald-500/50 backdrop-blur-md shadow-lg shadow-black/50 group-hover:shadow-emerald-500/20 flex items-center justify-center overflow-hidden transition-all duration-300">
+                        {/* Top/bottom inner highlights for 3D depth */}
+                        <div className="absolute inset-x-0 top-0 h-1/2 rounded-t-full bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
+                        <div className="absolute inset-x-0 bottom-0 h-1/2 rounded-b-full bg-gradient-to-t from-emerald-500/[0.04] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+                        {/* Chevron — rotates between expanded and collapsed */}
+                        <motion.div
+                            animate={{ rotate: isCollapsed ? 0 : 180 }}
+                            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+                            className="relative text-slate-400 group-hover:text-emerald-300 transition-colors duration-300"
+                        >
+                            <ChevronRight className="size-3" strokeWidth={2.6} />
+                        </motion.div>
+                    </div>
+                </motion.button>
 
                 {/* Search / Command palette button */}
                 {!isCollapsed ? (
