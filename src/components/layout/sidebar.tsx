@@ -245,14 +245,14 @@ function SidebarContent() {
                     isCollapsed ? "px-4 justify-center" : "pl-5 pr-3 justify-between"
                 )}>
                     {isCollapsed ? (
-                        <LogoIcon theme="dark" size={32} />
+                        <LogoIcon theme="dark" size={32} style="animated" />
                     ) : (
                         <motion.div
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             className="flex items-center overflow-hidden"
                         >
-                            <Logo variant="horizontal" theme="dark" width={130} height={30} />
+                            <Logo variant="horizontal" theme="dark" width={130} height={30} style="animated" />
                         </motion.div>
                     )}
 
