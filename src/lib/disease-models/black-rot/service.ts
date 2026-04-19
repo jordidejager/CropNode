@@ -134,10 +134,10 @@ export async function calculateBlackRotResults(
     }
   }
 
-  // Fetch weather: biofix (usually petal fall) → today + 7 days
+  // Fetch weather: biofix (usually petal fall) → today + 14 days
   const today = new Date();
   const forecastEnd = new Date(today);
-  forecastEnd.setDate(forecastEnd.getDate() + 7);
+  forecastEnd.setDate(forecastEnd.getDate() + 14);
 
   const weatherData = await fetchWeatherChunked(
     stationId,

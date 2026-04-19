@@ -39,7 +39,7 @@ const MIN_WET_FOR_INFECTION = 4; // hours, below this = no infection regardless 
 
 export interface BlackRotInput {
   biofixDate: Date; // usually petal fall
-  endDate: Date; // today + 7 days forecast
+  endDate: Date; // today + 14 days forecast
   latitude: number;
   longitude: number;
   inoculumPressure?: InoculumPressure;

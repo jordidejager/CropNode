@@ -221,7 +221,7 @@ export interface SimulationResult {
 export interface SimulationInput {
   /** Biofix date (start of simulation) */
   biofixDate: Date;
-  /** End date (usually today + 7 days forecast) */
+  /** End date (usually today + 14 days forecast) */
   endDate: Date;
   /** Latitude for astronomical calculations */
   latitude: number;

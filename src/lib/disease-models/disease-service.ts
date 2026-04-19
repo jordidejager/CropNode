@@ -235,10 +235,10 @@ export async function calculateDiseaseResults(
     }
   }
 
-  // Date range: biofix to today + 7 days forecast
+  // Date range: biofix to today + 14 days forecast
   const today = new Date();
   const forecastEnd = new Date(today);
-  forecastEnd.setDate(forecastEnd.getDate() + 7);
+  forecastEnd.setDate(forecastEnd.getDate() + 14);
 
   const weatherData = await fetchWeatherChunked(
     stationId,
@@ -481,7 +481,7 @@ async function loadCachedResults(
   if (sprayEvents.length > 0 && seasonProgress.length > 0) {
     const today = new Date();
     const forecastEnd = new Date(today);
-    forecastEnd.setDate(forecastEnd.getDate() + 7);
+    forecastEnd.setDate(forecastEnd.getDate() + 14);
 
     // Find station for this parcel
     const stationId = await getStationForParcel(config.parcel_id, supabase);
