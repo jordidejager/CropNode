@@ -35,12 +35,12 @@ const DISEASES: DiseaseCard[] = [
     name: 'Perenschurft',
     scientific: 'Venturia pirina',
     icon: Sprout,
-    colorClass: 'text-slate-500',
-    bgClass: 'bg-slate-500/5',
-    borderClass: 'border-white/5',
+    colorClass: 'text-cyan-400',
+    bgClass: 'bg-cyan-500/10',
+    borderClass: 'border-cyan-500/20 hover:border-cyan-500/40',
     description:
-      'Vergelijkbaar met appelschurft maar met aangepaste parameters voor peer. Komt binnenkort.',
-    status: 'coming-soon',
+      'RIMpro-niveau dynamisch model (Spotts-Cervantes 1991, Villalta 2000). Zelfde simulatie-engine als appelschurft met pear-specifieke parameters: meer natheid vereist bij warm weer, ascosporen ook overdag én deels \'s nachts.',
+    status: 'active',
     availableForCrops: ['Peer'],
   },
   {

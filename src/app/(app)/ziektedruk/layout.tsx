@@ -3,6 +3,7 @@ import { PageTabs } from '@/components/layout/page-tabs';
 const tabs = [
     { label: 'Overzicht', href: '/ziektedruk' },
     { label: 'Appelschurft', href: '/ziektedruk/appelschurft' },
+    { label: 'Perenschurft', href: '/ziektedruk/perenschurft' },
     { label: 'Zwartvruchtrot', href: '/ziektedruk/zwartvruchtrot' },
     { label: 'Meeldauw', href: '/ziektedruk/meeldauw' },
 ];

@@ -16,182 +16,21 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Combobox, ComboboxOption } from '@/components/ui/combobox';
-import { Edit, Trash2, BookOpen, CalendarIcon, Plus, Search, X, Save, AlertTriangle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
+import { ComboboxOption } from '@/components/ui/combobox';
+import { Edit, Trash2, BookOpen, CalendarIcon, Plus, X, Save, AlertTriangle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { deleteSpuitschriftEntry, updateSpuitschriftEntryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { SpuitschriftSkeleton, ErrorState, EmptyState } from '@/components/ui/data-states';
 import { cn } from '@/lib/utils';
 import { CropIcon } from '@/components/ui/crop-icon';
-import { DosageField } from '@/components/spuitschrift/dosage-field';
-import { NewSprayDialog } from '@/components/spuitschrift';
+import { NewSprayDialog, EditableProduct, EditableParcels, formatTotalUsage } from '@/components/spuitschrift';
 import { SectionHeader, SpotlightCard, GlowOrb } from '@/components/ui/premium';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const formatDate = (date: Date) => {
     return format(date, 'dd MMMM yyyy \'om\' HH:mm', { locale: nl });
 };
-
-// ============================================
-// Editable Products Component
-// ============================================
-
-interface EditableProductProps {
-    product: ProductEntry;
-    allProducts: ComboboxOption[];
-    onUpdate: (product: ProductEntry) => void;
-    onRemove: () => void;
-}
-
-function EditableProduct({ product, allProducts, onUpdate, onRemove }: EditableProductProps) {
-    return (
-        <div className="flex flex-wrap items-end gap-3 p-4 bg-white/[0.02] rounded-xl border border-white/10">
-            <div className="flex-1 min-w-[220px] space-y-2">
-                <Label className="text-sm text-slate-300 font-medium">Middel</Label>
-                <Combobox
-                    options={allProducts}
-                    value={product.product}
-                    onValueChange={(value) => onUpdate({ ...product, product: value })}
-                    placeholder="Selecteer middel"
-                />
-            </div>
-            <div className="w-32 space-y-2">
-                <Label className="text-sm text-slate-300 font-medium">Dosering</Label>
-                <DosageField
-                    value={product.dosage}
-                    onChange={(dosage) => onUpdate({ ...product, dosage })}
-                />
-            </div>
-            <div className="w-28 space-y-2">
-                <Label className="text-sm text-slate-300 font-medium">Eenheid</Label>
-                <Select value={product.unit} onValueChange={(value) => onUpdate({ ...product, unit: value })}>
-                    <SelectTrigger className="h-11 text-base">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="L/ha">L/ha</SelectItem>
-                        <SelectItem value="kg/ha">kg/ha</SelectItem>
-                        <SelectItem value="ml/ha">ml/ha</SelectItem>
-                        <SelectItem value="g/ha">g/ha</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <Button
-                variant="ghost"
-                size="lg"
-                className="h-11 px-4 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={onRemove}
-            >
-                <Trash2 className="h-5 w-5 mr-2" />
-                Verwijder
-            </Button>
-        </div>
-    );
-}
-
-// ============================================
-// Editable Parcels Component
-// ============================================
-
-interface EditableParcelsProps {
-    selectedIds: string[];
-    allParcels: SprayableParcel[];
-    onChange: (ids: string[]) => void;
-}
-
-function EditableParcels({ selectedIds, allParcels, onChange }: EditableParcelsProps) {
-    const [open, setOpen] = React.useState(false);
-    const [searchTerm, setSearchTerm] = React.useState('');
-
-    const filteredParcels = React.useMemo(() =>
-        allParcels.filter(parcel =>
-            parcel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (parcel.crop && parcel.crop.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (parcel.variety && parcel.variety.toLowerCase().includes(searchTerm.toLowerCase()))
-        ), [allParcels, searchTerm]
-    );
-
-    const selectedParcels = React.useMemo(() =>
-        selectedIds.map(id => allParcels.find(p => p.id === id)).filter(Boolean) as SprayableParcel[],
-        [selectedIds, allParcels]
-    );
-
-    const handleToggle = (parcelId: string, checked: boolean) => {
-        const newSelection = checked
-            ? [...selectedIds, parcelId]
-            : selectedIds.filter(id => id !== parcelId);
-        onChange(newSelection);
-    };
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal h-auto min-h-[48px] py-3 text-base">
-                    {selectedParcels.length === 0 ? (
-                        <span className="text-muted-foreground">Selecteer percelen...</span>
-                    ) : selectedParcels.length <= 2 ? (
-                        <span className="truncate">{selectedParcels.map(p => p.name).join(', ')}</span>
-                    ) : (
-                        <span>{selectedParcels.length} percelen geselecteerd</span>
-                    )}
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[380px] p-0" align="start">
-                <div className="p-3 border-b">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                            placeholder="Zoek perceel..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 h-11 text-base"
-                        />
-                    </div>
-                </div>
-                <ScrollArea className="h-[300px]">
-                    <div className="p-2 space-y-1">
-                        {filteredParcels.length > 0 ? (
-                            filteredParcels.map((parcel) => (
-                                <div
-                                    key={parcel.id}
-                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer min-h-[52px]"
-                                    onClick={() => handleToggle(parcel.id, !selectedIds.includes(parcel.id))}
-                                >
-                                    <Checkbox
-                                        checked={selectedIds.includes(parcel.id)}
-                                        onCheckedChange={(checked) => handleToggle(parcel.id, !!checked)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="h-5 w-5"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-base truncate">{parcel.name}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {parcel.crop} — {parcel.variety} · {parcel.area?.toFixed(2)} ha
-                                        </p>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-center text-muted-foreground p-6 text-base">
-                                Geen percelen gevonden.
-                            </p>
-                        )}
-                    </div>
-                </ScrollArea>
-                {selectedIds.length > 0 && (
-                    <div className="p-3 border-t bg-muted/50">
-                        <p className="text-sm text-muted-foreground">
-                            {selectedIds.length} perceel{selectedIds.length !== 1 ? 'en' : ''} geselecteerd
-                        </p>
-                    </div>
-                )}
-            </PopoverContent>
-        </Popover>
-    );
-}
 
 // ============================================
 // Spuitschrift Entry Card (SpotlightCard variant)
@@ -349,13 +188,21 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                     </div>
                     {entry.products && entry.products.length > 0 ? (
                         <div className="space-y-1" title={generateProductSummary()}>
-                            {(isExpanded ? entry.products : entry.products.slice(0, 2)).map((p, i) => (
-                                <div key={i} className="flex items-baseline gap-2 text-sm">
-                                    <span className="w-1 h-1 rounded-full bg-emerald-500/40 shrink-0 translate-y-[-3px]" aria-hidden />
-                                    <span className="text-slate-200 font-medium truncate">{p.product}</span>
-                                    <span className="text-slate-500 tabular-nums shrink-0">{p.dosage} {p.unit}/ha</span>
-                                </div>
-                            ))}
+                            {(isExpanded ? entry.products : entry.products.slice(0, 2)).map((p, i) => {
+                                const totalUsed = formatTotalUsage(p.dosage, totalArea, p.unit);
+                                return (
+                                    <div key={i} className="flex items-baseline gap-2 text-sm flex-wrap">
+                                        <span className="w-1 h-1 rounded-full bg-emerald-500/40 shrink-0 translate-y-[-3px]" aria-hidden />
+                                        <span className="text-slate-200 font-medium truncate">{p.product}</span>
+                                        <span className="text-slate-500 tabular-nums shrink-0">
+                                            {p.dosage} {p.unit}
+                                            {totalUsed && (
+                                                <span className="text-slate-600"> ({totalUsed})</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                             {entry.products.length > 2 && !isExpanded && (
                                 <div className="flex items-baseline gap-2 text-sm pt-0.5">
                                     <span className="w-1 h-1 shrink-0" aria-hidden />
@@ -516,8 +363,11 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                                                     key={index}
                                                     product={product}
                                                     allProducts={productOptions}
+                                                    totalArea={editedTotalArea}
                                                     onUpdate={(updated) => handleProductUpdate(index, updated)}
                                                     onRemove={() => handleProductRemove(index)}
+                                                    label="Middel"
+                                                    tint="emerald"
                                                 />
                                             ))}
                                             {editedProducts.length === 0 && (

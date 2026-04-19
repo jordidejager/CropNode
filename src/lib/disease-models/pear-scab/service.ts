@@ -1,5 +1,5 @@
 /**
- * Powdery mildew service — orchestrates weather fetch, winter check, simulation.
+ * Pear scab service — weather fetch + simulation + adapter.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -8,18 +8,13 @@ import {
   getOrCreateWeatherStation,
 } from '@/lib/weather/weather-service';
 import type { HourlyWeatherData } from '@/lib/weather/weather-types';
-import { runMildewSimulationV2 } from './simulation-v2';
+import { runPearScabSimulation } from './simulation';
 import {
-  mildewToSeasonProgress,
-  mildewToInfectionPeriods,
-  mildewToKPIs,
+  pearScabToSeasonProgress,
+  pearScabToInfectionPeriods,
+  pearScabToKPIs,
 } from './adapter';
-import type {
-  DiseaseModelConfig,
-  ZiektedrukResult,
-  HourlyWeatherInput,
-} from '../types';
-import { MILDEW_CONSTANTS as C } from './types';
+import type { DiseaseModelConfig, ZiektedrukResult } from '../types';
 
 const CHUNK_DAYS = 31;
 
@@ -28,18 +23,6 @@ function formatDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-function toWeatherInput(data: HourlyWeatherData[]): HourlyWeatherInput[] {
-  return data.map((d) => ({
-    timestamp: d.timestamp,
-    temperatureC: d.temperatureC,
-    humidityPct: d.humidityPct,
-    precipitationMm: d.precipitationMm,
-    leafWetnessPct: d.leafWetnessPct,
-    dewPointC: d.dewPointC,
-    isForecast: d.isForecast,
-  }));
 }
 
 async function getStationForParcel(
@@ -63,13 +46,11 @@ async function fetchWeatherChunked(
   const start = new Date(startDate);
   const end = new Date(endDate);
   const all: HourlyWeatherData[] = [];
-
   let chunkStart = new Date(start);
   while (chunkStart < end) {
     const chunkEnd = new Date(chunkStart);
     chunkEnd.setDate(chunkEnd.getDate() + CHUNK_DAYS);
     if (chunkEnd > end) chunkEnd.setTime(end.getTime());
-
     const chunk = await getHourlyRange(
       stationId,
       formatDate(chunkStart),
@@ -77,42 +58,16 @@ async function fetchWeatherChunked(
       supabase
     );
     all.push(...chunk);
-
     chunkStart = new Date(chunkEnd);
     chunkStart.setDate(chunkStart.getDate() + 1);
   }
-
   return all;
 }
 
-/**
- * Look up the minimum winter temperature (Dec-Feb) from stored weather data.
- * Used to check winter-kill condition for overwintering inoculum.
- */
-async function getMinWinterTemp(
-  stationId: string,
-  harvestYear: number,
-  supabase: SupabaseClient
-): Promise<number | null> {
-  // Winter preceding this season: Dec (year-1) through Feb (year)
-  const winterStart = `${harvestYear - 1}-12-01`;
-  const winterEnd = `${harvestYear}-02-28`;
-
-  const data = await fetchWeatherChunked(stationId, winterStart, winterEnd, supabase);
-  if (data.length === 0) return null;
-
-  let minT = Infinity;
-  for (const h of data) {
-    if (h.temperatureC !== null && h.temperatureC < minT) minT = h.temperatureC;
-  }
-  return minT === Infinity ? null : minT;
-}
-
-export async function calculateMildewResults(
+export async function calculatePearScabResults(
   config: DiseaseModelConfig,
   supabase: SupabaseClient
 ): Promise<ZiektedrukResult> {
-  // Resolve station
   let stationId: string | undefined = config.weather_station_id ?? undefined;
   let lat: number | undefined;
   let lng: number | undefined;
@@ -135,10 +90,9 @@ export async function calculateMildewResults(
       .select('location')
       .eq('id', config.parcel_id)
       .single();
-
     const loc = parcel?.location as { lat: number; lng: number } | undefined;
     if (!loc) {
-      throw new Error('Parcel heeft geen locatie — kan geen weerstation koppelen');
+      throw new Error('Parcel heeft geen locatie');
     }
     lat = loc.lat;
     lng = loc.lng;
@@ -163,37 +117,26 @@ export async function calculateMildewResults(
     supabase
   );
 
-  const weatherInput = toWeatherInput(weatherData);
   const biofixDate = new Date(config.biofix_date + 'T00:00:00Z');
-
-  // Get winter minimum temp for mortality check
-  const minWinterTemp = await getMinWinterTemp(
-    stationId,
-    config.harvest_year,
-    supabase
-  );
-
-  const simResult = runMildewSimulationV2({
+  const simResult = runPearScabSimulation({
     biofixDate,
     endDate: forecastEnd,
     latitude: lat,
     longitude: lng,
     inoculumPressure: config.inoculum_pressure,
-    minWinterTemp,
-    hourlyWeather: weatherInput.map((w) => ({
+    hourlyWeather: weatherData.map((w) => ({
       timestamp: w.timestamp,
       temperatureC: w.temperatureC,
       humidityPct: w.humidityPct,
       precipitationMm: w.precipitationMm,
       leafWetnessPct: w.leafWetnessPct,
-      dewPointC: w.dewPointC,
       isForecast: w.isForecast,
     })),
   });
 
-  const seasonProgress = mildewToSeasonProgress(simResult);
-  const infectionPeriods = mildewToInfectionPeriods(simResult);
-  const kpis = mildewToKPIs(simResult, infectionPeriods);
+  const seasonProgress = pearScabToSeasonProgress(simResult);
+  const infectionPeriods = pearScabToInfectionPeriods(simResult);
+  const kpis = pearScabToKPIs(simResult, infectionPeriods);
 
   return {
     configured: true,
