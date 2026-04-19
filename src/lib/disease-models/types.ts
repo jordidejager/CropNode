@@ -9,7 +9,7 @@ export type MillsSeverity = 'none' | 'light' | 'moderate' | 'severe';
 
 export type InoculumPressure = 'low' | 'medium' | 'high';
 
-export type DiseaseType = 'apple_scab' | 'black_rot';
+export type DiseaseType = 'apple_scab' | 'black_rot' | 'powdery_mildew';
 
 // === Configuration ===
 export interface DiseaseModelConfig {

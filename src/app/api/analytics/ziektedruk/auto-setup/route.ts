@@ -26,12 +26,14 @@ import {
   calculateDiseaseResults,
 } from '@/lib/disease-models/disease-service';
 import { calculateBlackRotResults } from '@/lib/disease-models/black-rot/service';
+import { calculateMildewResults } from '@/lib/disease-models/powdery-mildew/service';
 import type { DiseaseType } from '@/lib/disease-models/types';
 
 // Days relative to full bloom (bloom_date_f2)
 const BIOFIX_OFFSETS: Record<DiseaseType, number> = {
   apple_scab: -22, // green tip ≈ bloom - 22 days
   black_rot: 7, // petal fall ≈ bloom + 7 days
+  powdery_mildew: -35, // bud break ≈ bloom - 35 days (earliest)
 };
 
 // Fallback bloom dates when phenology_reference has no entry
@@ -113,6 +115,8 @@ export async function POST(request: Request) {
     const result =
       diseaseType === 'black_rot'
         ? await calculateBlackRotResults(config, supabase)
+        : diseaseType === 'powdery_mildew'
+        ? await calculateMildewResults(config, supabase)
         : await calculateDiseaseResults(config, supabase);
 
     return apiSuccess(result);

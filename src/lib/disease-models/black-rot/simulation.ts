@@ -23,6 +23,7 @@ import {
   calculateBlackRotInfectionFraction,
   type BlackRotSeverity,
 } from './arauz-sutton-table';
+import { seasonalInoculumFactor } from './seasonal-modulator';
 
 // ============================================================
 // Config
@@ -190,7 +191,8 @@ export function runBlackRotSimulation(input: BlackRotInput): BlackRotResult {
 
         if (severity !== 'none' && anyRainDuringWet) {
           const fraction = calculateBlackRotInfectionFraction(avgT, wetHours);
-          const rim = Math.round(fraction * pressureMultiplier * 10000);
+          const seasonFactor = seasonalInoculumFactor(active[wetStartIdx].timestamp);
+          const rim = Math.round(fraction * pressureMultiplier * seasonFactor * 10000);
           const wetStart = active[wetStartIdx].timestamp;
 
           infections.push({

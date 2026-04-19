@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Bug, Sprout, ChevronRight, Apple, Droplets, AlertCircle } from 'lucide-react';
+import { Bug, Sprout, ChevronRight, Apple, Droplets, AlertCircle, Wind } from 'lucide-react';
 
 interface DiseaseCard {
   slug: string;
@@ -65,7 +65,20 @@ const DISEASES: DiseaseCard[] = [
     bgClass: 'bg-amber-500/10',
     borderClass: 'border-amber-500/20 hover:border-amber-500/40',
     description:
-      'Dynamisch infectiemodel gebaseerd op Arauz-Sutton 1989/1990. Actief van bloei tot oogst. Onderbroken natperiodes ≥1u stoppen infectie.',
+      'Dynamisch infectiemodel met seizoens-modulator (Arauz-Sutton 1989/1990). Actief van bloei tot oogst. Piek mei-juli. Onderbroken natperiodes ≥1u stoppen infectie.',
+    status: 'active',
+    availableForCrops: ['Appel'],
+  },
+  {
+    slug: 'meeldauw',
+    name: 'Meeldauw',
+    scientific: 'Podosphaera leucotricha',
+    icon: Wind,
+    colorClass: 'text-purple-400',
+    bgClass: 'bg-purple-500/10',
+    borderClass: 'border-purple-500/20 hover:border-purple-500/40',
+    description:
+      'Droog-warm infectiemodel (Xu 1999). Optimaal 19-22°C en RH>70%. Let op: water doodt sporen juist. Strenge winters reduceren inoculum.',
     status: 'active',
     availableForCrops: ['Appel'],
   },
