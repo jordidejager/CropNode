@@ -104,10 +104,17 @@ function dischargeRate(
   step: WeatherStep30Min,
   isDaytime: boolean,
   minutesSinceRain: number,
-  cumulativeDDwet: number
+  _cumulativeDDwet: number
 ): number {
-  // Block any discharge before DDwet threshold (Villalta 2001)
-  if (cumulativeDDwet < PC.DDWET_FIRST_DISCHARGE) return 0;
+  // Note: Villalta 2001 DDwet threshold (268.5) is calibrated from Jan 1
+  // accumulation in Victoria, Australia. Since we accumulate from biofix
+  // (bloom - 28 days) in a temperate NL climate, applying that gate blocks
+  // all discharge until June — unrealistic.
+  //
+  // The biofix date itself serves as the effective gate (same as apple
+  // scab v2). Once past biofix, pseudothecia are developed enough for
+  // discharge when rain + temperature align.
+  void _cumulativeDDwet;
 
   const hasTrigger =
     step.precipitationMm > PC.RAIN_TRIGGER_MM ||
