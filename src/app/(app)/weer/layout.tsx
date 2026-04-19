@@ -2,7 +2,8 @@ import { PageTabs } from '@/components/layout/page-tabs';
 
 const tabs = [
     { label: 'Dashboard', href: '/weer' },
-    { label: 'Expert Forecast', href: '/weer/forecast' },
+    { label: 'Expert', href: '/weer/forecast' },
+    { label: 'Seizoen', href: '/weer/seizoen' },
     { label: 'Historie', href: '/weer/historie' },
 ];
 

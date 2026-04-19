@@ -9,14 +9,12 @@ import {
   useWeatherRefresh,
   useWeatherMultiModel,
 } from '@/hooks/use-weather';
-import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/ui/data-states';
 import { StationSelector } from './StationSelector';
 import { TodaySummary } from './TodaySummary';
 import { HourlyForecastStrip } from './HourlyForecastStrip';
 import { RainForecast } from './RainForecast';
 import { WeeklyForecast } from './WeeklyForecast';
-import { CurrentSeasonWidget } from './CurrentSeasonWidget';
 import { LastUpdated } from './LastUpdated';
 import { WeatherDashboardSkeleton } from './WeatherDashboardSkeleton';
 import { WeatherEmptyState } from './WeatherEmptyState';
@@ -24,17 +22,10 @@ import { StationLocationBanner } from './StationLocationBanner';
 import { WeatherAlertBanner } from './WeatherAlertBanner';
 import { SprayWindowHero } from './SprayWindowHero';
 import { MultiModelConsensus } from './MultiModelConsensus';
-import { WaterBalanceWidget } from './WaterBalanceWidget';
-import { WindRoseWidget } from './WindRoseWidget';
-import { ForecastAccuracyWidget } from './ForecastAccuracyWidget';
-import { PhenologyWidget } from './PhenologyWidget';
 import { DataFreshnessBadge } from './DataFreshnessBadge';
-
-type DashboardTab = 'dashboard' | 'seizoen';
 
 export function WeatherDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
 
   const {
     data: stations,
@@ -150,131 +141,62 @@ export function WeatherDashboard() {
         </div>
       </div>
 
-      {/* Tab navigation: Dashboard / Seizoen / Expert */}
-      <div className="flex items-center gap-1 border-b border-white/10 pb-0">
-        {([
-          { id: 'dashboard', label: 'Dashboard' },
-          { id: 'seizoen', label: 'Seizoen' },
-        ] as const).map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px',
-              activeTab === tab.id
-                ? 'text-emerald-400 border-emerald-400'
-                : 'text-white/40 border-transparent hover:text-white/60'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-        <a
-          href="/weer/forecast"
-          className="px-4 py-2.5 text-sm font-semibold text-white/40 border-b-2 border-transparent hover:text-white/60 transition-all -mb-px"
-        >
-          Expert
-        </a>
-      </div>
-
       {isLoading && !currentData ? (
         <WeatherDashboardSkeleton />
       ) : (
-        <>
-          {/* ===== DASHBOARD TAB ===== */}
-          {activeTab === 'dashboard' && (
-            <div className="space-y-4">
-              {/* Alert banner — frost, rain, last window */}
-              <WeatherAlertBanner
-                hourlyData={allHourlyData}
-                forecastData={forecastData as Array<Record<string, unknown>> | undefined}
-              />
+        <div className="space-y-4">
+          {/* Alert banner — frost, rain, last window */}
+          <WeatherAlertBanner
+            hourlyData={allHourlyData}
+            forecastData={forecastData as Array<Record<string, unknown>> | undefined}
+          />
 
-              {/* Spray Window Hero — status + remaining + upcoming windows */}
-              {currentData && currentData.length > 0 && (
-                <SprayWindowHero
-                  currentData={currentData}
-                  hourlyData={allHourlyData}
-                />
-              )}
-
-              {/* Today conditions — temp, precip, wind+gusts, RV, dauwpunt */}
-              {currentData && currentData.length > 0 && (
-                <TodaySummary currentData={currentData} />
-              )}
-
-              {/* Hourly strip (7 days) */}
-              {allHourlyData.length > 0 && (
-                <HourlyForecastStrip hourlyData={allHourlyData} />
-              )}
-
-              {/* Rain forecast — 2u radar + 24u+ maps */}
-              {activeStation && (
-                <RainForecast
-                  lat={activeStation.latitude}
-                  lon={activeStation.longitude}
-                  hourlyData={allHourlyData}
-                />
-              )}
-
-              {/* Weekly forecast */}
-              {forecastData && forecastData.length > 0 && (
-                <WeeklyForecast
-                  dailyData={forecastData}
-                  hourlyData={allHourlyData}
-                />
-              )}
-
-              {/* Multi-model consensus — one sentence + link to expert */}
-              {multiModelData && (
-                <MultiModelConsensus data={multiModelData} />
-              )}
-
-              <LastUpdated
-                fetchedAt={lastFetchedAt}
-                onRefresh={handleRefresh}
-                isRefreshing={refreshMutation.isPending}
-              />
-            </div>
+          {/* Spray Window Hero — status + remaining + upcoming windows */}
+          {currentData && currentData.length > 0 && (
+            <SprayWindowHero
+              currentData={currentData}
+              hourlyData={allHourlyData}
+            />
           )}
 
-          {/* ===== SEIZOEN TAB ===== */}
-          {activeTab === 'seizoen' && (
-            <div className="space-y-4">
-              {/* Season KNMI summary */}
-              {activeStation?.knmiStationId && (
-                <CurrentSeasonWidget
-                  knmiStationId={activeStation.knmiStationId}
-                  stationName={activeStation.name}
-                />
-              )}
-
-              {/* Water balance + Wind rose */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <WaterBalanceWidget stationId={activeStationId} />
-                {allHourlyData.length > 0 && (
-                  <WindRoseWidget hourlyData={allHourlyData} />
-                )}
-              </div>
-
-              {/* Phenology timeline */}
-              {activeStationId && (
-                <PhenologyWidget stationId={activeStationId} />
-              )}
-
-              {/* Forecast accuracy */}
-              {activeStationId && (
-                <ForecastAccuracyWidget stationId={activeStationId} />
-              )}
-
-              <LastUpdated
-                fetchedAt={lastFetchedAt}
-                onRefresh={handleRefresh}
-                isRefreshing={refreshMutation.isPending}
-              />
-            </div>
+          {/* Today conditions — temp, precip, wind+gusts, RV, dauwpunt */}
+          {currentData && currentData.length > 0 && (
+            <TodaySummary currentData={currentData} />
           )}
-        </>
+
+          {/* Hourly strip (7 days) */}
+          {allHourlyData.length > 0 && (
+            <HourlyForecastStrip hourlyData={allHourlyData} />
+          )}
+
+          {/* Rain forecast — 2u radar + 24u+ maps */}
+          {activeStation && (
+            <RainForecast
+              lat={activeStation.latitude}
+              lon={activeStation.longitude}
+              hourlyData={allHourlyData}
+            />
+          )}
+
+          {/* Weekly forecast */}
+          {forecastData && forecastData.length > 0 && (
+            <WeeklyForecast
+              dailyData={forecastData}
+              hourlyData={allHourlyData}
+            />
+          )}
+
+          {/* Multi-model consensus — one sentence + link to expert */}
+          {multiModelData && (
+            <MultiModelConsensus data={multiModelData} />
+          )}
+
+          <LastUpdated
+            fetchedAt={lastFetchedAt}
+            onRefresh={handleRefresh}
+            isRefreshing={refreshMutation.isPending}
+          />
+        </div>
       )}
     </div>
   );
