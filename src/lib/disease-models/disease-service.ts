@@ -185,35 +185,54 @@ export async function calculateDiseaseResults(
   config: DiseaseModelConfig,
   supabase: SupabaseClient
 ): Promise<ZiektedrukResult> {
-  // Get parcel location (needed for astronomy calcs even if station exists)
-  const { data: parcel } = await supabase
-    .from('parcels')
-    .select('location')
-    .eq('id', config.parcel_id)
-    .single();
+  // Resolve station: prefer the one stored in the config (station-centric),
+  // fall back to parcel lookup (legacy configs)
+  let stationId: string | undefined = (config as unknown as { weather_station_id?: string }).weather_station_id;
+  let stationLat: number | undefined;
+  let stationLng: number | undefined;
 
-  if (!parcel?.location) {
-    throw new Error(
-      `Kan geen weerstation koppelen aan dit perceel. Controleer of het perceel een locatie heeft.`
-    );
+  if (stationId) {
+    // Load station coordinates (needed for astronomy)
+    const { data: station } = await supabase
+      .from('weather_stations')
+      .select('latitude, longitude')
+      .eq('id', stationId)
+      .single();
+
+    stationLat = station?.latitude ? Number(station.latitude) : undefined;
+    stationLng = station?.longitude ? Number(station.longitude) : undefined;
   }
 
-  const parcelLoc = parcel.location as { lat: number; lng: number };
+  if (!stationId || stationLat === undefined || stationLng === undefined) {
+    // Fallback: resolve from parcel
+    const { data: parcel } = await supabase
+      .from('parcels')
+      .select('location')
+      .eq('id', config.parcel_id)
+      .single();
 
-  // Try to find existing station, or auto-create one
-  let stationId = await getStationForParcel(config.parcel_id, supabase);
-  if (!stationId) {
-    stationId = await getOrCreateWeatherStation(
-      config.user_id,
-      parcelLoc.lat,
-      parcelLoc.lng,
-      supabase
-    );
+    if (!parcel?.location) {
+      throw new Error(
+        `Kan geen weerstation koppelen aan dit perceel. Controleer of het perceel een locatie heeft.`
+      );
+    }
 
-    // Link parcel to station
-    await supabase
-      .from('parcel_weather_stations')
-      .upsert({ parcel_id: config.parcel_id, station_id: stationId });
+    const parcelLoc = parcel.location as { lat: number; lng: number };
+    stationLat = parcelLoc.lat;
+    stationLng = parcelLoc.lng;
+
+    stationId = await getStationForParcel(config.parcel_id, supabase) ?? undefined;
+    if (!stationId) {
+      stationId = await getOrCreateWeatherStation(
+        config.user_id,
+        stationLat,
+        stationLng,
+        supabase
+      );
+      await supabase
+        .from('parcel_weather_stations')
+        .upsert({ parcel_id: config.parcel_id, station_id: stationId });
+    }
   }
 
   // Date range: biofix to today + 7 days forecast
@@ -235,8 +254,8 @@ export async function calculateDiseaseResults(
   const simResult = runSimulation({
     biofixDate,
     endDate: forecastEnd,
-    latitude: parcelLoc.lat,
-    longitude: parcelLoc.lng,
+    latitude: stationLat,
+    longitude: stationLng,
     inoculumPressure: config.inoculum_pressure,
     hourlyWeather: weatherInput.map((w) => ({
       timestamp: w.timestamp,
@@ -518,21 +537,64 @@ async function loadCachedResults(
 export async function getConfig(
   parcelId: string,
   harvestYear: number,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  diseaseType: string = 'apple_scab'
 ): Promise<DiseaseModelConfig | null> {
+  // First resolve parcel → station
+  const { data: pws } = await supabase
+    .from('parcel_weather_stations')
+    .select('station_id')
+    .eq('parcel_id', parcelId)
+    .single();
+
+  if (pws?.station_id) {
+    // Station-based lookup (preferred)
+    const { data } = await supabase
+      .from('disease_model_config')
+      .select('*')
+      .eq('weather_station_id', pws.station_id)
+      .eq('harvest_year', harvestYear)
+      .eq('disease_type', diseaseType)
+      .maybeSingle();
+
+    if (data) return data as DiseaseModelConfig;
+  }
+
+  // Fallback: parcel-based lookup (legacy rows without station_id)
   const { data } = await supabase
     .from('disease_model_config')
     .select('*')
     .eq('parcel_id', parcelId)
     .eq('harvest_year', harvestYear)
-    .eq('disease_type', 'apple_scab')
-    .single();
+    .eq('disease_type', diseaseType)
+    .maybeSingle();
 
   return data as DiseaseModelConfig | null;
 }
 
 /**
- * Upsert disease model config.
+ * Get config directly by weather station id.
+ */
+export async function getConfigByStation(
+  stationId: string,
+  harvestYear: number,
+  supabase: SupabaseClient,
+  diseaseType: string = 'apple_scab'
+): Promise<DiseaseModelConfig | null> {
+  const { data } = await supabase
+    .from('disease_model_config')
+    .select('*')
+    .eq('weather_station_id', stationId)
+    .eq('harvest_year', harvestYear)
+    .eq('disease_type', diseaseType)
+    .maybeSingle();
+
+  return data as DiseaseModelConfig | null;
+}
+
+/**
+ * Upsert disease model config — now keyed by weather_station_id.
+ * parcel_id is still stored for reference (which parcel triggered the setup).
  */
 export async function upsertConfig(
   userId: string,
@@ -540,21 +602,75 @@ export async function upsertConfig(
   harvestYear: number,
   biofixDate: string,
   inoculumPressure: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  diseaseType: string = 'apple_scab'
 ): Promise<DiseaseModelConfig> {
-  const { data, error } = await supabase
+  // Resolve parcel → station; ensure one exists
+  const { data: pws } = await supabase
+    .from('parcel_weather_stations')
+    .select('station_id')
+    .eq('parcel_id', parcelId)
+    .single();
+
+  let stationId = pws?.station_id as string | undefined;
+
+  if (!stationId) {
+    // Create station from parcel location
+    const { data: parcel } = await supabase
+      .from('parcels')
+      .select('location')
+      .eq('id', parcelId)
+      .single();
+
+    const loc = parcel?.location as { lat: number; lng: number } | undefined;
+    if (!loc) {
+      throw new Error('Parcel heeft geen locatie — kan geen weerstation koppelen');
+    }
+
+    stationId = await getOrCreateWeatherStation(userId, loc.lat, loc.lng, supabase);
+    await supabase
+      .from('parcel_weather_stations')
+      .upsert({ parcel_id: parcelId, station_id: stationId });
+  }
+
+  // Upsert keyed by (user, station, year, disease)
+  // First try to find existing by station
+  const { data: existing } = await supabase
     .from('disease_model_config')
-    .upsert(
-      {
-        user_id: userId,
-        parcel_id: parcelId,
-        harvest_year: harvestYear,
-        disease_type: 'apple_scab',
+    .select('id')
+    .eq('weather_station_id', stationId)
+    .eq('harvest_year', harvestYear)
+    .eq('disease_type', diseaseType)
+    .maybeSingle();
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('disease_model_config')
+      .update({
         biofix_date: biofixDate,
         inoculum_pressure: inoculumPressure,
-      },
-      { onConflict: 'user_id,parcel_id,harvest_year,disease_type' }
-    )
+        parcel_id: parcelId, // update reference parcel
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as DiseaseModelConfig;
+  }
+
+  // No existing — insert new
+  const { data, error } = await supabase
+    .from('disease_model_config')
+    .insert({
+      user_id: userId,
+      parcel_id: parcelId,
+      weather_station_id: stationId,
+      harvest_year: harvestYear,
+      disease_type: diseaseType,
+      biofix_date: biofixDate,
+      inoculum_pressure: inoculumPressure,
+    })
     .select()
     .single();
 

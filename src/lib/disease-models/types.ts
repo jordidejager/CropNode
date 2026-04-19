@@ -9,13 +9,14 @@ export type MillsSeverity = 'none' | 'light' | 'moderate' | 'severe';
 
 export type InoculumPressure = 'low' | 'medium' | 'high';
 
-export type DiseaseType = 'apple_scab';
+export type DiseaseType = 'apple_scab' | 'black_rot';
 
 // === Configuration ===
 export interface DiseaseModelConfig {
   id: string;
   user_id: string;
-  parcel_id: string;
+  parcel_id: string;             // reference parcel (first one configured)
+  weather_station_id: string | null;  // station this config belongs to
   harvest_year: number;
   disease_type: DiseaseType;
   biofix_date: string; // YYYY-MM-DD

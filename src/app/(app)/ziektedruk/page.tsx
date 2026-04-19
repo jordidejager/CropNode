@@ -61,12 +61,12 @@ const DISEASES: DiseaseCard[] = [
     name: 'Zwartvruchtrot',
     scientific: 'Botryosphaeria obtusa',
     icon: Droplets,
-    colorClass: 'text-slate-500',
-    bgClass: 'bg-slate-500/5',
-    borderClass: 'border-white/5',
+    colorClass: 'text-amber-400',
+    bgClass: 'bg-amber-500/10',
+    borderClass: 'border-amber-500/20 hover:border-amber-500/40',
     description:
-      'Infectiemodel voor zwartvruchtrot. Komt binnenkort.',
-    status: 'coming-soon',
+      'Dynamisch infectiemodel gebaseerd op Arauz-Sutton 1989/1990. Actief van bloei tot oogst. Onderbroken natperiodes ≥1u stoppen infectie.',
+    status: 'active',
     availableForCrops: ['Appel'],
   },
 ];
