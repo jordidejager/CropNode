@@ -10,6 +10,7 @@
 
 import type { Signal, SignalDetector } from '../types';
 import { getBenchmark, getDominantCrop } from '../benchmarks';
+import { formatSubParcelName } from '../parcel-naming';
 import { createHash } from 'crypto';
 
 interface ParcelHistoryRow {
@@ -105,6 +106,13 @@ export const detectCostAnomalies: SignalDetector = async (ctx) => {
   const withCost = currentAggs.filter((a) => a.totalCost > 0);
   if (withCost.length === 0) return signals;
 
+  // Helper: bouw volledige naam uit parcel_history parcel_name (meestal subperceelnaam)
+  const nameToFullName = new Map<string, string>();
+  withCost.forEach((agg) => {
+    const sp = subParcels.find((s) => s.name === agg.parcelName);
+    nameToFullName.set(agg.parcelName, sp ? formatSubParcelName(sp, ctx.parcels) : agg.parcelName);
+  });
+
   // Bedrijfsgemiddelde
   const totalHa = withCost.reduce((s, a) => s + a.hectares, 0);
   const totalCost = withCost.reduce((s, a) => s + a.totalCost, 0);
@@ -122,14 +130,15 @@ export const detectCostAnomalies: SignalDetector = async (ctx) => {
       ? `Vorig jaar €${prev.costPerHa.toFixed(0)}/ha (${agg.costPerHa > prev.costPerHa ? '+' : ''}${Math.round(((agg.costPerHa - prev.costPerHa) / prev.costPerHa) * 100)}%).`
       : '';
 
+    const fullName = nameToFullName.get(agg.parcelName) || agg.parcelName;
     signals.push({
       id: hashId(['cost-high', agg.parcelName, String(harvestYear)]),
       mechanism: 'detectCostAnomalies:high-parcel',
       severity: deviation >= 60 ? 'urgent' : 'attention',
       category: 'cost',
-      title: `${agg.parcelName}: kosten €${agg.costPerHa.toFixed(0)}/ha — ${deviation.toFixed(0)}% boven bedrijfsgemiddelde`,
+      title: `${fullName}: kosten €${agg.costPerHa.toFixed(0)}/ha — ${deviation.toFixed(0)}% boven bedrijfsgemiddelde`,
       body: `${agg.treatmentCount} behandelingen dit oogstjaar. ${prevHint} Dat is €${Math.round(agg.costPerHa - avgCostPerHa)} per ha meer dan gemiddeld. Kijk of het hoge aantal behandelingen gerechtvaardigd was door ziektedruk-events, of dat er ruimte is voor rationalisatie.`,
-      affectedParcels: [agg.parcelName],
+      affectedParcels: [fullName],
       action: {
         label: 'Bekijk middelenanalyse',
         href: '/analytics',
@@ -156,7 +165,7 @@ export const detectCostAnomalies: SignalDetector = async (ctx) => {
       category: 'benchmark',
       title: `Inputkosten €${avgCostPerHa.toFixed(0)}/ha — ${pct}% boven sectorgemiddelde`,
       body: `Sector-indicatie voor hardfruit: ±€${benchmark.inputCostPerHa}/ha. Jouw gemiddelde dit oogstjaar: €${avgCostPerHa.toFixed(0)}/ha over ${withCost.length} percelen. Verschil kan door intensievere teelt, duurdere middelen, of grotere behandelfrequentie komen — kijk per perceel waar het zit.`,
-      affectedParcels: withCost.map((a) => a.parcelName),
+      affectedParcels: withCost.map((a) => nameToFullName.get(a.parcelName) || a.parcelName),
       metric: {
         value: Math.round(avgCostPerHa),
         benchmark: benchmark.inputCostPerHa,
@@ -180,14 +189,15 @@ export const detectCostAnomalies: SignalDetector = async (ctx) => {
     const pct = Math.round((increase / prev.treatmentCount) * 100);
     if (pct < 30) return;
 
+    const fullName2 = nameToFullName.get(agg.parcelName) || agg.parcelName;
     signals.push({
       id: hashId(['spray-freq-jump', agg.parcelName, String(harvestYear)]),
       mechanism: 'detectCostAnomalies:spray-freq-jump',
       severity: pct >= 50 ? 'attention' : 'explore',
       category: 'cost',
-      title: `${agg.parcelName}: behandelfrequentie fors toegenomen (${prev.treatmentCount} → ${agg.treatmentCount})`,
+      title: `${fullName2}: behandelfrequentie fors toegenomen (${prev.treatmentCount} → ${agg.treatmentCount})`,
       body: `+${pct}% meer behandelingen dan vorig oogstjaar. Dit kan legitiem zijn (hogere ziektedruk, nieuw ras-protocol) maar ook een signaal van reactief spuiten. Vergelijk met ziektedruk-events op dit perceel.`,
-      affectedParcels: [agg.parcelName],
+      affectedParcels: [fullName2],
       metric: {
         value: agg.treatmentCount,
         prevValue: prev.treatmentCount,

@@ -8,6 +8,7 @@
  */
 
 import type { Signal, SignalDetector } from '../types';
+import { formatSubParcelName } from '../parcel-naming';
 import { createHash } from 'crypto';
 
 interface HarvestRow {
@@ -106,7 +107,7 @@ export const detectQualityDrops: SignalDetector = async (ctx) => {
     if (dropPp < 5) return; // Niet significant
 
     const sp = spMap.get(spId);
-    const name = sp?.name || 'Onbekend';
+    const name = formatSubParcelName(sp, ctx.parcels);
     const variety = sp?.variety || current[0]?.variety || '';
 
     const severity: Signal['severity'] =

@@ -9,6 +9,7 @@
 
 import type { Signal, SignalDetector } from '../types';
 import { getBenchmark } from '../benchmarks';
+import { formatSubParcelName } from '../parcel-naming';
 import { createHash } from 'crypto';
 
 interface ProductionRow {
@@ -74,15 +75,16 @@ export const detectProductionTrends: SignalDetector = async (ctx) => {
 
       const sp = spMap.get(spId);
       if (!sp) return;
+      const fullName = formatSubParcelName(sp, ctx.parcels);
 
       signals.push({
         id: hashId(['prod-declining', spId]),
         mechanism: 'detectProductionTrends:declining',
         severity: totalDropPct >= 25 ? 'urgent' : 'attention',
         category: 'production',
-        title: `${sp.name}: opbrengst ${totalDropPct.toFixed(0)}% gedaald over 3 jaar`,
+        title: `${fullName}: opbrengst ${totalDropPct.toFixed(0)}% gedaald over 3 jaar`,
         body: `${y1.harvestYear}: ${Math.round(y1.kgPerHa).toLocaleString('nl-NL')} kg/ha → ${y3.harvestYear}: ${Math.round(y3.kgPerHa).toLocaleString('nl-NL')} kg/ha (${sp.variety || 'onbekend ras'}). Drie jaar achter elkaar dalend. Oorzaken kunnen zijn: boomleeftijd, bodemuitputting, wortelproblemen, ziekte- of plaagdruk die niet tijdig is aangepakt.`,
-        affectedParcels: [sp.name],
+        affectedParcels: [fullName],
         action: {
           label: 'Open perceeldiagnose',
           href: '/analytics/perceel?id=' + spId,
@@ -113,7 +115,7 @@ export const detectProductionTrends: SignalDetector = async (ctx) => {
     if (!sp || !sp.variety) return;
     const v = sp.variety.toLowerCase();
     if (!byVariety.has(v)) byVariety.set(v, []);
-    byVariety.get(v)!.push({ spId, kgPerHa: y.kgPerHa, spName: sp.name });
+    byVariety.get(v)!.push({ spId, kgPerHa: y.kgPerHa, spName: formatSubParcelName(sp, ctx.parcels) });
   });
 
   byVariety.forEach((list, variety) => {
