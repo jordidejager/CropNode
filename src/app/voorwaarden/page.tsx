@@ -11,7 +11,7 @@ export default function VoorwaardenPage() {
       <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020617]/80 backdrop-blur-xl">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Logo variant="horizontal" theme="dark" width={120} height={28} />
+            <Logo variant="horizontal" theme="dark" width={120} height={28} style="animated" />
           </Link>
           <Link
             href="/login"

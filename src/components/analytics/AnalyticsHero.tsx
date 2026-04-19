@@ -52,7 +52,7 @@ export function AnalyticsHero({ kpiComparison, harvestYear }: AnalyticsHeroProps
         {/* Left: Logo lockup */}
         <div className="flex flex-col items-center md:items-start gap-1">
           <div className="flex items-center gap-3 mb-1">
-            <LogoIcon theme="dark" size={40} />
+            <LogoIcon theme="dark" size={40} style="animated" />
             <span className="text-xl font-semibold text-white">CropNode</span>
           </div>
           <span className="analytics-shimmer text-3xl md:text-4xl font-light text-emerald-400 tracking-wide">Analytics</span>

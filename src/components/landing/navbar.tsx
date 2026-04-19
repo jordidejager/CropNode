@@ -49,7 +49,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center">
-            <Logo variant="horizontal" theme="dark" width={140} height={32} />
+            <Logo variant="horizontal" theme="dark" width={140} height={32} style="animated" />
           </Link>
 
           {/* Desktop Navigation */}

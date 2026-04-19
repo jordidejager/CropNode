@@ -12,7 +12,7 @@ export function Footer() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
             {/* Logo & Tagline */}
             <div className="flex flex-col items-center sm:items-start gap-2">
-              <Logo variant="horizontal" theme="dark" width={130} height={30} />
+              <Logo variant="horizontal" theme="dark" width={130} height={30} style="animated" />
               <span className="text-slate-500 text-xs tracking-wider uppercase">
                 Agriculture Intelligence Platform
               </span>

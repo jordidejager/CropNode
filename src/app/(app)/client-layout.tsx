@@ -26,7 +26,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
               {/* Mobile: hamburger + logo */}
               <div className="flex items-center gap-3 md:hidden">
                 <MobileMenuButton />
-                <Logo variant="horizontal" theme="dark" width={100} height={24} />
+                <Logo variant="horizontal" theme="dark" width={100} height={24} style="animated" />
               </div>
               <div className="flex-1" />
               <Button variant="ghost" size="icon" className="rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">

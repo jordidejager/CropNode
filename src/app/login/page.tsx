@@ -273,7 +273,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden mb-8 text-center">
             <Link href="/" className="inline-block">
-              <Logo variant="stacked" theme="dark" width={120} height={60} />
+              <Logo variant="horizontal" theme="dark" width={160} height={36} style="animated" />
             </Link>
           </div>
 
