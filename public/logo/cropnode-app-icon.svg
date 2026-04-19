@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <!-- Dark base gradient (subtle radial from emerald-tinted center) -->
+    <!-- Dark base gradient -->
     <radialGradient id="bgGrad" cx="50%" cy="45%" r="65%">
       <stop offset="0%" stop-color="#0f2318"/>
       <stop offset="55%" stop-color="#081611"/>
@@ -23,13 +23,7 @@
       <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
 
-    <!-- Dot gradient (3D sphere) -->
-    <radialGradient id="dotGradApp" cx="35%" cy="35%" r="70%">
-      <stop offset="0%" stop-color="#a7f3d0"/>
-      <stop offset="40%" stop-color="#34d399"/>
-      <stop offset="100%" stop-color="#059669"/>
-    </radialGradient>
-
+    <!-- Central hub gradient -->
     <radialGradient id="coreDotApp" cx="35%" cy="35%" r="65%">
       <stop offset="0%" stop-color="#d1fae5"/>
       <stop offset="35%" stop-color="#6ee7b7"/>
@@ -46,30 +40,122 @@
     </filter>
   </defs>
 
-  <!-- Full-bleed background (required for iOS opaque icon) -->
+  <!-- Full-bleed background -->
   <rect width="1024" height="1024" fill="url(#bgGrad)"/>
 
   <!-- Ambient halo behind logo -->
   <circle cx="512" cy="512" r="340" fill="url(#glowHalo)"/>
 
-  <!-- Subtle scattered background data-dots for premium feel -->
-  <g opacity="0.35">
-    <circle cx="180" cy="210" r="5" fill="#34d399"/>
-    <circle cx="860" cy="180" r="7" fill="#6ee7b7"/>
-    <circle cx="120" cy="480" r="4" fill="#10b981"/>
-    <circle cx="900" cy="540" r="5" fill="#34d399"/>
-    <circle cx="150" cy="820" r="4" fill="#6ee7b7"/>
-    <circle cx="880" cy="830" r="5" fill="#10b981"/>
-    <circle cx="280" cy="130" r="3" fill="#34d399"/>
-    <circle cx="720" cy="880" r="4" fill="#6ee7b7"/>
-    <circle cx="820" cy="320" r="3" fill="#34d399"/>
-    <circle cx="240" cy="780" r="4" fill="#10b981"/>
-    <circle cx="390" cy="920" r="3" fill="#6ee7b7"/>
-    <circle cx="780" cy="620" r="3" fill="#34d399"/>
+  <!-- LOTS of small subtle scattered background data-dots -->
+  <g>
+    <!-- Group 1: brighter, slightly larger -->
+    <g opacity="0.45" fill="#34d399">
+      <circle cx="87" cy="134" r="3"/>
+      <circle cx="903" cy="178" r="4"/>
+      <circle cx="156" cy="892" r="3"/>
+      <circle cx="832" cy="941" r="3"/>
+      <circle cx="412" cy="67" r="2.5"/>
+      <circle cx="634" cy="982" r="3"/>
+      <circle cx="52" cy="451" r="3"/>
+      <circle cx="968" cy="523" r="3.5"/>
+      <circle cx="276" cy="204" r="2.5"/>
+      <circle cx="748" cy="286" r="3"/>
+      <circle cx="368" cy="808" r="3"/>
+      <circle cx="672" cy="712" r="2.5"/>
+    </g>
+
+    <!-- Group 2: emerald, small -->
+    <g opacity="0.4" fill="#10b981">
+      <circle cx="142" cy="302" r="2"/>
+      <circle cx="862" cy="392" r="2.5"/>
+      <circle cx="224" cy="562" r="2"/>
+      <circle cx="782" cy="634" r="2.5"/>
+      <circle cx="312" cy="123" r="2"/>
+      <circle cx="692" cy="152" r="2"/>
+      <circle cx="98" cy="684" r="2.5"/>
+      <circle cx="912" cy="741" r="2"/>
+      <circle cx="438" cy="892" r="2.5"/>
+      <circle cx="568" cy="43" r="2"/>
+      <circle cx="186" cy="758" r="2"/>
+      <circle cx="818" cy="103" r="2.5"/>
+      <circle cx="332" cy="952" r="2"/>
+      <circle cx="712" cy="866" r="2.5"/>
+    </g>
+
+    <!-- Group 3: light mint, tiny -->
+    <g opacity="0.35" fill="#6ee7b7">
+      <circle cx="68" cy="241" r="1.8"/>
+      <circle cx="932" cy="287" r="1.5"/>
+      <circle cx="201" cy="812" r="1.8"/>
+      <circle cx="799" cy="851" r="1.5"/>
+      <circle cx="352" cy="33" r="1.8"/>
+      <circle cx="642" cy="87" r="1.5"/>
+      <circle cx="122" cy="571" r="1.8"/>
+      <circle cx="878" cy="611" r="1.5"/>
+      <circle cx="389" cy="212" r="1.8"/>
+      <circle cx="611" cy="272" r="1.5"/>
+      <circle cx="287" cy="451" r="1.8"/>
+      <circle cx="713" cy="491" r="1.5"/>
+      <circle cx="456" cy="782" r="1.8"/>
+      <circle cx="544" cy="832" r="1.5"/>
+      <circle cx="234" cy="348" r="1.8"/>
+      <circle cx="766" cy="398" r="1.5"/>
+    </g>
+
+    <!-- Group 4: very tiny, high density -->
+    <g opacity="0.3" fill="#34d399">
+      <circle cx="164" cy="52" r="1.2"/>
+      <circle cx="836" cy="72" r="1"/>
+      <circle cx="52" cy="362" r="1.2"/>
+      <circle cx="972" cy="402" r="1"/>
+      <circle cx="248" cy="712" r="1.2"/>
+      <circle cx="752" cy="752" r="1"/>
+      <circle cx="392" cy="962" r="1.2"/>
+      <circle cx="608" cy="952" r="1"/>
+      <circle cx="112" cy="842" r="1.2"/>
+      <circle cx="888" cy="862" r="1"/>
+      <circle cx="524" cy="12" r="1.2"/>
+      <circle cx="476" cy="1012" r="1"/>
+      <circle cx="32" cy="582" r="1.2"/>
+      <circle cx="992" cy="592" r="1"/>
+      <circle cx="210" cy="172" r="1.2"/>
+      <circle cx="792" cy="212" r="1"/>
+      <circle cx="134" cy="432" r="1.2"/>
+      <circle cx="866" cy="462" r="1"/>
+      <circle cx="58" cy="752" r="1.2"/>
+      <circle cx="942" cy="792" r="1"/>
+      <circle cx="344" cy="612" r="1.2"/>
+      <circle cx="656" cy="642" r="1"/>
+      <circle cx="182" cy="912" r="1.2"/>
+      <circle cx="818" cy="932" r="1"/>
+    </g>
+
+    <!-- Group 5: emerald tiny -->
+    <g opacity="0.25" fill="#10b981">
+      <circle cx="294" cy="87" r="1"/>
+      <circle cx="706" cy="112" r="0.9"/>
+      <circle cx="74" cy="512" r="1"/>
+      <circle cx="948" cy="542" r="0.9"/>
+      <circle cx="376" cy="352" r="1"/>
+      <circle cx="624" cy="392" r="0.9"/>
+      <circle cx="264" cy="632" r="1"/>
+      <circle cx="736" cy="662" r="0.9"/>
+      <circle cx="416" cy="52" r="1"/>
+      <circle cx="584" cy="982" r="0.9"/>
+      <circle cx="22" cy="172" r="1"/>
+      <circle cx="1002" cy="192" r="0.9"/>
+      <circle cx="312" cy="232" r="1"/>
+      <circle cx="688" cy="262" r="0.9"/>
+      <circle cx="154" cy="692" r="1"/>
+      <circle cx="846" cy="722" r="0.9"/>
+      <circle cx="428" cy="472" r="1"/>
+      <circle cx="572" cy="512" r="0.9"/>
+      <circle cx="102" cy="162" r="1"/>
+      <circle cx="898" cy="192" r="0.9"/>
+    </g>
   </g>
 
-  <!-- Main logo (scaled + centered from 48x48 geometry to fit nicely in 1024x1024 with padding) -->
-  <!-- Scale factor: 14, positioning offset to center -->
+  <!-- Main logo: only the stem structure + central hub root, NO tip dots -->
   <g transform="translate(176, 176) scale(14)">
     <!-- Main connection lines -->
     <path d="M 22.0 44.0 L 26.0 4.0
@@ -87,30 +173,11 @@
              M 25.2 12.0 L 36.0 7.0"
           stroke="#d1fae5" stroke-width="0.5" stroke-linecap="round" fill="none" opacity="0.55"/>
 
-    <!-- Soft outer glow behind dots -->
-    <g opacity="0.5" filter="url(#softGlowApp)">
+    <!-- Only the central hub (root of the plant) — with soft glow + 3D gradient -->
+    <g filter="url(#softGlowApp)" opacity="0.5">
       <circle cx="22.0" cy="44.0" r="6.0" fill="#10b981"/>
-      <circle cx="26.0" cy="4.0" r="4.0" fill="#10b981"/>
-      <circle cx="6.0" cy="24.0" r="4.5" fill="#10b981"/>
-      <circle cx="41.0" cy="18.0" r="4.5" fill="#10b981"/>
-      <circle cx="10.0" cy="11.0" r="4.5" fill="#10b981"/>
-      <circle cx="36.0" cy="7.0" r="4.5" fill="#10b981"/>
     </g>
-
-    <!-- Main node dots with 3D gradient -->
     <circle cx="22.0" cy="44.0" r="3.8" fill="url(#coreDotApp)"/>
-    <circle cx="26.0" cy="4.0" r="2.3" fill="url(#dotGradApp)"/>
-    <circle cx="6.0" cy="24.0" r="2.8" fill="url(#dotGradApp)"/>
-    <circle cx="41.0" cy="18.0" r="2.8" fill="url(#dotGradApp)"/>
-    <circle cx="10.0" cy="11.0" r="2.8" fill="url(#dotGradApp)"/>
-    <circle cx="36.0" cy="7.0" r="2.8" fill="url(#dotGradApp)"/>
-
-    <!-- Specular highlights -->
     <circle cx="21.1" cy="43.1" r="1.1" fill="#ecfdf5" opacity="0.9"/>
-    <circle cx="25.3" cy="3.3" r="0.55" fill="#ecfdf5" opacity="0.75"/>
-    <circle cx="5.3" cy="23.3" r="0.65" fill="#ecfdf5" opacity="0.75"/>
-    <circle cx="40.3" cy="17.3" r="0.65" fill="#ecfdf5" opacity="0.75"/>
-    <circle cx="9.3" cy="10.3" r="0.65" fill="#ecfdf5" opacity="0.75"/>
-    <circle cx="35.3" cy="6.3" r="0.65" fill="#ecfdf5" opacity="0.75"/>
   </g>
 </svg>
