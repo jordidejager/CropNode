@@ -42,20 +42,61 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'image/*',
-        'Referer': 'https://www.buienradar.nl/',
-      },
-      redirect: 'follow',
-      cache: 'no-store',
-    });
+    // Try up to 3x — Buienradar's CDN is sometimes briefly flaky
+    // (returns 502/503/504 on cache-miss, then recovers within seconds).
+    const MAX_ATTEMPTS = 3;
+    let response: Response | null = null;
+    let lastStatus = 0;
 
-    if (!response.ok) {
-      console.error(`[Radar Proxy] Buienradar returned ${response.status}: ${response.statusText}`);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+
+        const r = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'image/*',
+            'Referer': 'https://www.buienradar.nl/',
+          },
+          redirect: 'follow',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+        lastStatus = r.status;
+
+        // Success — break retry loop
+        if (r.ok) {
+          response = r;
+          break;
+        }
+
+        // 4xx = client error, don't retry
+        if (r.status >= 400 && r.status < 500) {
+          response = r;
+          break;
+        }
+
+        // 5xx — wait briefly and retry
+        console.warn(`[Radar Proxy] Buienradar ${r.status} on attempt ${attempt}/${MAX_ATTEMPTS}`);
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(res => setTimeout(res, 500 * attempt));
+        } else {
+          response = r;
+        }
+      } catch (fetchErr) {
+        console.warn(`[Radar Proxy] Fetch error on attempt ${attempt}:`, fetchErr);
+        if (attempt === MAX_ATTEMPTS) throw fetchErr;
+        await new Promise(res => setTimeout(res, 500 * attempt));
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.error(`[Radar Proxy] Buienradar returned ${lastStatus} after ${MAX_ATTEMPTS} attempts`);
       return NextResponse.json(
-        { error: `Buienradar returned ${response.status}` },
+        { error: `Buienradar temporarily unavailable (${lastStatus})` },
         { status: 502 }
       );
     }

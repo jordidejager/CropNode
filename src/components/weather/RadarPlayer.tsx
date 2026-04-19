@@ -53,8 +53,29 @@ export function RadarPlayer() {
       setIsPlaying(false);
 
       try {
-        const response = await fetch(gifUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // Client-side retry — the proxy has its own retries but Vercel can
+        // sometimes return 502 on cold start before our retry logic kicks in.
+        let response: Response | null = null;
+        const MAX_ATTEMPTS = 2;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          const r = await fetch(gifUrl);
+          if (r.ok) {
+            response = r;
+            break;
+          }
+          // 4xx — don't retry, give up
+          if (r.status >= 400 && r.status < 500) {
+            throw new Error(`HTTP ${r.status}`);
+          }
+          // 5xx — retry once after a short wait
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(res => setTimeout(res, 800));
+            continue;
+          }
+          throw new Error(`HTTP ${r.status}`);
+        }
+        if (!response) throw new Error('No response');
+
         const buffer = await response.arrayBuffer();
 
         const { parseGIF, decompressFrames } = await import('gifuct-js');
