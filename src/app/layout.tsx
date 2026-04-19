@@ -23,11 +23,12 @@ export const metadata: Metadata = {
   title: 'CropNode — Agriculture Intelligence Platform',
   description: 'CropNode is het Agriculture Intelligence Platform voor de moderne fruitteelt. AI-gestuurde registraties, 5-model weerensemble, CTGB-validatie, perceelbeheer en meer — alles in één platform.',
   manifest: '/manifest.json',
+  // Note: Next.js App Router auto-picks up src/app/icon.png and src/app/apple-icon.png
+  // We only need `icon` entries here for the SVG favicon fallback.
   icons: {
     icon: [
       { url: '/logo/cropnode-icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/logo/cropnode-icon.svg',
   },
   appleWebApp: {
     capable: true,
