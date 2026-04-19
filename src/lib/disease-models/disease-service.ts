@@ -9,9 +9,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getHourlyRange, getOrCreateWeatherStation } from '@/lib/weather/weather-service';
 import type { HourlyWeatherData } from '@/lib/weather/weather-types';
-import { buildSeasonProgress } from './apple-scab/ascospore-maturation';
-import { detectWetPeriods } from './apple-scab/wet-period-detection';
-import { evaluateInfections } from './apple-scab/infection-calculator';
+import { runSimulation } from './apple-scab-v2/simulation';
+import {
+  toSeasonProgress as v2ToSeasonProgress,
+  toInfectionPeriods as v2ToInfectionPeriods,
+  toKPIs as v2ToKPIs,
+} from './apple-scab-v2/adapter';
 import {
   evaluateCoverageForInfections,
   buildCombinedCoverageTimeline,
@@ -182,24 +185,30 @@ export async function calculateDiseaseResults(
   config: DiseaseModelConfig,
   supabase: SupabaseClient
 ): Promise<ZiektedrukResult> {
+  // Get parcel location (needed for astronomy calcs even if station exists)
+  const { data: parcel } = await supabase
+    .from('parcels')
+    .select('location')
+    .eq('id', config.parcel_id)
+    .single();
+
+  if (!parcel?.location) {
+    throw new Error(
+      `Kan geen weerstation koppelen aan dit perceel. Controleer of het perceel een locatie heeft.`
+    );
+  }
+
+  const parcelLoc = parcel.location as { lat: number; lng: number };
+
   // Try to find existing station, or auto-create one
   let stationId = await getStationForParcel(config.parcel_id, supabase);
   if (!stationId) {
-    // Get parcel location and create/find station using the existing supabase client
-    const { data: parcel } = await supabase
-      .from('parcels')
-      .select('location')
-      .eq('id', config.parcel_id)
-      .single();
-
-    if (!parcel?.location) {
-      throw new Error(
-        `Kan geen weerstation koppelen aan dit perceel. Controleer of het perceel een locatie heeft.`
-      );
-    }
-
-    const { lat, lng } = parcel.location as { lat: number; lng: number };
-    stationId = await getOrCreateWeatherStation(config.user_id, lat, lng, supabase);
+    stationId = await getOrCreateWeatherStation(
+      config.user_id,
+      parcelLoc.lat,
+      parcelLoc.lng,
+      supabase
+    );
 
     // Link parcel to station
     await supabase
@@ -221,15 +230,28 @@ export async function calculateDiseaseResults(
 
   const weatherInput = toWeatherInput(weatherData);
 
-  // Run submodels
-  const seasonProgress = buildSeasonProgress(weatherInput, config.biofix_date);
-  const wetPeriods = detectWetPeriods(weatherInput);
-  const infectionPeriods = evaluateInfections(
-    wetPeriods,
-    seasonProgress,
-    config.biofix_date
-  );
-  const kpis = calculateKPIs(seasonProgress, infectionPeriods);
+  // Run v2 simulation (RIMpro-level: 30-min timestep, age-class boxcar trains)
+  const biofixDate = new Date(config.biofix_date + 'T00:00:00Z');
+  const simResult = runSimulation({
+    biofixDate,
+    endDate: forecastEnd,
+    latitude: parcelLoc.lat,
+    longitude: parcelLoc.lng,
+    inoculumPressure: config.inoculum_pressure,
+    hourlyWeather: weatherInput.map((w) => ({
+      timestamp: w.timestamp,
+      temperatureC: w.temperatureC,
+      humidityPct: w.humidityPct,
+      precipitationMm: w.precipitationMm,
+      leafWetnessPct: w.leafWetnessPct,
+      isForecast: w.isForecast,
+    })),
+  });
+
+  // Adapt v2 result to legacy UI shape
+  const seasonProgress = v2ToSeasonProgress(simResult);
+  const infectionPeriods = v2ToInfectionPeriods(simResult);
+  const kpis = v2ToKPIs(simResult, infectionPeriods);
 
   // Coverage model (Niveau 2): link sprays to infection periods
   const sprayEvents = await fetchSprayEventsForParcel(

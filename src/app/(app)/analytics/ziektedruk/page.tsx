@@ -74,30 +74,6 @@ export default function ZiektedrukPage() {
         setSelectedParcelId(parcelList[0].id);
       }
 
-      // Get bloom date for biofix suggestion
-      // Green tip (groene punt) ≈ 22 days before full bloom
-      const { data: phenoData } = await supabase
-        .from('phenology_reference')
-        .select('bloom_date_f2')
-        .eq('year', harvestYear)
-        .maybeSingle();
-
-      if (phenoData?.bloom_date_f2) {
-        const bloom = new Date(phenoData.bloom_date_f2 + 'T12:00:00');
-        const greenTip = new Date(bloom.getTime() - 22 * 24 * 60 * 60 * 1000);
-        setSuggestedBiofixDate(greenTip.toISOString().slice(0, 10));
-      } else {
-        // Fallback: known bloom dates
-        const fallbackBlooms: Record<number, string> = {
-          2024: '2024-04-03', 2025: '2025-04-11', 2026: '2026-04-08',
-        };
-        const bloom = fallbackBlooms[harvestYear];
-        if (bloom) {
-          const bloomDate = new Date(bloom + 'T12:00:00');
-          const greenTip = new Date(bloomDate.getTime() - 22 * 24 * 60 * 60 * 1000);
-          setSuggestedBiofixDate(greenTip.toISOString().slice(0, 10));
-        }
-      }
       setLoading(false);
     }
     loadParcels();
@@ -154,6 +130,28 @@ export default function ZiektedrukPage() {
       loadDiseaseData(selectedParcelId);
     }
   }, [selectedParcelId, loadDiseaseData]);
+
+  // Auto-biofix detection: ask the server to compute biofix from winter weather
+  useEffect(() => {
+    if (!selectedParcelId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/analytics/ziektedruk/auto-biofix?parcel_id=${encodeURIComponent(selectedParcelId)}&harvest_year=${harvestYear}`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data?.detected_biofix) {
+          setSuggestedBiofixDate(json.data.detected_biofix);
+        }
+      } catch {
+        // Silently fail — suggestion is optional
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedParcelId, harvestYear]);
 
   const handleParcelChange = (id: string) => {
     setSelectedParcelId(id);
