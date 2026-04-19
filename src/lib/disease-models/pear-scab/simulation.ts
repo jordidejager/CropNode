@@ -18,6 +18,7 @@ import {
   calculatePearScabInfectionFraction,
   type PearScabSeverity,
 } from './spotts-table';
+import { fruitSusceptibility } from './susceptibility';
 import { getSunTimes } from '../apple-scab-v2/astronomy';
 import { buildWeatherSteps } from '../apple-scab-v2/weather-stepper';
 import type {
@@ -32,6 +33,8 @@ import type {
 
 export interface PearScabInput {
   biofixDate: Date;
+  /** Full bloom date (from phenology). Used for fruit susceptibility curve. */
+  bloomDate?: Date;
   endDate: Date;
   latitude: number;
   longitude: number;
@@ -122,16 +125,18 @@ function dischargeRate(
   if (!hasTrigger) return 0;
 
   const temp = step.temperatureC;
+  // Pear-specific: ~half the rate of apple scab.
+  // Pear pseudothecia produce fewer ascospores per rain event than apple.
   let baseRate: number;
-  if (temp < 4) baseRate = 0.05;
-  else if (temp < 8) baseRate = 0.15;
-  else if (temp < 12) baseRate = 0.22;
-  else baseRate = 0.28;
+  if (temp < 4) baseRate = 0.025;
+  else if (temp < 8) baseRate = 0.08;
+  else if (temp < 12) baseRate = 0.11;
+  else baseRate = 0.14;
 
   const rainMultiplier = Math.min(2, 1 + step.precipitationMm);
   const lightFactor = isDaytime ? 1.0 : PC.NIGHT_DISCHARGE_FRACTION;
 
-  return Math.min(0.9, baseRate * rainMultiplier * lightFactor);
+  return Math.min(0.5, baseRate * rainMultiplier * lightFactor);
 }
 
 // ============================================================
@@ -170,7 +175,10 @@ function advanceCohort(
 }
 
 function cohortInfectionCompleted(cohort: GerminatingCohort): boolean {
-  if (cohort.wetHoursAccumulated <= 0) return false;
+  // Pear scab: shorter wet periods (<5u) rarely cause infection regardless
+  // of Spotts threshold — matches RIMpro observation that most short wet
+  // events don't register as infections
+  if (cohort.wetHoursAccumulated < PC.MIN_WET_DURATION_HOURS) return false;
   const severity = lookupPearScabSeverity(
     cohort.avgTempExposed,
     cohort.wetHoursAccumulated,
@@ -332,8 +340,13 @@ export function runPearScabSimulation(input: PearScabInput): PearScabResult {
         stepInfectionWetHours,
         'ascospore'
       );
+      // Fruit susceptibility weighting — infections after petal fall count
+      // less (matches RIMpro "effectieve vruchtinfecties" output)
+      const susceptibility = input.bloomDate
+        ? fruitSusceptibility(stepInfectionStart, input.bloomDate)
+        : 1.0;
       const eventRIM = Math.round(
-        (stepInfectedCount / initialInoculum) * 10_000 * fraction
+        (stepInfectedCount / initialInoculum) * 10_000 * fraction * susceptibility
       );
       const pamAtStart = (initialInoculum - immature) / initialInoculum;
       const severity = lookupPearScabSeverity(

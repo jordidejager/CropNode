@@ -64,6 +64,33 @@ async function fetchWeatherChunked(
   return all;
 }
 
+/**
+ * Look up the bloom date for fruit-susceptibility weighting.
+ * Returns null if no phenology entry exists.
+ */
+async function getBloomDate(
+  harvestYear: number,
+  supabase: SupabaseClient
+): Promise<Date | null> {
+  const { data } = await supabase
+    .from('phenology_reference')
+    .select('bloom_date_f2')
+    .eq('year', harvestYear)
+    .maybeSingle();
+
+  if (data?.bloom_date_f2) {
+    return new Date((data.bloom_date_f2 as string) + 'T12:00:00Z');
+  }
+
+  const FALLBACK: Record<number, string> = {
+    2024: '2024-04-03',
+    2025: '2025-04-11',
+    2026: '2026-04-08',
+  };
+  const fallback = FALLBACK[harvestYear];
+  return fallback ? new Date(fallback + 'T12:00:00Z') : null;
+}
+
 export async function calculatePearScabResults(
   config: DiseaseModelConfig,
   supabase: SupabaseClient
@@ -118,8 +145,10 @@ export async function calculatePearScabResults(
   );
 
   const biofixDate = new Date(config.biofix_date + 'T00:00:00Z');
+  const bloomDate = await getBloomDate(config.harvest_year, supabase);
   const simResult = runPearScabSimulation({
     biofixDate,
+    bloomDate: bloomDate ?? undefined,
     endDate: forecastEnd,
     latitude: lat,
     longitude: lng,

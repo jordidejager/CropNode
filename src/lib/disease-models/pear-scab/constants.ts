@@ -22,16 +22,19 @@ export const PEAR_SCAB_CONSTANTS = {
 
   // Maturation parameters (Villalta-tuned for pear)
   BASE_TEMP_MATURATION: 0, // °C
-  TSUM_FOR_50_PCT_MATURATION: 280, // slightly higher than apple (250)
-  DDWET_FIRST_DISCHARGE: 268.5, // °C·d wet before any discharge possible
+  // Tsum 400 — matches RIMpro's slow ascospore pool buildup for pear scab in
+  // temperate climates (pool at ~50% only by mid-May instead of early April)
+  TSUM_FOR_50_PCT_MATURATION: 400,
+  DDWET_FIRST_DISCHARGE: 268.5, // not currently used — kept for reference
 
   // Maturation interruption
   MATURATION_DRY_DAYS_STOP: 5,
 
-  // Wet period detection (same as apple)
+  // Wet period detection (stricter than apple: Spotts thresholds are higher)
   WET_RH_THRESHOLD: 85,
   RAIN_TRIGGER_MM: 0.2,
   DISCHARGE_STOP_AFTER_RAIN_MIN: 90,
+  MIN_WET_DURATION_HOURS: 5, // vs apple's 4 — short wet periods rarely cause pear infection
 
   // Night discharge inhibition (Villalta 2001):
   // V. pirina releases up to 17.5% at night (vs <5% for V. inaequalis)
