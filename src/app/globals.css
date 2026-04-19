@@ -123,24 +123,16 @@
   display: none !important;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar — volledig verborgen voor premium/minimal look. Scroll blijft werken. */
+.custom-scrollbar {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* IE/Edge legacy */
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  width: 0;
+  height: 0;
+  display: none;                  /* WebKit (Chrome/Safari/Edge) */
 }
 
 /* ── Dashboard premium effects ── */
@@ -463,6 +455,139 @@
   );
   animation: shimmer-line 8s ease-in-out infinite;
   pointer-events: none;
+}
+
+/* ── Landing-inspired card effects (reusable for dashboard) ── */
+
+/* Noise / grain texture overlay */
+.card-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.018;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Mouse-following spotlight (uses --mx / --my CSS variables set via inline style) */
+.card-spotlight {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  background: radial-gradient(
+    520px circle at var(--mx, 50%) var(--my, 50%),
+    var(--spot-color, rgba(16, 185, 129, 0.14)),
+    transparent 45%
+  );
+}
+
+.card-spotlight-host:hover .card-spotlight {
+  opacity: 1;
+}
+
+/* Gradient border animation on hover */
+.card-gradient-border {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+  background: linear-gradient(
+    135deg,
+    var(--gb-color, rgba(16, 185, 129, 0.55)),
+    transparent 40%,
+    transparent 60%,
+    var(--gb-color, rgba(16, 185, 129, 0.55))
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+
+.card-spotlight-host:hover .card-gradient-border {
+  opacity: 1;
+}
+
+/* Glow orb behind card (top-right, subtle) */
+.card-glow-orb {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 180px;
+  height: 180px;
+  border-radius: 9999px;
+  filter: blur(80px);
+  transform: translate(25%, -25%);
+  opacity: 0.05;
+  pointer-events: none;
+  transition: opacity 0.7s ease;
+}
+
+.card-spotlight-host:hover .card-glow-orb {
+  opacity: 0.14;
+}
+
+/* Section header pill badge (animated dot) */
+.section-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.section-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(52, 211, 153);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
+  animation: dot-pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes dot-pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.25); }
+}
+
+/* Gradient heading text (slate fade accent) */
+.section-heading-accent {
+  background: linear-gradient(to right, rgba(148, 163, 184, 1), rgba(100, 116, 139, 1));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Aurora background behind section header */
+.section-aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(600px 240px at 50% 20%, rgba(16, 185, 129, 0.055), transparent 70%),
+    radial-gradient(400px 180px at 80% 40%, rgba(129, 140, 248, 0.035), transparent 70%),
+    radial-gradient(380px 160px at 15% 40%, rgba(163, 230, 53, 0.025), transparent 70%);
+}
+
+/* Accessibility: larger focus ring for keyboard nav (helps older users) */
+.dashboard-focusable:focus-visible {
+  outline: 2px solid rgba(52, 211, 153, 0.7);
+  outline-offset: 3px;
+  border-radius: 12px;
 }
 
 /* Respect reduced motion preferences */
