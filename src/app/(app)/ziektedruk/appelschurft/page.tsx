@@ -114,21 +114,25 @@ export default function ZiektedrukPage() {
     loadStations();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load disease data when parcel changes
+  // Load disease data — uses auto-setup: creates config if missing, always returns results
   const loadDiseaseData = useCallback(
-    async (parcelId: string, force = false) => {
+    async (parcelId: string) => {
       if (!parcelId) return;
       setCalculating(true);
       setError(null);
 
       try {
-        const forceParam = force ? '&force=1' : '';
-        const res = await fetch(
-          `/api/analytics/ziektedruk?parcel_id=${encodeURIComponent(parcelId)}&harvest_year=${harvestYear}${forceParam}`
-        );
+        const res = await fetch('/api/analytics/ziektedruk/auto-setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parcel_id: parcelId,
+            harvest_year: harvestYear,
+            disease_type: 'apple_scab',
+          }),
+        });
 
         if (res.status === 401) {
-          // Session expired — reload page to trigger re-auth
           window.location.reload();
           return;
         }
@@ -330,7 +334,7 @@ export default function ZiektedrukPage() {
         config={config}
         onSave={handleSaveConfig}
         onRecalculate={async () => {
-          await loadDiseaseData(selectedParcelId, true);
+          await loadDiseaseData(selectedParcelId);
         }}
         suggestedBiofixDate={suggestedBiofixDate}
       />

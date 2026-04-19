@@ -115,9 +115,15 @@ export default function ZwartvruchtrotPage() {
       setCalculating(true);
       setError(null);
       try {
-        const res = await fetch(
-          `/api/analytics/ziektedruk/zwartvruchtrot?parcel_id=${encodeURIComponent(parcelId)}&harvest_year=${harvestYear}`
-        );
+        const res = await fetch('/api/analytics/ziektedruk/auto-setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parcel_id: parcelId,
+            harvest_year: harvestYear,
+            disease_type: 'black_rot',
+          }),
+        });
         if (res.status === 401) {
           window.location.reload();
           return;

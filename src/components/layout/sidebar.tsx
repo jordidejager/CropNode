@@ -256,11 +256,11 @@ function SidebarContent() {
 
                 </div>
 
-                {/* Premium edge toggle — pill tab on the right edge, works for both states */}
+                {/* Premium edge toggle — pill tab on the right edge, vertically centered */}
                 <motion.button
                     onClick={toggleCollapse}
                     aria-label={isCollapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
-                    className="group absolute right-0 top-[96px] z-[70] flex items-center justify-center h-14 w-5 translate-x-1/2"
+                    className="group absolute right-0 top-1/2 -translate-y-1/2 z-[70] flex items-center justify-center h-14 w-5 translate-x-1/2"
                     whileHover={{ x: '65%' }}
                     whileTap={{ scale: 0.92 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 26 }}

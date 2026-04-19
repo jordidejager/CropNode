@@ -38,9 +38,9 @@ const INOCULUM_LABELS: Record<InoculumPressure, string> = {
 };
 
 const INOCULUM_DESCRIPTIONS: Record<InoculumPressure, string> = {
-  low: 'Weinig tot geen schurft vorig seizoen',
-  medium: 'Normale schurftdruk',
-  high: 'Veel schurft vorig seizoen',
+  low: 'Weinig tot geen ziektedruk vorig seizoen',
+  medium: 'Normale ziektedruk',
+  high: 'Veel ziektedruk vorig seizoen',
 };
 
 export function BiofixConfig({
