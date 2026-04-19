@@ -63,16 +63,29 @@ function CompactNoteRow({ note }: { note: FieldNote }) {
   const isDone = note.status === 'done';
   const tag = note.auto_tag ? TAG_COMPACT[note.auto_tag] : null;
 
+  // Due date formatting (alleen voor taken met deadline)
+  const dueDateInfo = (() => {
+    if (!note.due_date) return null;
+    const due = new Date(note.due_date + 'T00:00:00');
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const diffDays = Math.floor((due.getTime() - todayStart.getTime()) / 86400000);
+    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d te laat`, isOverdue: true };
+    if (diffDays === 0) return { label: 'Vandaag', isOverdue: false };
+    if (diffDays === 1) return { label: 'Morgen', isOverdue: false };
+    return { label: due.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }), isOverdue: false };
+  })();
+
   return (
     <button
       onClick={() => router.push('/veldnotities')}
-      className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-all text-left"
+      className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/[0.02] transition-all text-left min-h-[56px]"
     >
       <div className={cn(
-        "flex-shrink-0 h-4 w-4 rounded border-[1.5px] flex items-center justify-center mt-0.5",
+        'flex-shrink-0 h-4 w-4 rounded border-[1.5px] flex items-center justify-center mt-0.5',
         isDone
-          ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
-          : "border-white/20"
+          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+          : 'border-white/25',
       )}>
         {isDone && <Check className="h-2.5 w-2.5" />}
       </div>
@@ -86,30 +99,43 @@ function CompactNoteRow({ note }: { note: FieldNote }) {
       )}
       <div className="flex-1 min-w-0">
         <p className={cn(
-          "text-sm truncate",
-          isDone ? "text-white/25 line-through" : "text-white/60"
+          'text-sm truncate',
+          isDone ? 'text-white/25 line-through' : 'text-white/70',
         )}>
           {note.content}
         </p>
-        {(tag || (note.sub_parcels && note.sub_parcels.length > 0)) && (
+        {(tag || dueDateInfo || note.observation_subject || (note.sub_parcels && note.sub_parcels.length > 0)) && (
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {tag && (
-              <span className={cn(
-                "text-[10px] font-medium px-1.5 py-0.5 rounded-md",
-                tag.bg, tag.text
-              )}>
+              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md', tag.bg, tag.text)}>
                 {tag.label}
               </span>
             )}
+            {dueDateInfo && (
+              <span className={cn(
+                'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border',
+                dueDateInfo.isOverdue
+                  ? 'bg-red-500/15 text-red-300 border-red-500/25'
+                  : 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+              )}>
+                {dueDateInfo.isOverdue ? <AlertTriangle className="h-2.5 w-2.5" /> : <CalendarDays className="h-2.5 w-2.5" />}
+                {dueDateInfo.label}
+              </span>
+            )}
+            {note.observation_subject && (
+              <span className="text-[10px] text-amber-300/80 bg-amber-500/10 px-1.5 py-0.5 rounded-md font-medium truncate max-w-[90px]">
+                {note.observation_subject}
+              </span>
+            )}
             {note.sub_parcels?.[0] && (
-              <span className="text-[10px] text-white/30 bg-white/[0.04] px-1.5 py-0.5 rounded-md">
+              <span className="text-[10px] text-white/30 bg-white/[0.04] px-1.5 py-0.5 rounded-md truncate max-w-[100px]">
                 {note.sub_parcels[0].parcel_name || note.sub_parcels[0].name}
               </span>
             )}
           </div>
         )}
       </div>
-      <span className="text-[11px] text-white/20 flex-shrink-0 tabular-nums mt-0.5">
+      <span className="text-[11px] text-white/25 flex-shrink-0 tabular-nums mt-0.5">
         {formatCompactTime(note.created_at)}
       </span>
     </button>
@@ -135,28 +161,36 @@ export function FieldNotesCard() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[11px] font-semibold text-white/30 uppercase tracking-widest flex items-center gap-2">
-          <StickyNote className="h-3.5 w-3.5" />
-          Veldnotities
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest flex items-center gap-2">
+          <StickyNote className="h-3.5 w-3.5 text-emerald-300/70" />
+          <span className="bg-gradient-to-r from-white/80 to-emerald-200/80 bg-clip-text text-transparent">
+            Veldnotities
+          </span>
         </h2>
         <Link
           href="/veldnotities"
-          className="text-xs text-white/25 hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
+          className="text-xs text-white/25 hover:text-emerald-300 transition-colors flex items-center gap-1.5 group"
         >
           Alles
           <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       </div>
 
-      <div className="dashboard-card dashboard-shimmer rounded-2xl overflow-hidden">
+      <div className="relative dashboard-card dashboard-shimmer rounded-2xl overflow-hidden">
+        {/* Subtiele emerald glow orb — veldnotities-kleur */}
+        <div
+          className="pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full blur-[80px] bg-emerald-500 opacity-[0.06]"
+          aria-hidden
+        />
+
         {/* Quick add */}
-        <div className="p-3 border-b border-white/[0.04]">
+        <div className="relative p-3 border-b border-white/[0.04]">
           <QuickAddCompact onSubmit={handleCreate} />
         </div>
 
         {/* Recent notes */}
         {isLoading ? (
-          <div className="divide-y divide-white/[0.04]">
+          <div className="relative divide-y divide-white/[0.04]">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-2.5">
                 <Skeleton className="h-4 w-4 rounded flex-shrink-0" />
@@ -166,12 +200,15 @@ export function FieldNotesCard() {
             ))}
           </div>
         ) : recentNotes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-            <Inbox className="h-6 w-6 text-white/15 mb-2" />
-            <p className="text-xs text-white/25">Nog geen notities</p>
+          <div className="relative flex flex-col items-center justify-center py-8 px-4 text-center">
+            <div className="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-2">
+              <Inbox className="h-4 w-4 text-emerald-400/70" />
+            </div>
+            <p className="text-xs text-white/35 font-medium">Nog geen notities</p>
+            <p className="text-[10px] text-white/20 mt-0.5">Begin hierboven</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/[0.04]">
+          <div className="relative divide-y divide-white/[0.04]">
             {recentNotes.map((note) => (
               <CompactNoteRow key={note.id} note={note} />
             ))}

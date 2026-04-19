@@ -2,15 +2,14 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
+import { CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Search, Shield, Leaf, Wheat,
   Droplets, Bug, Sprout, TrendingUp,
-  Building2, Hash, Droplet, Combine, Tag,
+  Building2, Hash, Droplet, Combine,
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDebounce } from '@/hooks/use-debounce';
 import type { CtgbGebruiksvoorschrift, FertilizerProduct } from '@/lib/types';
+import type { PaletteColor } from '@/components/ui/premium';
 
 // ============================================
 // Types
@@ -102,25 +102,36 @@ interface UnifiedDatabaseClientProps {
 // ============================================
 
 const segmentConfig = [
-  { id: 'gwb' as const, label: 'Gewasbescherming', icon: Shield, color: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400' },
-  { id: 'blad' as const, label: 'Bladmeststoffen', icon: Leaf, color: 'border-green-500/50 bg-green-500/10 text-green-400' },
-  { id: 'strooien' as const, label: 'Strooimeststoffen', icon: Wheat, color: 'border-amber-500/50 bg-amber-500/10 text-amber-400' },
+  { id: 'gwb' as const, label: 'Gewasbescherming', shortLabel: 'Middelen', icon: Shield, palette: 'emerald' as PaletteColor, active: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400' },
+  { id: 'blad' as const, label: 'Bladmeststoffen', shortLabel: 'Blad', icon: Leaf, palette: 'green' as PaletteColor, active: 'border-green-500/60 bg-green-500/10 text-green-400' },
+  { id: 'strooien' as const, label: 'Strooimeststoffen', shortLabel: 'Strooien', icon: Wheat, palette: 'amber' as PaletteColor, active: 'border-amber-500/60 bg-amber-500/10 text-amber-400' },
 ];
 
-// GWB type filters
+// GWB type filters — with product card palette colors
 const gwbFilterConfig = [
-  { id: 'fungicide', label: 'Fungicide', icon: Droplets, color: 'hover:bg-purple-500/10 hover:text-purple-400 hover:border-purple-500/30' },
-  { id: 'insecticide', label: 'Insecticide', icon: Bug, color: 'hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30' },
-  { id: 'herbicide', label: 'Herbicide', icon: Sprout, color: 'hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30' },
-  { id: 'groeiregulator', label: 'Groeiregulator', icon: TrendingUp, color: 'hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/30' },
+  { id: 'fungicide', label: 'Fungicide', icon: Droplets, palette: 'purple' as PaletteColor, active: 'bg-purple-500/15 border-purple-500/50 text-purple-400', hover: 'hover:bg-purple-500/10 hover:text-purple-400 hover:border-purple-500/30' },
+  { id: 'insecticide', label: 'Insecticide', icon: Bug, palette: 'orange' as PaletteColor, active: 'bg-rose-500/15 border-rose-500/50 text-rose-400', hover: 'hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30' },
+  { id: 'herbicide', label: 'Herbicide', icon: Sprout, palette: 'amber' as PaletteColor, active: 'bg-amber-500/15 border-amber-500/50 text-amber-400', hover: 'hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30' },
+  { id: 'groeiregulator', label: 'Groeiregulator', icon: TrendingUp, palette: 'blue' as PaletteColor, active: 'bg-blue-500/15 border-blue-500/50 text-blue-400', hover: 'hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/30' },
 ] as const;
 
 // Meststof category filters
 const fertCategoryConfig = [
-  { id: 'Leaf', label: 'Blad', icon: Droplet, color: 'hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/30' },
-  { id: 'Soil', label: 'Bodem', icon: Combine, color: 'hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30' },
-  { id: 'Fertigation', label: 'Fertigatie', icon: Sprout, color: 'hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/30' },
+  { id: 'Leaf', label: 'Blad', icon: Droplet, active: 'bg-green-500/15 border-green-500/50 text-green-400', hover: 'hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/30' },
+  { id: 'Soil', label: 'Bodem', icon: Combine, active: 'bg-amber-500/15 border-amber-500/50 text-amber-400', hover: 'hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30' },
+  { id: 'Fertigation', label: 'Fertigatie', icon: Sprout, active: 'bg-blue-500/15 border-blue-500/50 text-blue-400', hover: 'hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/30' },
 ] as const;
+
+// Determine product card palette color from product types
+function getProductPalette(productTypes?: string[]): PaletteColor {
+  if (!productTypes || productTypes.length === 0) return 'emerald';
+  const types = productTypes.map(t => t.toLowerCase());
+  if (types.some(t => t.includes('fungicide'))) return 'purple';
+  if (types.some(t => t.includes('insecticide'))) return 'orange';
+  if (types.some(t => t.includes('herbicide'))) return 'amber';
+  if (types.some(t => t.includes('groeiregulator'))) return 'blue';
+  return 'emerald';
+}
 
 // ============================================
 // DosageSelector (re-used from original)
@@ -134,25 +145,28 @@ const DosageSelector: React.FC<{ voorschriften: CtgbGebruiksvoorschrift[] }> = (
   const allVoorschriften = pomeFruitVoorschriften.length > 0 ? pomeFruitVoorschriften : voorschriften;
   const [selectedVoorschrift, setSelectedVoorschrift] = React.useState(allVoorschriften[0]);
 
-  if (!selectedVoorschrift) return <span className="text-muted-foreground">-</span>;
+  if (!selectedVoorschrift) return <span className="text-sm text-muted-foreground">—</span>;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="font-mono text-primary font-bold h-7 p-0 px-2 flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 hover:text-primary rounded-md border border-primary/20">
-          <span className="text-[10px] text-primary/60 font-bold uppercase tracking-tight">Valid</span>
-          <span className="text-sm">{selectedVoorschrift.dosering || '-'}</span>
-          {allVoorschriften.length > 1 && <ChevronDown className="h-3.5 w-3.5 opacity-70" />}
+        <Button
+          variant="ghost"
+          className="font-mono text-primary font-bold h-10 px-3 flex items-center gap-2 bg-primary/10 hover:bg-primary/20 hover:text-primary rounded-lg border border-primary/30"
+        >
+          <span className="text-xs text-primary/70 font-bold uppercase tracking-wider">Dosis</span>
+          <span className="text-base">{selectedVoorschrift.dosering || '—'}</span>
+          {allVoorschriften.length > 1 && <ChevronDown className="h-4 w-4 opacity-70" />}
         </Button>
       </DropdownMenuTrigger>
       {allVoorschriften.length > 1 && (
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className="w-72">
           {allVoorschriften.map((item, index) => (
-            <DropdownMenuItem key={index} onSelect={() => setSelectedVoorschrift(item)} className="cursor-pointer">
-              <div className="flex flex-col gap-0.5 py-1">
+            <DropdownMenuItem key={index} onSelect={() => setSelectedVoorschrift(item)} className="cursor-pointer py-3">
+              <div className="flex flex-col gap-1">
                 <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">{item.gewas}</span>
-                <span className="font-mono font-bold text-primary">{item.dosering}</span>
-                {item.maxToepassingen && <span className="text-[10px] text-muted-foreground/80 mt-1">Max. {item.maxToepassingen}x per jaar</span>}
+                <span className="font-mono font-bold text-primary text-base">{item.dosering}</span>
+                {item.maxToepassingen && <span className="text-xs text-muted-foreground/80">Max. {item.maxToepassingen}× per jaar</span>}
               </div>
             </DropdownMenuItem>
           ))}
@@ -290,21 +304,24 @@ export function UnifiedDatabaseClient({ ctgbProducts, ctgbHardfruit, fertilizers
 
   return (
     <div className="space-y-6">
-      {/* Segment Switch */}
+      {/* Segment Switch — chunky chunky, grote tap targets */}
       <div className="grid grid-cols-3 gap-3">
-        {segmentConfig.map(({ id, label, icon: Icon, color }) => (
+        {segmentConfig.map(({ id, label, shortLabel, icon: Icon, active }) => (
           <button
             key={id}
             onClick={() => setSegment(id)}
             className={cn(
-              'relative flex flex-col items-center gap-2 rounded-xl border-2 px-4 py-4 transition-all duration-200',
+              'relative flex flex-col items-center justify-center gap-2 rounded-2xl border-2 px-4 py-5 min-h-[108px] transition-all duration-200',
               segment === id
-                ? cn(color, 'shadow-lg shadow-current/5')
-                : 'border-border/40 bg-card/30 text-muted-foreground hover:border-border/60 hover:bg-card/50'
+                ? cn(active, 'shadow-lg shadow-current/5')
+                : 'border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/20 hover:bg-white/[0.04]'
             )}
           >
-            <Icon className={cn('h-5 w-5', segment === id ? '' : 'opacity-50')} />
-            <span className="text-sm font-semibold">{label}</span>
+            <Icon className={cn('h-6 w-6', segment === id ? '' : 'opacity-60')} />
+            <span className="text-base font-semibold leading-tight text-center">
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{shortLabel}</span>
+            </span>
             <span className={cn(
               'text-2xl font-bold tabular-nums',
               segment === id ? 'text-white' : 'text-white/60'
@@ -317,81 +334,81 @@ export function UnifiedDatabaseClient({ ctgbProducts, ctgbHardfruit, fertilizers
 
       {/* Sector filter (only for GWB segment) */}
       {segment === 'gwb' && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground font-medium whitespace-nowrap">Sector:</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-base text-slate-300 font-medium whitespace-nowrap">Sector:</span>
           <Select value={sector} onValueChange={(val) => setSector(val as SectorId)}>
-            <SelectTrigger className="w-[260px] h-10 bg-card/40 border-border/40">
+            <SelectTrigger className="w-[280px] h-12 text-base bg-white/[0.02] border-white/10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {SECTORS.map(s => (
-                <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                <SelectItem key={s.id} value={s.id} className="text-base py-3">{s.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {/* Search + Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-grow">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder={
-              segment === 'gwb'
-                ? 'Zoek op naam of werkzame stof...'
-                : 'Zoek op naam, element of fabrikant...'
-            }
-            className="pl-10 h-12 bg-card/40 border-border/40"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {segment === 'gwb' ? (
-            gwbFilterConfig.map(({ id, label, icon: Icon, color }) => (
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder={
+            segment === 'gwb'
+              ? 'Zoek op naam of werkzame stof...'
+              : 'Zoek op naam, element of fabrikant...'
+          }
+          className="pl-12 h-14 text-base bg-white/[0.02] border-white/10"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* Filters — always show text labels, chunky buttons */}
+      <div className="flex flex-wrap items-center gap-2">
+        {segment === 'gwb' ? (
+          gwbFilterConfig.map(({ id, label, icon: Icon, active, hover }) => (
+            <Button
+              key={id}
+              variant="outline"
+              onClick={() => setGwbFilter(prev => prev === id ? null : id)}
+              className={cn(
+                'h-12 px-5 text-base border-dashed transition-all duration-200 flex-1 sm:flex-none min-w-[140px]',
+                gwbFilter === id ? active : cn('border-white/10', hover)
+              )}
+            >
+              <Icon className="mr-2 h-5 w-5" />
+              {label}
+            </Button>
+          ))
+        ) : (
+          fertCategoryConfig
+            .filter(({ id }) => {
+              if (segment === 'blad') return id === 'Leaf';
+              return id === 'Soil' || id === 'Fertigation';
+            })
+            .map(({ id, label, icon: Icon, active, hover }) => (
               <Button
                 key={id}
-                variant={gwbFilter === id ? 'secondary' : 'outline'}
-                onClick={() => setGwbFilter(prev => prev === id ? null : id)}
+                variant="outline"
+                onClick={() => setFertFilter(prev => prev === id ? null : id)}
                 className={cn(
-                  'flex-1 h-12 px-4 border-dashed transition-all duration-200',
-                  gwbFilter === id ? 'bg-secondary/40 border-secondary' : color
+                  'h-12 px-5 text-base border-dashed transition-all duration-200 flex-1 sm:flex-none min-w-[140px]',
+                  fertFilter === id ? active : cn('border-white/10', hover)
                 )}
               >
-                <Icon className={cn('mr-2 h-4 w-4', gwbFilter === id && 'text-primary')} />
-                <span className="hidden lg:inline">{label}</span>
+                <Icon className="mr-2 h-5 w-5" />
+                {label}
               </Button>
             ))
-          ) : (
-            fertCategoryConfig
-              .filter(({ id }) => {
-                if (segment === 'blad') return id === 'Leaf';
-                return id === 'Soil' || id === 'Fertigation';
-              })
-              .map(({ id, label, icon: Icon, color }) => (
-                <Button
-                  key={id}
-                  variant={fertFilter === id ? 'secondary' : 'outline'}
-                  onClick={() => setFertFilter(prev => prev === id ? null : id)}
-                  className={cn(
-                    'flex-1 h-12 px-4 border-dashed transition-all duration-200',
-                    fertFilter === id ? 'bg-secondary/40 border-secondary' : color
-                  )}
-                >
-                  <Icon className={cn('mr-2 h-4 w-4', fertFilter === id && 'text-primary')} />
-                  <span className="hidden lg:inline">{label}</span>
-                </Button>
-              ))
-          )}
-        </div>
+        )}
       </div>
 
       {/* Result count */}
-      <CardDescription>
+      <CardDescription className="text-base">
         {segment === 'gwb'
-          ? `Gefilterd op hardfruit. ${filteredGwb.length} middelen gevonden.`
+          ? `Gefilterd op ${SECTORS.find(s => s.id === sector)?.label.toLowerCase() || 'alle sectoren'}. ${filteredGwb.length} middelen gevonden.`
           : `${filteredFert.length} meststoffen gevonden.`
         }
       </CardDescription>
@@ -400,24 +417,26 @@ export function UnifiedDatabaseClient({ ctgbProducts, ctgbHardfruit, fertilizers
       <ScrollArea className="h-full">
         {segment === 'gwb' ? (
           filteredGwb.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-6">
               {filteredGwb.map(product => (
                 <ProductCard
                   key={product.toelatingsnummer}
+                  color={getProductPalette(product.productTypes)}
                   title={product.naam}
                   subtitle={product.werkzameStoffen.join(', ')}
                   labels={[
-                    { label: 'Houder', value: product.toelatingshouder || '-', verified: true, icon: <Building2 className="h-3 w-3" /> },
-                    { label: 'Toelatingsnr', value: product.toelatingsnummer, icon: <Hash className="h-3 w-3" /> },
+                    { label: 'Houder', value: product.toelatingshouder || '—', verified: true, icon: <Building2 className="h-3.5 w-3.5" /> },
+                    { label: 'Nummer', value: product.toelatingsnummer, icon: <Hash className="h-3.5 w-3.5" /> },
                   ]}
                   categoryBadge={<CtgbCategoryBadge category={product.categorie} productTypes={product.productTypes} />}
                   status={{
-                    label: product.status,
+                    label: product.status === 'Valid' ? 'Toegelaten' : product.status,
                     variant: product.status === 'Valid' ? 'default' : 'destructive',
                     className: product.status === 'Valid' ? 'bg-green-600/30 text-green-400 border-green-500/50' : undefined,
                   }}
                   footerExtra={<DosageSelector voorschriften={product.gebruiksvoorschriften} />}
                   onAction={() => router.push(`/gewasbescherming/database/${product.toelatingsnummer}`)}
+                  actionLabel="Bekijk details"
                 />
               ))}
             </div>
@@ -426,7 +445,7 @@ export function UnifiedDatabaseClient({ ctgbProducts, ctgbHardfruit, fertilizers
           )
         ) : (
           filteredFert.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-6">
               {filteredFert.map(fertilizer => (
                 <FertilizerCard
                   key={fertilizer.id}
@@ -452,7 +471,7 @@ export function UnifiedDatabaseClient({ ctgbProducts, ctgbHardfruit, fertilizers
 
 function EmptyState() {
   return (
-    <div className="flex items-center justify-center h-48 text-muted-foreground border rounded-lg border-dashed border-border/40">
+    <div className="flex items-center justify-center h-56 text-base text-muted-foreground border rounded-2xl border-dashed border-white/10">
       Geen producten gevonden voor uw zoekopdracht.
     </div>
   );

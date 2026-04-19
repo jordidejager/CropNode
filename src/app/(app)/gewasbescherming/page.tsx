@@ -4,8 +4,7 @@ import * as React from 'react';
 import { useCropProtectionEntries, useParcels, useInvalidateQueries, useCtgbProducts } from '@/hooks/use-data';
 import { SpuitschriftEntry, ProductEntry } from '@/lib/types';
 import type { SprayableParcel } from '@/lib/supabase-store';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Card, CardContent } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,13 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Combobox, ComboboxOption } from '@/components/ui/combobox';
-import { MoreHorizontal, Edit, Trash2, BookOpen, CalendarIcon, Plus, Search, X, Save, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Edit, Trash2, BookOpen, CalendarIcon, Plus, Search, X, Save, AlertTriangle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { deleteSpuitschriftEntry, updateSpuitschriftEntryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -30,9 +28,11 @@ import { cn } from '@/lib/utils';
 import { CropIcon } from '@/components/ui/crop-icon';
 import { DosageField } from '@/components/spuitschrift/dosage-field';
 import { NewSprayDialog } from '@/components/spuitschrift';
+import { SectionHeader, SpotlightCard, GlowOrb } from '@/components/ui/premium';
+import { AnimatePresence, motion } from 'framer-motion';
 
 const formatDate = (date: Date) => {
-    return format(date, 'dd MMMM yyyy HH:mm', { locale: nl });
+    return format(date, 'dd MMMM yyyy \'om\' HH:mm', { locale: nl });
 };
 
 // ============================================
@@ -48,9 +48,9 @@ interface EditableProductProps {
 
 function EditableProduct({ product, allProducts, onUpdate, onRemove }: EditableProductProps) {
     return (
-        <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/50 rounded-lg border">
-            <div className="flex-1 min-w-[200px]">
-                <Label className="text-xs text-muted-foreground">Middel</Label>
+        <div className="flex flex-wrap items-end gap-3 p-4 bg-white/[0.02] rounded-xl border border-white/10">
+            <div className="flex-1 min-w-[220px] space-y-2">
+                <Label className="text-sm text-slate-300 font-medium">Middel</Label>
                 <Combobox
                     options={allProducts}
                     value={product.product}
@@ -58,17 +58,17 @@ function EditableProduct({ product, allProducts, onUpdate, onRemove }: EditableP
                     placeholder="Selecteer middel"
                 />
             </div>
-            <div className="w-28">
-                <Label className="text-xs text-muted-foreground">Dosering</Label>
+            <div className="w-32 space-y-2">
+                <Label className="text-sm text-slate-300 font-medium">Dosering</Label>
                 <DosageField
                     value={product.dosage}
                     onChange={(dosage) => onUpdate({ ...product, dosage })}
                 />
             </div>
-            <div className="w-24">
-                <Label className="text-xs text-muted-foreground">Eenheid</Label>
+            <div className="w-28 space-y-2">
+                <Label className="text-sm text-slate-300 font-medium">Eenheid</Label>
                 <Select value={product.unit} onValueChange={(value) => onUpdate({ ...product, unit: value })}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger className="h-11 text-base">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -81,11 +81,12 @@ function EditableProduct({ product, allProducts, onUpdate, onRemove }: EditableP
             </div>
             <Button
                 variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 mt-5"
+                size="lg"
+                className="h-11 px-4 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={onRemove}
             >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-5 w-5 mr-2" />
+                Verwijder
             </Button>
         </div>
     );
@@ -128,7 +129,7 @@ function EditableParcels({ selectedIds, allParcels, onChange }: EditableParcelsP
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal h-auto min-h-[40px] py-2">
+                <Button variant="outline" className="w-full justify-start text-left font-normal h-auto min-h-[48px] py-3 text-base">
                     {selectedParcels.length === 0 ? (
                         <span className="text-muted-foreground">Selecteer percelen...</span>
                     ) : selectedParcels.length <= 2 ? (
@@ -138,50 +139,51 @@ function EditableParcels({ selectedIds, allParcels, onChange }: EditableParcelsP
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[350px] p-0" align="start">
-                <div className="p-2 border-b">
+            <PopoverContent className="w-[380px] p-0" align="start">
+                <div className="p-3 border-b">
                     <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                             placeholder="Zoek perceel..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-8 h-8"
+                            className="pl-10 h-11 text-base"
                         />
                     </div>
                 </div>
-                <ScrollArea className="h-[250px]">
+                <ScrollArea className="h-[300px]">
                     <div className="p-2 space-y-1">
                         {filteredParcels.length > 0 ? (
                             filteredParcels.map((parcel) => (
                                 <div
                                     key={parcel.id}
-                                    className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer min-h-[52px]"
                                     onClick={() => handleToggle(parcel.id, !selectedIds.includes(parcel.id))}
                                 >
                                     <Checkbox
                                         checked={selectedIds.includes(parcel.id)}
                                         onCheckedChange={(checked) => handleToggle(parcel.id, !!checked)}
                                         onClick={(e) => e.stopPropagation()}
+                                        className="h-5 w-5"
                                     />
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-sm truncate">{parcel.name}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {parcel.crop} - {parcel.variety} • {parcel.area?.toFixed(2)} ha
+                                        <p className="font-medium text-base truncate">{parcel.name}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {parcel.crop} — {parcel.variety} · {parcel.area?.toFixed(2)} ha
                                         </p>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-center text-muted-foreground p-4 text-sm">
+                            <p className="text-center text-muted-foreground p-6 text-base">
                                 Geen percelen gevonden.
                             </p>
                         )}
                     </div>
                 </ScrollArea>
                 {selectedIds.length > 0 && (
-                    <div className="p-2 border-t bg-muted/50">
-                        <p className="text-xs text-muted-foreground">
+                    <div className="p-3 border-t bg-muted/50">
+                        <p className="text-sm text-muted-foreground">
                             {selectedIds.length} perceel{selectedIds.length !== 1 ? 'en' : ''} geselecteerd
                         </p>
                     </div>
@@ -192,71 +194,7 @@ function EditableParcels({ selectedIds, allParcels, onChange }: EditableParcelsP
 }
 
 // ============================================
-// Actions Menu Component
-// ============================================
-
-function ActionsMenu({ entry, onEdit, onAction }: { entry: SpuitschriftEntry; onEdit: () => void; onAction: () => void }) {
-    const [isPending, startTransition] = React.useTransition();
-    const [isAlertOpen, setIsAlertOpen] = React.useState(false);
-    const { toast } = useToast();
-    const { invalidateSpuitschrift, invalidateInventory } = useInvalidateQueries();
-
-    const handleDelete = () => {
-        startTransition(async () => {
-            await deleteSpuitschriftEntry(entry.id);
-            toast({ title: 'Regel verwijderd', description: 'De registratie is permanent verwijderd.' });
-            invalidateSpuitschrift();
-            invalidateInventory();
-            onAction();
-        });
-    };
-
-    return (
-        <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0" disabled={isPending}>
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={onEdit}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Bewerken
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onSelect={(e) => {
-                            e.preventDefault();
-                            setIsAlertOpen(true);
-                        }}
-                    >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Verwijderen
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Deze actie kan niet ongedaan worden gemaakt. Dit zal de registratie permanent uit het spuitschrift verwijderen.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Annuleren</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-                        Verwijderen
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    );
-}
-
-// ============================================
-// Spuitschrift Entry Card Component
+// Spuitschrift Entry Card (SpotlightCard variant)
 // ============================================
 
 interface SpuitschriftEntryCardProps {
@@ -264,11 +202,10 @@ interface SpuitschriftEntryCardProps {
     allParcels: SprayableParcel[];
     allProducts: string[];
     onAction: () => void;
-    onExpand?: () => void;
-    isOpen?: boolean;
 }
 
-function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExpand, isOpen }: SpuitschriftEntryCardProps) {
+function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: SpuitschriftEntryCardProps) {
+    const [isExpanded, setIsExpanded] = React.useState(false);
     const [isEditing, setIsEditing] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
     const [editedDate, setEditedDate] = React.useState<Date>(entry.date);
@@ -293,9 +230,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExp
     }));
 
     const generateProductSummary = () => {
-        if (!entry.products || entry.products.length === 0) {
-            return 'Geen middelen';
-        }
+        if (!entry.products || entry.products.length === 0) return 'Geen middelen';
         return entry.products.map(p => `${p.product} (${p.dosage} ${p.unit}/ha)`).join(', ');
     };
 
@@ -305,6 +240,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExp
         setEditedProducts(entry.products.map(p => ({ ...p })));
         setValidationResult(null);
         setIsEditing(true);
+        setIsExpanded(true);
     };
 
     const handleCancel = () => {
@@ -363,7 +299,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExp
                     description: result.message || 'Validatiefouten gevonden.',
                 });
             }
-        } catch (error) {
+        } catch {
             toast({
                 variant: 'destructive',
                 title: 'Fout',
@@ -391,246 +327,329 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, onExp
     };
 
     return (
-        <AccordionItem value={entry.id}>
-            <div className="flex items-center">
-                <AccordionTrigger className="flex-1">
-                    <div className="flex justify-between items-center w-full pr-4">
-                        <div className="flex items-center gap-2 text-left">
-                            <CropIcon parcels={selectedParcels} />
-                            <div>
-                                <p className="font-semibold">{formatDate(entry.date)}</p>
-                                <p className="text-sm text-muted-foreground truncate max-w-xs md:max-w-md" title={generateProductSummary()}>
-                                    {generateProductSummary()}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            {entry.registrationType === 'spreading' && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
-                                    Strooien
-                                </Badge>
-                            )}
-                            <div className="text-right hidden sm:block">
-                                <p className="text-sm">{selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}</p>
-                                <p className="text-sm text-muted-foreground">{totalArea.toFixed(4)} ha</p>
-                            </div>
-                        </div>
+        <SpotlightCard color="emerald" padding="p-0">
+            {/* Summary row — always visible, click to toggle expand */}
+            <button
+                type="button"
+                onClick={() => !isEditing && setIsExpanded(!isExpanded)}
+                disabled={isEditing}
+                className="w-full flex items-start gap-4 p-5 text-left focus-visible:outline-none focus-visible:bg-emerald-500/5 transition-colors"
+            >
+                <div className="shrink-0 pt-0.5">
+                    <CropIcon parcels={selectedParcels} />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap mb-1.5">
+                        <p className="font-semibold text-lg text-white">{formatDate(entry.date)}</p>
+                        {entry.registrationType === 'spreading' && (
+                            <Badge variant="outline" className="text-xs px-2.5 py-1 bg-teal-500/10 border-teal-500/30 text-teal-400">
+                                Strooien
+                            </Badge>
+                        )}
                     </div>
-                </AccordionTrigger>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartEdit();
-                        onExpand?.();
-                    }}
-                    title="Bewerken"
-                >
-                    <Edit className="h-4 w-4" />
-                </Button>
-                <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                    {entry.products && entry.products.length > 0 ? (
+                        <div className="space-y-1" title={generateProductSummary()}>
+                            {(isExpanded ? entry.products : entry.products.slice(0, 2)).map((p, i) => (
+                                <div key={i} className="flex items-baseline gap-2 text-sm">
+                                    <span className="w-1 h-1 rounded-full bg-emerald-500/40 shrink-0 translate-y-[-3px]" aria-hidden />
+                                    <span className="text-slate-200 font-medium truncate">{p.product}</span>
+                                    <span className="text-slate-500 tabular-nums shrink-0">{p.dosage} {p.unit}/ha</span>
+                                </div>
+                            ))}
+                            {entry.products.length > 2 && !isExpanded && (
+                                <div className="flex items-baseline gap-2 text-sm pt-0.5">
+                                    <span className="w-1 h-1 shrink-0" aria-hidden />
+                                    <span className="text-emerald-400/90 font-semibold">
+                                        + {entry.products.length - 2} {entry.products.length - 2 === 1 ? 'ander middel' : 'andere middelen'}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500 italic">Geen middelen</p>
+                    )}
+                </div>
+                <div className="hidden sm:flex flex-col items-end text-right mr-2 pt-0.5 shrink-0">
+                    <p className="text-sm text-slate-300 font-medium">
+                        {selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}
+                    </p>
+                    <p className="text-sm text-slate-500">{totalArea.toFixed(2)} ha</p>
+                </div>
+                <ChevronDown
+                    className={cn(
+                        'h-5 w-5 text-slate-400 transition-transform duration-300 shrink-0 mt-1',
+                        isExpanded && 'rotate-180',
+                    )}
+                />
+            </button>
+
+            {/* Action buttons row — directly visible when collapsed, on touch-friendly tap size */}
+            {!isExpanded && !isEditing && (
+                <div className="flex gap-2 px-5 pb-4 pt-0">
                     <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 mr-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        variant="outline"
+                        size="lg"
+                        className="h-11 flex-1 sm:flex-none text-base border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/10"
                         onClick={(e) => {
                             e.stopPropagation();
-                            setIsDeleteAlertOpen(true);
+                            handleStartEdit();
                         }}
-                        disabled={isDeleting}
-                        title="Verwijderen"
                     >
-                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        <Edit className="h-5 w-5 mr-2" />
+                        Bewerken
                     </Button>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Bespuiting verwijderen?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Weet je zeker dat je de registratie van {formatDate(entry.date)} wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Annuleren</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDirectDelete} className="bg-destructive hover:bg-destructive/90">
-                                Verwijderen
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </div>
-            <AccordionContent className="px-4 pt-2 pb-4 space-y-4 bg-muted/50 rounded-b-md">
-                {isEditing ? (
-                    // Edit Mode
-                    <div className="space-y-6">
-                        {/* Validation Messages */}
-                        {validationResult && validationResult.message && (
-                            <div className={cn(
-                                "p-3 rounded-lg border text-sm",
-                                validationResult.errorCount > 0 ? "bg-destructive/10 border-destructive/50 text-destructive" : "bg-yellow-500/10 border-yellow-500/50 text-yellow-700 dark:text-yellow-400"
-                            )}>
-                                <div className="flex items-start gap-2">
-                                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                                    <div className="whitespace-pre-wrap">{validationResult.message}</div>
-                                </div>
-                            </div>
-                        )}
+                    <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="h-11 flex-1 sm:flex-none text-base border-white/10 text-destructive hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsDeleteAlertOpen(true);
+                            }}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Trash2 className="h-5 w-5 mr-2" />}
+                            Verwijderen
+                        </Button>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Bespuiting verwijderen?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Weet je zeker dat je de registratie van {formatDate(entry.date)} wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="h-11 text-base">Annuleren</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDirectDelete} className="h-11 text-base bg-destructive hover:bg-destructive/90">
+                                    Verwijderen
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+            )}
 
-                        {/* Date Picker */}
-                        <div className="space-y-2">
-                            <Label>Datum & tijd</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {format(editedDate, 'dd MMMM yyyy HH:mm', { locale: nl })}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={editedDate}
-                                        onSelect={(date) => date && setEditedDate(date)}
-                                        locale={nl}
-                                    />
-                                    <div className="p-3 border-t">
-                                        <Label className="text-xs text-muted-foreground">Tijd</Label>
-                                        <Input
-                                            type="time"
-                                            value={format(editedDate, 'HH:mm')}
-                                            onChange={(e) => {
-                                                const [hours, minutes] = e.target.value.split(':').map(Number);
-                                                const newDate = new Date(editedDate);
-                                                newDate.setHours(hours, minutes);
-                                                setEditedDate(newDate);
-                                            }}
-                                            className="mt-1"
+            {/* Expanded content */}
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        key="content"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="px-5 pb-5 pt-1 space-y-5 border-t border-white/[0.06]">
+                            {isEditing ? (
+                                // Edit Mode
+                                <div className="space-y-5 pt-4">
+                                    {validationResult && validationResult.message && (
+                                        <div className={cn(
+                                            'p-4 rounded-xl border text-sm',
+                                            validationResult.errorCount > 0
+                                                ? 'bg-destructive/10 border-destructive/50 text-destructive'
+                                                : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400',
+                                        )}>
+                                            <div className="flex items-start gap-2">
+                                                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                                                <div className="whitespace-pre-wrap text-base">{validationResult.message}</div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-slate-300 font-medium">Datum & tijd</Label>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button variant="outline" className="w-full justify-start text-left font-normal h-12 text-base">
+                                                    <CalendarIcon className="mr-2 h-5 w-5" />
+                                                    {format(editedDate, 'dd MMMM yyyy \'om\' HH:mm', { locale: nl })}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={editedDate}
+                                                    onSelect={(date) => date && setEditedDate(date)}
+                                                    locale={nl}
+                                                />
+                                                <div className="p-3 border-t">
+                                                    <Label className="text-sm text-muted-foreground">Tijd</Label>
+                                                    <Input
+                                                        type="time"
+                                                        value={format(editedDate, 'HH:mm')}
+                                                        onChange={(e) => {
+                                                            const [hours, minutes] = e.target.value.split(':').map(Number);
+                                                            const newDate = new Date(editedDate);
+                                                            newDate.setHours(hours, minutes);
+                                                            setEditedDate(newDate);
+                                                        }}
+                                                        className="mt-1 h-11 text-base"
+                                                    />
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-slate-300 font-medium">Percelen ({editedTotalArea.toFixed(2)} ha totaal)</Label>
+                                        <EditableParcels
+                                            selectedIds={editedPlots}
+                                            allParcels={allParcels}
+                                            onChange={setEditedPlots}
                                         />
                                     </div>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
 
-                        {/* Parcels */}
-                        <div className="space-y-2">
-                            <Label>Percelen ({editedTotalArea.toFixed(4)} ha totaal)</Label>
-                            <EditableParcels
-                                selectedIds={editedPlots}
-                                allParcels={allParcels}
-                                onChange={setEditedPlots}
-                            />
-                        </div>
-
-                        {/* Products */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <Label>Middelen</Label>
-                                <Button variant="outline" size="sm" onClick={handleProductAdd}>
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Middel toevoegen
-                                </Button>
-                            </div>
-                            <div className="space-y-2">
-                                {editedProducts.map((product, index) => (
-                                    <EditableProduct
-                                        key={index}
-                                        product={product}
-                                        allProducts={productOptions}
-                                        onUpdate={(updated) => handleProductUpdate(index, updated)}
-                                        onRemove={() => handleProductRemove(index)}
-                                    />
-                                ))}
-                                {editedProducts.length === 0 && (
-                                    <p className="text-sm text-muted-foreground text-center py-4">
-                                        Geen middelen. Klik op "Middel toevoegen" om een middel toe te voegen.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex justify-end gap-2 pt-4 border-t">
-                            <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
-                                <X className="h-4 w-4 mr-2" />
-                                Annuleren
-                            </Button>
-                            <Button onClick={handleSave} disabled={isSaving}>
-                                {isSaving ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                    <Save className="h-4 w-4 mr-2" />
-                                )}
-                                Opslaan
-                            </Button>
-                        </div>
-                    </div>
-                ) : (
-                    // View Mode
-                    <>
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h4 className="font-semibold mb-2">Percelen ({totalArea.toFixed(4)} ha totaal)</h4>
-                                <div className="text-sm text-muted-foreground space-y-1">
-                                    {selectedParcels.map(p => (
-                                        <div key={p.id} className="flex justify-between">
-                                            <span>{p.name} <span className="text-xs">({p.variety})</span></span>
-                                            <span className="ml-4">{p.area ? p.area.toFixed(4) : '0.0000'} ha</span>
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <Label className="text-sm text-slate-300 font-medium">Middelen</Label>
+                                            <Button variant="outline" size="sm" onClick={handleProductAdd} className="h-10 text-sm">
+                                                <Plus className="h-4 w-4 mr-1" />
+                                                Middel toevoegen
+                                            </Button>
                                         </div>
-                                    ))}
+                                        <div className="space-y-2">
+                                            {editedProducts.map((product, index) => (
+                                                <EditableProduct
+                                                    key={index}
+                                                    product={product}
+                                                    allProducts={productOptions}
+                                                    onUpdate={(updated) => handleProductUpdate(index, updated)}
+                                                    onRemove={() => handleProductRemove(index)}
+                                                />
+                                            ))}
+                                            {editedProducts.length === 0 && (
+                                                <p className="text-sm text-muted-foreground text-center py-4">
+                                                    Geen middelen. Klik op &quot;Middel toevoegen&quot; om een middel toe te voegen.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-4 border-t border-white/[0.06]">
+                                        <Button variant="outline" size="lg" onClick={handleCancel} disabled={isSaving} className="h-11 text-base">
+                                            <X className="h-5 w-5 mr-2" />
+                                            Annuleren
+                                        </Button>
+                                        <Button size="lg" onClick={handleSave} disabled={isSaving} className="h-11 text-base">
+                                            {isSaving ? (
+                                                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                                            ) : (
+                                                <Save className="h-5 w-5 mr-2" />
+                                            )}
+                                            Opslaan
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                            <ActionsMenu entry={entry} onEdit={handleStartEdit} onAction={onAction} />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold mb-2">Middelen</h4>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Middel</TableHead>
-                                            <TableHead className="text-right">Dosering per ha</TableHead>
-                                            <TableHead className="text-right">Totaal Gebruikt</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {productsWithTotals.map((p, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell className="font-medium">
-                                                    <span>{p.product}</span>
-                                                    {p.source === 'fertilizer' && (
-                                                        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400">
-                                                            meststof
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">{p.dosage} {p.unit}/ha</TableCell>
-                                                <TableCell className="text-right">{p.totalUsed} {p.unit}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-                        {entry.validationMessage && (
-                            <div className={cn(
-                                "p-3 rounded-lg border text-sm",
-                                entry.status === 'Waarschuwing' ? "bg-yellow-500/10 border-yellow-500/50" : "bg-green-500/10 border-green-500/50"
-                            )}>
-                                <div className="flex items-start gap-2">
-                                    {entry.status === 'Waarschuwing' ? (
-                                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
-                                    ) : (
-                                        <CheckCircle className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
+                            ) : (
+                                // View Mode
+                                <div className="pt-4 space-y-5">
+                                    <div>
+                                        <h4 className="font-semibold text-base mb-2 text-white">Percelen ({totalArea.toFixed(2)} ha totaal)</h4>
+                                        <div className="text-sm text-slate-400 space-y-1.5">
+                                            {selectedParcels.map(p => (
+                                                <div key={p.id} className="flex justify-between gap-4">
+                                                    <span>{p.name} <span className="text-slate-500">({p.variety})</span></span>
+                                                    <span className="tabular-nums shrink-0">{p.area ? p.area.toFixed(2) : '0.00'} ha</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-base mb-2 text-white">Middelen</h4>
+                                        <div className="rounded-xl border border-white/10 overflow-hidden">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="border-white/10 hover:bg-transparent">
+                                                        <TableHead className="text-sm">Middel</TableHead>
+                                                        <TableHead className="text-sm text-right">Dosering per ha</TableHead>
+                                                        <TableHead className="text-sm text-right">Totaal Gebruikt</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {productsWithTotals.map((p, index) => (
+                                                        <TableRow key={index} className="border-white/[0.06]">
+                                                            <TableCell className="font-medium text-base">
+                                                                <span>{p.product}</span>
+                                                                {p.source === 'fertilizer' && (
+                                                                    <Badge variant="outline" className="ml-2 text-xs px-2 py-0.5 bg-teal-500/10 border-teal-500/30 text-teal-400">
+                                                                        meststof
+                                                                    </Badge>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right text-base tabular-nums">{p.dosage} {p.unit}/ha</TableCell>
+                                                            <TableCell className="text-right text-base tabular-nums">{p.totalUsed} {p.unit}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                    {entry.validationMessage && (
+                                        <div className={cn(
+                                            'p-4 rounded-xl border text-base',
+                                            entry.status === 'Waarschuwing'
+                                                ? 'bg-yellow-500/10 border-yellow-500/50'
+                                                : 'bg-green-500/10 border-green-500/50',
+                                        )}>
+                                            <div className="flex items-start gap-2">
+                                                {entry.status === 'Waarschuwing' ? (
+                                                    <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-yellow-400" />
+                                                ) : (
+                                                    <CheckCircle className="h-5 w-5 mt-0.5 shrink-0 text-green-400" />
+                                                )}
+                                                <div className="whitespace-pre-wrap text-slate-300">{entry.validationMessage}</div>
+                                            </div>
+                                        </div>
                                     )}
-                                    <div className="whitespace-pre-wrap text-muted-foreground">{entry.validationMessage}</div>
+
+                                    {/* Expanded action row */}
+                                    <div className="flex gap-2 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            size="lg"
+                                            className="h-11 flex-1 sm:flex-none text-base border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/10"
+                                            onClick={handleStartEdit}
+                                        >
+                                            <Edit className="h-5 w-5 mr-2" />
+                                            Bewerken
+                                        </Button>
+                                        <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                                            <Button
+                                                variant="outline"
+                                                size="lg"
+                                                className="h-11 flex-1 sm:flex-none text-base border-white/10 text-destructive hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10"
+                                                onClick={() => setIsDeleteAlertOpen(true)}
+                                                disabled={isDeleting}
+                                            >
+                                                {isDeleting ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Trash2 className="h-5 w-5 mr-2" />}
+                                                Verwijderen
+                                            </Button>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Bespuiting verwijderen?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Weet je zeker dat je de registratie van {formatDate(entry.date)} wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel className="h-11 text-base">Annuleren</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleDirectDelete} className="h-11 text-base bg-destructive hover:bg-destructive/90">
+                                                        Verwijderen
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </>
+                            )}
+                        </div>
+                    </motion.div>
                 )}
-            </AccordionContent>
-        </AccordionItem>
+            </AnimatePresence>
+        </SpotlightCard>
     );
 }
 
@@ -644,10 +663,8 @@ function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
     allProducts: string[];
     onAction: () => void;
 }) {
-    const [openItem, setOpenItem] = React.useState<string | undefined>(undefined);
-
     return (
-        <Accordion type="single" collapsible className="w-full" value={openItem} onValueChange={setOpenItem}>
+        <div className="space-y-3">
             {entries.map(entry => (
                 <SpuitschriftEntryCard
                     key={entry.id}
@@ -655,11 +672,9 @@ function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
                     allParcels={allParcels}
                     allProducts={allProducts}
                     onAction={onAction}
-                    isOpen={openItem === entry.id}
-                    onExpand={() => setOpenItem(entry.id)}
                 />
             ))}
-        </Accordion>
+        </div>
     );
 }
 
@@ -688,14 +703,14 @@ function ParcelHistoryView({ allParcels, entries }: { allParcels: SprayableParce
     }, [selectedParcelId, entries]);
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-5">
             <Select onValueChange={setSelectedParcelId}>
-                <SelectTrigger className="w-full md:w-[300px]">
+                <SelectTrigger className="w-full md:w-[360px] h-12 text-base">
                     <SelectValue placeholder="Kies een perceel om de historie te zien" />
                 </SelectTrigger>
                 <SelectContent>
                     {allParcels.map(parcel => (
-                        <SelectItem key={parcel.id} value={parcel.id}>
+                        <SelectItem key={parcel.id} value={parcel.id} className="text-base py-3">
                             {parcel.name} ({parcel.variety})
                         </SelectItem>
                     ))}
@@ -703,38 +718,40 @@ function ParcelHistoryView({ allParcels, entries }: { allParcels: SprayableParce
             </Select>
 
             {!selectedParcelId && (
-                <div className="text-center text-muted-foreground py-10">
+                <div className="text-center text-muted-foreground py-12 text-base">
                     <p>Kies een perceel om de historie te bekijken.</p>
                 </div>
             )}
 
             {selectedParcelId && history.length === 0 && (
-                <div className="text-center text-muted-foreground py-10">
+                <div className="text-center text-muted-foreground py-12 text-base">
                     <p>Geen bespuitingen gevonden voor dit perceel.</p>
                 </div>
             )}
 
             {history.length > 0 && (
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Datum</TableHead>
-                                <TableHead>Middel</TableHead>
-                                <TableHead className="text-right">Dosering</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {history.map(item => (
-                                <TableRow key={item.id}>
-                                    <TableCell>{format(item.date, 'dd-MM-yyyy')}</TableCell>
-                                    <TableCell className="font-medium">{item.product}</TableCell>
-                                    <TableCell className="text-right">{item.dosage} {item.unit}/ha</TableCell>
+                <SpotlightCard color="emerald" padding="p-0" disableSpotlight>
+                    <div className="rounded-2xl overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="border-white/10 hover:bg-transparent">
+                                    <TableHead className="text-sm px-5">Datum</TableHead>
+                                    <TableHead className="text-sm">Middel</TableHead>
+                                    <TableHead className="text-sm text-right px-5">Dosering</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {history.map(item => (
+                                    <TableRow key={item.id} className="border-white/[0.06]">
+                                        <TableCell className="text-base px-5">{format(item.date, 'dd-MM-yyyy')}</TableCell>
+                                        <TableCell className="font-medium text-base">{item.product}</TableCell>
+                                        <TableCell className="text-right text-base tabular-nums px-5">{item.dosage} {item.unit}/ha</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </SpotlightCard>
             )}
         </div>
     );
@@ -769,7 +786,6 @@ export default function SpuitschriftPage() {
     const isLoading = isLoadingEntries || isLoadingParcels || isLoadingProducts;
     const isError = isErrorEntries || isErrorParcels;
 
-    // State for new spray dialog
     const [isNewSprayDialogOpen, setIsNewSprayDialogOpen] = React.useState(false);
 
     const allProductNames = React.useMemo(() =>
@@ -781,56 +797,61 @@ export default function SpuitschriftPage() {
         refetchEntries();
     };
 
+    const currentYear = new Date().getFullYear();
+    const entriesThisYear = entries.filter(e => new Date(e.date).getFullYear() === currentYear).length;
+
+    const header = (
+        <SectionHeader
+            eyebrow="Gewasbescherming"
+            title="Spuitschrift"
+            titleGradient={entries.length > 0 ? `${entriesThisYear} in ${currentYear}` : undefined}
+            description="Alle definitief geregistreerde bespuitingen — chronologisch of per perceel."
+            color="emerald"
+            action={
+                <Button
+                    size="lg"
+                    onClick={() => setIsNewSprayDialogOpen(true)}
+                    className="h-12 px-6 text-base font-semibold"
+                >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Nieuwe Bespuiting
+                </Button>
+            }
+        />
+    );
+
     if (isLoading) {
         return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Spuitschrift</CardTitle>
-                    <CardDescription>Overzicht van alle definitief geregistreerde bespuitingen.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <SpuitschriftSkeleton />
-                </CardContent>
-            </Card>
+            <div className="relative space-y-8">
+                <GlowOrb color="emerald" position="top-left" size="w-[400px] h-[300px]" blur="blur-[140px]" opacity={0.06} />
+                {header}
+                <Card>
+                    <CardContent className="pt-6">
+                        <SpuitschriftSkeleton />
+                    </CardContent>
+                </Card>
+            </div>
         );
     }
 
     if (isError) {
         return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Spuitschrift</CardTitle>
-                    <CardDescription>Overzicht van alle definitief geregistreerde bespuitingen.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ErrorState
-                        title="Kon spuitschrift niet laden"
-                        message={errorEntries?.message || errorParcels?.message || 'Er is een fout opgetreden.'}
-                        onRetry={() => {
-                            refetchEntries();
-                            refetchParcels();
-                        }}
-                    />
-                </CardContent>
-            </Card>
-        );
-    }
-
-    if (entries.length === 0 && allParcels.length === 0) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Spuitschrift</CardTitle>
-                    <CardDescription>Overzicht van alle definitief geregistreerde bespuitingen.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <EmptyState
-                        icon={BookOpen}
-                        title="Geen registraties gevonden"
-                        description="Er zijn nog geen bevestigde bespuitingen of percelen gevonden. Voer bespuitingen in via de Slimme Invoer."
-                    />
-                </CardContent>
-            </Card>
+            <div className="relative space-y-8">
+                <GlowOrb color="emerald" position="top-left" size="w-[400px] h-[300px]" blur="blur-[140px]" opacity={0.06} />
+                {header}
+                <Card>
+                    <CardContent className="pt-6">
+                        <ErrorState
+                            title="Kon spuitschrift niet laden"
+                            message={errorEntries?.message || errorParcels?.message || 'Er is een fout opgetreden.'}
+                            onRetry={() => {
+                                refetchEntries();
+                                refetchParcels();
+                            }}
+                        />
+                    </CardContent>
+                </Card>
+            </div>
         );
     }
 
@@ -840,26 +861,32 @@ export default function SpuitschriftPage() {
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <CardTitle>Spuitschrift</CardTitle>
-                            <CardDescription>Overzicht van alle definitief geregistreerde bespuitingen, chronologisch of per perceel.</CardDescription>
-                        </div>
-                        <Button onClick={() => setIsNewSprayDialogOpen(true)}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nieuwe Bespuiting
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Tabs defaultValue="chronological">
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="chronological">Chronologisch</TabsTrigger>
-                            <TabsTrigger value="by_parcel">Per Perceel</TabsTrigger>
+            <div className="relative space-y-8">
+                {/* Ambient background orbs */}
+                <GlowOrb color="emerald" position="top-left" size="w-[500px] h-[320px]" blur="blur-[140px]" opacity={0.07} />
+                <GlowOrb color="lime" position="top-right" size="w-[360px] h-[260px]" blur="blur-[140px]" opacity={0.04} />
+
+                {header}
+
+                {entries.length === 0 && allParcels.length === 0 ? (
+                    <SpotlightCard color="emerald">
+                        <EmptyState
+                            icon={BookOpen}
+                            title="Geen registraties gevonden"
+                            description="Er zijn nog geen bevestigde bespuitingen of percelen gevonden. Voer bespuitingen in via de Slimme Invoer of via Nieuwe Bespuiting."
+                        />
+                    </SpotlightCard>
+                ) : (
+                    <Tabs defaultValue="chronological" className="space-y-6">
+                        <TabsList className="h-12 p-1 bg-white/[0.04] border border-white/10">
+                            <TabsTrigger value="chronological" className="h-10 px-6 text-base data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400">
+                                Chronologisch
+                            </TabsTrigger>
+                            <TabsTrigger value="by_parcel" className="h-10 px-6 text-base data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400">
+                                Per perceel
+                            </TabsTrigger>
                         </TabsList>
-                        <TabsContent value="chronological" className="mt-6">
+                        <TabsContent value="chronological" className="mt-0">
                             {entries.length > 0 ? (
                                 <ChronologicalView
                                     entries={entries}
@@ -868,19 +895,21 @@ export default function SpuitschriftPage() {
                                     onAction={handleAction}
                                 />
                             ) : (
-                                <EmptyState
-                                    icon={BookOpen}
-                                    title="Geen registraties"
-                                    description="Er zijn nog geen bevestigde bespuitingen in het logboek gevonden."
-                                />
+                                <SpotlightCard color="emerald">
+                                    <EmptyState
+                                        icon={BookOpen}
+                                        title="Geen registraties"
+                                        description="Er zijn nog geen bevestigde bespuitingen in het logboek gevonden."
+                                    />
+                                </SpotlightCard>
                             )}
                         </TabsContent>
-                        <TabsContent value="by_parcel" className="mt-6">
+                        <TabsContent value="by_parcel" className="mt-0">
                             <ParcelHistoryView allParcels={allParcels} entries={entries} />
                         </TabsContent>
                     </Tabs>
-                </CardContent>
-            </Card>
+                )}
+            </div>
 
             <NewSprayDialog
                 open={isNewSprayDialogOpen}

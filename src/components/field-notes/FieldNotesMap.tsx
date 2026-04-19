@@ -2,23 +2,17 @@
 
 import { useRef, useEffect, useCallback } from 'react';
 import type { FieldNote } from '@/hooks/use-field-notes';
+import { tagTokens, TAG_LABEL, type FieldNoteTag } from '@/lib/veldnotities/tag-colors';
 
-// Tag → circleMarker color
-const TAG_COLORS: Record<string, string> = {
-  bespuiting: '#378ADD',
-  bemesting: '#10b981',
-  taak: '#EF9F27',
-  waarneming: '#7F77DD',
-  overig: '#888780',
-};
+// Tag → circleMarker color (via centraal palet)
+function getTagHex(tag: string | null | undefined): string {
+  return tagTokens(tag as FieldNoteTag | null).hex;
+}
 
-const TAG_LABELS: Record<string, string> = {
-  bespuiting: 'Bespuiting',
-  bemesting: 'Bemesting',
-  taak: 'Taak',
-  waarneming: 'Waarneming',
-  overig: 'Overig',
-};
+function getTagLabel(tag: string | null | undefined): string {
+  if (!tag) return 'Overig';
+  return (TAG_LABEL as Record<string, string>)[tag] ?? 'Overig';
+}
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -99,8 +93,8 @@ export function FieldNotesMap({ notes, onNoteClick, onViewInList }: FieldNotesMa
     for (const note of geoNotes) {
       const lat = note.latitude!;
       const lng = note.longitude!;
-      const color = TAG_COLORS[note.auto_tag ?? 'overig'] ?? TAG_COLORS.overig;
-      const tagLabel = TAG_LABELS[note.auto_tag ?? 'overig'] ?? 'Overig';
+      const color = getTagHex(note.auto_tag);
+      const tagLabel = getTagLabel(note.auto_tag);
 
       const marker = L.circleMarker([lat, lng], {
         radius: 10,

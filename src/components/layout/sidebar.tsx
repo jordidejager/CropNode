@@ -14,6 +14,7 @@ import {
     Truck,
     CloudSun,
     BarChart3,
+    Bug,
     CalendarDays,
     BookOpen,
     Clock,
@@ -135,6 +136,7 @@ const navGroups: NavGroup[] = [
         items: [
             { label: 'Weer', href: '/weer', icon: CloudSun },
             { label: 'Analytics', href: '/analytics', icon: BarChart3 },
+            { label: 'Ziektedruk', href: '/ziektedruk', icon: Bug },
             { label: 'Kalender', href: '/kalender', icon: CalendarDays },
             { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
         ],
