@@ -224,7 +224,7 @@ export default function LoginPage() {
         <div className="max-w-md space-y-8">
           {/* Logo */}
           <Link href="/" className="inline-block">
-            <Logo variant="horizontal" theme="dark" width={180} height={40} />
+            <Logo variant="horizontal" theme="dark" width={180} height={40} style="animated" />
           </Link>
 
           <div className="space-y-3">

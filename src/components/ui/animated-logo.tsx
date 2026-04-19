@@ -1,21 +1,27 @@
 'use client';
 
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { generateDots, LOGO_DOTS_SEED } from '@/lib/logo-dots';
 
 interface AnimatedLogoProps {
   variant?: 'horizontal' | 'icon';
   size?: number;
   className?: string;
-  /** Show the full animation loop (default). Set false for subtle/static use. */
+  /** Show animations (default true). Set false for reduced motion. */
   animated?: boolean;
 }
 
 /**
- * Premium animated CropNode logo — neural network with pulsing glow,
- * twinkling data dots, and data-flow pulses along connection lines.
+ * Premium animated CropNode logo.
  *
- * Renders SVG inline so framer-motion can animate individual primitives.
+ * Matches the app-icon design:
+ * - Branch tree with gradient strokes (no tip dots)
+ * - Small central hub (root)
+ * - ~100 data dots in a Gaussian cloud around the logo
+ * - A moving glow orbits through the dot cloud, brightening dots it passes
+ * - Soft halo pulse for ambient life
  */
 export function AnimatedLogo({
   variant = 'horizontal',
@@ -26,45 +32,24 @@ export function AnimatedLogo({
   const isIcon = variant === 'icon';
   const vbWidth = isIcon ? 48 : 176;
   const vbHeight = 48;
+
   const defaultWidth = isIcon ? 48 : 176;
-  const scale = size ? size / (isIcon ? 48 : 176) : 1;
   const renderWidth = size ?? defaultWidth;
   const renderHeight = isIcon ? renderWidth : Math.round(renderWidth * (48 / 176));
 
-  // Main connection lines as [x1,y1,x2,y2] — same geometry as the static logo
-  const connections = [
-    { x1: 22.0, y1: 44.0, x2: 26.0, y2: 4.0 },   // vertical long
-    { x1: 23.2, y1: 32.0, x2: 6.0, y2: 24.0 },   // to left
-    { x1: 23.8, y1: 26.0, x2: 41.0, y2: 18.0 },  // to right
-    { x1: 24.6, y1: 18.0, x2: 10.0, y2: 11.0 },  // to upper-left
-    { x1: 25.2, y1: 12.0, x2: 36.0, y2: 7.0 },   // to upper-right
-  ];
-
-  // Main nodes [cx, cy, r]
-  const mainNodes: [number, number, number][] = [
-    [22.0, 44.0, 3.5], // central/bottom hub (largest)
-    [26.0, 4.0, 2.0],
-    [6.0, 24.0, 2.5],
-    [41.0, 18.0, 2.5],
-    [10.0, 11.0, 2.5],
-    [36.0, 7.0, 2.5],
-  ];
-
-  // Small scattered background data points
-  const backgroundDots: { cx: number; cy: number; r: number; color: string; delay: number }[] = [
-    { cx: 7, cy: 4, r: 0.5, color: '#34d399', delay: 0 },
-    { cx: 44, cy: 6, r: 0.7, color: '#6ee7b7', delay: 0.3 },
-    { cx: 3, cy: 16, r: 0.45, color: '#10b981', delay: 0.6 },
-    { cx: 46, cy: 22, r: 0.5, color: '#34d399', delay: 0.9 },
-    { cx: 2, cy: 35, r: 0.4, color: '#6ee7b7', delay: 1.2 },
-    { cx: 45, cy: 40, r: 0.55, color: '#10b981', delay: 1.5 },
-    { cx: 14, cy: 2, r: 0.4, color: '#34d399', delay: 0.2 },
-    { cx: 33, cy: 44, r: 0.5, color: '#6ee7b7', delay: 0.5 },
-    { cx: 40, cy: 13, r: 0.35, color: '#34d399', delay: 0.8 },
-    { cx: 9, cy: 38, r: 0.45, color: '#10b981', delay: 1.1 },
-    { cx: 17, cy: 46, r: 0.4, color: '#6ee7b7', delay: 1.4 },
-    { cx: 38, cy: 28, r: 0.35, color: '#34d399', delay: 1.7 },
-  ];
+  // Generate dots deterministically (same seed → same cloud on every render)
+  const dots = useMemo(
+    () =>
+      generateDots({
+        count: 110,
+        size: 48,
+        std: 11,
+        seed: LOGO_DOTS_SEED,
+        minRadius: 0.18,
+        maxRadius: 1.0,
+      }),
+    []
+  );
 
   return (
     <svg
@@ -75,13 +60,14 @@ export function AnimatedLogo({
       className={cn('overflow-visible', className)}
     >
       <defs>
+        {/* Ambient halo */}
         <radialGradient id="aLogoHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-          <stop offset="40%" stopColor="#10b981" stopOpacity="0.14" />
-          <stop offset="75%" stopColor="#10b981" stopOpacity="0.03" />
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
+          <stop offset="50%" stopColor="#10b981" stopOpacity="0.06" />
           <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
         </radialGradient>
 
+        {/* Branch line gradient */}
         <linearGradient id="aLogoLine" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#6ee7b7" />
           <stop offset="35%" stopColor="#34d399" />
@@ -89,34 +75,29 @@ export function AnimatedLogo({
           <stop offset="100%" stopColor="#059669" />
         </linearGradient>
 
-        <radialGradient id="aLogoDot" cx="35%" cy="35%" r="70%">
+        {/* Central hub 3D gradient */}
+        <radialGradient id="aLogoCore" cx="35%" cy="35%" r="70%">
           <stop offset="0%" stopColor="#a7f3d0" />
-          <stop offset="40%" stopColor="#34d399" />
+          <stop offset="45%" stopColor="#34d399" />
           <stop offset="100%" stopColor="#059669" />
         </radialGradient>
 
-        <radialGradient id="aLogoCore" cx="35%" cy="35%" r="65%">
-          <stop offset="0%" stopColor="#d1fae5" />
-          <stop offset="35%" stopColor="#6ee7b7" />
-          <stop offset="75%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#047857" />
-        </radialGradient>
-
+        {/* Wordmark gradient */}
         <linearGradient id="aLogoText" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" />
           <stop offset="100%" stopColor="#d1fae5" />
         </linearGradient>
 
-        <filter id="aLogoSoft" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="0.6" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
+        {/* Moving glow — used as fill for a circle that orbits */}
+        <radialGradient id="aLogoMovingGlow">
+          <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.55" />
+          <stop offset="40%" stopColor="#34d399" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+        </radialGradient>
 
-        <filter id="aLogoCoreGlow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="1.2" result="blur" />
+        {/* Soft hub glow filter */}
+        <filter id="aLogoHubGlow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="0.5" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -124,135 +105,121 @@ export function AnimatedLogo({
         </filter>
       </defs>
 
-      {/* Pulsing halo */}
+      {/* ───── IN-ICON ARTWORK (first 48×48) ───── */}
+
+      {/* Ambient halo (breathing) */}
       <motion.circle
         cx={24}
         cy={24}
         r={24}
         fill="url(#aLogoHalo)"
-        animate={animated ? { opacity: [0.65, 1, 0.65], scale: [0.95, 1.05, 0.95] } : {}}
-        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+        animate={animated ? { opacity: [0.7, 1, 0.7], scale: [0.95, 1.05, 0.95] } : {}}
+        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
         style={{ transformOrigin: '24px 24px' }}
       />
 
-      {/* Background twinkling data dots */}
+      {/* Data-dot cloud — subtle twinkle per dot */}
       <g>
-        {backgroundDots.map((d, i) => (
+        {dots.map((d, i) => (
           <motion.circle
             key={i}
-            cx={d.cx}
-            cy={d.cy}
+            cx={d.x}
+            cy={d.y}
             r={d.r}
             fill={d.color}
-            animate={animated ? { opacity: [0.2, 0.85, 0.2], scale: [0.8, 1.2, 0.8] } : { opacity: 0.55 }}
-            transition={animated ? { duration: 2.5 + (i % 3) * 0.5, repeat: Infinity, ease: 'easeInOut', delay: d.delay } : undefined}
-            style={{ transformOrigin: `${d.cx}px ${d.cy}px` }}
+            initial={{ opacity: d.opacity }}
+            animate={
+              animated
+                ? {
+                    opacity: [d.opacity * 0.55, d.opacity, d.opacity * 0.55],
+                  }
+                : {}
+            }
+            transition={{
+              duration: d.twinkleDuration,
+              delay: d.twinkleDelay,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
           />
         ))}
       </g>
 
-      {/* Subtle connecting mesh lines */}
-      <g opacity="0.15" stroke="#10b981" fill="none" strokeWidth="0.15">
-        <line x1="7" y1="4" x2="14" y2="2" />
-        <line x1="44" y1="6" x2="40" y2="13" />
-        <line x1="3" y1="16" x2="2" y2="35" />
-        <line x1="46" y1="22" x2="45" y2="40" />
-        <line x1="38" y1="28" x2="45" y2="40" />
-        <line x1="9" y1="38" x2="17" y2="46" />
-      </g>
+      {/* Orbiting glow — a large soft circle that drifts through the cloud,
+          brightening dots underneath via screen blend mode. */}
+      {animated && (
+        <motion.circle
+          r={14}
+          fill="url(#aLogoMovingGlow)"
+          animate={{
+            cx: [14, 34, 30, 18, 14],
+            cy: [18, 14, 32, 34, 18],
+          }}
+          transition={{
+            duration: 16,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          style={{ mixBlendMode: 'screen' as const, pointerEvents: 'none' }}
+        />
+      )}
 
-      {/* Main connection lines */}
-      {connections.map((c, i) => (
-        <g key={`line-${i}`}>
-          {/* Base line */}
-          <line
-            x1={c.x1}
-            y1={c.y1}
-            x2={c.x2}
-            y2={c.y2}
-            stroke="url(#aLogoLine)"
-            strokeWidth="2.0"
-            strokeLinecap="round"
-          />
-          {/* Inner highlight */}
-          <line
-            x1={c.x1}
-            y1={c.y1}
-            x2={c.x2}
-            y2={c.y2}
-            stroke="#d1fae5"
-            strokeWidth="0.4"
-            strokeLinecap="round"
-            opacity="0.5"
-          />
-          {/* Data flow pulse — small bright dot travels from outer node to hub */}
-          {animated && (
-            <motion.circle
-              r={0.7}
-              fill="#ecfdf5"
-              animate={{
-                cx: [c.x2, c.x1, c.x2],
-                cy: [c.y2, c.y1, c.y2],
-                opacity: [0, 1, 1, 0],
-              }}
-              transition={{
-                duration: 2.8,
-                times: [0, 0.45, 0.55, 1],
-                repeat: Infinity,
-                ease: 'easeInOut',
-                delay: i * 0.4,
-              }}
-              style={{
-                filter: 'drop-shadow(0 0 1.5px rgba(167,243,208,0.9))',
-              }}
-            />
-          )}
-        </g>
-      ))}
+      {/* Secondary smaller glow moving opposite direction */}
+      {animated && (
+        <motion.circle
+          r={9}
+          fill="url(#aLogoMovingGlow)"
+          animate={{
+            cx: [34, 14, 18, 30, 34],
+            cy: [30, 26, 14, 36, 30],
+          }}
+          transition={{
+            duration: 22,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+          style={{ mixBlendMode: 'screen' as const, pointerEvents: 'none', opacity: 0.8 }}
+        />
+      )}
 
-      {/* Soft outer glow behind main nodes (breathing) */}
+      {/* Branch tree */}
+      <path
+        d="M 22.0 44.0 L 26.0 4.0
+           M 23.2 32.0 L 6.0 24.0
+           M 23.8 26.0 L 41.0 18.0
+           M 24.6 18.0 L 10.0 11.0
+           M 25.2 12.0 L 36.0 7.0"
+        stroke="url(#aLogoLine)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      {/* Inner highlight on branches */}
+      <path
+        d="M 22.0 44.0 L 26.0 4.0
+           M 23.2 32.0 L 6.0 24.0
+           M 23.8 26.0 L 41.0 18.0
+           M 24.6 18.0 L 10.0 11.0
+           M 25.2 12.0 L 36.0 7.0"
+        stroke="#d1fae5"
+        strokeWidth="0.4"
+        strokeLinecap="round"
+        fill="none"
+        opacity="0.5"
+      />
+
+      {/* Central hub (root) — subtle pulse */}
       <motion.g
-        opacity={0.45}
-        filter="url(#aLogoSoft)"
-        animate={animated ? { opacity: [0.3, 0.65, 0.3] } : {}}
-        transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+        animate={animated ? { scale: [1, 1.08, 1] } : {}}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ transformOrigin: '22px 44px' }}
       >
-        {mainNodes.map(([cx, cy, r], i) => (
-          <circle key={`glow-${i}`} cx={cx} cy={cy} r={r + 2.2} fill="#10b981" />
-        ))}
+        <circle cx={22} cy={44} r={2.4} fill="url(#aLogoCore)" filter="url(#aLogoHubGlow)" />
+        <circle cx={21.5} cy={43.5} r={0.6} fill="#ecfdf5" opacity="0.8" />
       </motion.g>
 
-      {/* Main nodes with 3D gradient */}
-      {mainNodes.map(([cx, cy, r], i) => {
-        const isCore = i === 0; // bottom hub
-        return (
-          <motion.circle
-            key={`node-${i}`}
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill={isCore ? 'url(#aLogoCore)' : 'url(#aLogoDot)'}
-            filter={isCore ? 'url(#aLogoCoreGlow)' : undefined}
-            animate={animated ? { scale: isCore ? [1, 1.08, 1] : [1, 1.12, 1] } : {}}
-            transition={{ duration: 2.4 + i * 0.15, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }}
-            style={{ transformOrigin: `${cx}px ${cy}px` }}
-          />
-        );
-      })}
-
-      {/* Specular highlights */}
-      {mainNodes.map(([cx, cy, r], i) => (
-        <circle
-          key={`shine-${i}`}
-          cx={cx - r * 0.28}
-          cy={cy - r * 0.28}
-          r={r * 0.25}
-          fill="#ecfdf5"
-          opacity={i === 0 ? 0.9 : 0.7}
-        />
-      ))}
-
-      {/* CropNode wordmark (horizontal variant only) */}
+      {/* ───── WORDMARK (horizontal variant only) ───── */}
       {!isIcon && (
         <g fill="url(#aLogoText)">
           <path d="M391 706Q505 706 590.0 651.0Q675 596 714 495H605Q576 558 521.5 592.0Q467 626 391 626Q318 626 260.0 592.0Q202 558 169.0 495.5Q136 433 136 349Q136 266 169.0 203.5Q202 141 260.0 107.0Q318 73 391 73Q467 73 521.5 106.5Q576 140 605 203H714Q675 103 590.0 48.5Q505 -6 391 -6Q294 -6 214.5 39.5Q135 85 89.0 166.0Q43 247 43 349Q43 451 89.0 532.5Q135 614 214.5 660.0Q294 706 391 706Z" transform="translate(52.00,31.00) scale(0.021490,-0.021490)" />
