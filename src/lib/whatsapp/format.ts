@@ -40,7 +40,14 @@ export function formatRegistrationSummary(
   // Products — compact: "Product (dosering)" per line
   for (const prod of allProducts) {
     const ctgb = prod.resolved !== false ? ' ✓' : ' ⚠️';
-    const dose = prod.dosage > 0 ? ` — ${prod.dosage} ${prod.unit}/ha` : '';
+    let dose = '';
+    if (prod.dosage > 0) {
+      dose = ` — ${prod.dosage} ${prod.unit}/ha`;
+      // Show total amount if user provided it explicitly
+      if ((prod as any).totalAmount != null) {
+        dose += ` _(${(prod as any).totalAmount} ${prod.unit} totaal)_`;
+      }
+    }
     lines.push(`🌿 *${prod.product}*${ctgb}${dose}`);
   }
 

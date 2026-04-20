@@ -291,6 +291,8 @@ export type ProductEntry = {
   availableDoelorganismen?: DoelorganismeOption[]; // Beschikbare opties uit CTGB (voor UI)
   resolved?: boolean; // false = niet gevonden in CTGB/meststoffen database
   suggestions?: ProductSuggestion[]; // "Bedoel je...?" alternatieven
+  /** If set, user provided the TOTAL amount (not per-ha). `dosage` is still per-ha after conversion. */
+  totalAmount?: number;
 };
 
 export type ParsedSprayData = {

@@ -348,11 +348,11 @@ export function resolveFertilizerProduct(
  * @param fertilizers - Lijst van meststoffen uit database
  */
 export function resolveProductSources(
-  products: Array<{ product: string; dosage: number; unit: string; source?: ProductSource }>,
+  products: Array<{ product: string; dosage: number; unit: string; source?: ProductSource; totalAmount?: number }>,
   registrationType: RegistrationType,
   ctgbResolvedNames: Set<string>,
   fertilizers?: FertilizerProduct[],
-): Array<{ product: string; dosage: number; unit: string; source: ProductSource; warning?: string }> {
+): Array<{ product: string; dosage: number; unit: string; source: ProductSource; warning?: string; totalAmount?: number }> {
   return products.map(prod => {
     // Bij spreading: alles is fertilizer
     if (registrationType === 'spreading') {
@@ -363,6 +363,7 @@ export function resolveProductSources(
         unit: prod.unit,
         source: 'fertilizer' as ProductSource,
         warning: fertResult?.warning,
+        ...(prod.totalAmount != null ? { totalAmount: prod.totalAmount } : {}),
       };
     }
 
@@ -375,6 +376,7 @@ export function resolveProductSources(
         unit: prod.unit,
         source: 'fertilizer' as ProductSource,
         warning: fertResult.warning,
+        ...(prod.totalAmount != null ? { totalAmount: prod.totalAmount } : {}),
       };
     }
 
@@ -386,6 +388,7 @@ export function resolveProductSources(
         dosage: prod.dosage,
         unit: prod.unit,
         source: 'ctgb' as ProductSource,
+        ...(prod.totalAmount != null ? { totalAmount: prod.totalAmount } : {}),
       };
     }
 
@@ -395,6 +398,7 @@ export function resolveProductSources(
       dosage: prod.dosage,
       unit: prod.unit,
       source: 'ctgb' as ProductSource, // Default: behandel als potentieel GWB (voor unknown product warning)
+      ...(prod.totalAmount != null ? { totalAmount: prod.totalAmount } : {}),
     };
   });
 }

@@ -243,11 +243,16 @@ export function resolveProducts(
         const resolvedName = alias?.resolvedName || p.product;
         const defaultUnit = getDefaultUnitForProduct(resolvedName, allProducts);
         const normalized = normalizeDosageUnit(p.dosage, p.unit || defaultUnit);
-        return {
+        const entry: ProductEntry = {
             product: resolvedName,
             dosage: normalized.dosage,
             unit: normalized.unit,
         };
+        // Preserve isTotal flag by storing original total in totalAmount; dosage converted later
+        if (p.isTotal) {
+            entry.totalAmount = normalized.dosage;
+        }
+        return entry;
     });
 }
 
@@ -403,6 +408,23 @@ export async function runRegistrationPipeline(
             });
         }
 
+        // Step 4b: Convert TOTAL amounts to per-hectare based on unit's total area
+        currentStep = 'convertTotals';
+        for (const unit of units) {
+            const unitArea = unit.plots.reduce((sum, plotId) => {
+                const parcel = ctx.parcels.find(p => p.id === plotId);
+                return sum + (parcel?.area || 0);
+            }, 0);
+            if (unitArea > 0) {
+                for (const prod of unit.products) {
+                    if (prod.totalAmount != null && prod.totalAmount > 0) {
+                        // Convert: dosage per ha = total / area
+                        prod.dosage = Math.round((prod.totalAmount / unitArea) * 1000) / 1000; // 3 decimals
+                    }
+                }
+            }
+        }
+
         // Step 5: Dual-database source resolution (CTGB vs fertilizers)
         currentStep = 'resolveProductSources';
         const ctgbNames = new Set(ctx.products.map(p => p.naam.toLowerCase()));
@@ -417,6 +439,7 @@ export async function runRegistrationPipeline(
                 dosage: p.dosage,
                 unit: p.unit,
                 source: p.source,
+                ...(p.totalAmount != null ? { totalAmount: p.totalAmount } : {}),
             }));
         }
 

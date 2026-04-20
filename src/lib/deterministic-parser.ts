@@ -24,6 +24,8 @@ export interface ParsedProduct {
   product: string;
   dosage: number;
   unit: string;
+  /** If true, dosage is the TOTAL amount used (not per hectare). Needs conversion to per-ha. */
+  isTotal?: boolean;
 }
 
 export interface ParsedRegistration {
@@ -896,18 +898,29 @@ export function extractProducts(text: string): ParsedProduct[] {
 }
 
 function parseSingleProduct(segment: string): ParsedProduct | null {
-  const s = segment.trim();
+  // Detect "totaal" / "in totaal" / "in het geheel" — marks this as a TOTAL amount (not per-ha)
+  // Strip the keyword and set isTotal flag; conversion happens in the pipeline with total area.
+  const totalPattern = /\b(?:in\s+totaal|totaal|in\s+het\s+geheel)\b/i;
+  const hasTotal = totalPattern.test(segment);
+  const cleaned = hasTotal ? segment.replace(totalPattern, ' ').replace(/\s+/g, ' ').trim() : segment;
+  const s = cleaned.trim();
+
+  // Apply isTotal flag to whatever is returned below
+  const withTotal = (p: ParsedProduct | null): ParsedProduct | null => {
+    if (p && hasTotal) return { ...p, isTotal: true };
+    return p;
+  };
 
   // Pattern 1: "productName dosage unit" (e.g., "Merpan 2 L", "Captan 0.5 kg")
   const matchA = s.match(/^([a-zà-ü][\w\s®*-]*?)\s+(\d+[.,]?\d*)\s*(kg|l|g|gram|gr|ml|liter)(?:\/ha)?$/i);
   if (matchA) {
     const name = matchA[1].trim();
     if (name.length >= 2 && !CROP_STOP_WORDS.has(name.toLowerCase())) {
-      return {
+      return withTotal({
         product: name,
         dosage: parseFloat(matchA[2].replace(',', '.')),
         unit: normalizeUnit(matchA[3]),
-      };
+      });
     }
   }
 
@@ -916,11 +929,11 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
   if (matchB) {
     const name = matchB[3].trim();
     if (name.length >= 2 && !CROP_STOP_WORDS.has(name.toLowerCase())) {
-      return {
+      return withTotal({
         product: name,
         dosage: parseFloat(matchB[1].replace(',', '.')),
         unit: normalizeUnit(matchB[2]),
-      };
+      });
     }
   }
 
@@ -929,26 +942,24 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
   if (matchC) {
     const name = matchC[1].trim();
     if (name.length >= 2 && !CROP_STOP_WORDS.has(name.toLowerCase())) {
-      return {
+      return withTotal({
         product: name,
         dosage: parseFloat(matchC[2].replace(',', '.')),
         unit: normalizeUnit(matchC[3]),
-      };
+      });
     }
   }
 
   // Pattern 4: "dosage productName" WITHOUT unit (e.g., "0,75 Pyrus 400 SC", "3 ACS-Koper 500")
-  // Common in Dutch farming where unit is implied
-  // Return empty unit so resolveProducts can look up the correct unit from CTGB data
   const matchD = s.match(/^(\d+[.,]?\d*)\s+([a-zà-ü][\w\s®*-]+)$/i);
   if (matchD) {
     const name = matchD[2].trim();
     if (name.length >= 2 && !CROP_STOP_WORDS.has(name.toLowerCase())) {
-      return {
+      return withTotal({
         product: name,
         dosage: parseFloat(matchD[1].replace(',', '.')),
         unit: '', // Empty: let resolveProducts determine unit from CTGB data
-      };
+      });
     }
   }
 
