@@ -38,35 +38,46 @@ interface ApiResponse {
 
 function DataAvailability({ data }: { data: ApiResponse['stats']['dataAvailability'] }) {
   const items = [
-    { label: 'Percelen',              value: data.parcels,              icon: MapPin,  min: 1, key: 'parcels' },
-    { label: 'Subpercelen',           value: data.subParcels,           icon: Sprout,  min: 1, key: 'subParcels' },
-    { label: 'Bespuitingen',          value: data.spuitschriftEntries,  icon: FileText,min: 5, key: 'spuitschrift' },
-    { label: 'Oogstregistraties',     value: data.harvestRegistrations, icon: Apple,   min: 1, key: 'harvests' },
-    { label: 'Productiegeschiedenis', value: data.productionEntries,    icon: Target,  min: 2, key: 'production' },
-    { label: 'Grondmonsters',         value: data.soilAnalyses,         icon: CloudSun,min: 1, key: 'soil' },
+    { label: 'Percelen',              value: data.parcels,              icon: MapPin,  min: 1, key: 'parcels',       link: '/percelen',            linkText: 'Percelen beheren' },
+    { label: 'Subpercelen',           value: data.subParcels,           icon: Sprout,  min: 1, key: 'subParcels',    link: '/percelen',            linkText: 'Subperceel toevoegen' },
+    { label: 'Bespuitingen',          value: data.spuitschriftEntries,  icon: FileText,min: 5, key: 'spuitschrift',  link: '/slimme-invoer',       linkText: 'Bespuiting registreren' },
+    { label: 'Oogstregistraties',     value: data.harvestRegistrations, icon: Apple,   min: 1, key: 'harvests',      link: '/oogst',               linkText: 'Oogst registreren' },
+    { label: 'Productiegeschiedenis', value: data.productionEntries,    icon: Target,  min: 2, key: 'production',    link: '/oogst/geschiedenis',  linkText: 'Geschiedenis invoeren' },
+    { label: 'Grondmonsters',         value: data.soilAnalyses,         icon: CloudSun,min: 1, key: 'soil',          link: '/percelen',            linkText: 'PDF uploaden' },
   ];
 
   return (
     <div className="rounded-xl border border-white/5 bg-white/[0.01] p-4 md:p-5">
       <h3 className="text-sm font-semibold text-slate-200 mb-3">Beschikbare data</h3>
       <p className="text-[11px] text-slate-500 mb-3">
-        Hoe meer data je invoert, hoe scherper de signalering wordt.
+        Hoe meer data je invoert, hoe scherper de signalering wordt. Klik op een ontbrekende
+        bron om direct naar de invoerpagina te gaan.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {items.map((item) => {
           const ok = item.value >= item.min;
           const Icon = item.icon;
           return (
-            <div key={item.key} className="flex items-center gap-2 text-xs">
-              {ok ? (
-                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-              ) : (
-                <XCircle className="size-3.5 text-slate-600 shrink-0" />
-              )}
-              <Icon className={`size-3 shrink-0 ${ok ? 'text-slate-400' : 'text-slate-600'}`} />
-              <span className={ok ? 'text-slate-300' : 'text-slate-600'}>
-                {item.label}: <strong>{item.value}</strong>
-              </span>
+            <div key={item.key} className="flex items-center justify-between gap-2 text-xs rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {ok ? (
+                  <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <XCircle className="size-3.5 text-slate-600 shrink-0" />
+                )}
+                <Icon className={`size-3 shrink-0 ${ok ? 'text-slate-400' : 'text-slate-600'}`} />
+                <span className={`truncate ${ok ? 'text-slate-300' : 'text-slate-600'}`}>
+                  {item.label}: <strong>{item.value}</strong>
+                </span>
+              </div>
+              <a
+                href={item.link}
+                className={`text-[10px] font-medium shrink-0 transition-colors ${
+                  ok ? 'text-slate-500 hover:text-emerald-400' : 'text-emerald-400 hover:text-emerald-300'
+                }`}
+              >
+                {ok ? 'Bijwerken →' : item.linkText + ' →'}
+              </a>
             </div>
           );
         })}

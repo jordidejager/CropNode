@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
 import dynamic from 'next/dynamic';
 import {
   Sprout, Leaf, FlaskConical, Droplets, MapPin, FileText,
@@ -353,6 +354,12 @@ export default function BemestingPage() {
           {stats.totalHoofdPercelen} {stats.totalHoofdPercelen === 1 ? 'perceel' : 'percelen'} · {stats.totalSubParcels} blokken met data
         </div>
       </div>
+
+      <DataSourceHint
+        variant="banner"
+        label="Bodemdata wordt automatisch uit Eurofins-grondmonsters (PDF) gehaald. Upload via een perceel."
+        links={[{ href: '/percelen', text: 'Naar percelen om te uploaden' }]}
+      />
 
       {/* KPI Cards */}
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Wrench, Droplets, Sprout, Shield, AlertTriangle, CheckCircle2, Loader2, Info } from 'lucide-react';
+import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
 
 interface OperationsData {
   harvestYear: number;
@@ -38,10 +39,12 @@ interface OperationsData {
   }>;
   substanceList: Array<{
     substance: string;
-    totalApplications: number;
+    maxApplicationsOnOneParcel: number;
+    maxParcel: string;
+    parcelsAboveThreshold: number;
     products: string[];
   }>;
-  highRiskSubstances: Array<{ substance: string; totalApplications: number; products: string[] }>;
+  highRiskByParcel: Array<{ parcel: string; fullName: string; substance: string; applications: number; products: string[] }>;
   diversityByCategory: Array<{ category: string; uniqueSubstances: number; substances: string[] }>;
   generatedAt: string;
   error?: string;
@@ -145,7 +148,17 @@ export default function OperationsPage() {
 
           {/* Spuit-rendement-matrix */}
           <div className="rounded-xl border border-white/5 bg-white/[0.01] p-4 md:p-5">
-            <h3 className="text-sm font-semibold text-slate-100 mb-3">Middelenoverzicht</h3>
+            <div className="flex items-start justify-between mb-3 gap-3">
+              <h3 className="text-sm font-semibold text-slate-100">Middelenoverzicht</h3>
+              <DataSourceHint
+                variant="inline"
+                label=""
+                links={[
+                  { href: '/slimme-invoer', text: 'Bespuiting registreren' },
+                  { href: '/gewasbescherming', text: 'Spuitschrift' },
+                ]}
+              />
+            </div>
             {data.productList.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-6">Nog geen middelengebruik geregistreerd dit oogstjaar.</p>
             ) : (
@@ -189,27 +202,38 @@ export default function OperationsPage() {
             )}
           </div>
 
-          {/* Resistentie risico */}
-          {data.highRiskSubstances.length > 0 && (
+          {/* Resistentie risico per perceel */}
+          {data.highRiskByParcel.length > 0 && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 md:p-5">
               <h3 className="text-sm font-semibold text-slate-100 mb-2 flex items-center gap-2">
                 <AlertTriangle className="size-4 text-amber-400" />
-                Resistentie-aandacht
+                Resistentie-aandacht per perceel
               </h3>
               <p className="text-[11px] text-slate-400 mb-3">
-                Werkzame stoffen met 6+ toepassingen dit seizoen — let op resistentie-opbouw en rotatie-strategie.
+                Percelen waar dezelfde werkzame stof 6× of vaker is toegepast dit seizoen. Rotatie
+                met andere werkingsmechanismen verlaagt resistentiedruk.
               </p>
               <div className="space-y-2">
-                {data.highRiskSubstances.map((s) => (
-                  <div key={s.substance} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                    <div>
-                      <div className="text-sm text-slate-200 capitalize">{s.substance}</div>
-                      <div className="text-[10px] text-slate-500">via {s.products.join(', ')}</div>
+                {data.highRiskByParcel.map((s, i) => (
+                  <div key={`${s.parcel}-${s.substance}-${i}`} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-slate-200 truncate">
+                        <span className="text-emerald-400">{s.fullName}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        <span className="capitalize">{s.substance}</span>
+                        <span className="text-slate-600"> · via {s.products.join(', ')}</span>
+                      </div>
                     </div>
-                    <span className="text-sm font-semibold text-amber-400">{s.totalApplications}×</span>
+                    <span className="text-sm font-semibold text-amber-400 shrink-0">{s.applications}×</span>
                   </div>
                 ))}
               </div>
+              <DataSourceHint
+                variant="inline"
+                label="Gebaseerd op bespuitingsregistraties."
+                links={[{ href: '/slimme-invoer', text: 'Nieuwe bespuiting registreren' }]}
+              />
             </div>
           )}
 
@@ -244,6 +268,16 @@ export default function OperationsPage() {
                 Bedoeld als signalering, niet als exact bemestingsadvies.
               </span>
             </p>
+            <div className="mb-3">
+              <DataSourceHint
+                variant="inline"
+                label="Data uit grondmonsters + bemestingsregistraties."
+                links={[
+                  { href: '/percelen', text: 'Grondmonster uploaden' },
+                  { href: '/slimme-invoer', text: 'Bemesting registreren' },
+                ]}
+              />
+            </div>
             {data.balansRows.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-4">Nog geen subpercelen beschikbaar.</p>
             ) : (
@@ -292,17 +326,29 @@ export default function OperationsPage() {
           {/* Substances breakdown */}
           {data.substanceList.length > 0 && (
             <div className="rounded-xl border border-white/5 bg-white/[0.01] p-4 md:p-5">
-              <h3 className="text-sm font-semibold text-slate-100 mb-3">Werkzame stoffen</h3>
+              <h3 className="text-sm font-semibold text-slate-100 mb-1">Werkzame stoffen</h3>
+              <p className="text-[11px] text-slate-500 mb-3">
+                Hoogste aantal toepassingen op één perceel — maatgevend voor resistentierisico.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {data.substanceList.map((s) => (
-                  <div key={s.substance} className="flex items-center justify-between rounded-lg bg-white/[0.02] px-3 py-2 border border-white/5">
-                    <div>
-                      <div className="text-sm text-slate-200 capitalize">{s.substance}</div>
-                      <div className="text-[10px] text-slate-500 truncate max-w-[260px]">{s.products.join(', ')}</div>
+                  <div key={s.substance} className="flex items-center justify-between rounded-lg bg-white/[0.02] px-3 py-2 border border-white/5 gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-slate-200 capitalize truncate">{s.substance}</div>
+                      <div className="text-[10px] text-slate-500 truncate">
+                        max op: {s.maxParcel || '—'}
+                      </div>
                     </div>
-                    <span className={`text-sm font-semibold ${s.totalApplications >= 6 ? 'text-amber-400' : 'text-slate-300'}`}>
-                      {s.totalApplications}×
-                    </span>
+                    <div className="text-right shrink-0">
+                      <div className={`text-sm font-semibold ${s.maxApplicationsOnOneParcel >= 6 ? 'text-amber-400' : 'text-slate-300'}`}>
+                        {s.maxApplicationsOnOneParcel}×
+                      </div>
+                      {s.parcelsAboveThreshold > 0 && (
+                        <div className="text-[9px] text-amber-500/70">
+                          {s.parcelsAboveThreshold} perceel{s.parcelsAboveThreshold > 1 ? 'en' : ''} ≥6×
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -310,7 +356,7 @@ export default function OperationsPage() {
           )}
 
           {/* All clear */}
-          {data.highRiskSubstances.length === 0 && data.balansRows.every((r) => r.nStatus === 'op niveau') && (
+          {data.highRiskByParcel.length === 0 && data.balansRows.every((r) => r.nStatus === 'op niveau') && (
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-start gap-3">
               <CheckCircle2 className="size-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { ParcelDiagnosticsData } from '@/lib/analytics/perceel/types';
+import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
 
 const StoryTimeline = dynamic(
   () => import('@/components/analytics/perceel/StoryTimeline').then((m) => ({ default: m.StoryTimeline })),
@@ -439,6 +440,25 @@ export default function PerceelDiagnosticsPage() {
               )}
             </div>
 
+            {(!data.profile?.plantjaar || !data.profile?.onderstam || !data.profile?.teeltsysteem) && (
+              <div className="mt-3">
+                <DataSourceHint
+                  variant="inline"
+                  label="Perceelgegevens incompleet."
+                  links={[{ href: `/percelen`, text: 'Perceelprofiel aanvullen' }]}
+                />
+              </div>
+            )}
+
+            {!data.latestSoil && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <DataSourceHint
+                  variant="banner"
+                  label="Nog geen grondmonster op dit perceel. Upload een Eurofins-rapport voor bodem-analyse."
+                  links={[{ href: `/percelen`, text: 'Grondmonster uploaden' }]}
+                />
+              </div>
+            )}
             {data.latestSoil && (
               <div className="mt-4 pt-4 border-t border-white/5">
                 <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -460,7 +480,17 @@ export default function PerceelDiagnosticsPage() {
           <StoryTimeline events={data.timeline} />
 
           {/* Yield chart */}
-          <YieldHistoryChart yields={data.yields} peerAvg={peerAvg} />
+          <div>
+            <YieldHistoryChart yields={data.yields} peerAvg={peerAvg} />
+            <DataSourceHint
+              variant="inline"
+              label="Opbrengstdata uit productiegeschiedenis + oogstregistraties."
+              links={[
+                { href: '/oogst/geschiedenis', text: 'Productiegeschiedenis bewerken' },
+                { href: '/oogst', text: 'Nieuwe oogstregistratie' },
+              ]}
+            />
+          </div>
 
           {/* Autopsy */}
           <AutopsySection data={data} />

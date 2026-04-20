@@ -187,30 +187,113 @@ export async function GET() {
 
     balansRows.sort((a, b) => a.nBalance - b.nBalance); // Tekorten bovenaan
 
-    // --- 3. CTGB CUMULATIE: werkzame stoffen dit seizoen ---
-    const substanceStats = new Map<string, {
-      substance: string;
-      totalApplications: number;
-      products: string[];
-    }>();
+    // --- 3. CTGB CUMULATIE: werkzame stoffen PER PERCEEL ---
+    // Bouw een product → actieve stoffen lookup
+    const productToSubstances = new Map<string, string[]>();
+    ctgbDetails.forEach((c: any) => {
+      if (Array.isArray(c.werkzame_stoffen)) {
+        productToSubstances.set(c.naam, c.werkzame_stoffen);
+      }
+    });
 
-    productList.forEach((p) => {
-      (p.activeSubstances || []).forEach((s: string) => {
-        if (!substanceStats.has(s)) {
-          substanceStats.set(s, { substance: s, totalApplications: 0, products: [] });
+    // Per (perceel × stof): hoeveel toepassingen dit seizoen
+    const parcelSubstanceStats = new Map<string, Map<string, {
+      applications: number;
+      products: Set<string>;
+    }>>();
+
+    // Tel per registratie per perceel per product → actieve stoffen
+    spuitRows.forEach((r) => {
+      const products = Array.isArray(r.products) ? r.products : [];
+      const plots = Array.isArray(r.plots) ? r.plots : [];
+      plots.forEach((plot: string) => {
+        if (!parcelSubstanceStats.has(plot)) {
+          parcelSubstanceStats.set(plot, new Map());
         }
-        const entry = substanceStats.get(s)!;
-        entry.totalApplications += p.applications;
-        if (!entry.products.includes(p.product)) entry.products.push(p.product);
+        const byStof = parcelSubstanceStats.get(plot)!;
+        products.forEach((p: any) => {
+          const substances = productToSubstances.get(p.product) || [];
+          substances.forEach((s: string) => {
+            if (!byStof.has(s)) {
+              byStof.set(s, { applications: 0, products: new Set() });
+            }
+            const entry = byStof.get(s)!;
+            entry.applications += 1;
+            entry.products.add(p.product);
+          });
+        });
       });
     });
 
-    const substanceList = [...substanceStats.values()].sort(
-      (a, b) => b.totalApplications - a.totalApplications
-    );
+    // Flat lijst voor overzicht: hoogste aantal per (stof × perceel)
+    const parcelSubstanceList: Array<{
+      parcel: string;
+      fullName: string;
+      substance: string;
+      applications: number;
+      products: string[];
+    }> = [];
 
-    // Risico-indicatie: werkzame stof met > 6 toepassingen = verdacht voor resistentie/overschrijding
-    const highRiskSubstances = substanceList.filter((s) => s.totalApplications >= 6);
+    parcelSubstanceStats.forEach((byStof, plot) => {
+      // Bouw fullName voor weergave
+      const sp = subParcels.find((s) => s.name === plot);
+      const parcelName = sp ? (parcelMap.get(sp.parcel_id) || 'Onbekend') : '';
+      const fullName = parcelName && parcelName.toLowerCase() !== plot.toLowerCase()
+        ? `${parcelName} — ${plot}`
+        : plot;
+
+      byStof.forEach((entry, substance) => {
+        parcelSubstanceList.push({
+          parcel: plot,
+          fullName,
+          substance,
+          applications: entry.applications,
+          products: [...entry.products],
+        });
+      });
+    });
+    parcelSubstanceList.sort((a, b) => b.applications - a.applications);
+
+    // Aggregeer ook per-stof (met max per perceel) voor het overzicht
+    const substanceByMaxPerParcel = new Map<string, {
+      substance: string;
+      maxApplicationsOnOneParcel: number;
+      maxParcel: string;
+      parcelsAboveThreshold: number;
+      allProducts: Set<string>;
+    }>();
+
+    parcelSubstanceList.forEach((entry) => {
+      if (!substanceByMaxPerParcel.has(entry.substance)) {
+        substanceByMaxPerParcel.set(entry.substance, {
+          substance: entry.substance,
+          maxApplicationsOnOneParcel: 0,
+          maxParcel: '',
+          parcelsAboveThreshold: 0,
+          allProducts: new Set(),
+        });
+      }
+      const agg = substanceByMaxPerParcel.get(entry.substance)!;
+      if (entry.applications > agg.maxApplicationsOnOneParcel) {
+        agg.maxApplicationsOnOneParcel = entry.applications;
+        agg.maxParcel = entry.fullName;
+      }
+      if (entry.applications >= 6) agg.parcelsAboveThreshold += 1;
+      entry.products.forEach((p) => agg.allProducts.add(p));
+    });
+
+    const substanceList = [...substanceByMaxPerParcel.values()]
+      .map((s) => ({
+        substance: s.substance,
+        maxApplicationsOnOneParcel: s.maxApplicationsOnOneParcel,
+        maxParcel: s.maxParcel,
+        parcelsAboveThreshold: s.parcelsAboveThreshold,
+        products: [...s.allProducts],
+      }))
+      .sort((a, b) => b.maxApplicationsOnOneParcel - a.maxApplicationsOnOneParcel);
+
+    // Risico-lijst: (stof × perceel) combinaties met 6+ toepassingen
+    const highRiskByParcel = parcelSubstanceList.filter((e) => e.applications >= 6);
 
     // --- 4. MODE-OF-ACTION DIVERSITY (resistentie-management) ---
     // Per categorie (fungicide/insecticide) hoeveel unieke stoffen zijn toegepast?
@@ -246,7 +329,7 @@ export async function GET() {
       productList: productList.slice(0, 20),
       balansRows,
       substanceList,
-      highRiskSubstances,
+      highRiskByParcel,
       diversityByCategory,
       generatedAt: now.toISOString(),
     });

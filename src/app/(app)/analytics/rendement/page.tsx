@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import {
   Euro, TrendingUp, TrendingDown, Loader2, Info, AlertTriangle, Award, ArrowRight,
 } from 'lucide-react';
+import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
 
 const MarginHeatmap = dynamic(
   () => import('@/components/analytics/rendement/MarginHeatmap').then((m) => ({ default: m.MarginHeatmap })),
@@ -166,7 +167,17 @@ export default function RendementPage() {
           )}
 
           {/* Heatmap */}
-          <MarginHeatmap cells={data.cells} years={data.years} />
+          <div>
+            <MarginHeatmap cells={data.cells} years={data.years} />
+            <DataSourceHint
+              variant="inline"
+              label="Marge = omzet − inputkosten. Data uit bespuitings-prijzen + productiegeschiedenis."
+              links={[
+                { href: '/oogst/geschiedenis', text: 'Oogstkgs invoeren' },
+                { href: '/slimme-invoer', text: 'Bespuiting met prijs registreren' },
+              ]}
+            />
+          </div>
 
           {/* Ranking: beste + slechtste percelen */}
           {latestRanking && (latestRanking.top.length > 0 || latestRanking.bottom.length > 0) && (
@@ -258,12 +269,19 @@ export default function RendementPage() {
           {/* Empty state */}
           {data.cells.length === 0 && (
             <div className="rounded-xl border border-white/5 bg-white/[0.01] p-8 text-center">
-              <p className="text-sm text-slate-500 mb-2">
-                Nog geen rendementsdata. Voeg productprijzen toe aan je registraties en vul productiegeschiedenis aan voor marge-berekening.
+              <p className="text-sm text-slate-200 mb-1">Nog geen rendementsdata</p>
+              <p className="text-xs text-slate-500 mb-4 max-w-md mx-auto">
+                Voor marge-berekening heeft CropNode twee dingen nodig: (1) bespuitingsregistraties
+                mét productprijzen en (2) productiegeschiedenis.
               </p>
-              <Link href="/oogst/geschiedenis" className="text-xs text-emerald-400 hover:text-emerald-300">
-                Naar productiegeschiedenis →
-              </Link>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link href="/slimme-invoer" className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-medium">
+                  Bespuiting registreren <ArrowRight className="size-3" />
+                </Link>
+                <Link href="/oogst/geschiedenis" className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 px-3 py-1.5 text-xs font-medium">
+                  Oogstkgs invoeren <ArrowRight className="size-3" />
+                </Link>
+              </div>
             </div>
           )}
 
