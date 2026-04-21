@@ -3,11 +3,12 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
 import { runSignalEngine } from '@/lib/analytics/signals/engine';
 import { buildBenchmarkSnapshot } from '@/lib/analytics/signals/benchmark-snapshot';
+import { resolveUser } from '@/lib/analytics/auth-helper';
 
 export async function GET() {
   try {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await resolveUser(supabase);
     if (!user) {
       return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
     }

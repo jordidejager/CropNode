@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
+import { resolveUser } from '@/lib/analytics/auth-helper';
 
 function deriveHarvestYear(now: Date): number {
   const month = now.getMonth() + 1;
@@ -27,7 +28,7 @@ function getNRequirement(variety: string): number {
 export async function GET() {
   try {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await resolveUser(supabase);
     if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
 
     const admin = getSupabaseAdmin();
