@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { motion } from "framer-motion"
 import type { SprayableParcel } from "@/lib/supabase-store"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +13,7 @@ interface ParcelCardProps {
     index: number
 }
 
-export function ParcelCard({ parcel, onClick, index }: ParcelCardProps) {
+function ParcelCardImpl({ parcel, onClick, index }: ParcelCardProps) {
     // SprayableParcel has crop and variety directly
     const crop = parcel.crop || 'Onbekend'
 
@@ -126,3 +127,7 @@ export function ParcelCard({ parcel, onClick, index }: ParcelCardProps) {
         </motion.div>
     )
 }
+
+// Memo wrapper: only re-renders when parcel/onClick/index change.
+// Skips unnecessary re-renders when parent state changes but props are stable.
+export const ParcelCard = memo(ParcelCardImpl)

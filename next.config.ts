@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
+    // Tree-shake unused exports from heavy component libraries at build time.
+    // Reduces client bundle by ~15-40KB and speeds up cold route loads.
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-icons',
+      'date-fns',
+      'recharts',
+    ],
   },
   async redirects() {
     return [

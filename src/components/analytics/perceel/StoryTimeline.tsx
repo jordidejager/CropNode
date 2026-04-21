@@ -113,7 +113,7 @@ export function StoryTimeline({ events }: StoryTimelineProps) {
 
   // Bereken range
   const { months, eventsByMonth } = useMemo(() => {
-    if (events.length === 0) return { months: [], eventsByMonth: new Map() };
+    if (events.length === 0) return { months: [], eventsByMonth: new Map<string, TimelineEvent[]>() };
 
     const dates = events.map((e) => new Date(e.date));
     const minDate = new Date(Math.min(...dates.map((d) => d.getTime())));

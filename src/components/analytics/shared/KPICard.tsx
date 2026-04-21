@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { CountUpNumber } from './CountUpNumber';
 
@@ -13,7 +14,7 @@ interface KPICardProps {
   invertColors?: boolean;
 }
 
-export function KPICard({ label, value, prefix = '', suffix = '', decimals = 0, changePercent, invertColors = false }: KPICardProps) {
+function KPICardImpl({ label, value, prefix = '', suffix = '', decimals = 0, changePercent, invertColors = false }: KPICardProps) {
   const hasChange = changePercent !== null && changePercent !== undefined && isFinite(changePercent);
   const isPositive = hasChange && changePercent! > 0;
   const isNegative = hasChange && changePercent! < 0;
@@ -45,3 +46,8 @@ export function KPICard({ label, value, prefix = '', suffix = '', decimals = 0, 
     </div>
   );
 }
+
+// KPICards receive primitive props and are rendered N-times per analytics page
+// (typically 4-8 per dashboard). Memo skips re-render when parent state changes
+// but KPI values haven't moved.
+export const KPICard = memo(KPICardImpl);

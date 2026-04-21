@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 interface CountUpNumberProps {
   value: number;
@@ -11,7 +11,7 @@ interface CountUpNumberProps {
   className?: string;
 }
 
-export function CountUpNumber({
+function CountUpNumberImpl({
   value,
   duration = 1200,
   prefix = '',
@@ -56,3 +56,6 @@ export function CountUpNumber({
 
   return <span className={className}>{prefix}{formatted}{suffix}</span>;
 }
+
+// Memo: only re-animate when value/duration actually change, not on parent state updates.
+export const CountUpNumber = memo(CountUpNumberImpl);

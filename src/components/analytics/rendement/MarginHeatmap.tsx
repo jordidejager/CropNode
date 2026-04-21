@@ -11,6 +11,7 @@ interface MarginCell {
   harvestYear: number;
   inputCost: number;
   totalKg: number;
+  estimatedRevenue: number;
   estimatedMargin: number;
   marginPerHa: number;
   hasYieldData: boolean;

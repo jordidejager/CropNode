@@ -45,6 +45,7 @@ import {
     LogStatus,
     ParsedSprayData,
     Parcel,
+    ParcelHistoryEntry,
     ProductEntry,
     InventoryMovement,
     SpuitschriftEntry,
@@ -104,12 +105,19 @@ export type InitialState = {
 async function validateSprayData(
     parsedData: ParsedSprayData,
     parcels: Parcel[],
-    applicationDate?: Date
+    applicationDate?: Date,
+    // Optional pre-fetched data — allows callers that already fetched these to avoid
+    // redundant queries. Falls back to fetching if not provided (backward compatible).
+    preFetched?: {
+        ctgbProducts?: CtgbProduct[];
+        parcelHistory?: ParcelHistoryEntry[];
+        sprayableParcels?: SprayableParcel[];
+    }
 ): Promise<{ isValid: boolean, validationMessage: string | null, errorCount: number, warningCount: number, infoCount: number, updatedProducts?: ProductEntry[], assumedTargets?: Record<string, string> }> {
     const [allCtgbProducts, allParcelHistory, sprayableParcels] = await Promise.all([
-        getAllCtgbProducts(),
-        getParcelHistoryEntries(),
-        getSprayableParcelsById(parsedData.plots)
+        preFetched?.ctgbProducts ? Promise.resolve(preFetched.ctgbProducts) : getAllCtgbProducts(),
+        preFetched?.parcelHistory ? Promise.resolve(preFetched.parcelHistory) : getParcelHistoryEntries(),
+        preFetched?.sprayableParcels ? Promise.resolve(preFetched.sprayableParcels) : getSprayableParcelsById(parsedData.plots),
     ]);
 
     // Build lookup for sprayable parcels - history uses these IDs
@@ -577,9 +585,12 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
         }
 
         // Fetch both legacy parcels (for validation) and sprayable parcels (for history)
-        const [allParcels, sprayableParcels] = await Promise.all([
+        // Also pre-fetch ctgb + history so validateSprayData() doesn't re-fetch them internally
+        const [allParcels, sprayableParcels, ctgbProducts, parcelHistory] = await Promise.all([
             getParcels(),
             getSprayableParcelsById(entry.parsedData.plots),
+            getAllCtgbProducts(),
+            getParcelHistoryEntries(),
         ]);
 
         // Parse and validate date - default to today if invalid
@@ -593,7 +604,12 @@ export async function confirmLogbookEntry(entryId: string): Promise<{ success: b
             entryDate = new Date();
         }
 
-        const { isValid, validationMessage, updatedProducts, errorCount, warningCount, assumedTargets } = await validateSprayData(entry.parsedData, allParcels, entryDate);
+        const { isValid, validationMessage, updatedProducts, errorCount, warningCount, assumedTargets } = await validateSprayData(
+            entry.parsedData,
+            allParcels,
+            entryDate,
+            { ctgbProducts, parcelHistory, sprayableParcels }
+        );
 
         if (updatedProducts) {
             entry.parsedData.products = updatedProducts;
@@ -693,9 +709,12 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
         }
 
         // Fetch parcels for validation and history
-        const [allParcels, sprayableParcels] = await Promise.all([
+        // Also pre-fetch ctgb + history so validateSprayData() doesn't re-fetch them internally
+        const [allParcels, sprayableParcels, ctgbProducts, parcelHistory] = await Promise.all([
             getParcels(),
             getSprayableParcelsById(draftData.plots),
+            getAllCtgbProducts(),
+            getParcelHistoryEntries(),
         ]);
 
         // Parse and validate date - default to today if invalid
@@ -723,7 +742,12 @@ export async function confirmDraftDirectToSpuitschrift(draftData: {
         let warningCount = 0;
 
         if (ctgbOnlyProducts.length > 0) {
-            const result = await validateSprayData(parsedData, allParcels, entryDate);
+            const result = await validateSprayData(
+                parsedData,
+                allParcels,
+                entryDate,
+                { ctgbProducts, parcelHistory, sprayableParcels }
+            );
             validationMessage = result.validationMessage;
             updatedProducts = result.updatedProducts;
             errorCount = result.errorCount;

@@ -1689,6 +1689,10 @@ export async function getProducts(): Promise<string[]> {
 // CTGB Products Functions
 // ============================================
 
+// Explicit column list — excludes 'embedding' (768-dim vector, ~3KB/row, not needed for display)
+// Saves ~6MB payload on getAllCtgbProducts() queries with 2000 products.
+const CTGB_COLUMNS = 'id, toelatingsnummer, naam, status, vervaldatum, categorie, toelatingshouder, werkzame_stoffen, product_types, samenstelling, gebruiksvoorschriften, etikettering, search_keywords, last_synced_at';
+
 export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduct[]> {
   if (!searchTerm || searchTerm.length < 2) return [];
 
@@ -1705,7 +1709,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // First try exact/partial match on naam
     const { data: nameData, error: nameError } = await client
       .from('ctgb_products')
-      .select('*')
+      .select(CTGB_COLUMNS)
       .ilike('naam', searchPattern)
       .order('naam')
       .limit(20);
@@ -1725,7 +1729,7 @@ export async function searchCtgbProducts(searchTerm: string): Promise<CtgbProduc
     // Fallback: search in werkzame_stoffen or toelatingsnummer
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select(CTGB_COLUMNS)
       .or(`werkzame_stoffen.cs.{${normalizedSearch}},toelatingsnummer.ilike.${searchPattern}`)
       .order('naam')
       .limit(20);
@@ -1749,7 +1753,7 @@ export async function getCtgbProductByNumber(toelatingsnummer: string): Promise<
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('*')
+    .select(CTGB_COLUMNS)
     .eq('toelatingsnummer', toelatingsnummer)
     .limit(1);
 
@@ -1767,7 +1771,7 @@ export async function getCtgbProductByName(naam: string): Promise<CtgbProduct | 
 
   const { data, error } = await client
     .from('ctgb_products')
-    .select('*')
+    .select(CTGB_COLUMNS)
     .eq('naam', naam)
     .single();
 
@@ -1783,11 +1787,10 @@ export async function getAllCtgbProducts(): Promise<CtgbProduct[]> {
 
   return withRetry(async () => {
     // NOTE: Increased limit from 1000 to 2000 because we have 1047+ products
-    // Explicitly select needed columns — excluding 'embedding' (768-dim vector, ~3MB)
-    // to keep payload size manageable for production
+    // CTGB_COLUMNS excludes 'embedding' (768-dim vector, ~3KB/row = ~6MB for 2000 products)
     const { data, error } = await client
       .from('ctgb_products')
-      .select('*')
+      .select(CTGB_COLUMNS)
       .order('naam')
       .limit(2000);
 

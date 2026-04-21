@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
     CloudSun,
@@ -195,6 +196,10 @@ export function WeatherSprayStrip() {
 
     const isLoading = stationsLoading || weatherLoading;
 
+    // Memoize the hourly→daily grouping so it only recomputes when hourlyData changes.
+    // Must be declared before any conditional returns (Rules of Hooks).
+    const days = useMemo(() => processHourlyData(hourlyData ?? []), [hourlyData]);
+
     if (!stationsLoading && !stationId) {
         return (
             <div>
@@ -234,8 +239,6 @@ export function WeatherSprayStrip() {
             </div>
         );
     }
-
-    const days = processHourlyData(hourlyData ?? []);
 
     return (
         <div>
