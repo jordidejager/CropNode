@@ -1,5 +1,7 @@
 export { ProductSelector } from './product-selector';
 export { DosageInput } from './dosage-input';
+export { DosageTotalField, formatTotalUsage, perHaUnit, totalUnit } from './dosage-total-field';
+export { EditableProduct, EditableParcels } from './editable-entry';
 export { ParcelMultiSelect } from './parcel-multi-select';
 export {
     ValidationFeedback,
