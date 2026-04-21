@@ -429,21 +429,32 @@ export const parseHoursRegistration = ai.defineFlow(
 );
 
 /**
- * Check if input is likely an hours registration (pre-AI filter)
+ * Check if input is likely an hours registration (pre-AI filter).
+ *
+ * IMPORTANT: reject if the input contains a spray dosage pattern
+ * ("5 liter X", "1.5 kg Y", "2 L/ha") — those are spray registrations,
+ * not labour-hours registrations. "gespoten" alone is ambiguous, so
+ * we only accept it if there's an explicit hour marker too.
  */
 export function isLikelyHoursRegistration(input: string): boolean {
   const lower = input.toLowerCase();
 
-  // Hours patterns
-  if (/\d+\s*(uur|uren|u)\b/i.test(lower)) return true;
-  if (/hele\s*dag|halve\s*dag/i.test(lower)) return true;
+  // Reject spray registrations: any dosage pattern = spray, not hours
+  const hasDosage = /\d+[,.]?\d*\s*(?:l|kg|ml|g|liter)(?:\/ha)?\b/i.test(lower);
 
-  // Activity patterns
-  const activities = ['gesnoeid', 'gedund', 'geplukt', 'gemaaid', 'gesorteerd', 'gespoten', 'gewerkt'];
-  if (activities.some(a => lower.includes(a))) return true;
+  // Timer commands (always win — even with dosage-like text this is a timer)
+  if (/^(start|stop)\s/i.test(lower) || /^(start|stop)$/i.test(lower.trim())) return true;
 
-  // Timer commands
-  if (/^(start|stop)\s/i.test(lower)) return true;
+  // Hours patterns (explicit time markers)
+  const hasHourMarker = /\d+\s*(uur|uren)\b/i.test(lower) || /\b\d+u\b/i.test(lower) || /hele\s*dag|halve\s*dag/i.test(lower);
+  if (hasHourMarker && !hasDosage) return true;
+
+  // Pure labour activities (NOT "gespoten" — too ambiguous with spray)
+  const activities = ['gesnoeid', 'gedund', 'geplukt', 'gemaaid', 'gesorteerd', 'gewerkt'];
+  if (activities.some(a => lower.includes(a)) && !hasDosage) return true;
+
+  // "gespoten" alone only counts if an hour marker is present (e.g. "4 uur gespoten")
+  if (lower.includes('gespoten') && hasHourMarker && !hasDosage) return true;
 
   return false;
 }
