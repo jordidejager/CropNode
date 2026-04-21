@@ -2,6 +2,7 @@
 
 import { Suspense } from 'react';
 import { Sidebar, MobileSidebarProvider, MobileMenuButton } from '@/components/layout/sidebar';
+import { MobileBackButton } from '@/components/layout/mobile-back-button';
 import { Bell, Loader2 } from 'lucide-react';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { Button } from '@/components/ui/button';
@@ -23,9 +24,10 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           <Sidebar />
           <div className="flex-1 flex flex-col min-h-0 bg-transparent">
             <header className="sticky top-0 z-20 md:z-30 flex h-16 items-center gap-4 border-b border-white/5 bg-[#020617]/80 px-4 md:px-6 backdrop-blur-md">
-              {/* Mobile: hamburger + logo */}
-              <div className="flex items-center gap-3 md:hidden">
+              {/* Mobile: hamburger + back + logo */}
+              <div className="flex items-center gap-2 md:hidden">
                 <MobileMenuButton />
+                <MobileBackButton />
                 <Logo variant="horizontal" theme="dark" width={100} height={24} style="animated" />
               </div>
               <div className="flex-1" />
