@@ -11,6 +11,7 @@ import {
   useUpdateStation,
   type PhysicalStation,
 } from '@/hooks/use-physical-stations';
+import { useLegacyParcels } from '@/hooks/use-data';
 import { StationHistoryChart } from '@/components/weather/StationHistoryChart';
 
 export function WeerstationsManager() {
@@ -434,24 +435,10 @@ function StationDetail({
 
 // ---- Parcel select ----
 
-interface ParcelOption {
-  id: string;
-  name: string;
-}
-
 function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [parcels, setParcels] = useState<ParcelOption[] | null>(null);
+  const { data: parcels, isLoading } = useLegacyParcels();
 
-  if (parcels === null) {
-    fetch('/api/parcels')
-      .then(r => r.json())
-      .then(json => {
-        if (Array.isArray(json)) setParcels(json.map((p: any) => ({ id: p.id, name: p.name })));
-        else if (Array.isArray(json.data))
-          setParcels(json.data.map((p: any) => ({ id: p.id, name: p.name })));
-        else setParcels([]);
-      })
-      .catch(() => setParcels([]));
+  if (isLoading) {
     return (
       <select disabled className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white/40">
         <option>Laden…</option>
@@ -466,7 +453,7 @@ function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string
       className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
     >
       <option value="">— Geen koppeling —</option>
-      {parcels.map(p => (
+      {(parcels ?? []).map(p => (
         <option key={p.id} value={p.id}>
           {p.name}
         </option>
