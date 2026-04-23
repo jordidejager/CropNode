@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Lock, MessageCircle, Clock, ArrowRight } from 'lucide-react';
+import { Settings, Lock, MessageCircle, Clock, Mail, ArrowRight, Radio } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import Link from 'next/link';
 
@@ -78,6 +78,38 @@ export default function InstellingenPage() {
             <div className="flex-1">
               <h2 className="text-sm font-semibold text-white/80">WhatsApp Koppeling</h2>
               <p className="text-xs text-white/25 mt-0.5">Beheer gekoppelde telefoonnummers</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-white/40" />
+          </div>
+        </Link>
+
+        {/* Weerstation link */}
+        <Link
+          href="/instellingen/weerstations"
+          className="block rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Radio className="h-4 w-4 text-emerald-400" />
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-white/80">Eigen weerstations</h2>
+              <p className="text-xs text-white/25 mt-0.5">
+                LoRaWAN-sensoren (TTN) koppelen aan een perceel
+              </p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-white/40" />
+          </div>
+        </Link>
+
+        {/* E-mail inbox link */}
+        <Link
+          href="/instellingen/email-inbox"
+          className="block rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Mail className="h-4 w-4 text-emerald-400" />
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-white/80">E-mail inbox</h2>
+              <p className="text-xs text-white/25 mt-0.5">Automatische dataverwerking via e-mail (Storex, VDH, etc.)</p>
             </div>
             <ArrowRight className="h-4 w-4 text-white/40" />
           </div>

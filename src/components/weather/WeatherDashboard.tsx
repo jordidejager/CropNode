@@ -23,6 +23,7 @@ import { WeatherAlertBanner } from './WeatherAlertBanner';
 import { SprayWindowHero } from './SprayWindowHero';
 import { MultiModelConsensus } from './MultiModelConsensus';
 import { DataFreshnessBadge } from './DataFreshnessBadge';
+import { LiveStationCard } from './LiveStationCard';
 
 export function WeatherDashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -145,6 +146,9 @@ export function WeatherDashboard() {
         <WeatherDashboardSkeleton />
       ) : (
         <div className="space-y-4">
+          {/* Live data from user's physical weather station (if registered) */}
+          <LiveStationCard />
+
           {/* Alert banner — frost, rain, last window */}
           <WeatherAlertBanner
             hourlyData={allHourlyData}
