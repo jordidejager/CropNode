@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS physical_weather_stations (
   firmware_version TEXT,
 
   -- Location + parcel linkage (parcel is optional — station can exist before linking)
-  parcel_id UUID REFERENCES parcels(id) ON DELETE SET NULL,
+  -- parcels.id is TEXT in this project (not UUID), so match that type here.
+  parcel_id TEXT REFERENCES parcels(id) ON DELETE SET NULL,
   latitude NUMERIC(8,5),
   longitude NUMERIC(8,5),
   elevation_m INTEGER,
