@@ -83,19 +83,23 @@ export function decodeTTNUplink(body: TTNUplinkPayload): DecodedUplink {
   const applicationId = body.end_device_ids?.application_ids?.application_id;
   const devEui = body.end_device_ids?.dev_eui;
   const measuredAt = body.received_at;
-  const frameCounter = body.uplink_message?.f_cnt;
-  const fPort = body.uplink_message?.f_port;
+  // TTN's protobuf-JSON encoder omits zero-valued numeric fields, so on the
+  // first uplink after a (re)join f_cnt and f_port can simply be missing.
+  // Treat them as 0 rather than rejecting the payload.
+  const frameCounter = body.uplink_message?.f_cnt ?? 0;
+  const fPort = body.uplink_message?.f_port ?? 0;
   const decoded = body.uplink_message?.decoded_payload;
 
   if (!deviceId) throw new InvalidTTNPayloadError('Missing end_device_ids.device_id');
   if (!applicationId) throw new InvalidTTNPayloadError('Missing application_id');
   if (!devEui) throw new InvalidTTNPayloadError('Missing dev_eui');
   if (!measuredAt) throw new InvalidTTNPayloadError('Missing received_at');
-  if (frameCounter === undefined || frameCounter === null) {
-    throw new InvalidTTNPayloadError('Missing uplink_message.f_cnt');
-  }
-  if (fPort === undefined || fPort === null) {
-    throw new InvalidTTNPayloadError('Missing uplink_message.f_port');
+
+  // If there's no uplink_message block at all, this isn't a sensor uplink
+  // (e.g. a stray event that slipped past the TTN webhook filter). Signal
+  // the caller so it can 200-skip rather than 400-retry.
+  if (!body.uplink_message) {
+    throw new InvalidTTNPayloadError('Missing uplink_message block');
   }
 
   // Pressure comes as a string from the Dragino decoder — parse to float

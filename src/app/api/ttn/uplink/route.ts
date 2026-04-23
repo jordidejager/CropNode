@@ -178,7 +178,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const status = err instanceof InvalidTTNPayloadError ? 400 : 500;
+
+    // Payload-shape problems are permanent — responding with 4xx makes TTN
+    // keep retrying forever. Log and return 200 so TTN considers it handled.
+    const isPayloadError = err instanceof InvalidTTNPayloadError;
+    const httpStatus = isPayloadError ? 200 : 500;
 
     console.error('[TTN Webhook] Error:', message);
     await logWebhookError(admin, {
@@ -186,11 +190,13 @@ export async function POST(request: NextRequest) {
       errorMessage: message,
       rawBody: body,
       ipAddress,
-      httpStatus: status,
+      httpStatus,
     });
 
-    // Still return 200 so TTN doesn't spam retries for bad payloads
-    return NextResponse.json({ success: false, error: message }, { status });
+    return NextResponse.json(
+      { success: false, skipped: isPayloadError, error: message },
+      { status: httpStatus }
+    );
   }
 }
 

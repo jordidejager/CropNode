@@ -11,7 +11,7 @@ import {
   useUpdateStation,
   type PhysicalStation,
 } from '@/hooks/use-physical-stations';
-import { useLegacyParcels } from '@/hooks/use-data';
+import { useParcels } from '@/hooks/use-data';
 import { StationHistoryChart } from '@/components/weather/StationHistoryChart';
 
 export function WeerstationsManager() {
@@ -435,8 +435,15 @@ function StationDetail({
 
 // ---- Parcel select ----
 
+/**
+ * Dropdown that lists every sub-parcel the user has, grouped by parent parcel,
+ * with the full identifying label "Parent — Block (Crop Variety)". The selected
+ * value is the PARENT parcel id — that's what physical_weather_stations.parcel_id
+ * references, and a weather station covers the whole parent plot, not a single
+ * sub-parcel block.
+ */
 function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: parcels, isLoading } = useLegacyParcels();
+  const { data: subParcels, isLoading } = useParcels();
 
   if (isLoading) {
     return (
@@ -446,6 +453,22 @@ function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string
     );
   }
 
+  // Group sub-parcels by parent parcel_id so the <optgroup> renders neatly.
+  type SubParcel = NonNullable<typeof subParcels>[number];
+  const groups = new Map<string, { parentName: string; subs: SubParcel[] }>();
+  for (const sp of subParcels ?? []) {
+    const parentId = sp.parcel_id ?? sp.id;
+    const parentName = sp.parcel_name ?? sp.name ?? 'Onbekend perceel';
+    if (!groups.has(parentId)) {
+      groups.set(parentId, { parentName, subs: [] });
+    }
+    groups.get(parentId)!.subs.push(sp);
+  }
+
+  const sortedGroups = Array.from(groups.entries()).sort((a, b) =>
+    a[1].parentName.localeCompare(b[1].parentName, 'nl')
+  );
+
   return (
     <select
       value={value}
@@ -453,10 +476,24 @@ function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string
       className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
     >
       <option value="">— Geen koppeling —</option>
-      {(parcels ?? []).map(p => (
-        <option key={p.id} value={p.id}>
-          {p.name}
-        </option>
+      {sortedGroups.map(([parentId, group]) => (
+        <optgroup key={parentId} label={group.parentName}>
+          {group.subs.map(sub => {
+            const parts: string[] = [];
+            if (sub.name && sub.name !== group.parentName) parts.push(sub.name);
+            const cropVariety = [sub.crop, sub.variety].filter(Boolean).join(' ');
+            if (cropVariety) parts.push(cropVariety);
+            if (sub.area) parts.push(`${sub.area.toFixed(2)} ha`);
+            const label = parts.length > 0
+              ? `${group.parentName} — ${parts.join(' · ')}`
+              : group.parentName;
+            return (
+              <option key={sub.id} value={parentId}>
+                {label}
+              </option>
+            );
+          })}
+        </optgroup>
       ))}
     </select>
   );
