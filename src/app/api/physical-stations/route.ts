@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
+import { resolveParcelForUser } from '@/lib/weather/resolve-parcel';
 
 /**
  * GET /api/physical-stations
@@ -74,27 +75,24 @@ export async function POST(request: NextRequest) {
   // Normalize dev_eui to uppercase (TTN returns either case)
   const devEui = body.devEui.toUpperCase();
 
-  // If a parcel is given, make sure it's the user's parcel + use its lat/lng
+  // If a parcel is given, make sure it's the user's parcel + use its lat/lng.
+  // The id may be either a parcel or a sub_parcel — resolveParcelForUser
+  // handles both and returns the canonical parent parcel id.
   let latitude: number | null = null;
   let longitude: number | null = null;
+  let resolvedParcelId: string | null = null;
 
   if (body.parcelId) {
-    const { data: parcel } = await supabase
-      .from('parcels')
-      .select('id, location')
-      .eq('id', body.parcelId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!parcel) {
-      return NextResponse.json({ error: 'Parcel not found or not yours' }, { status: 403 });
+    const resolved = await resolveParcelForUser(supabase, user.id, body.parcelId);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: 'Parcel not found or not yours' },
+        { status: 403 }
+      );
     }
-
-    const loc = parcel.location as { lat?: number; lng?: number } | null;
-    if (loc?.lat && loc?.lng) {
-      latitude = loc.lat;
-      longitude = loc.lng;
-    }
+    resolvedParcelId = resolved.parcelId;
+    latitude = resolved.latitude;
+    longitude = resolved.longitude;
   }
 
   // Insert the station

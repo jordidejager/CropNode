@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { resolveParcelForUser } from '@/lib/weather/resolve-parcel';
 
 /**
  * PATCH /api/physical-stations/[id]  — update station (parcel link, label, active)
@@ -50,27 +51,22 @@ export async function PATCH(
 
   // Parcel change — also refresh coordinates + virtual-station link
   if (body.parcelId !== undefined) {
-    if (body.parcelId === null) {
+    if (body.parcelId === null || body.parcelId === '') {
       patch.parcel_id = null;
       patch.latitude = null;
       patch.longitude = null;
       patch.virtual_station_id = null;
     } else {
-      const { data: parcel } = await supabase
-        .from('parcels')
-        .select('id, location')
-        .eq('id', body.parcelId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!parcel) {
-        return NextResponse.json({ error: 'Parcel not found or not yours' }, { status: 403 });
+      const resolved = await resolveParcelForUser(supabase, user.id, body.parcelId);
+      if (!resolved) {
+        return NextResponse.json(
+          { error: 'Parcel not found or not yours' },
+          { status: 403 }
+        );
       }
-
-      const loc = parcel.location as { lat?: number; lng?: number } | null;
-      patch.parcel_id = parcel.id;
-      patch.latitude = loc?.lat ?? null;
-      patch.longitude = loc?.lng ?? null;
+      patch.parcel_id = resolved.parcelId;
+      patch.latitude = resolved.latitude;
+      patch.longitude = resolved.longitude;
     }
   }
 
