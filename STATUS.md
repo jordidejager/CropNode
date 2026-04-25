@@ -12,6 +12,9 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-04-25 — Weerstation historie ook op /weer/historie
+- ✅ Nieuwe `OwnStationHistorySection` component aan top van /weer/historie pagina. Verschijnt automatisch wanneer de gebruiker een fysiek weerstation heeft gekoppeld; toont sensor-historie (24u/7d/30d/90d × temp/RV/druk/regen) net zoals op de detail-pagina, met station-picker als er meerdere zijn. Onder dezelfde pagina blijft de KNMI sectie intact (apart kopje "KNMI meetstations · Officiële regio-data").
+
 ### 2026-04-25 — Weerstations: webhook resilience + UX polish
 - ✅ TTN webhook losgekoppeld van actieve UNIQUE-constraint vorm: explicit pre-check op `(station_id, measured_at)` + plain insert ipv upsert-onConflict. Werkt nu mét en zonder migratie 072 (commit `6549335`).
 - ✅ `f_cnt`/`f_port` defaulten naar 0 als TTN ze omit (zero-value protobuf strip) — fixt eerste post-rejoin uplinks.

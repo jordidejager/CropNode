@@ -22,6 +22,7 @@ import { PrecipitationHistoryChart } from './PrecipitationHistoryChart';
 import { GddAccumulationChart } from './GddAccumulationChart';
 import { WaterBalanceChart } from './WaterBalanceChart';
 import { SeasonSummaryTable } from './SeasonSummaryTable';
+import { OwnStationHistorySection } from './OwnStationHistorySection';
 
 type Tab = 'temperature' | 'precipitation' | 'gdd' | 'water' | 'summary';
 
@@ -145,7 +146,17 @@ export function HistorieOverview() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Eigen weerstation (LoRaWAN) — verschijnt alleen als de gebruiker er één heeft */}
+      <OwnStationHistorySection />
+
+      {/* KNMI sectie */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white/80">KNMI meetstations</h2>
+          <span className="text-[11px] text-white/30">Officiële regio-data</span>
+        </div>
+
       {/* Station picker + controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-white/60 text-sm">
@@ -301,6 +312,7 @@ export function HistorieOverview() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
