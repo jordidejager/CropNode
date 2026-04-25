@@ -2,6 +2,22 @@
 
 Intelligent crop protection management app for Dutch fruit farming (apples & pears).
 
+## ⚠️ STATUS.md — Update at end of every session
+
+The user works with many parallel chats and loses track of what each one finished or left open. There's a single source of truth at `studio/STATUS.md` that ALL chats are responsible for keeping current.
+
+**Before you finish a session in which you changed any code:**
+1. Read `STATUS.md` to see current state.
+2. Add a new entry under "Recent activity" (newest at top) with today's date and a 2-5 line summary of what you did.
+3. If you created files, migrations, or features that are NOT yet finished or NOT yet verified by the user, add them under "Open clusters" with file paths.
+4. If you fixed something listed under "Open clusters", remove it (or move to "Recent activity" with ✅).
+5. If you discovered TODOs, security issues, or pending migrations, add them to the right section.
+6. Status markers: `⏳` open, `✅` done, `🚫` blocked, `⚠️` security/risk.
+
+The user explicitly asked for this — it's not optional. **Do not skip it because the chat is "almost over"; that's exactly when it matters most.**
+
+If you're only answering a question and didn't change code, you can skip the update.
+
 ## ⚠️ Git Remotes — Read Before Pushing
 
 This submodule has TWO remotes. **Only `cropnode` is deployed.**
@@ -23,7 +39,7 @@ Pushing only to `origin` silently leaves Vercel out of date. If you must push to
 | Framework | Next.js 15 (App Router + Turbopack) |
 | Language | TypeScript 5, React 19 |
 | AI | Genkit + Google Gemini 2.5 Flash Lite (intent classification & parsing) |
-| Embeddings | googleai/text-embedding-004 (768-dim vectors for RAG) |
+| Embeddings | googleai/gemini-embedding-001 (768-dim vectors for RAG) |
 | Database | Supabase (PostgreSQL + pgvector) |
 | Auth | Supabase Auth (email/password, RLS on all user tables) |
 | Data Fetching | TanStack React Query |
@@ -113,12 +129,45 @@ FRUITCONSULT_PASS=
 
 ## Database Migrations
 
-Migrations live in `supabase/migrations/` as numbered SQL files (001-045+). Run via Supabase SQL Editor.
+Migrations live in `supabase/migrations/` as numbered SQL files. They are run **manually** via the Supabase SQL Editor (not auto-applied).
 
-**Creating a new migration:**
-1. Create `supabase/migrations/NNN_description.sql` (next number in sequence)
-2. Write idempotent SQL (use `IF NOT EXISTS`, `OR REPLACE`, `ON CONFLICT` where possible)
-3. Run in Supabase Dashboard > SQL Editor
+### ⚠️ Hard rules for AI chats (read this before creating a migration!)
+
+The user works with multiple parallel chats, runs migrations manually, and has had problems with duplicate numbering and silently-modified files. Follow these rules strictly:
+
+**1. ALWAYS pick the next free number — never reuse an existing one.**
+Before creating a migration, list existing files and pick the highest number + 1:
+```bash
+ls supabase/migrations/ | sort | tail -3
+# e.g. last is 072_xyz.sql → use 073_yourname.sql
+```
+Numbered duplicates (two `053_*.sql` files) are a real recurring problem in this repo. **Don't add to it.**
+
+**2. NEVER modify an existing migration file.**
+If a migration has already been sent to the user once, assume they have run it. To fix or change something, create a NEW migration that does the change. Editing the old file silently means the user won't know they need to re-run it.
+
+**3. Make migrations idempotent.**
+Use `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `ON CONFLICT DO NOTHING`. The user may run the same migration twice; that should be safe.
+
+**4. Use descriptive names — minimum 3 meaningful words.**
+✅ `074_add_disease_severity_index.sql`
+❌ `074_fix.sql` or `074_update.sql`
+
+**5. End your response with a clear, unmissable run instruction.**
+Don't bury "btw also run this migration" in the middle of a long explanation. Use a header and code block:
+```markdown
+### ⚠️ Migratie draaien
+Open Supabase SQL Editor, plak de inhoud van `074_add_disease_severity_index.sql`, klik Run.
+```
+
+**6. If you must change a previously-issued migration in the same conversation, say so explicitly.**
+"Ik heb migratie 074 aangepast. Als je 'm al hebt gedraaid: drop de gewijzigde objecten eerst, dan opnieuw runnen."
+
+### Known duplicate-number clusters (legacy, leave as-is)
+
+The repo has duplicates from before these rules existed: `029_*` (2), `034_*` (2), `039_*` (2), `040_*` (2), `041_*` (2), `045_*` (2), `046_*` (2), `052_*` (2), `053_*` (3), `058_*` (2), `062_*` (2), `064_*` (2), `065_*` (2), `070_*` (2). Plus the `042_gv_NN` batch (22 files — intentional, knowledge import chunks). Don't try to renumber these — the user has run various combinations of them already; renaming would only confuse `schema_migrations` tracking.
+
+For NEW work, just pick the next clean number above the current max.
 
 ## Product Database Scripts
 
@@ -154,7 +203,7 @@ Vercel cron (ma 06:00) → /api/knowledge/scrape (CRON_SECRET auth)
   → pipeline.ts → scrapers/fruitconsult.ts (ASP.NET login + cheerio)
   → transform.ts (Gemini herformulering, NL tone of voice, no source attribution)
   → validate.ts (Gemini quality check → blockers ⇒ status='needs_review')
-  → embed.ts (text-embedding-004, 768-dim)
+  → embed.ts (gemini-embedding-001, 768-dim)
   → fuse.ts (find_fusion_candidate RPC, similarity > 0.90 ⇒ Gemini fusion)
   → INSERT/UPDATE knowledge_articles + knowledge_scrape_log
 ```
