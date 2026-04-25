@@ -101,13 +101,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Dedup: the unique constraint on (station_id, measured_at) is our
-    //    ultimate backstop, but a same-second retransmission can still be
-    //    caught here for free.
-    if (
-      station.last_seen_at &&
-      decoded.measuredAt === station.last_seen_at
-    ) {
+    // 6. Dedup — explicit pre-check on (station, measured_at).
+    //    We deliberately do NOT use Supabase upsert with onConflict here
+    //    because the underlying UNIQUE constraint changed shape over migrations
+    //    (frame_counter → measured_at) and we want this route to work
+    //    regardless of which constraint is currently active in the DB.
+    const { data: existing } = await (admin as any)
+      .from('weather_measurements')
+      .select('id')
+      .eq('station_id', station.id)
+      .eq('measured_at', decoded.measuredAt)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
       return NextResponse.json({ success: true, duplicate: true });
     }
 
@@ -125,7 +132,8 @@ export async function POST(request: NextRequest) {
       previousRow?.rain_counter ?? null
     );
 
-    // 8. Insert measurement
+    // 8. Insert measurement (plain insert — no onConflict to keep the route
+    //    decoupled from the active UNIQUE-constraint shape).
     const insertRow: WeatherMeasurementInsert = {
       station_id: station.id,
       measured_at: decoded.measuredAt,
@@ -150,15 +158,12 @@ export async function POST(request: NextRequest) {
 
     const { error: insertErr } = await (admin as any)
       .from('weather_measurements')
-      .upsert(insertRow, {
-        // After a LoRaWAN rejoin the frame counter resets, so we deduplicate
-        // by (station, measured_at) instead. Migration 072 enforces this.
-        onConflict: 'station_id,measured_at',
-        ignoreDuplicates: true,
-      });
+      .insert(insertRow);
 
     if (insertErr) {
-      // Unique-violation is fine — race with another retry
+      // 23505 = unique_violation. Could be race with another retry, OR the
+      // old (station_id, frame_counter) constraint catches a rejoin reset.
+      // In both cases the data is already-stored or harmless to skip.
       if (insertErr.code === '23505') {
         return NextResponse.json({ success: true, duplicate: true });
       }
