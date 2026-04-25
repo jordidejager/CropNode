@@ -101,11 +101,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Dedup: the unique constraint on (station_id, frame_counter) is our
-    //    ultimate backstop, but checking first avoids a pointless insert.
+    // 6. Dedup: the unique constraint on (station_id, measured_at) is our
+    //    ultimate backstop, but a same-second retransmission can still be
+    //    caught here for free.
     if (
-      station.last_frame_counter !== null &&
-      decoded.frameCounter === station.last_frame_counter
+      station.last_seen_at &&
+      decoded.measuredAt === station.last_seen_at
     ) {
       return NextResponse.json({ success: true, duplicate: true });
     }
@@ -150,7 +151,9 @@ export async function POST(request: NextRequest) {
     const { error: insertErr } = await (admin as any)
       .from('weather_measurements')
       .upsert(insertRow, {
-        onConflict: 'station_id,frame_counter',
+        // After a LoRaWAN rejoin the frame counter resets, so we deduplicate
+        // by (station, measured_at) instead. Migration 072 enforces this.
+        onConflict: 'station_id,measured_at',
         ignoreDuplicates: true,
       });
 
