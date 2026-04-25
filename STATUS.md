@@ -12,6 +12,16 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-04-25 — Weerstation historiegrafiek herzien (premium look)
+- ✅ Licht (lux) als 5e metric tab toegevoegd — iconisch geel, k-suffix bij hoge waarden.
+- ✅ Op 7-daagse range bevat de x-as nu **dag + uur** ipv alleen datum, dus diurnale patronen meteen leesbaar.
+- ✅ Tooltip toont **volledige datum + tijd** plus relevante context-velden per metric (bv. dauwpunt + wet-bulb bij temperatuur, dauwpunt + temperatuur bij RV).
+- ✅ Stats-strip met Min / Gem / Max / Laatste, kleur-gecodeerd per type, automatisch herberekend per range+metric.
+- ✅ Gradient-fill onder de lijngrafiek (subtiel) voor meer diepte.
+- ✅ Reference line voor gemiddelde + 0°C lijn (vorstgrens) op temperatuur.
+- ✅ Smart tick-skipping op de x-as via `minTickGap=40` → geen overlap meer op kleine schermen.
+- ✅ Active dot kleurt nu mee met de metric.
+
 ### 2026-04-25 — Weerstation historie ook op /weer/historie
 - ✅ Nieuwe `OwnStationHistorySection` component aan top van /weer/historie pagina. Verschijnt automatisch wanneer de gebruiker een fysiek weerstation heeft gekoppeld; toont sensor-historie (24u/7d/30d/90d × temp/RV/druk/regen) net zoals op de detail-pagina, met station-picker als er meerdere zijn. Onder dezelfde pagina blijft de KNMI sectie intact (apart kopje "KNMI meetstations · Officiële regio-data").
 
