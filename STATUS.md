@@ -12,6 +12,17 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-04-25 — Weerstations: webhook resilience + UX polish
+- ✅ TTN webhook losgekoppeld van actieve UNIQUE-constraint vorm: explicit pre-check op `(station_id, measured_at)` + plain insert ipv upsert-onConflict. Werkt nu mét en zonder migratie 072 (commit `6549335`).
+- ✅ `f_cnt`/`f_port` defaulten naar 0 als TTN ze omit (zero-value protobuf strip) — fixt eerste post-rejoin uplinks.
+- ✅ Migratie `072_weather_measurements_dedup_by_time.sql` aangemaakt — **nog draaien door user** (nice-to-have, niet blokkerend).
+- ✅ Lux toegevoegd als 5e KPI in `StationOverviewCard` (Weerstations overzicht).
+- ✅ Battery + signaal labels nu mensvriendelijk overal: `Vol/Voldoende/Bijna leeg` ipv `3.98V`, `Zeer goed/Goed/Matig/Zwak` ipv `-108dBm`. Technische detail blijft beschikbaar via `title` tooltip + Health card subtitel.
+- ✅ Rules-of-Hooks fix in `LiveStationCard` (useMemo's verplaatst boven early returns).
+- ✅ Refresh-knop op `/weerstations` hub header.
+- ✅ Parcel grouping bug gefixt (`parcelId`/`parcelName` ipv snake_case op SprayableParcel type).
+- ⏳ Regen-counter `rain=0` ondanks `i_flag=1` — user kijkt naar countmod / Dragino downlink. Decoder server-side klopt (geverifieerd met byte-decoding).
+
 ### 2026-04-25 — Performance audit + workflow rules
 - ✅ 9 quick-win performance fixes toegepast (commit `7cf795b`)
 - ✅ `053_performance_indexes.sql` aangemaakt — **moet nog gedraaid worden door user**

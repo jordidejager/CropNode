@@ -457,8 +457,8 @@ function ParcelSelect({ value, onChange }: { value: string; onChange: (v: string
   type SubParcel = NonNullable<typeof subParcels>[number];
   const groups = new Map<string, { parentName: string; subs: SubParcel[] }>();
   for (const sp of subParcels ?? []) {
-    const parentId = sp.parcel_id ?? sp.id;
-    const parentName = sp.parcel_name ?? sp.name ?? 'Onbekend perceel';
+    const parentId = sp.parcelId ?? sp.id;
+    const parentName = sp.parcelName ?? sp.name ?? 'Onbekend perceel';
     if (!groups.has(parentId)) {
       groups.set(parentId, { parentName, subs: [] });
     }

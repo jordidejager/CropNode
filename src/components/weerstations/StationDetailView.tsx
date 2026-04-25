@@ -196,15 +196,19 @@ export function StationDetailView({
             title="Accu"
             icon={Zap}
             accent={batteryColor(latest.battery_status)}
-            main={latest.battery_v !== null ? `${latest.battery_v.toFixed(2)} V` : '—'}
-            sub={batteryLabel(latest.battery_status)}
+            main={batteryMainLabel(latest.battery_status)}
+            sub={
+              latest.battery_v !== null
+                ? `${batteryAdvice(latest.battery_status)} · ${latest.battery_v.toFixed(2)} V`
+                : batteryAdvice(latest.battery_status)
+            }
           />
           <HealthCard
             title="LoRaWAN signaal"
             icon={Activity}
             accent={signalColor(latest.rssi_dbm)}
-            main={latest.rssi_dbm !== null ? `${latest.rssi_dbm} dBm` : '—'}
-            sub={signalLabel(latest.rssi_dbm, latest.snr_db, latest.gateway_count)}
+            main={signalMainLabel(latest.rssi_dbm)}
+            sub={signalDetail(latest.rssi_dbm, latest.snr_db, latest.gateway_count)}
           />
         </div>
       )}
@@ -458,9 +462,16 @@ function batteryColor(status: 'good' | 'low' | 'critical' | null): string {
       : 'text-emerald-400';
 }
 
-function batteryLabel(status: 'good' | 'low' | 'critical' | null): string {
-  if (status === 'critical') return 'Kritiek laag — vervangen';
-  if (status === 'low') return 'Binnenkort vervangen';
+function batteryMainLabel(status: 'good' | 'low' | 'critical' | null): string {
+  if (status === 'critical') return 'Bijna leeg';
+  if (status === 'low') return 'Voldoende';
+  if (status === 'good') return 'Vol';
+  return '—';
+}
+
+function batteryAdvice(status: 'good' | 'low' | 'critical' | null): string {
+  if (status === 'critical') return 'Vervang accu binnenkort';
+  if (status === 'low') return 'Op termijn vervangen';
   return 'Prima';
 }
 
@@ -471,16 +482,25 @@ function signalColor(rssi: number | null): string {
   return 'text-red-400';
 }
 
-function signalLabel(
+function signalMainLabel(rssi: number | null): string {
+  if (rssi === null) return '—';
+  if (rssi >= -100) return 'Zeer goed';
+  if (rssi >= -110) return 'Goed';
+  if (rssi >= -120) return 'Matig';
+  return 'Zwak';
+}
+
+function signalDetail(
   rssi: number | null,
   snr: number | null,
   gatewayCount: number | null
 ): string {
   if (rssi === null) return '—';
-  const quality = rssi >= -110 ? 'Sterk signaal' : rssi >= -120 ? 'Acceptabel' : 'Zwak';
-  const parts = [quality];
+  const parts: string[] = [];
+  if (gatewayCount && gatewayCount > 0)
+    parts.push(`${gatewayCount} gateway${gatewayCount > 1 ? 's' : ''}`);
+  parts.push(`${rssi} dBm`);
   if (snr !== null) parts.push(`SNR ${snr.toFixed(1)}`);
-  if (gatewayCount && gatewayCount > 0) parts.push(`${gatewayCount} gateway${gatewayCount > 1 ? 's' : ''}`);
   return parts.join(' · ');
 }
 

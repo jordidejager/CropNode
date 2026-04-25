@@ -6,6 +6,7 @@ import {
   Droplets,
   CloudRain,
   Gauge,
+  Sun,
   Radio,
   ChevronRight,
   AlertCircle,
@@ -13,9 +14,8 @@ import {
   Battery,
   BatteryLow,
   BatteryWarning,
-  Signal,
-  SignalLow,
-  SignalZero,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -132,7 +132,7 @@ export function StationOverviewCard({
 
           {/* KPI row */}
           {latest && (
-            <div className="mt-3.5 grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="mt-3.5 grid grid-cols-2 md:grid-cols-5 gap-2">
               <MiniStat
                 icon={Thermometer}
                 label="Temp"
@@ -165,10 +165,11 @@ export function StationOverviewCard({
                 decimals={0}
                 color="text-violet-400"
               />
+              <LightStat lux={latest.illuminance_lux} />
             </div>
           )}
 
-          {/* Quality chips */}
+          {/* Quality chips — user-friendly labels, technical detail in tooltip */}
           {latest && (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
               {latest.battery_v !== null && (
@@ -229,6 +230,39 @@ function MiniStat({
   );
 }
 
+/**
+ * Light intensity mini-stat. Compact label switches between the actual lux
+ * reading and a human-friendly daylight description ("Zonnig", "Bewolkt", …).
+ */
+function LightStat({ lux }: { lux: number | null }) {
+  const display =
+    lux === null
+      ? '—'
+      : lux >= 10_000
+        ? `${(lux / 1000).toFixed(1)}k`
+        : Math.round(lux).toString();
+  const unit = lux !== null && lux >= 10_000 ? 'klux' : 'lux';
+  return (
+    <div className="rounded-lg bg-white/[0.03] border border-white/10 px-2.5 py-2">
+      <div className="flex items-center gap-1 mb-0.5">
+        <Sun className="h-3 w-3 text-amber-300" />
+        <span className="text-[9px] font-bold uppercase tracking-wider text-white/40">
+          Licht
+        </span>
+      </div>
+      <div className="flex items-baseline gap-0.5">
+        <span className="text-base font-bold text-white tabular-nums">{display}</span>
+        <span className="text-[10px] text-white/40">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * User-friendly battery badge. Shows a label like "Vol" / "Voldoende" /
+ * "Bijna leeg" — the underlying voltage is in the title attribute for
+ * power users / debugging.
+ */
 function BatteryBadge({
   voltage,
   status,
@@ -243,16 +277,29 @@ function BatteryBadge({
       : status === 'low'
         ? 'text-amber-400'
         : 'text-emerald-400';
+  const label =
+    status === 'critical'
+      ? 'Bijna leeg'
+      : status === 'low'
+        ? 'Voldoende'
+        : 'Vol';
   return (
-    <div className="flex items-center gap-1 text-white/40">
+    <div
+      className="flex items-center gap-1 text-white/40"
+      title={`Accuspanning: ${voltage.toFixed(2)} V`}
+    >
       <Icon className={cn('h-3 w-3', color)} />
-      <span className={cn('font-semibold tabular-nums', color)}>
-        {voltage.toFixed(2)}V
-      </span>
+      <span className="text-white/40">Accu</span>
+      <span className={cn('font-semibold', color)}>{label}</span>
     </div>
   );
 }
 
+/**
+ * User-friendly LoRaWAN signal badge. Shows a label like "Zeer goed" /
+ * "Goed" / "Matig" / "Zwak". Technical RSSI / SNR / gateway count are kept
+ * in the title attribute so an installer can still see them on hover.
+ */
 function SignalBadge({
   rssi,
   snr,
@@ -262,24 +309,29 @@ function SignalBadge({
   snr: number | null;
   gatewayCount: number | null;
 }) {
-  const quality = rssi >= -110 ? 'strong' : rssi >= -120 ? 'ok' : 'weak';
-  const Icon = quality === 'strong' ? Signal : quality === 'ok' ? SignalLow : SignalZero;
-  const color =
-    quality === 'strong'
-      ? 'text-emerald-400'
-      : quality === 'ok'
-        ? 'text-amber-400'
-        : 'text-red-400';
+  const { label, color } = signalQuality(rssi);
+  const Icon = rssi >= -120 ? Wifi : WifiOff;
+  const tooltipParts = [`${rssi} dBm`];
+  if (snr !== null) tooltipParts.push(`SNR ${snr.toFixed(1)} dB`);
+  if (gatewayCount && gatewayCount > 0)
+    tooltipParts.push(`${gatewayCount} gateway${gatewayCount > 1 ? 's' : ''}`);
   return (
-    <div className="flex items-center gap-1 text-white/40">
+    <div
+      className="flex items-center gap-1 text-white/40"
+      title={tooltipParts.join(' · ')}
+    >
       <Icon className={cn('h-3 w-3', color)} />
-      <span className={cn('font-semibold tabular-nums', color)}>{rssi}dBm</span>
-      {gatewayCount && gatewayCount > 1 && (
-        <span className="text-white/30">· {gatewayCount}gw</span>
-      )}
-      {snr !== null && <span className="text-white/30">· SNR {snr.toFixed(1)}</span>}
+      <span className="text-white/40">Signaal</span>
+      <span className={cn('font-semibold', color)}>{label}</span>
     </div>
   );
+}
+
+function signalQuality(rssi: number): { label: string; color: string } {
+  if (rssi >= -100) return { label: 'Zeer goed', color: 'text-emerald-400' };
+  if (rssi >= -110) return { label: 'Goed', color: 'text-emerald-400' };
+  if (rssi >= -120) return { label: 'Matig', color: 'text-amber-400' };
+  return { label: 'Zwak', color: 'text-red-400' };
 }
 
 function formatAge(minutes: number): string {

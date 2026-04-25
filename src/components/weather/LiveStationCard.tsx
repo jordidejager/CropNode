@@ -44,11 +44,10 @@ export function LiveStationCard() {
   const { data: measurements, isLoading: measurementsLoading } =
     useStationMeasurements(activeStation?.id ?? null, '24h');
 
-  // Skip silently when there's no station at all
-  if (!stationsLoading && (!stations || stations.length === 0)) return null;
-  if (!activeStation) return null;
-
+  // Derived values — must be declared BEFORE any early returns to keep the
+  // hook call order stable across renders (React Rules of Hooks).
   const latest: Measurement | undefined = measurements?.[0];
+
   const rainfallLastHour = useMemo(() => {
     if (!measurements || measurements.length === 0) return 0;
     const cutoff = Date.now() - 60 * 60 * 1000;
@@ -65,8 +64,11 @@ export function LiveStationCard() {
   const ageMinutes = latest
     ? Math.floor((Date.now() - new Date(latest.measured_at).getTime()) / 60_000)
     : null;
-
   const isStale = ageMinutes !== null && ageMinutes > 60;
+
+  // Now safe to bail out
+  if (!stationsLoading && (!stations || stations.length === 0)) return null;
+  if (!activeStation) return null;
 
   if (measurementsLoading) {
     return (
@@ -321,15 +323,22 @@ function BatteryChip({
       : status === 'low'
         ? 'text-amber-400'
         : 'text-emerald-400';
+  const label =
+    status === 'critical'
+      ? 'Bijna leeg'
+      : status === 'low'
+        ? 'Voldoende'
+        : 'Vol';
   return (
-    <div className="flex items-center gap-1.5 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5">
+    <div
+      className="flex items-center gap-1.5 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5"
+      title={`Accuspanning: ${voltage.toFixed(2)} V`}
+    >
       <Icon className={cn('h-3 w-3', color)} />
       <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
         Accu
       </span>
-      <span className={cn('text-xs font-semibold tabular-nums', color)}>
-        {voltage.toFixed(2)} V
-      </span>
+      <span className={cn('text-xs font-semibold', color)}>{label}</span>
     </div>
   );
 }
@@ -343,33 +352,31 @@ function SignalChip({
   snr: number | null;
   gatewayCount: number | null;
 }) {
-  // LoRaWAN quality thresholds
-  const quality = rssi >= -110 ? 'strong' : rssi >= -120 ? 'ok' : 'weak';
-  const Icon = quality === 'strong' ? Signal : quality === 'ok' ? SignalLow : SignalZero;
-  const color =
-    quality === 'strong'
-      ? 'text-emerald-400'
-      : quality === 'ok'
-        ? 'text-amber-400'
-        : 'text-red-400';
+  // LoRaWAN quality thresholds — user-friendly labels
+  const { label, color } =
+    rssi >= -100
+      ? { label: 'Zeer goed', color: 'text-emerald-400' }
+      : rssi >= -110
+        ? { label: 'Goed', color: 'text-emerald-400' }
+        : rssi >= -120
+          ? { label: 'Matig', color: 'text-amber-400' }
+          : { label: 'Zwak', color: 'text-red-400' };
+  const Icon = rssi >= -120 ? Wifi : Signal;
+  // Hover tip preserves the technical detail for installers
+  const tooltipParts = [`${rssi} dBm`];
+  if (snr !== null) tooltipParts.push(`SNR ${snr.toFixed(1)} dB`);
+  if (gatewayCount && gatewayCount > 0)
+    tooltipParts.push(`${gatewayCount} gateway${gatewayCount > 1 ? 's' : ''}`);
   return (
-    <div className="flex items-center gap-1.5 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5">
+    <div
+      className="flex items-center gap-1.5 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5"
+      title={tooltipParts.join(' · ')}
+    >
       <Icon className={cn('h-3 w-3', color)} />
       <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
         Signaal
       </span>
-      <span className={cn('text-xs font-semibold tabular-nums', color)}>
-        {rssi} dBm
-      </span>
-      {gatewayCount && gatewayCount > 0 ? (
-        <span className="text-[10px] text-white/40 inline-flex items-center gap-0.5">
-          <Wifi className="h-2.5 w-2.5" />
-          {gatewayCount}
-        </span>
-      ) : null}
-      {snr !== null && (
-        <span className="text-[10px] text-white/40">SNR {snr.toFixed(1)}</span>
-      )}
+      <span className={cn('text-xs font-semibold', color)}>{label}</span>
     </div>
   );
 }
