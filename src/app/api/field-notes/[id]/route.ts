@@ -16,7 +16,8 @@ const UpdateNoteSchema = z.object({
   status: z.enum(['open', 'done', 'transferred']).optional(),
   is_pinned: z.boolean().optional(),
   is_locked: z.boolean().optional(),
-  parcel_ids: z.array(z.string()).optional(),
+  // Vereist uuid (sub_parcel.id) — geen TEXT-namen meer (zie migratie 074)
+  parcel_ids: z.array(z.string().uuid('parcel_ids moet sub_parcel.id (uuid) zijn')).optional(),
   due_date: z.string().nullable().optional(),
   reminder_at: z.string().nullable().optional(),
 });
