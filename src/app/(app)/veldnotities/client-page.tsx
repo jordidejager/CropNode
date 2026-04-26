@@ -15,6 +15,8 @@ import {
   type FieldNote
 } from '@/hooks/use-field-notes';
 import { useParcels } from '@/hooks/use-data';
+import { useParcelGroupOptions } from '@/hooks/use-parcel-group-options';
+import { UnifiedParcelMultiSelect } from '@/components/domain/unified-parcel-multi-select';
 import { PhotoLightbox } from '@/components/field-notes/PhotoLightbox';
 import { WhatsAppIcon } from '@/components/icons/whatsapp-icon';
 import dynamic from 'next/dynamic';
@@ -433,12 +435,64 @@ function QuickAddInput({ onSubmit, compact = false, isUploading = false }: {
 // PARCEL SELECTOR
 // ============================================================================
 
+/**
+ * Multi-select wrapper voor veldnotities — gebruikt UnifiedParcelMultiSelect
+ * onder de motorkap, maar zonder eigen Popover (de NoteCard heeft al een
+ * eigen relative containers + auto-close-on-blur logica).
+ *
+ * Bewust expanded panel rendering i.p.v. de standaard Popover-trigger:
+ * de notitie heeft al een MapPinPlus-knop als trigger.
+ */
+function NoteParcelMultiSelector({
+  selectedIds,
+  onChange,
+  onClose,
+}: {
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const { data: groups = [] } = useParcelGroupOptions();
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Klik buiten = sluiten
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-8 z-20 w-80 rounded-xl bg-[#0f1e35] border border-white/[0.1] shadow-2xl overflow-hidden p-2"
+    >
+      <UnifiedParcelMultiSelect
+        groups={groups}
+        selectedSubParcelIds={selectedIds}
+        onChange={onChange}
+        placeholder="Geen perceel"
+        showScopeSummary
+      />
+      <button
+        onClick={() => { onChange([]); onClose(); }}
+        className="w-full mt-2 text-xs text-white/40 hover:text-white/70 py-1"
+      >
+        Wissen & sluiten
+      </button>
+    </div>
+  );
+}
+
 interface ParcelSelectorProps {
   currentParcelId: string | null;
   onSelect: (parcelId: string | null) => void;
   onClose: () => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ParcelSelector({ currentParcelId, onSelect, onClose }: ParcelSelectorProps) {
   const { data: parcels = [] } = useParcels();
   const [search, setSearch] = useState('');
@@ -620,7 +674,7 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
   onToggleLock: () => void;
   onDelete: () => void;
   onEdit: (content: string) => void;
-  onUpdateParcel: (parcelId: string | null) => void;
+  onUpdateParcel: (parcelIds: string[]) => void;
   onTransfer: () => void;
   onPhotoClick?: (url: string) => void;
   onObservationFilter?: (subject: string) => void;
@@ -855,9 +909,9 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
                 <MapPinPlus className="h-4 w-4" />
               </button>
               {showParcelSelector && (
-                <ParcelSelector
-                  currentParcelId={(note.parcel_ids ?? [])[0] ?? null}
-                  onSelect={onUpdateParcel}
+                <NoteParcelMultiSelector
+                  selectedIds={note.parcel_ids ?? []}
+                  onChange={onUpdateParcel}
                   onClose={() => setShowParcelSelector(false)}
                 />
               )}
@@ -1893,11 +1947,8 @@ export function VeldnotitiesClient() {
     updateMutation.mutate({ id: note.id, updates: { content } });
   }, [updateMutation]);
 
-  const handleUpdateParcel = useCallback((note: FieldNote, parcelId: string | null) => {
-    const parcel_ids = parcelId
-      ? [...new Set([...(note.parcel_ids ?? []), parcelId])]
-      : [];
-    updateMutation.mutate({ id: note.id, updates: { parcel_ids } });
+  const handleUpdateParcel = useCallback((note: FieldNote, parcelIds: string[]) => {
+    updateMutation.mutate({ id: note.id, updates: { parcel_ids: parcelIds } });
   }, [updateMutation]);
 
   const handleDirectTransfer = useCallback(async (note: FieldNote) => {
@@ -2083,7 +2134,7 @@ export function VeldnotitiesClient() {
                       onToggleLock={() => handleToggleLock(note)}
                       onDelete={() => handleDelete(note)}
                       onEdit={(content) => handleEdit(note, content)}
-                      onUpdateParcel={(parcelId) => handleUpdateParcel(note, parcelId)}
+                      onUpdateParcel={(parcelIds) => handleUpdateParcel(note, parcelIds)}
                       onTransfer={() => handleDirectTransfer(note)}
                       onPhotoClick={(url) => setLightboxUrl(url)}
                       onObservationFilter={(subject) => setActiveObservation(subject)}
