@@ -38,8 +38,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ProductSelector } from './product-selector';
-import { ParcelMultiSelect } from './parcel-multi-select';
+import { UnifiedParcelMultiSelect } from '@/components/domain/unified-parcel-multi-select';
+import { DosageTotalField, formatTotalUsage, perHaUnit } from './dosage-total-field';
 import { useParcelGroups } from '@/hooks/use-data';
+import { useParcelGroupOptions } from '@/hooks/use-parcel-group-options';
+import type { ParcelGroupOption, ParcelGroup } from '@/lib/types';
 import { ValidationFeedback, type ValidationFlag } from './validation-feedback';
 import type { SprayableParcel } from '@/lib/supabase-store';
 import type { CtgbProduct, ProductEntry } from '@/lib/types';
@@ -72,7 +75,6 @@ const STEPS: { key: Step; label: string; icon: React.ComponentType<{ className?:
 ];
 
 const DOSAGE_PRESETS = [0.25, 0.5, 1, 1.5, 2, 2.5];
-const UNIT_OPTIONS = ['L/ha', 'kg/ha', 'ml/ha', 'g/ha'];
 
 export function NewSprayDialog({
     open,
@@ -82,6 +84,7 @@ export function NewSprayDialog({
 }: NewSprayDialogProps) {
     const { toast } = useToast();
     const { data: parcelGroups = [] } = useParcelGroups();
+    const { data: parcelGroupOptions = [] } = useParcelGroupOptions();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     // Wizard state
@@ -289,7 +292,8 @@ export function NewSprayDialog({
                                     parcels={parcels}
                                     selectedIds={selectedParcelIds}
                                     onChange={setSelectedParcelIds}
-                                    parcelGroups={parcelGroups}
+                                    groups={parcelGroupOptions}
+                                    favoriteGroups={parcelGroups}
                                     totalArea={totalArea}
                                     selectedCount={selectedParcels.length}
                                 />
@@ -297,6 +301,7 @@ export function NewSprayDialog({
                             {step === 2 && (
                                 <StepProducts
                                     products={products}
+                                    totalArea={totalArea}
                                     onAdd={addProductRow}
                                     onRemove={removeProductRow}
                                     onUpdate={updateProduct}
@@ -497,14 +502,16 @@ function StepParcels({
     parcels,
     selectedIds,
     onChange,
-    parcelGroups,
+    groups,
+    favoriteGroups,
     totalArea,
     selectedCount,
 }: {
     parcels: SprayableParcel[];
     selectedIds: string[];
     onChange: (ids: string[]) => void;
-    parcelGroups: Parameters<typeof ParcelMultiSelect>[0]['groups'];
+    groups: ParcelGroupOption[];
+    favoriteGroups: ParcelGroup[];
     totalArea: number;
     selectedCount: number;
 }) {
@@ -517,13 +524,14 @@ function StepParcels({
 
             <div className="space-y-3">
                 <Label className="text-base text-slate-300 font-medium">Percelen</Label>
-                <div className="[&_button]:!h-auto [&_button]:!min-h-[56px] [&_button]:!text-base">
-                    <ParcelMultiSelect
-                        parcels={parcels}
-                        selectedIds={selectedIds}
+                <div className="[&_button]:!min-h-[56px] [&_button]:!text-base">
+                    <UnifiedParcelMultiSelect
+                        groups={groups}
+                        selectedSubParcelIds={selectedIds}
                         onChange={onChange}
+                        favoriteGroups={favoriteGroups}
                         placeholder="Tik hier om percelen te kiezen..."
-                        groups={parcelGroups}
+                        showScopeSummary
                     />
                 </div>
             </div>
@@ -559,11 +567,13 @@ function StepParcels({
 
 function StepProducts({
     products,
+    totalArea,
     onAdd,
     onRemove,
     onUpdate,
 }: {
     products: ProductRow[];
+    totalArea: number;
     onAdd: () => void;
     onRemove: (id: string) => void;
     onUpdate: (id: string, patch: Partial<ProductRow>) => void;
@@ -572,7 +582,7 @@ function StepProducts({
         <div className="space-y-6">
             <div>
                 <h3 className="text-2xl font-bold text-white mb-1">Welk middel en hoeveel?</h3>
-                <p className="text-base text-slate-400">Voeg één of meerdere middelen toe. Gebruik de snelle doseringen voor vaak gebruikte hoeveelheden.</p>
+                <p className="text-base text-slate-400">Voeg één of meerdere middelen toe. Kies tussen dosering per hectare of de totale hoeveelheid — we rekenen het voor je om.</p>
             </div>
 
             <div className="space-y-4">
@@ -581,6 +591,7 @@ function StepProducts({
                         key={product.id}
                         product={product}
                         index={idx}
+                        totalArea={totalArea}
                         canRemove={products.length > 1}
                         onRemove={() => onRemove(product.id)}
                         onUpdate={(patch) => onUpdate(product.id, patch)}
@@ -605,34 +616,18 @@ function StepProducts({
 function ProductRowEditor({
     product,
     index,
+    totalArea,
     canRemove,
     onRemove,
     onUpdate,
 }: {
     product: ProductRow;
     index: number;
+    totalArea: number;
     canRemove: boolean;
     onRemove: () => void;
     onUpdate: (patch: Partial<ProductRow>) => void;
 }) {
-    const [displayDosage, setDisplayDosage] = React.useState(product.dosage ? String(product.dosage) : '');
-
-    React.useEffect(() => {
-        setDisplayDosage(product.dosage ? String(product.dosage) : '');
-    }, [product.dosage]);
-
-    const handleDosageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let raw = e.target.value.replace(/[^0-9.,]/g, '');
-        setDisplayDosage(raw);
-        const parsed = parseFloat(raw.replace(',', '.'));
-        onUpdate({ dosage: isNaN(parsed) ? 0 : parsed });
-    };
-
-    const applyPreset = (v: number) => {
-        setDisplayDosage(String(v).replace('.', ','));
-        onUpdate({ dosage: v });
-    };
-
     return (
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -663,49 +658,27 @@ function ProductRowEditor({
                 </div>
             </div>
 
-            <div className="grid grid-cols-[1fr_auto] gap-3">
-                <div className="space-y-2">
-                    <Label className="text-sm text-slate-300 font-medium">Dosering</Label>
-                    <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={displayDosage}
-                        onChange={handleDosageChange}
-                        placeholder="0,00"
-                        className="h-12 text-lg font-semibold text-right tabular-nums"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label className="text-sm text-slate-300 font-medium">Eenheid</Label>
-                    <div className="grid grid-cols-2 gap-1.5 w-36">
-                        {UNIT_OPTIONS.map(u => (
-                            <button
-                                key={u}
-                                type="button"
-                                onClick={() => onUpdate({ unit: u })}
-                                className={cn(
-                                    'h-12 rounded-lg border text-sm font-medium transition-all',
-                                    product.unit === u
-                                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-400'
-                                        : 'bg-white/[0.02] border-white/10 text-slate-400 hover:bg-white/[0.04]',
-                                )}
-                            >
-                                {u}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+            <div className="space-y-2">
+                <Label className="text-sm text-slate-300 font-medium">Dosering</Label>
+                <DosageTotalField
+                    dosage={product.dosage}
+                    unit={product.unit}
+                    totalArea={totalArea}
+                    onDosageChange={(dosage) => onUpdate({ dosage })}
+                    onUnitChange={(unit) => onUpdate({ unit })}
+                    tint="emerald"
+                />
             </div>
 
-            {/* Dosage presets */}
+            {/* Dosage presets — only meaningful in per-ha thinking, but still useful */}
             <div className="space-y-2">
-                <Label className="text-sm text-slate-400 font-medium">Snelle doseringen</Label>
+                <Label className="text-sm text-slate-400 font-medium">Snelle doseringen (per ha)</Label>
                 <div className="flex flex-wrap gap-2">
                     {DOSAGE_PRESETS.map(v => (
                         <button
                             key={v}
                             type="button"
-                            onClick={() => applyPreset(v)}
+                            onClick={() => onUpdate({ dosage: v })}
                             className={cn(
                                 'h-11 px-4 rounded-lg border text-base font-semibold tabular-nums transition-all',
                                 product.dosage === v
@@ -795,14 +768,20 @@ function StepConfirm({
                     <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-400">{products.length} {products.length === 1 ? 'middel' : 'middelen'}</p>
                         <div className="space-y-1.5 mt-1.5">
-                            {products.map(p => (
-                                <div key={p.id} className="flex items-center justify-between gap-4 text-base">
-                                    <span className="text-white font-medium truncate">{p.product}</span>
-                                    <span className="text-emerald-400 font-semibold tabular-nums shrink-0">
-                                        {String(p.dosage).replace('.', ',')} {p.unit}
-                                    </span>
-                                </div>
-                            ))}
+                            {products.map(p => {
+                                const totalUsed = formatTotalUsage(p.dosage, totalArea, p.unit);
+                                return (
+                                    <div key={p.id} className="flex items-center justify-between gap-4 text-base">
+                                        <span className="text-white font-medium truncate">{p.product}</span>
+                                        <span className="font-semibold tabular-nums shrink-0 text-right">
+                                            <span className="text-emerald-400">{String(p.dosage).replace('.', ',')} {perHaUnit(p.unit)}</span>
+                                            {totalUsed && (
+                                                <span className="block text-xs text-slate-500 font-normal mt-0.5">= {totalUsed} totaal</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
