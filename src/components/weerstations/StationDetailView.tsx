@@ -155,7 +155,7 @@ export function StationDetailView({
             unit="%"
             decimals={0}
             accent="sky"
-            sublabel={latest.wet_bulb_c !== null ? `Wet-bulb ${latest.wet_bulb_c.toFixed(1)}°C` : undefined}
+            sublabel={latest.wet_bulb_c !== null ? `Natte bol ${latest.wet_bulb_c.toFixed(1)}°C` : undefined}
           />
           <BigKPI
             icon={CloudRain}

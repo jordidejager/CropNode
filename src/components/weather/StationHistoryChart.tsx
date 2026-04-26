@@ -294,7 +294,7 @@ function CustomTooltip({
   if (metric === 'temperature' && p.dewPoint !== null) {
     rows.push({ label: 'Dauwpunt', value: `${p.dewPoint.toFixed(1)} °C`, color: '#60a5fa' });
     if (p.wetBulb !== null) {
-      rows.push({ label: 'Wet-bulb', value: `${p.wetBulb.toFixed(1)} °C`, color: '#94a3b8' });
+      rows.push({ label: 'Natte bol', value: `${p.wetBulb.toFixed(1)} °C`, color: '#94a3b8' });
     }
   }
   if (metric === 'humidity' && p.dewPoint !== null) {
