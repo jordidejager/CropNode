@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useParcels } from '@/hooks/use-data';
+import { useParcelGroupOptions } from '@/hooks/use-parcel-group-options';
+import { UnifiedParcelMultiSelect } from '@/components/domain/unified-parcel-multi-select';
 import type { HarvestRegistration, HarvestRegistrationInput, PickNumber, QualityClass } from '@/lib/types';
 
 interface HarvestRegistrationFormProps {
@@ -49,6 +51,7 @@ export function HarvestRegistrationForm({
   isLoading,
 }: HarvestRegistrationFormProps) {
   const { data: parcels = [] } = useParcels();
+  const { data: parcelGroups = [] } = useParcelGroupOptions();
 
   // Form state
   const [subParcelId, setSubParcelId] = React.useState<string>('');
@@ -145,25 +148,13 @@ export function HarvestRegistrationForm({
           {/* Sub-parcel selection */}
           <div className="space-y-2">
             <Label htmlFor="sub-parcel">Perceel / Blok</Label>
-            <Select value={subParcelId} onValueChange={setSubParcelId}>
-              <SelectTrigger id="sub-parcel">
-                <SelectValue placeholder="Selecteer een perceel..." />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(groupedParcels).map(([groupName, items]) => (
-                  <React.Fragment key={groupName}>
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                      {groupName}
-                    </div>
-                    {items.filter((parcel) => parcel.id).map((parcel) => (
-                      <SelectItem key={parcel.id} value={parcel.id}>
-                        {parcel.name} ({parcel.variety})
-                      </SelectItem>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </SelectContent>
-            </Select>
+            <UnifiedParcelMultiSelect
+              groups={parcelGroups}
+              selectedSubParcelIds={subParcelId ? [subParcelId] : []}
+              onChange={(ids) => setSubParcelId(ids[ids.length - 1] ?? '')}
+              mode="single"
+              placeholder="Selecteer een perceel..."
+            />
           </div>
 
           {/* Date and pick number row */}
