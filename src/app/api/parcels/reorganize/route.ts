@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase-client';
 import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-utils';
 
 /**
@@ -129,6 +130,55 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // 7b. Defensive repointing: tabellen die main parcel_id referencen moeten
+    // naar het target wijzen vóór we de oude parcels verwijderen. Service-role
+    // client gebruiken om RLS te bypassen (zelfde user_id check loopt mee).
+    const adminClient = createServiceRoleClient();
+
+    // parcel_history.parcel_id is meestal sub_parcel.id, maar er kunnen edge-case
+    // rijen zijn die naar main parcel.id verwijzen — die hier defensief verleggen.
+    await adminClient
+      .from('parcel_history')
+      .update({ parcel_id: targetParcel.id })
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
+
+    // task_logs heeft parcel_id (whole-parcel mode) — repoint naar target
+    await adminClient
+      .from('task_logs')
+      .update({ parcel_id: targetParcel.id })
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
+
+    // active_task_sessions idem
+    await adminClient
+      .from('active_task_sessions')
+      .update({ parcel_id: targetParcel.id })
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
+
+    // harvest_registrations.parcel_id legacy column — repoint
+    await adminClient
+      .from('harvest_registrations')
+      .update({ parcel_id: targetParcel.id })
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
+
+    // cell_sub_parcels.parcel_id (if used as fallback when sub_parcel_id null)
+    await adminClient
+      .from('cell_sub_parcels')
+      .update({ parcel_id: targetParcel.id })
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
+
+    // disease_model_config: lossy delete (na merge is er nog maar 1 perceel,
+    // dus 1 config — behoud die van het target, verwijder de rest)
+    await adminClient
+      .from('disease_model_config')
+      .delete()
+      .in('parcel_id', otherParcelIds)
+      .eq('user_id', user.id);
 
     // 8. Delete the now-empty old parcels
     const { error: deleteError } = await supabase

@@ -83,6 +83,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   // Groups
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [isReorganizeOpen, setIsReorganizeOpen] = useState(false);
+  const [reorganizeTab, setReorganizeTab] = useState<'auto' | 'manual'>('auto');
   const [activeGroupFilter, setActiveGroupFilter] = useState<string | null>(null);
   const [groupInitialSelectedIds, setGroupInitialSelectedIds] = useState<Set<string> | undefined>(undefined);
 
@@ -689,11 +690,19 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
           </Button>
           <Button
             variant="outline"
-            onClick={() => setIsReorganizeOpen(true)}
+            onClick={() => { setReorganizeTab('auto'); setIsReorganizeOpen(true); }}
             className="flex-1 md:flex-none border-white/10 font-bold gap-2 h-12 rounded-full bg-white/5 hover:bg-white/10"
           >
             <Merge className="h-4 w-4" />
             <span className="hidden md:inline">Reorganiseren</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => { setReorganizeTab('manual'); setIsReorganizeOpen(true); }}
+            className="flex-1 md:flex-none border-white/10 font-bold gap-2 h-12 rounded-full bg-white/5 hover:bg-white/10"
+          >
+            <Layers className="h-4 w-4" />
+            <span className="hidden md:inline">Hoofdperceel maken</span>
           </Button>
           <Button
             onClick={handleAdd}
@@ -1294,6 +1303,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
       <ParcelReorganizeDialog
         open={isReorganizeOpen}
         onOpenChange={setIsReorganizeOpen}
+        defaultTab={reorganizeTab}
         onSuccess={() => {
           invalidateParcels();
           toast({ title: 'Percelen samengevoegd', description: 'De percelenlijst is bijgewerkt.' });
