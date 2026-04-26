@@ -486,71 +486,8 @@ function NoteParcelMultiSelector({
   );
 }
 
-interface ParcelSelectorProps {
-  currentParcelId: string | null;
-  onSelect: (parcelId: string | null) => void;
-  onClose: () => void;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function ParcelSelector({ currentParcelId, onSelect, onClose }: ParcelSelectorProps) {
-  const { data: parcels = [] } = useParcels();
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() =>
-    parcels.filter(p =>
-      !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.variety ?? '').toLowerCase().includes(search.toLowerCase())
-    ),
-    [parcels, search]
-  );
-
-  return (
-    <div className="absolute right-0 top-8 z-20 w-64 rounded-xl bg-[#0f1e35] border border-white/[0.1] shadow-2xl overflow-hidden">
-      <div className="p-2 border-b border-white/[0.06]">
-        <input
-          autoFocus
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Zoek perceel..."
-          className="w-full bg-white/[0.04] rounded-lg px-3 py-1.5 text-xs text-white/80 placeholder:text-white/20 outline-none"
-        />
-      </div>
-      <div className="max-h-48 overflow-y-auto">
-        <button
-          onClick={() => { onSelect(null); onClose(); }}
-          className={cn(
-            'w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors text-left',
-            currentParcelId === null ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:bg-white/[0.04] hover:text-white/60'
-          )}
-        >
-          <span className="text-white/20">—</span>
-          Geen perceel
-        </button>
-        {filtered.map(p => (
-          <button
-            key={p.id}
-            onClick={() => { onSelect(p.id); onClose(); }}
-            className={cn(
-              'w-full flex items-start gap-2 px-3 py-2 text-xs transition-colors text-left',
-              currentParcelId === p.id ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/60 hover:bg-white/[0.04] hover:text-white/80'
-            )}
-          >
-            <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-            <div className="min-w-0">
-              <div className="font-medium truncate">{p.name}</div>
-              <div className="text-white/30 truncate">{p.crop} · {p.variety}</div>
-            </div>
-          </button>
-        ))}
-        {filtered.length === 0 && (
-          <p className="px-3 py-3 text-xs text-white/25 text-center">Geen percelen gevonden</p>
-        )}
-      </div>
-    </div>
-  );
-}
+// (oude inline ParcelSelector verwijderd in stap 10 — vervangen door
+//  NoteParcelMultiSelector hierboven, gebruikt UnifiedParcelMultiSelect)
 
 // ============================================================================
 // OBSERVATION HELPERS
