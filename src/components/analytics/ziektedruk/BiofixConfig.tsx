@@ -18,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { UnifiedParcelMultiSelect } from '@/components/domain/unified-parcel-multi-select';
+import { useParcelGroupOptions } from '@/hooks/use-parcel-group-options';
 import type { DiseaseModelConfig, InoculumPressure } from '@/lib/disease-models/types';
 
 interface BiofixConfigProps {
@@ -62,6 +64,33 @@ export function BiofixConfig({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  // Hiërarchische parcel-data voor UnifiedParcelMultiSelect.
+  // Filter op alleen groepen wiens parcelId in de toegestane lijst (props.parcels) zit.
+  const { data: allGroups = [] } = useParcelGroupOptions();
+  const groupsForBiofix = allGroups.filter(g =>
+    parcels.some(p => p.id === g.parcelId || g.subParcels.some(s => s.id === p.id)),
+  );
+
+  // Klik op sub_parcel → vind owning group → selecteer parent parcelId
+  // (BiofixConfig is per main parcel, niet per sub).
+  const handleParcelSubChange = (subIds: string[]) => {
+    if (subIds.length === 0) return onParcelChange('');
+    const subId = subIds[subIds.length - 1];
+    for (const g of groupsForBiofix) {
+      if (g.subParcels.some(s => s.id === subId)) {
+        onParcelChange(g.parcelId);
+        return;
+      }
+    }
+    onParcelChange('');
+  };
+
+  // Vertaal selectedParcelId (= main parcels.id) naar sub_parcel.id[]
+  const selectedSubIds = (() => {
+    const g = groupsForBiofix.find(g => g.parcelId === selectedParcelId);
+    return g ? g.subParcels.map(s => s.id) : [];
+  })();
+
   const handleSave = () => {
     if (!biofixDate) return;
     const dateStr = format(biofixDate, 'yyyy-MM-dd');
@@ -103,22 +132,17 @@ export function BiofixConfig({
 
         <div className="flex flex-wrap items-end gap-3">
           {/* Parcel selector */}
-          <div className="min-w-[200px]">
+          <div className="min-w-[240px]">
             <label className="block text-xs font-medium text-slate-400 mb-1.5">
               Perceel
             </label>
-            <Select value={selectedParcelId} onValueChange={onParcelChange}>
-              <SelectTrigger className="w-full bg-white/5 border-white/10">
-                <SelectValue placeholder="Selecteer perceel" />
-              </SelectTrigger>
-              <SelectContent>
-                {parcels.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <UnifiedParcelMultiSelect
+              groups={groupsForBiofix}
+              selectedSubParcelIds={selectedSubIds}
+              onChange={handleParcelSubChange}
+              mode="single"
+              placeholder="Selecteer perceel"
+            />
           </div>
 
           {/* Biofix date picker */}
@@ -208,18 +232,15 @@ export function BiofixConfig({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* Parcel selector */}
-      <Select value={selectedParcelId} onValueChange={onParcelChange}>
-        <SelectTrigger className="w-[200px] bg-white/5 border-white/10">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {parcels.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              {p.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="w-[240px]">
+        <UnifiedParcelMultiSelect
+          groups={groupsForBiofix}
+          selectedSubParcelIds={selectedSubIds}
+          onChange={handleParcelSubChange}
+          mode="single"
+          placeholder="Selecteer perceel"
+        />
+      </div>
 
       <div className="flex items-center gap-2 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5">
         <Calendar className="size-3.5 text-emerald-400" />

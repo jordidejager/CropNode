@@ -24,16 +24,12 @@ import {
   ChevronsUpDown,
   Layers,
   MapPin,
+  Search,
   X as XIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandList,
-} from '@/components/ui/command';
+import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
@@ -292,18 +288,24 @@ export function UnifiedParcelMultiSelect({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] min-w-[360px] p-0"
+        className="w-[--radix-popover-trigger-width] min-w-[360px] p-0 flex flex-col"
         align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <Command shouldFilter={false}>
-          <CommandInput
+        {/* Search input */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Input
             placeholder="Zoek perceel of ras..."
             value={search}
-            onValueChange={setSearch}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 border-0 bg-transparent px-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            autoFocus
           />
+        </div>
 
-          {/* Header bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-b text-xs">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-3 py-2 border-b text-xs">
             <span className="text-muted-foreground">
               {selectedSubs.length} van {totalSubs} geselecteerd
             </span>
@@ -331,8 +333,8 @@ export function UnifiedParcelMultiSelect({
             )}
           </div>
 
-          {/* Scrollable list — KEY FIX: max-h + overflow-y-auto */}
-          <CommandList className="max-h-[400px] overflow-y-auto overscroll-contain">
+        {/* Scrollable list — KEY FIX: max-h + overflow-y-auto */}
+        <div className="max-h-[400px] overflow-y-auto overscroll-contain">
             {/* Favorieten-groepen sectie (parcel_groups) */}
             {favoriteGroups.length > 0 && !isSearching && (
               <div className="border-b py-1">
@@ -364,7 +366,7 @@ export function UnifiedParcelMultiSelect({
             )}
 
             {filteredGroups.length === 0 ? (
-              <CommandEmpty>Geen percelen gevonden</CommandEmpty>
+              <div className="py-6 text-center text-sm text-muted-foreground">Geen percelen gevonden</div>
             ) : (
               <div className="py-1">
                 {filteredGroups.map(group => {
@@ -490,8 +492,7 @@ export function UnifiedParcelMultiSelect({
                 })}
               </div>
             )}
-          </CommandList>
-        </Command>
+        </div>
       </PopoverContent>
     </Popover>
   );
