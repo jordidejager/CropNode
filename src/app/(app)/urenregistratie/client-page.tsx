@@ -13,7 +13,6 @@ import {
     useTaskStats,
     useAddTaskLog,
     useDeleteTaskLog,
-    useParcels,
     useActiveTaskSessions,
     useStartTaskSession,
     useStopTaskSession,
@@ -22,7 +21,8 @@ import {
     useDeleteActiveTaskSession,
     useWorkSchedule,
 } from '@/hooks/use-data'
-import type { ActiveTaskSession, ParcelGroupOption } from '@/lib/types'
+import { useParcelGroupOptions } from '@/hooks/use-parcel-group-options'
+import type { ActiveTaskSession } from '@/lib/types'
 import { UrenKPI } from '@/components/urenregistratie/primitives/UrenKPI'
 import { SectionHeader } from '@/components/urenregistratie/primitives/SectionHeader'
 import { QuickStartChips } from '@/components/urenregistratie/QuickStartChips'
@@ -51,7 +51,7 @@ export default function UrenregistratieClientPage() {
     const { data: taskTypes = [], isLoading: typesLoading } = useTaskTypes()
     const { data: taskLogs = [], isLoading: logsLoading } = useTaskLogs()
     const { data: stats, isLoading: statsLoading } = useTaskStats()
-    const { data: parcels = [] } = useParcels()
+    // useParcels() vervangen door useParcelGroupOptions() (zie hieronder)
     const { data: activeSessions = [], isLoading: activeLoading } = useActiveTaskSessions()
 
     const addTaskLogMutation = useAddTaskLog()
@@ -141,65 +141,16 @@ export default function UrenregistratieClientPage() {
     }
 
     /**
-     * Group sprayable parcels (= sub-parcels with parent reference) into
-     * hoofdperceel → subpercelen trees for the hierarchical selector.
+     * Group sprayable parcels into hoofdperceel → subpercelen trees voor de
+     * hiërarchische selector. Gebruikt de gedeelde hook (groepering op
+     * `parcelName`) zodat de hiërarchie identiek is aan /percelen, spuitschrift,
+     * veldnotities en oogst.
      *
-     * Hoofdpercelen are sorted alphabetically. Within a hoofdperceel,
-     * sub-parcels are sorted by shortLabel (ras/variety).
+     * Belangrijke fix: vroeger groepeerde we op `sp.parcelId || sp.id` —
+     * waardoor "Jan van W ×3 losse parcels" als 3 hoofdpercelen verscheen.
+     * Nu groeperen op naam, dus "Jan van W" is altijd 1 groep.
      */
-    const parcelGroups = React.useMemo<ParcelGroupOption[]>(() => {
-        const byParcel = new Map<string, ParcelGroupOption>()
-
-        for (const sp of parcels) {
-            const key = sp.parcelId || sp.id
-            const parentName = sp.parcelName || sp.name
-
-            // Derive a short label that is unique WITHIN the parent parcel.
-            // Input examples:
-            //   sp.name         = "Jachthoek Oude Conference (Conference)"
-            //   sp.parcelName   = "Jachthoek"
-            //   sp.variety      = "Conference"
-            // Strategy: strip parent-name prefix + trailing "(variety)" — what
-            // remains is the human-meaningful unique name ("Oude Conference").
-            // If nothing meaningful remains, fall back to variety, then full name.
-            let shortLabel = sp.name
-            if (parentName) {
-                const prefix = parentName.toLowerCase()
-                if (shortLabel.toLowerCase().startsWith(prefix)) {
-                    shortLabel = shortLabel.slice(parentName.length).trim()
-                }
-            }
-            shortLabel = shortLabel.replace(/\s*\([^)]*\)\s*$/, '').trim()
-            if (!shortLabel) {
-                shortLabel = sp.variety || sp.name
-            }
-
-            let group = byParcel.get(key)
-            if (!group) {
-                group = {
-                    parcelId: key,
-                    parcelName: parentName,
-                    subParcels: [],
-                }
-                byParcel.set(key, group)
-            }
-            group.subParcels.push({
-                id: sp.id,
-                name: sp.name,
-                shortLabel,
-                variety: sp.variety || null,
-                crop: sp.crop,
-                area: sp.area ?? null,
-            })
-        }
-
-        const groups = Array.from(byParcel.values())
-        for (const g of groups) {
-            g.subParcels.sort((a, b) => a.shortLabel.localeCompare(b.shortLabel, 'nl'))
-        }
-        groups.sort((a, b) => a.parcelName.localeCompare(b.parcelName, 'nl'))
-        return groups
-    }, [parcels])
+    const { data: parcelGroups = [] } = useParcelGroupOptions()
 
     if (isLoading) {
         return (

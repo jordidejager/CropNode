@@ -408,13 +408,29 @@ export function UnifiedParcelMultiSelect({
 
                   return (
                     <React.Fragment key={group.parcelId}>
-                      {/* Hoofdperceel-rij: checkbox + chevron + naam + count + area */}
+                      {/* Hoofdperceel-rij: chevron-area (links, klap uit/in) + content (klik = toggle alle subs) */}
                       <div
                         className={cn(
-                          'flex items-center gap-2 px-3 py-2 hover:bg-accent/60 group/row',
+                          'flex items-center gap-1 px-2 py-2 hover:bg-accent/60 group/row',
                           groupState !== 'unchecked' && 'bg-accent/20',
                         )}
                       >
+                        {!isSearching && group.subParcels.length > 1 ? (
+                          <button
+                            type="button"
+                            aria-label={isExpanded ? 'Subpercelen verbergen' : 'Subpercelen tonen'}
+                            onClick={e => toggleExpand(group.parcelId, e)}
+                            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground shrink-0"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="w-7 shrink-0" />
+                        )}
                         <button
                           type="button"
                           onClick={() => toggleGroup(group)}
@@ -433,20 +449,6 @@ export function UnifiedParcelMultiSelect({
                             </span>
                           )}
                         </button>
-                        {!isSearching && (
-                          <button
-                            type="button"
-                            aria-label={isExpanded ? 'Subpercelen verbergen' : 'Subpercelen tonen'}
-                            onClick={e => toggleExpand(group.parcelId, e)}
-                            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground shrink-0"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </button>
-                        )}
                       </div>
 
                       {/* Sub-rijen (indented) */}
