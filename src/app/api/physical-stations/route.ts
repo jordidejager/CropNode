@@ -20,18 +20,32 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from('physical_weather_stations')
-    .select(`
+  // Try the SELECT with mm_per_tip first; if that column doesn't exist yet
+  // (migration 076 not applied), retry without it so users still see their
+  // stations. PostgREST returns code 42703 for unknown column.
+  const baseColumns = `
       id, device_id, dev_eui, application_id, label,
       hardware_model, firmware_version,
       parcel_id, latitude, longitude, elevation_m,
       active, installed_at, last_seen_at, last_frame_counter,
-      mm_per_tip,
       created_at, updated_at,
       parcels ( id, name )
-    `)
+    `;
+  const withCalibration = `${baseColumns}, mm_per_tip`;
+
+  let { data, error } = await supabase
+    .from('physical_weather_stations')
+    .select(withCalibration)
     .order('created_at', { ascending: true });
+
+  if (error && (error.code === '42703' || /mm_per_tip/.test(error.message))) {
+    const retry = await supabase
+      .from('physical_weather_stations')
+      .select(baseColumns)
+      .order('created_at', { ascending: true });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
