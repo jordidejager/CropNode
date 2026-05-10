@@ -20,6 +20,7 @@ export interface PhysicalStation {
   installed_at: string | null;
   last_seen_at: string | null;
   last_frame_counter: number | null;
+  mm_per_tip?: number;
   created_at: string;
   updated_at: string;
   parcels?: { id: string; name: string } | null;
@@ -119,6 +120,7 @@ export interface UpdateStationPayload {
   parcelId?: string | null;
   active?: boolean;
   firmwareVersion?: string | null;
+  mmPerTip?: number;
 }
 
 export function useUpdateStation() {

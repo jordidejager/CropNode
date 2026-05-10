@@ -192,20 +192,24 @@ export function classifyBattery(voltage: number | null): 'good' | 'low' | 'criti
  * Compute rainfall for this uplink from the cumulative counter diff.
  *
  * The WSC2 tipping bucket reports a monotonically increasing counter that
- * only resets at firmware-level power cycle (rare). Each tip = 0.1 mm.
+ * only resets at firmware-level power cycle (rare). Each tip equals a fixed
+ * `mmPerTip` (the bucket's calibration constant — typically 0.2 mm for the
+ * Dragino factory bucket, but adjustable per station after calibration).
+ *
  * Returns null if we have no previous value, or if the counter went
  * backwards (treat as a reset — don't subtract, just log the reading).
  */
 export function calcRainfallMm(
   currentCounter: number | null,
-  previousCounter: number | null
+  previousCounter: number | null,
+  mmPerTip: number = 0.2
 ): number | null {
   if (currentCounter === null) return null;
   if (previousCounter === null) return 0; // first measurement — no delta yet
   const diff = currentCounter - previousCounter;
   if (diff < 0) return 0;                  // counter reset
   if (diff > 10_000) return null;          // implausibly large — skip
-  return Math.round(diff * 0.1 * 100) / 100;
+  return Math.round(diff * mmPerTip * 100) / 100;
 }
 
 /** Dutch harvest-year rule: Nov/Dec → next year. */

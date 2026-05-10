@@ -27,6 +27,7 @@ export async function GET() {
       hardware_model, firmware_version,
       parcel_id, latitude, longitude, elevation_m,
       active, installed_at, last_seen_at, last_frame_counter,
+      mm_per_tip,
       created_at, updated_at,
       parcels ( id, name )
     `)

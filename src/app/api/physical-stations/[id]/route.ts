@@ -12,6 +12,7 @@ interface UpdateBody {
   parcelId?: string | null;
   active?: boolean;
   firmwareVersion?: string | null;
+  mmPerTip?: number;
 }
 
 export async function PATCH(
@@ -48,6 +49,20 @@ export async function PATCH(
   if (body.label !== undefined) patch.label = body.label || null;
   if (body.active !== undefined) patch.active = body.active;
   if (body.firmwareVersion !== undefined) patch.firmware_version = body.firmwareVersion || null;
+  if (body.mmPerTip !== undefined) {
+    if (
+      typeof body.mmPerTip !== 'number' ||
+      !Number.isFinite(body.mmPerTip) ||
+      body.mmPerTip <= 0 ||
+      body.mmPerTip > 10
+    ) {
+      return NextResponse.json(
+        { error: 'mmPerTip must be a number between 0 and 10' },
+        { status: 400 }
+      );
+    }
+    patch.mm_per_tip = Math.round(body.mmPerTip * 1000) / 1000;
+  }
 
   // Parcel change — also refresh coordinates + virtual-station link
   if (body.parcelId !== undefined) {

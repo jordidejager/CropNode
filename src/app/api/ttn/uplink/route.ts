@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     //    If unknown, log it but keep returning 200 so TTN doesn't retry forever.
     const { data: station, error: stationErr } = await (admin as any)
       .from('physical_weather_stations')
-      .select('id, last_frame_counter')
+      .select('id, last_frame_counter, last_seen_at, mm_per_tip')
       .eq('device_id', decoded.deviceId)
       .maybeSingle();
 
@@ -127,9 +127,19 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    // Per-station calibration constant (mm of rain per bucket tip). Default 0.2
+    // matches Dragino factory spec; users can recalibrate via the station detail
+    // page. Fall back to default if the column doesn't exist yet (migration 076
+    // not applied).
+    const mmPerTip =
+      typeof station.mm_per_tip === 'number' && station.mm_per_tip > 0
+        ? station.mm_per_tip
+        : 0.2;
+
     const rainfallMm = calcRainfallMm(
       decoded.rainCounter,
-      previousRow?.rain_counter ?? null
+      previousRow?.rain_counter ?? null,
+      mmPerTip
     );
 
     // 8. Insert measurement (plain insert — no onConflict to keep the route
