@@ -79,11 +79,32 @@ export async function POST(request: NextRequest) {
 
     // 5. Look up the physical station by device_id.
     //    If unknown, log it but keep returning 200 so TTN doesn't retry forever.
-    const { data: station, error: stationErr } = await (admin as any)
+    // Try the SELECT with mm_per_tip first; if migration 076 hasn't been applied
+    // yet that column is missing and Postgres returns code 42703. Retry without
+    // it so the webhook keeps working — calcRainfallMm falls back to its own
+    // 0.2 default.
+    let stationLookup = await (admin as any)
       .from('physical_weather_stations')
       .select('id, last_frame_counter, last_seen_at, mm_per_tip')
       .eq('device_id', decoded.deviceId)
       .maybeSingle();
+
+    if (
+      stationLookup.error &&
+      (stationLookup.error.code === '42703' ||
+        /mm_per_tip/.test(stationLookup.error.message || ''))
+    ) {
+      stationLookup = await (admin as any)
+        .from('physical_weather_stations')
+        .select('id, last_frame_counter, last_seen_at')
+        .eq('device_id', decoded.deviceId)
+        .maybeSingle();
+    }
+
+    const station = stationLookup.data as
+      | { id: string; last_frame_counter: number | null; last_seen_at: string | null; mm_per_tip?: number }
+      | null;
+    const stationErr = stationLookup.error;
 
     if (stationErr) throw new Error(`DB lookup failed: ${stationErr.message}`);
 
