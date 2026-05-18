@@ -10,7 +10,7 @@
 
 import { ai } from '@/ai/genkit';
 import { MONTH_LABELS_LONG } from '../ui-tokens';
-import type { RagContext, RetrievedChunk } from './types';
+import type { ChatTurn, RagContext, RetrievedChunk } from './types';
 
 const GENERATION_MODEL = 'googleai/gemini-2.5-flash-lite';
 
@@ -66,7 +66,21 @@ ANTWOORDSTIJL:
 - Praktisch, direct, als een ervaren collega
 - Geen marketingtaal, geen "ik denk" of "misschien"
 - Feit-gericht: wat moet de teler doen, wanneer, met welk middel, welke dosering
-- Max ~200-300 woorden tenzij de vraag complex is`;
+- Max ~200-300 woorden tenzij de vraag complex is
+
+SYNONIEM-HERKENNING:
+22a. Als de vraag een informele/regionale term gebruikt ("dikkoppen", "springer", "wolluis", "wurm", etc.) en de context beschrijft de canonical term ("perengalmug", "perenbladvlo", "bloedluis", "fruitmot"), bevestig dit expliciet:
+     Bijv. "Dikkoppen worden veroorzaakt door perengalmug (Contarinia pyrivora). De bestrijding..."
+     Zo weet de teler dat jij hun term begrijpt en kunnen ze de canonical term later opzoeken.
+
+BRONVERWIJZINGEN (inline citations):
+23. Voeg aan het einde van elke concrete claim een bron-marker toe in de vorm \`[n]\`,
+    waarbij n het nummer is van het BRON-blok onderaan de context (begint bij 1).
+    Voorbeeld: "Spuit Scala 0,6 L/ha curatief tot 72u na infectie [1][3]."
+24. Verwijs ALLEEN naar bronnen die daadwerkelijk in de context staan. Geen [4] als er maar 3 bronnen zijn.
+25. GESTRUCTUREERDE KENNIS (uit onze database) krijgt GEEN marker — alleen BRONARTIKELEN.
+26. Als een zin uit meerdere bronnen komt, combineer: "… [1][2]".
+27. Gebruik markers spaarzaam: per zin hooguit twee. Geen markers in kopjes.`;
 
 export interface GenerateOptions {
   query: string;
@@ -77,31 +91,46 @@ export interface GenerateOptions {
   productAliases?: Record<string, string>;
   /** Pre-formatted structured knowledge (product advice table, disease profile, relations) */
   structuredContext?: string | null;
+  /** Prior exchanges for multi-turn follow-ups */
+  history?: ChatTurn[];
 }
 
 export interface GenerateResult {
-  /** The full text after streaming completes */
-  fullText: string;
-  /** Async iterable of text chunks (yields incrementally) */
+  /**
+   * Async iterable of text chunks as Gemini streams them. Iterate to get
+   * incremental output; the caller is responsible for accumulating the full
+   * text (or call `getFullText()` after iteration completes).
+   */
   stream: AsyncIterable<string>;
+  /**
+   * Resolves with the authoritative full text after the stream has been
+   * fully consumed. Reads from the underlying Genkit `response` promise so
+   * callers who don't iterate the stream can still get the final answer.
+   */
+  getFullText(): Promise<string>;
 }
 
 /**
- * Run the grounded generator. Returns a streaming async iterable.
+ * Run the grounded generator with true SSE streaming via `ai.generateStream`.
  *
- * NOTE: Genkit's `ai.generateStream` returns chunks as StreamChunk objects.
- * We wrap it so callers get simple strings.
+ * Genkit yields `GenerateResponseChunk` objects with a `.text` getter; we map
+ * them to plain strings so the pipeline can forward each delta as an
+ * `answer_chunk` SSE event.
  */
 export async function generateGroundedAnswer(options: GenerateOptions): Promise<GenerateResult> {
-  const { query, intent, context, chunks } = options;
+  const userPrompt = buildPrompt(options);
 
-  const userPrompt = buildPrompt({ query, intent, context, chunks });
+  // Genkit expects conversation turns as `messages: [{role, content: [{text}]}]`.
+  // We only include prior turns — the current user message goes via `prompt`.
+  const priorMessages = (options.history ?? []).slice(-6).map((t) => ({
+    role: t.role === 'assistant' ? ('model' as const) : ('user' as const),
+    content: [{ text: t.content }],
+  }));
 
-  // Use non-streaming variant for now (simpler to wire into SSE; we can batch
-  // the full response as one "chunk" since gemini-flash-lite is very fast)
-  const result = await ai.generate({
+  const { stream, response } = ai.generateStream({
     model: GENERATION_MODEL,
     system: GROUNDED_SYSTEM_PROMPT,
+    messages: priorMessages.length > 0 ? priorMessages : undefined,
     prompt: userPrompt,
     config: {
       temperature: 0.2,
@@ -109,18 +138,19 @@ export async function generateGroundedAnswer(options: GenerateOptions): Promise<
     },
   });
 
-  const text = (result as { text?: string; output?: { text?: string } }).text
-    ?? (result as { output?: { text?: string } }).output?.text
-    ?? '';
-
-  // Wrap single response as a minimal async iterable (for future upgrade to true streaming)
-  async function* singleChunkStream() {
-    yield text;
+  async function* textStream() {
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) yield text;
+    }
   }
 
   return {
-    fullText: text,
-    stream: singleChunkStream(),
+    stream: textStream(),
+    getFullText: async () => {
+      const final = await response;
+      return final.text ?? '';
+    },
   };
 }
 

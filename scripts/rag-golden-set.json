@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "description": "Golden set voor RAG-regressietesten. Elke query bevat verwachte entiteiten (topic/crops/products/subjects) + sleutelwoorden die in het antwoord moeten staan. Kan groeien als we nieuwe bugs/patronen tegenkomen.",
+  "queries": [
+    {
+      "id": "schurft-curatief-appel",
+      "query": "Wat doe ik nu curatief tegen schurft bij Jonagold?",
+      "expected_intent": {
+        "topic": "ziekte",
+        "crops": ["appel"],
+        "specific_subjects": ["schurft"]
+      },
+      "expected_answer_contains_any": ["scala", "pyrimethanil", "difcor", "score", "geyser", "curatief"],
+      "expected_answer_contains_all": []
+    },
+    {
+      "id": "perenbladvlo-bestrijding",
+      "query": "Welke middelen zijn effectief tegen perenbladvlo?",
+      "expected_intent": {
+        "topic": "plaag",
+        "crops": ["peer"],
+        "specific_subjects": ["perenbladvlo"]
+      },
+      "expected_answer_contains_any": ["movento", "batavia", "naturalis", "spruzit", "olie", "witte olie"]
+    },
+    {
+      "id": "ga47-conference",
+      "query": "Wanneer GA4/7 op Conference spuiten?",
+      "expected_intent": {
+        "topic": "teelttechniek",
+        "crops": ["peer"],
+        "varieties": ["Conference"],
+        "products": ["GA4/7"]
+      },
+      "expected_answer_contains_any": ["bloei", "volle bloei", "vruchtzetting", "bloembladval"],
+      "timing_question_expected": true
+    },
+    {
+      "id": "brevis-dunning",
+      "query": "Welke dosering Brevis voor chemische dunning op Elstar?",
+      "expected_intent": {
+        "topic": "dunning",
+        "crops": ["appel"],
+        "varieties": ["Elstar"],
+        "products": ["Brevis"]
+      },
+      "expected_answer_contains_any": ["metamitron", "kg/ha", "l/ha", "dosering"],
+      "dosage_question_expected": true
+    },
+    {
+      "id": "captan-alternatief",
+      "query": "Alternatieven voor Captan tijdens bloei?",
+      "expected_intent": {
+        "topic": "middel_advies",
+        "products": ["Captan"]
+      },
+      "expected_answer_contains_any": ["scala", "syllit", "delan", "dithianon", "dodine"]
+    },
+    {
+      "id": "pyrus-scala-synoniem",
+      "query": "Kan ik Pyrus gebruiken tegen schurft?",
+      "expected_intent": {
+        "topic": "middel_advies",
+        "products": ["Pyrus"]
+      },
+      "expected_answer_contains_any": ["scala", "pyrimethanil", "curatief", "schurft"],
+      "comment": "Test product alias resolution (Pyrus = Scala)."
+    },
+    {
+      "id": "fruitmot-monitoring",
+      "query": "Hoe monitor ik fruitmot?",
+      "expected_intent": {
+        "topic": "plaag",
+        "specific_subjects": ["fruitmot"]
+      },
+      "expected_answer_contains_any": ["val", "feromoon", "trap", "monitoring"]
+    },
+    {
+      "id": "vruchtboomkanker-preventie",
+      "query": "Hoe voorkom ik vruchtboomkanker?",
+      "expected_intent": {
+        "topic": "ziekte",
+        "specific_subjects": ["vruchtboomkanker"]
+      },
+      "expected_answer_contains_any": ["snoei", "wond", "koper", "luna"]
+    },
+    {
+      "id": "bacterievuur-herkennen",
+      "query": "Hoe herken ik bacterievuur?",
+      "expected_intent": {
+        "topic": "ziekte",
+        "specific_subjects": ["bacterievuur"]
+      },
+      "expected_answer_contains_any": ["herderstaf", "verwelking", "zwart", "erwinia", "symptomen"]
+    },
+    {
+      "id": "off-topic-tomaten",
+      "query": "Welke kunstmest is goed voor tomaten?",
+      "expected_intent": {
+        "topic": "off_topic"
+      },
+      "should_fallback": true,
+      "comment": "Off-topic — should be rejected by confidence check."
+    },
+    {
+      "id": "off-topic-fotosynthese",
+      "query": "Hoe werkt fotosynthese?",
+      "expected_intent": {
+        "topic": "off_topic"
+      },
+      "should_fallback": true
+    },
+    {
+      "id": "followup-en-bij-peer",
+      "query": "En bij peer?",
+      "history": [
+        { "role": "user", "content": "Wat doe ik curatief tegen schurft bij appel?" },
+        { "role": "assistant", "content": "Bij appel kun je Scala 0,6 L/ha curatief inzetten tot 72 uur na infectie." }
+      ],
+      "expected_intent": {
+        "crops": ["peer"]
+      },
+      "expected_answer_contains_any": ["peer", "schurft", "scala", "pyrus", "curatief"],
+      "comment": "Follow-up query — intent extractor moet gewas opvangen uit historie."
+    },
+    {
+      "id": "encyclopedie-fastpath-perenbladvlo",
+      "query": "Hoe overwintert perenbladvlo?",
+      "expected_intent": {
+        "topic": "plaag",
+        "specific_subjects": ["perenbladvlo"]
+      },
+      "expected_answer_contains_any": ["volwassene", "volwassen", "springer", "winter"],
+      "comment": "Test encyclopedia fast-path + hallucinatie-preventie (NIET 'ei' als antwoord)."
+    }
+  ]
+}

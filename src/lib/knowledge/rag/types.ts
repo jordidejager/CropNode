@@ -115,6 +115,19 @@ export interface CtgbAnnotation {
 }
 
 // ============================================
+// Conversation history (multi-turn chat)
+// ============================================
+
+/**
+ * A single prior turn forwarded to the pipeline for follow-up questions
+ * ("en bij peer?", "hoeveel dan?"). Limit callers send is typically 3.
+ */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// ============================================
 // Chat session / message shapes
 // ============================================
 

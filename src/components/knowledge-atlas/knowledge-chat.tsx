@@ -21,62 +21,20 @@ import {
   Check,
   X,
   CircleDashed,
-  MessageSquare,
   ChevronDown,
   Leaf,
   ThumbsUp,
   ThumbsDown,
 } from 'lucide-react';
 
-import type {
-  RagEvent,
-  CtgbAnnotation,
-} from '@/lib/knowledge/rag/types';
+import type { CtgbAnnotation } from '@/lib/knowledge/rag/types';
 import { cn } from '@/lib/utils';
 import { useCurrentPhenology } from '@/hooks/use-knowledge';
+import { useRagChat, type RagChatMessage } from '@/hooks/use-rag-chat';
 
 // ============================================
-// Seasonal suggestions
+// Seasonal suggestions — fetched dynamically from /api/knowledge/suggestions
 // ============================================
-
-const SEASONAL_SUGGESTIONS: Record<string, string[]> = {
-  rust: [
-    'Hoe moet ik snoeien bij Elstar?',
-    'Wanneer koperbespuiting uitvoeren?',
-    'Welke winterbehandeling tegen bloedluis?',
-  ],
-  knopstadium: [
-    'Wanneer start ik met schurftbestrijding?',
-    'Welke middelen bij groen-puntje?',
-    'Hoe herken ik appelbloesemkever?',
-  ],
-  bloei: [
-    'Wat nu te doen tegen schurft?',
-    'Wanneer GA4/7 op Conference spuiten?',
-    'Hoe herken ik bacterievuur?',
-    'Welke middelen tegen perenbladvlo?',
-  ],
-  vruchtzetting: [
-    'Wanneer chemisch dunnen bij Elstar?',
-    'Welke dosering Brevis voor dunning?',
-    'Hoe voorkom ik junival bij Conference?',
-  ],
-  groei: [
-    'Welke middelen tegen fruitmot?',
-    'Hoe herken ik spintmijt?',
-    'Wanneer calcium spuiten op appel?',
-  ],
-  oogst: [
-    'Wanneer SmartFresh toepassen?',
-    'Welke bewaarfungiciden gebruiken?',
-    'Hoe voorkom ik vruchtrot bij Conference?',
-  ],
-  nabloei: [
-    'Wanneer ureum op gevallen blad?',
-    'Welke najaarsbehandeling tegen kanker?',
-    'Hoe verlaag ik de schurftdruk?',
-  ],
-};
 
 const DEFAULT_SUGGESTIONS = [
   'Wat doe ik nu tegen schurft bij Jonagold?',
@@ -84,22 +42,6 @@ const DEFAULT_SUGGESTIONS = [
   'Wanneer GA4/7 op Conference spuiten?',
   'Alternatieven voor Captan tijdens bloei?',
 ];
-
-// ============================================
-// Types
-// ============================================
-
-interface ChatMessage {
-  id: string;
-  query: string;
-  answer: string;
-  annotations: CtgbAnnotation[];
-  sources: Array<{ id: string; title: string; category: string; subcategory: string | null; image_urls?: string[] }>;
-  loading: boolean;
-  error: string | null;
-  pipelineStage: string;
-  feedback: 'positive' | 'negative' | null;
-}
 
 // ============================================
 // Main component
@@ -113,170 +55,48 @@ interface KnowledgeChatProps {
 
 export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps) {
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { data: phenology } = useCurrentPhenology();
+  const { messages, submit, sendFeedback, isLoading } = useRagChat();
+  const [suggestions, setSuggestions] = useState<string[]>(DEFAULT_SUGGESTIONS);
 
   const currentPhase = phenology?.seasonPhase ?? 'bloei';
-  const suggestions = SEASONAL_SUGGESTIONS[currentPhase] ?? DEFAULT_SUGGESTIONS;
+
+  // Fetch phase-aware suggestions (feedback-driven + fallback)
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`/api/knowledge/suggestions?phase=${encodeURIComponent(currentPhase)}`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { suggestions?: string[] } | null) => {
+        if (data?.suggestions && data.suggestions.length > 0) {
+          setSuggestions(data.suggestions);
+        }
+      })
+      .catch(() => {
+        // keep defaults on error
+      });
+    return () => ctrl.abort();
+  }, [currentPhase]);
 
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSubmit = useCallback(async (questionText?: string) => {
-    const trimmed = (questionText ?? query).trim();
-    if (trimmed.length < 2) return;
-
-    const id = `msg-${Date.now()}`;
-    const msg: ChatMessage = {
-      id,
-      query: trimmed,
-      answer: '',
-      annotations: [],
-      sources: [],
-      loading: true,
-      error: null,
-      pipelineStage: 'Intentie analyseren...',
-      feedback: null,
-    };
-    setMessages((prev) => [...prev, msg]);
-    setQuery('');
-    setIsExpanded(true);
-
-    // SSE streaming with retry
-    const MAX_ATTEMPTS = 3;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        const res = await fetch('/api/knowledge/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: trimmed }),
-        });
-
-        if (!res.ok || !res.body) {
-          const text = await res.text().catch(() => '');
-          const isRetryable = res.status >= 500 || res.status === 503;
-          if (attempt < MAX_ATTEMPTS && isRetryable) {
-            await new Promise(r => setTimeout(r, 1000 * attempt));
-            continue;
-          }
-          throw new Error(
-            res.status === 401
-              ? 'Je sessie is verlopen. Ververs de pagina.'
-              : `Er ging iets mis (${res.status}).`,
-          );
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const event = JSON.parse(line.slice(6)) as RagEvent;
-              setMessages((prev) =>
-                prev.map((m) => {
-                  if (m.id !== id) return m;
-                  const next = { ...m };
-                  switch (event.type) {
-                    case 'understanding_start':
-                      next.pipelineStage = 'Vraag analyseren...';
-                      break;
-                    case 'understanding_done':
-                      next.pipelineStage = 'Zoeken in kennisbank...';
-                      break;
-                    case 'retrieval_start':
-                      next.pipelineStage = 'Zoeken in 2000+ artikelen...';
-                      break;
-                    case 'retrieval_done':
-                      next.pipelineStage = 'Antwoord formuleren...';
-                      break;
-                    case 'generation_start':
-                      next.pipelineStage = 'Antwoord schrijven...';
-                      break;
-                    case 'answer_chunk':
-                      next.answer += event.text;
-                      next.pipelineStage = '';
-                      break;
-                    case 'ctgb_annotation':
-                      next.annotations = event.annotations;
-                      break;
-                    case 'sources':
-                      next.sources = event.chunks;
-                      break;
-                    case 'error':
-                      next.error = event.message;
-                      break;
-                    case 'done':
-                      next.loading = false;
-                      break;
-                  }
-                  return next;
-                }),
-              );
-            } catch {
-              // ignore malformed
-            }
-          }
-        }
-        break; // success
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const isTransient = /fetch failed|ECONNRESET|NetworkError/i.test(message);
-        if (attempt < MAX_ATTEMPTS && isTransient) {
-          await new Promise(r => setTimeout(r, 1000 * attempt));
-          continue;
-        }
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === id
-              ? {
-                  ...m,
-                  error: isTransient
-                    ? 'Tijdelijk verbindingsprobleem. Probeer het opnieuw.'
-                    : message,
-                  loading: false,
-                }
-              : m,
-          ),
-        );
-        break;
-      }
-    }
-  }, [query]);
-
-  const handleFeedback = useCallback(async (messageId: string, type: 'positive' | 'negative') => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, feedback: type } : m)),
-    );
-    // Save feedback to server (fire-and-forget)
-    try {
-      await fetch('/api/knowledge/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messageId,
-          query: messages.find((m) => m.id === messageId)?.query,
-          answer: messages.find((m) => m.id === messageId)?.answer?.slice(0, 500),
-          feedback: type,
-        }),
-      });
-    } catch {
-      // Silent fail — feedback is nice-to-have
-    }
-  }, [messages]);
+  const handleSubmit = useCallback(
+    (questionText?: string) => {
+      const text = (questionText ?? query).trim();
+      if (text.length < 2 || isLoading) return;
+      setQuery('');
+      setIsExpanded(true);
+      void submit(text);
+    },
+    [query, isLoading, submit],
+  );
 
   return (
     <div className={cn('relative', className)}>
@@ -351,7 +171,7 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
                   key={msg.id}
                   message={msg}
                   onArticleClick={onArticleClick}
-                  onFeedback={handleFeedback}
+                  onFeedback={sendFeedback}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -377,7 +197,7 @@ export function KnowledgeChat({ onArticleClick, className }: KnowledgeChatProps)
           />
           <button
             type="submit"
-            disabled={query.trim().length < 2 || messages.some((m) => m.loading)}
+            disabled={query.trim().length < 2 || isLoading}
             className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-emerald-400 disabled:opacity-30"
           >
             <Send className="h-4 w-4" />
@@ -398,7 +218,7 @@ function ChatMessageBlock({
   onArticleClick,
   onFeedback,
 }: {
-  message: ChatMessage;
+  message: RagChatMessage;
   onArticleClick?: (articleId: string) => void;
   onFeedback?: (messageId: string, type: 'positive' | 'negative') => void;
 }) {
@@ -433,7 +253,11 @@ function ChatMessageBlock({
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
             <div className="min-w-0 flex-1 text-sm leading-relaxed text-white/85">
-              <FormattedAnswer text={message.answer} />
+              <FormattedAnswer
+                text={message.answer}
+                sources={message.sources}
+                onArticleClick={onArticleClick}
+              />
             </div>
           </div>
 
@@ -570,8 +394,13 @@ function ChatMessageBlock({
 // Formatted answer (basic markdown)
 // ============================================
 
-function FormattedAnswer({ text }: { text: string }) {
-  // Simple markdown rendering: **bold**, *italic*, bullet lists
+interface FormattedAnswerProps {
+  text: string;
+  sources?: Array<{ id: string; title: string; category: string; subcategory: string | null }>;
+  onArticleClick?: (articleId: string) => void;
+}
+
+function FormattedAnswer({ text, sources = [], onArticleClick }: FormattedAnswerProps) {
   const lines = text.split('\n');
   const elements: React.ReactNode[] = [];
 
@@ -585,19 +414,19 @@ function FormattedAnswer({ text }: { text: string }) {
     if (line.startsWith('* ') || line.startsWith('- ')) {
       elements.push(
         <li key={i} className="ml-4 list-disc">
-          <InlineFormatted text={line.slice(2)} />
+          <InlineFormatted text={line.slice(2)} sources={sources} onArticleClick={onArticleClick} />
         </li>,
       );
     } else if (line.match(/^\d+\.\s/)) {
       elements.push(
         <li key={i} className="ml-4 list-decimal">
-          <InlineFormatted text={line.replace(/^\d+\.\s/, '')} />
+          <InlineFormatted text={line.replace(/^\d+\.\s/, '')} sources={sources} onArticleClick={onArticleClick} />
         </li>,
       );
     } else {
       elements.push(
         <p key={i} className={i > 0 ? 'mt-2' : ''}>
-          <InlineFormatted text={line} />
+          <InlineFormatted text={line} sources={sources} onArticleClick={onArticleClick} />
         </p>,
       );
     }
@@ -606,9 +435,17 @@ function FormattedAnswer({ text }: { text: string }) {
   return <>{elements}</>;
 }
 
-function InlineFormatted({ text }: { text: string }) {
-  // Replace **bold** and *italic*
-  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+function InlineFormatted({
+  text,
+  sources = [],
+  onArticleClick,
+}: {
+  text: string;
+  sources?: Array<{ id: string; title: string; category: string; subcategory: string | null }>;
+  onArticleClick?: (articleId: string) => void;
+}) {
+  // Split on **bold**, *italic*, AND [n] citation markers
+  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|\[\d+\])/g);
   return (
     <>
       {parts.map((part, i) => {
@@ -621,6 +458,29 @@ function InlineFormatted({ text }: { text: string }) {
         }
         if (part.startsWith('*') && part.endsWith('*')) {
           return <em key={i}>{part.slice(1, -1)}</em>;
+        }
+        const citationMatch = /^\[(\d+)\]$/.exec(part);
+        if (citationMatch) {
+          const n = parseInt(citationMatch[1], 10);
+          const source = sources[n - 1];
+          const title = source ? `${source.category}${source.subcategory ? ` · ${source.subcategory}` : ''}: ${source.title}` : `Bron ${n}`;
+          return (
+            <button
+              key={i}
+              type="button"
+              title={title}
+              disabled={!source}
+              onClick={() => source && onArticleClick?.(source.id)}
+              className={cn(
+                'mx-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full border px-1 align-[1px] text-[9px] font-semibold transition-colors',
+                source
+                  ? 'cursor-pointer border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-white/10 bg-white/[0.03] text-white/30',
+              )}
+            >
+              {n}
+            </button>
+          );
         }
         return <span key={i}>{part}</span>;
       })}

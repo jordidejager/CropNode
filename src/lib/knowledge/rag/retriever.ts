@@ -16,6 +16,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedText } from '../embed';
 import { cosineSimilarity, parseVectorLiteral } from '../cosine';
 import { resolveProductAliases } from './ctgb-postprocessor';
+import { generateHydeText } from './hyde';
+import { rerankChunks } from './reranker';
+import { resolveDiseaseAliases } from './structured-lookup';
 import type { QueryIntent, RagContext, RetrievedChunk } from './types';
 
 const DEFAULT_THRESHOLD = 0.65;
@@ -23,6 +26,7 @@ const MONTH_BOOST = 0.08;          // was 0.04 — seizoensrelevantie moet zwaar
 const PHASE_BOOST = 0.06;          // was 0.03 — fenologische fase-match is belangrijk
 const PRODUCT_MATCH_BOOST = 0.10;  // was 0.08
 const HARVEST_YEAR_BOOST = 0.05;   // nieuw — recent advies > oud advies
+const BM25_BOOST = 0.07;           // nieuw — lexicale overlap (FTS) als tie-breaker
 const MAX_CANDIDATES = 80;
 
 // Columns to select (INCLUDING content_embedding for in-memory similarity)
@@ -59,6 +63,8 @@ type CandidateRow = {
   valid_until: string | null;
   content_embedding: string | null;
   image_urls: string[] | null;
+  /** ts_rank_cd if this row came from the FTS strategy; undefined otherwise */
+  fts_rank?: number;
 };
 
 export async function retrieveChunks(options: RetrieveOptions): Promise<RetrievedChunk[]> {
@@ -71,7 +77,7 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
     threshold = DEFAULT_THRESHOLD,
   } = options;
 
-  // 1. Resolve product aliases (Pyrus → Scala)
+  // 1a. Resolve product aliases (Pyrus → Scala)
   let allProductNames = [...intent.products];
   if (intent.products.length > 0) {
     try {
@@ -82,15 +88,50 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
     }
   }
 
-  // 2. Embed the query (enriched with resolved product names)
-  const embedQuery = allProductNames.length > 0
-    ? `${query} ${allProductNames.join(' ')}`
-    : query;
+  // 1b. Resolve disease/pest aliases (dikkoppen → perengalmug) — expands
+  // the specific_subjects with canonical names + all known aliases so FTS
+  // can match both informal and formal terminology.
+  let expandedSubjects = [...intent.specific_subjects];
+  if (intent.specific_subjects.length > 0) {
+    try {
+      const diseaseRes = await resolveDiseaseAliases(supabase, intent.specific_subjects);
+      expandedSubjects = Array.from(
+        new Set([...intent.specific_subjects, ...diseaseRes.expanded]),
+      );
+      if (expandedSubjects.length > intent.specific_subjects.length) {
+        console.log(
+          `[retriever] Disease-alias expansion: ${intent.specific_subjects.join(', ')} → ${expandedSubjects.join(', ')}`,
+        );
+      }
+    } catch (err) {
+      console.warn('[retriever] disease alias resolution failed:', err);
+    }
+  }
+
+  // 2. HyDE — generate a hypothetical answer and embed that instead of
+  // (or in addition to) the raw query. Much better recall for "wanneer / hoe"
+  // style questions where the question-vector is far from the answer-vector.
+  const hyde = await generateHydeText(query, intent);
+  const embedQuery = [
+    hyde.text,
+    allProductNames.length > 0 ? allProductNames.join(' ') : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (hyde.used) {
+    console.log('[retriever] HyDE actief — gebruik hypothetisch antwoord voor embedding');
+  }
   const queryEmbedding = await embedText(embedQuery);
 
-  // 3. Fetch candidates via metadata pre-filter (fast, no vector search)
-  const candidates = await fetchCandidates(supabase, intent, allProductNames);
-  console.log(`[retriever] ${candidates.length} kandidaten via metadata pre-filter`);
+  // 3. Fetch candidates via metadata pre-filter + BM25 (fast, no vector search)
+  const candidates = await fetchCandidates(
+    supabase,
+    intent,
+    allProductNames,
+    query,
+    expandedSubjects,
+  );
+  console.log(`[retriever] ${candidates.length} kandidaten via metadata + FTS pre-filter`);
 
   if (candidates.length === 0) {
     return [];
@@ -103,9 +144,11 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
     const embedding = parseVectorLiteral(row.content_embedding);
     if (embedding.length !== queryEmbedding.length) continue;
 
-    let similarity = cosineSimilarity(queryEmbedding, embedding);
+    const rawSimilarity = cosineSimilarity(queryEmbedding, embedding);
+    let similarity = rawSimilarity;
 
-    // Apply boosts
+    // Apply boosts (ranking only — `rawSimilarity` stays pristine so
+    // the confidence check reflects actual semantic match, not seasonality).
     if (row.relevant_months?.includes(context.currentMonth)) {
       similarity += MONTH_BOOST;
     }
@@ -146,6 +189,11 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
         similarity -= 0.06; // significant penalty for expired content
       }
     }
+    // BM25 boost — lexical overlap with the query (from knowledge_fts_search)
+    if (row.fts_rank && row.fts_rank > 0) {
+      // ts_rank_cd is unbounded but typically 0–1.5; squash to [0, BM25_BOOST]
+      similarity += Math.min(BM25_BOOST, row.fts_rank * BM25_BOOST);
+    }
     similarity = Math.min(1, Math.max(0, similarity));
 
     if (similarity >= threshold) {
@@ -164,7 +212,7 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
         image_urls: row.image_urls ?? [],
         fusion_sources: row.fusion_sources ?? 1,
         similarity,
-        raw_similarity: similarity,
+        raw_similarity: rawSimilarity,
       });
     }
   }
@@ -174,7 +222,18 @@ export async function retrieveChunks(options: RetrieveOptions): Promise<Retrieve
     `[retriever] ${ranked.length} resultaten boven threshold ${threshold}` +
       (ranked.length > 0 ? `, top: ${ranked[0].similarity.toFixed(3)}` : ''),
   );
-  return ranked.slice(0, limit);
+
+  // Re-ranker pass — only runs when top similarity is borderline.
+  // Takes the top 10 candidates and asks Gemini to score them against the
+  // specific question, yielding a much better top-3.
+  const topCandidates = ranked.slice(0, 10);
+  const reranked = await rerankChunks({
+    query,
+    chunks: topCandidates,
+    phaseHint: context.currentPhaseDetail,
+    keep: limit,
+  });
+  return reranked;
 }
 
 // ============================================
@@ -208,6 +267,8 @@ async function fetchCandidates(
   supabase: SupabaseClient,
   intent: QueryIntent,
   productNames: string[],
+  rawQuery: string,
+  expandedSubjects: string[],
 ): Promise<CandidateRow[]> {
   const seen = new Set<string>();
   const results: CandidateRow[] = [];
@@ -215,30 +276,49 @@ async function fetchCandidates(
 
   const addRows = (rows: CandidateRow[] | null) => {
     for (const row of rows ?? []) {
-      if (!seen.has(row.id) && results.length < MAX_CANDIDATES) {
-        seen.add(row.id);
-        results.push(row);
+      if (results.length >= MAX_CANDIDATES) break;
+      if (seen.has(row.id)) {
+        // Merge fts_rank if this row was seen earlier without one
+        const existing = results.find((r) => r.id === row.id);
+        if (existing && row.fts_rank && !existing.fts_rank) {
+          existing.fts_rank = row.fts_rank;
+        }
+        continue;
       }
+      seen.add(row.id);
+      results.push(row);
     }
   };
 
   const promises: Promise<CandidateRow[] | null>[] = [];
 
-  // A) Subcategory match
-  if (intent.specific_subjects.length > 0) {
-    for (const subject of intent.specific_subjects.slice(0, 3)) {
-      promises.push(
-        safeQuery(
-          supabase
-            .from('knowledge_articles')
-            .select(SELECT_WITH_EMBEDDING)
-            .eq('status', 'published')
-            .ilike('subcategory', `%${subject}%`)
-            .order('fusion_sources', { ascending: false })
-            .limit(20),
-        ),
-      );
-    }
+  // F) Full-text search (BM25). Runs first so its rank is available for
+  // subsequent strategies that might re-encounter the same id. Expanded
+  // with resolved product aliases (Pyrus → Scala) AND disease aliases
+  // (dikkoppen → perengalmug) for better lexical hits.
+  const ftsQuery = buildFtsQuery(rawQuery, intent, productNames, expandedSubjects);
+  if (ftsQuery.length > 0) {
+    const cropFilter = intent.crops.length === 1 ? intent.crops[0] : null;
+    promises.push(fetchFtsCandidates(supabase, ftsQuery, cropFilter, 25));
+  }
+
+  // A) Subcategory match — uses expandedSubjects so "dikkoppen" also
+  // searches the "perengalmug" subcategory.
+  const subjectsForSubcatMatch = expandedSubjects.length > 0
+    ? expandedSubjects.slice(0, 5)
+    : intent.specific_subjects.slice(0, 3);
+  for (const subject of subjectsForSubcatMatch) {
+    promises.push(
+      safeQuery(
+        supabase
+          .from('knowledge_articles')
+          .select(SELECT_WITH_EMBEDDING)
+          .eq('status', 'published')
+          .ilike('subcategory', `%${subject}%`)
+          .order('fusion_sources', { ascending: false })
+          .limit(20),
+      ),
+    );
   }
 
   // B) Category match
@@ -272,11 +352,11 @@ async function fetchCandidates(
     );
   }
 
-  // D) Title search
+  // D) Title search — includes expanded disease aliases for informal terms
   const searchTerms = [
-    ...intent.specific_subjects,
+    ...expandedSubjects,
     ...productNames,
-  ].filter(Boolean).slice(0, 3);
+  ].filter(Boolean).slice(0, 5);
   if (searchTerms.length > 0) {
     for (const term of searchTerms) {
       promises.push(
@@ -312,6 +392,69 @@ async function fetchCandidates(
   }
 
   return results;
+}
+
+/**
+ * Fetch candidates via the BM25 RPC (knowledge_fts_search). Gracefully returns
+ * [] if the migration hasn't run yet, so the retriever stays working on stale
+ * environments.
+ */
+async function fetchFtsCandidates(
+  supabase: SupabaseClient,
+  queryText: string,
+  cropFilter: string | null,
+  matchLimit: number,
+): Promise<CandidateRow[] | null> {
+  try {
+    const { data, error } = await supabase.rpc('knowledge_fts_search', {
+      query_text: queryText,
+      crop_filter: cropFilter,
+      match_limit: matchLimit,
+    });
+    if (error) {
+      if (/function .* does not exist/i.test(error.message)) {
+        // Migration not applied yet — skip FTS silently
+        return null;
+      }
+      console.warn('[retriever] FTS RPC error:', error.message);
+      return null;
+    }
+    const rows = (data ?? []) as Array<CandidateRow & { rank?: number }>;
+    return rows.map((r) => ({ ...r, fts_rank: r.rank ?? 0 }));
+  } catch (err) {
+    console.warn('[retriever] FTS fetch failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Build a `websearch_to_tsquery` input from the raw query and intent entities.
+ * We prepend specific subjects + products so exact matches weigh more than
+ * filler words.
+ */
+function buildFtsQuery(
+  rawQuery: string,
+  intent: QueryIntent,
+  expandedProducts: string[],
+  expandedSubjects: string[],
+): string {
+  // Dedupe key terms case-insensitively so "Pyrus" + "Scala" (or "dikkoppen"
+  // + "perengalmug") both end up in the query but neither is repeated.
+  const keyTerms = new Map<string, string>();
+  for (const term of [
+    ...expandedSubjects,
+    ...intent.specific_subjects,
+    ...expandedProducts,
+    ...intent.products,
+  ]) {
+    if (!term) continue;
+    const k = term.toLowerCase();
+    if (!keyTerms.has(k)) keyTerms.set(k, term);
+  }
+  const cleaned = rawQuery.trim().replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ');
+  if (cleaned.length === 0 && keyTerms.size === 0) return '';
+  const terms = Array.from(keyTerms.values()).join(' ');
+  return terms.length > 0 ? `${terms} ${cleaned}` : cleaned;
 }
 
 // ============================================

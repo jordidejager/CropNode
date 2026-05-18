@@ -17,7 +17,7 @@ import {
   setToolSupabaseClient,
 } from '@/ai/tools/knowledge-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { QueryIntent, RagContext, RetrievedChunk } from './types';
+import type { ChatTurn, QueryIntent, RagContext, RetrievedChunk } from './types';
 
 const AGENT_MODEL = 'googleai/gemini-2.5-flash-lite';
 
@@ -69,6 +69,8 @@ export interface AgentOptions {
   preRetrievedChunks?: RetrievedChunk[];
   /** Product alias mappings (Pyrus → Scala) */
   productAliases?: Record<string, string>;
+  /** Prior exchanges for multi-turn follow-ups */
+  history?: ChatTurn[];
 }
 
 export interface AgentResult {
@@ -77,7 +79,7 @@ export interface AgentResult {
 }
 
 export async function runKnowledgeAgent(options: AgentOptions): Promise<AgentResult> {
-  const { supabase, query, intent, context, preRetrievedChunks, productAliases } = options;
+  const { supabase, query, intent, context, preRetrievedChunks, productAliases, history } = options;
 
   // Set the Supabase client for all tools
   setToolSupabaseClient(supabase);
@@ -85,10 +87,16 @@ export async function runKnowledgeAgent(options: AgentOptions): Promise<AgentRes
   // Build the user prompt with context hints
   const userPrompt = buildAgentPrompt(query, intent, context, preRetrievedChunks, productAliases);
 
+  const priorMessages = (history ?? []).slice(-6).map((t) => ({
+    role: t.role === 'assistant' ? ('model' as const) : ('user' as const),
+    content: [{ text: t.content }],
+  }));
+
   // Run the agent with tools
   const result = await ai.generate({
     model: AGENT_MODEL,
     system: AGENT_SYSTEM_PROMPT,
+    messages: priorMessages.length > 0 ? priorMessages : undefined,
     prompt: userPrompt,
     tools: knowledgeTools,
     config: {

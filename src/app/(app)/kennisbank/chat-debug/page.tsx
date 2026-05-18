@@ -1,21 +1,19 @@
 'use client';
 
 /**
- * Chat Debug page — minimal UI to test the RAG pipeline
+ * Chat Debug page — minimal UI to inspect the RAG pipeline.
  *
- * Shows the raw event stream from /api/knowledge/chat so we can verify each
- * stage of the pipeline (understanding, retrieval, confidence, generation,
- * CTGB annotation, sources). Not the final chat UI — that's Fase 3.
+ * Shows the raw event stream + retrieved chunks per message so we can verify
+ * each stage (understanding, retrieval, confidence, generation, CTGB, sources).
+ * Uses the shared `useRagChat` hook with `debug: true` so the plumbing stays
+ * in sync with the production Atlas chat.
  */
 
 import { useState } from 'react';
 import { Send, Sparkles, AlertTriangle, Check, X, CircleDashed } from 'lucide-react';
 
-import type {
-  RagEvent,
-  RetrievedChunk,
-  CtgbAnnotation,
-} from '@/lib/knowledge/rag/types';
+import type { CtgbAnnotation, RagEvent } from '@/lib/knowledge/rag/types';
+import { useRagChat, type RagChatMessage } from '@/hooks/use-rag-chat';
 import { cn } from '@/lib/utils';
 
 const SUGGESTED_QUERIES = [
@@ -28,146 +26,16 @@ const SUGGESTED_QUERIES = [
   'Hoe werkt fotosynthese?', // off-topic test
 ];
 
-interface ChatMessage {
-  id: string;
-  query: string;
-  events: RagEvent[];
-  answer: string;
-  chunks: RetrievedChunk[];
-  annotations: CtgbAnnotation[];
-  sources: Array<{ id: string; title: string; category: string; subcategory: string | null }>;
-  loading: boolean;
-  error: string | null;
-}
-
 export default function ChatDebugPage() {
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, submit, isLoading } = useRagChat({ debug: true });
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const trimmed = query.trim();
-    if (trimmed.length < 2) return;
-
-    const id = `msg-${Date.now()}`;
-    const msg: ChatMessage = {
-      id,
-      query: trimmed,
-      events: [],
-      answer: '',
-      chunks: [],
-      annotations: [],
-      sources: [],
-      loading: true,
-      error: null,
-    };
-    setMessages((prev) => [...prev, msg]);
+    if (query.trim().length < 2 || isLoading) return;
+    const text = query;
     setQuery('');
-
-    // Retry logic for transient network/auth issues
-    const MAX_ATTEMPTS = 3;
-    let lastError: string | null = null;
-
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        const res = await fetch('/api/knowledge/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: trimmed }),
-        });
-
-        if (!res.ok || !res.body) {
-          const text = await res.text().catch(() => '');
-          const isRetryable = res.status === 503 || res.status === 502 || res.status === 504
-            || (res.status === 401 && /verbinding|fetch failed|timeout/i.test(text));
-          if (attempt < MAX_ATTEMPTS && isRetryable) {
-            await new Promise(r => setTimeout(r, 1000 * attempt));
-            continue;
-          }
-          if (res.status === 401 && !isRetryable) {
-            throw new Error('Je sessie is verlopen. Ververs de pagina en log opnieuw in.');
-          }
-          throw new Error(
-            res.status === 503
-              ? 'Tijdelijk verbindingsprobleem. Probeer het opnieuw.'
-              : `Er ging iets mis (${res.status}). Probeer het opnieuw.`,
-          );
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const event = JSON.parse(line.slice(6)) as RagEvent;
-              applyEvent(id, event);
-            } catch {
-              // ignore malformed
-            }
-          }
-        }
-        lastError = null;
-        break; // success
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const isTransient = /fetch failed|ECONNRESET|ETIMEDOUT|TypeError.*fetch|NetworkError/i.test(message);
-        if (attempt < MAX_ATTEMPTS && isTransient) {
-          await new Promise(r => setTimeout(r, 1000 * attempt));
-          lastError = message;
-          continue;
-        }
-        lastError = isTransient
-          ? 'Tijdelijk verbindingsprobleem. Probeer het opnieuw.'
-          : message;
-        break;
-      }
-    }
-
-    if (lastError) {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, error: lastError!, loading: false } : m)),
-      );
-    }
-  };
-
-  const applyEvent = (id: string, event: RagEvent) => {
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== id) return m;
-        const next: ChatMessage = { ...m, events: [...m.events, event] };
-        switch (event.type) {
-          case 'answer_chunk':
-            next.answer += event.text;
-            break;
-          case 'retrieval_done':
-            next.chunks = event.chunks;
-            break;
-          case 'ctgb_annotation':
-            next.annotations = event.annotations;
-            break;
-          case 'sources':
-            next.sources = event.chunks;
-            break;
-          case 'error':
-            next.error = event.message;
-            break;
-          case 'done':
-            next.loading = false;
-            break;
-        }
-        return next;
-      }),
-    );
+    void submit(text);
   };
 
   return (
@@ -219,7 +87,7 @@ export default function ChatDebugPage() {
         />
         <button
           type="submit"
-          disabled={query.trim().length < 2}
+          disabled={query.trim().length < 2 || isLoading}
           className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-30"
         >
           <Send className="h-4 w-4" />
@@ -234,7 +102,7 @@ export default function ChatDebugPage() {
 // Message block
 // ============================================
 
-function MessageBlock({ message }: { message: ChatMessage }) {
+function MessageBlock({ message }: { message: RagChatMessage }) {
   return (
     <div className="space-y-3">
       {/* User query */}
@@ -266,7 +134,7 @@ function MessageBlock({ message }: { message: ChatMessage }) {
           {message.annotations.length > 0 && (
             <div className="mt-4 border-t border-white/10 pt-3">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                🧪 CTGB Toelatingscheck
+                CTGB Toelatingscheck
               </p>
               <div className="space-y-1">
                 {message.annotations.map((ann) => (
@@ -280,7 +148,7 @@ function MessageBlock({ message }: { message: ChatMessage }) {
           {message.sources.length > 0 && (
             <div className="mt-4 border-t border-white/10 pt-3">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                📚 Bronnen ({message.sources.length})
+                Bronnen ({message.sources.length})
               </p>
               <div className="space-y-1">
                 {message.sources.map((source) => (

@@ -7,7 +7,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { QueryIntentSchema, type QueryIntent } from './types';
+import { QueryIntentSchema, type ChatTurn, type QueryIntent } from './types';
 
 const INTENT_MODEL = 'googleai/gemini-2.5-flash-lite';
 
@@ -41,7 +41,37 @@ OFF_TOPIC detectie — wees VOORZICHTIG, markeer ALLEEN als off_topic als je ZEK
 GEWASSEN (crops): appel, peer, kers, pruim, blauwe_bes
   (lijst van gewassen die in de vraag genoemd worden. Als de vraag generiek is, zet beide: ["appel", "peer"])
 
+RAS-NAAR-GEWAS MAPPING (kritiek — als een ras genoemd wordt, vul het bijbehorende gewas ALTIJD in bij crops):
+- Appel: Elstar, Jonagold, Jonagored, Goldrush, Kanzi, Fuji, Gala, Royal Gala, Junami, Rubens, Wellant, Golden Delicious, Braeburn, Boskoop, Goudreinette, Rode Boskoop, Cox, Pinova, Rubinette, Pink Lady, Cripps Pink, Red Prince, Dalinette, Natyra, Idared, Winesap, Rubinette, Sirius, Topaz, Santana
+- Peer: Conference, Doyenné du Comice, Beurré Alexandre Lucas, Beurré Hardy, Gieser Wildeman, Saint Remy, Saint-Remy, Saint Rémy, Triomphe de Vienne, Clapp's Favorite, Concorde, Packham's Triumph, Williams Bon Chrétien, Bonne Louise d'Avranches, Durondeau, Général Leclerc, Legipont, Doyenné d'Hiver, Dicolor, Celina, QTee, Xenia
+- Kers: Kordia, Regina, Sweetheart, Lapins, Burlat, Early Rivers, Van, Schneiders
+- Pruim: Opal, Victoria, Reine Claude, Mirabelle, Hanita, Elena, Presenta, Tophit, Angeleno
+
+Bij twijfel over het ras: zoek bekende markers (bv. "Conference" → ALTIJD peer, "Elstar" → ALTIJD appel).
+
 SPECIFIC_SUBJECTS: specifieke ziekte/plaag/onderwerp-namen (schurft, perenbladvlo, meeldauw, etc.)
+
+INFORMELE/REGIONALE TELERSTERMEN — map ALTIJD naar de canonieke term EN zet beide in specific_subjects:
+- "dikkoppen" / "dikke peren" / "galmug" → perengalmug (én zet de originele term in)
+- "springer" / "springers" / "peerluis" / "bladvlo" → perenbladvlo
+- "fusicladium" / "black spot" → schurft
+- "kanker" / "takkanker" / "neonectria" → vruchtboomkanker
+- "oidium" / "witziekte" → meeldauw
+- "wolluis" / "witte luis" → bloedluis
+- "bloesemkever" / "snuitkever" / "roodkop" → appelbloesemkever
+- "appelmot" / "appelwurm" / "wurm" / "codling moth" → fruitmot
+- "rode spint" / "rode mijt" / "spintmijt" → spint
+- "bruinrot" / "monilinia" / "bloesemmonilia" → monilia
+- "lederrot" / "vlekkenziekte stemphylium" → stemphylium
+- "bewaarrot" / "gloeosporium" / "neofabraea" / "lenticelrot" → vruchtrot
+- "groene wants" / "stinkwants" / "lygus" → wants
+- "roze luis" / "groene luis" / "bladluis" → luis
+- "sooty mould" / "honingdauwschimmel" → roetdauw
+- "zwartvlekkenziekte" / "alternaria alternata" → alternaria
+- "herderstaf" / "fire blight" → bacterievuur
+
+Voorbeeld: bij "wat doe ik tegen dikkoppen in Conference?" → specific_subjects = ["perengalmug", "dikkoppen"], crops = ["peer"].
+Hou de originele teler-term erbij zodat de retriever de letterlijke match ook vindt; het eerste element moet de canonieke term zijn.
 VARIETIES: rassen die genoemd worden (Conference, Elstar, Jonagold, etc.)
 PRODUCTS: productnamen van gewasbeschermingsmiddelen EN groeistoffen.
   Dit omvat ook: GA3, GA4/7, GA47, Ethrel, ATS, Regalis, Kudos, NAA, BA, Brevis, AmidThin, Topper.
@@ -61,7 +91,10 @@ EXTRACTOR_CONFIDENCE: 0-1, hoe zeker je bent van de extractie
 
 OUTPUT: JSON object met alle velden.`;
 
-export async function extractQueryIntent(query: string): Promise<QueryIntent> {
+export async function extractQueryIntent(
+  query: string,
+  history: ChatTurn[] = [],
+): Promise<QueryIntent> {
   const trimmed = query.trim();
   if (trimmed.length < 2) {
     return {
@@ -77,11 +110,18 @@ export async function extractQueryIntent(query: string): Promise<QueryIntent> {
     };
   }
 
+  const historyBlock = history.length > 0
+    ? `Vorige gespreksbeurten (nieuwste onderaan):\n${history
+        .slice(-4)
+        .map((t) => `- ${t.role === 'user' ? 'Gebruiker' : 'Assistent'}: ${t.content.slice(0, 400)}`)
+        .join('\n')}\n\n`
+    : '';
+
   try {
     const result = await ai.generate({
       model: INTENT_MODEL,
       system: INTENT_SYSTEM_PROMPT,
-      prompt: `Vraag van de gebruiker:\n"${trimmed}"\n\nExtraheer de metadata.`,
+      prompt: `${historyBlock}Huidige vraag van de gebruiker:\n"${trimmed}"\n\nExtraheer de metadata. Als de huidige vraag een korte follow-up is ("en bij peer?", "hoeveel dan?"), gebruik de vorige beurten om het onderwerp, gewas, en producten in te vullen.`,
       output: {
         schema: QueryIntentSchema,
         format: 'json',

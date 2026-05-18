@@ -95,6 +95,8 @@ export interface DiseaseProfile {
   peak_phases: string[];
   peak_months: number[];
   source_article_count: number;
+  /** Informele/regionale synoniemen (migratie 068) */
+  aliases?: string[];
 }
 
 // In-memory cache for disease profiles — prevents repeated DB calls
@@ -120,10 +122,17 @@ async function ensureProfileCache(supabase: SupabaseClient): Promise<Map<string,
       const map = new Map<string, DiseaseProfile>();
       for (const row of (data ?? []) as DiseaseProfile[]) {
         map.set(row.name.toLowerCase(), row);
+        // Also key by aliases so lookups with informal terms (dikkoppen,
+        // springer, etc.) resolve in O(1) — see migratie 068.
+        for (const alias of row.aliases ?? []) {
+          const k = alias.toLowerCase();
+          // Canonical name always wins — never overwrite with an alias mapping
+          if (!map.has(k)) map.set(k, row);
+        }
       }
       _profileCache = map;
       _profileCacheTime = Date.now();
-      console.log(`[structured] Disease profile cache geladen: ${map.size} profielen`);
+      console.log(`[structured] Disease profile cache geladen: ${map.size} keys`);
       return map;
     } catch (err: any) {
       if (attempt < 8) {
@@ -146,14 +155,15 @@ export async function lookupDiseaseProfile(
     const cache = await ensureProfileCache(supabase);
     const lower = diseaseName.toLowerCase();
 
-    // Exact match first
+    // Exact match (canonical name OR alias — see ensureProfileCache)
     if (cache.has(lower)) {
       const profile = cache.get(lower)!;
-      console.log(`[structured] Disease profile (cache): ${profile.name} (lifecycle: ${profile.lifecycle_notes ? 'ja' : 'nee'})`);
+      const viaAlias = profile.name.toLowerCase() !== lower ? ` (alias van ${profile.name})` : '';
+      console.log(`[structured] Disease profile (cache): ${profile.name}${viaAlias} (lifecycle: ${profile.lifecycle_notes ? 'ja' : 'nee'})`);
       return profile;
     }
 
-    // Partial match
+    // Partial match — check both canonical names and aliases
     for (const [key, profile] of cache) {
       if (key.includes(lower) || lower.includes(key)) {
         console.log(`[structured] Disease profile (cache, partial): ${profile.name}`);
@@ -166,6 +176,46 @@ export async function lookupDiseaseProfile(
   } catch (err) {
     console.warn('[structured] disease_profile exception:', err);
     return null;
+  }
+}
+
+/**
+ * Resolve a list of disease/pest names (possibly informal — "dikkoppen",
+ * "springer") to their canonical profile names. Unknown terms are returned
+ * unchanged so retrieval can still fall back to raw lexical matching.
+ *
+ * Returns an object with:
+ *   - canonical: canonical names (one per input, deduped)
+ *   - expanded: canonical + aliases (for FTS / ilike expansion)
+ */
+export async function resolveDiseaseAliases(
+  supabase: SupabaseClient,
+  subjects: string[],
+): Promise<{ canonical: string[]; expanded: string[] }> {
+  if (subjects.length === 0) return { canonical: [], expanded: [] };
+  try {
+    const cache = await ensureProfileCache(supabase);
+    const canonical = new Set<string>();
+    const expanded = new Set<string>();
+    for (const term of subjects) {
+      const lower = term.toLowerCase();
+      expanded.add(term); // keep the user's original term
+      const profile = cache.get(lower);
+      if (profile) {
+        canonical.add(profile.name);
+        expanded.add(profile.name);
+        for (const a of profile.aliases ?? []) expanded.add(a);
+      } else {
+        canonical.add(term); // unknown — pass through
+      }
+    }
+    return {
+      canonical: Array.from(canonical),
+      expanded: Array.from(expanded),
+    };
+  } catch (err) {
+    console.warn('[structured] resolveDiseaseAliases failed:', err);
+    return { canonical: subjects, expanded: subjects };
   }
 }
 

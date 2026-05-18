@@ -15,17 +15,23 @@ import { generateGroundedAnswer } from './grounded-generator';
 import { runKnowledgeAgent } from './knowledge-agent';
 import { extractProductMentions, lookupCtgbStatus } from './ctgb-postprocessor';
 import { getCurrentPhenology } from '../phenology-service';
+import { logRagQuery, summarizeChunks } from './query-log';
 import {
   lookupProductAdvice,
   lookupDiseaseProfile,
   lookupProductRelations,
   formatStructuredContext,
 } from './structured-lookup';
-import type { RagContext, RagEvent, RetrievedChunk } from './types';
+import type { ChatTurn, RagContext, RagEvent, RetrievedChunk } from './types';
 
 export interface RunChatPipelineOptions {
   supabase: SupabaseClient;
   query: string;
+  /**
+   * Prior turns for multi-turn follow-ups. Caller should send the most
+   * recent ~3 exchanges; the pipeline trims further if needed.
+   */
+  history?: ChatTurn[];
 }
 
 /**
@@ -66,11 +72,26 @@ export async function* runChatPipeline(
   options: RunChatPipelineOptions,
 ): AsyncGenerator<RagEvent> {
   const { supabase, query } = options;
+  // Keep the last 3 exchanges (6 messages max) — enough for follow-ups
+  // without blowing up the context window.
+  const history = (options.history ?? []).slice(-6);
+
+  // Observability: track pipeline metrics to persist at the end.
+  const startedAt = Date.now();
+  let loggedIntent: import('./types').QueryIntent | null = null;
+  let loggedChunks: RetrievedChunk[] = [];
+  let loggedConfidence = { passes: true, reason: null as string | null };
+  let loggedUsedAgent = false;
+  let loggedUsedFallback = false;
+  let loggedAnswerLength: number | null = null;
+  let loggedError: string | null = null;
 
   try {
-    // 1. Understanding
+    // 1. Understanding — the extractor receives prior turns as context so
+    // follow-ups like "en bij peer?" can still be classified correctly.
     yield { type: 'understanding_start', query };
-    const intent = await withRetry('understanding', () => extractQueryIntent(query));
+    const intent = await withRetry('understanding', () => extractQueryIntent(query, history));
+    loggedIntent = intent;
     yield { type: 'understanding_done', intent };
 
     // 2. ENCYCLOPEDIE FAST-PATH: als de vraag gaat over de biologie/levenscyclus
@@ -84,6 +105,7 @@ export async function* runChatPipeline(
         yield { type: 'generation_start' };
 
         const answer = formatEncyclopediaAnswer(profile, query);
+        loggedAnswerLength = answer.length;
         yield { type: 'answer_chunk', text: answer };
         yield { type: 'generation_done', fullText: answer };
         yield { type: 'sources', chunks: [{ id: '', title: `Encyclopedie: ${profile.name}`, category: profile.profile_type, subcategory: profile.name }] };
@@ -120,8 +142,11 @@ export async function* runChatPipeline(
           }
           if (Object.keys(productAliases).length > 0) {
             console.log('[pipeline] Product aliassen:', JSON.stringify(productAliases));
-            // Replace with canonical names for retrieval
-            intent.products = Array.from(new Set(resolved.filter(Boolean)));
+            // NB: we do NOT overwrite intent.products with canonical names —
+            // the retriever does its own alias expansion (keeping both original
+            // and canonical), and downstream consumers use `productAliases`
+            // or resolved `canonicalProducts` explicitly. Overwriting here
+            // caused "alternatieven voor Captan" → retrieval about Merpan.
           }
         } catch (err) {
           console.warn('[pipeline] Alias resolution failed:', err);
@@ -199,6 +224,7 @@ export async function* runChatPipeline(
 
     // 4. Confidence check
     const confidence = assessConfidence(intent, chunks);
+    loggedConfidence = { passes: confidence.passes, reason: confidence.reason };
     const hasStructuredData = !!structuredContext && structuredContext.length > 50;
 
     let fullText = '';
@@ -211,6 +237,7 @@ export async function* runChatPipeline(
       // Last resort: try the agent with tools (it can query the DB itself)
       try {
         console.log('[pipeline] Confidence fail + no structured data → agent fallback');
+        loggedUsedAgent = true;
         const agentResult = await withRetry('agent-fallback', () =>
           runKnowledgeAgent({
             supabase,
@@ -218,6 +245,7 @@ export async function* runChatPipeline(
             intent,
             context,
             productAliases,
+            history,
           })
         );
         if (agentResult.fullText && agentResult.fullText.length > 20) {
@@ -230,6 +258,7 @@ export async function* runChatPipeline(
             chunks = agentChunks;
           }
         } else {
+          loggedUsedFallback = true;
           yield {
             type: 'answer_chunk',
             text: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
@@ -243,6 +272,7 @@ export async function* runChatPipeline(
         }
       } catch (agentErr) {
         console.warn('[pipeline] Agent fallback failed:', agentErr);
+        loggedUsedFallback = true;
         yield {
           type: 'answer_chunk',
           text: confidence.fallbackMessage ?? 'Ik heb hier geen informatie over.',
@@ -262,6 +292,7 @@ export async function* runChatPipeline(
 
       if (useAgent) {
         console.log('[pipeline] Confidence fail maar structured data beschikbaar → agent met tools');
+        loggedUsedAgent = true;
         const agentResult = await withRetry('agent-structured', () =>
           runKnowledgeAgent({
             supabase,
@@ -270,6 +301,7 @@ export async function* runChatPipeline(
             context,
             preRetrievedChunks: chunks,
             productAliases,
+            history,
           })
         );
         fullText = agentResult.fullText;
@@ -285,12 +317,15 @@ export async function* runChatPipeline(
             chunks,
             productAliases,
             structuredContext,
+            history,
           })
         );
-        fullText = genResult.fullText;
+        let streamed = '';
         for await (const chunk of genResult.stream) {
-          if (chunk) yield { type: 'answer_chunk', text: chunk };
+          streamed += chunk;
+          yield { type: 'answer_chunk', text: chunk };
         }
+        fullText = streamed || (await genResult.getFullText());
         yield { type: 'generation_done', fullText };
       }
     }
@@ -317,16 +352,38 @@ export async function* runChatPipeline(
       })),
     };
 
+    loggedChunks = chunks;
+    loggedAnswerLength = fullText.length;
     yield { type: 'done' };
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
     console.error('[rag pipeline] error:', rawMessage);
+    loggedError = rawMessage;
     const isTransient = /fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|UND_ERR|503/i.test(rawMessage);
     const userMessage = isTransient
       ? 'Er is een tijdelijk verbindingsprobleem opgetreden. Probeer het opnieuw.'
       : rawMessage;
     yield { type: 'error', message: userMessage };
     yield { type: 'done' };
+  } finally {
+    // Observability — never blocks the user, never throws
+    const summary = summarizeChunks(loggedChunks);
+    void logRagQuery(supabase, {
+      query,
+      intent: loggedIntent,
+      candidateCount: null,
+      retrievedCount: loggedChunks.length,
+      topRawSimilarity: summary.topRawSimilarity,
+      topSimilarity: summary.topSimilarity,
+      confidencePassed: loggedConfidence.passes,
+      confidenceReason: loggedConfidence.reason,
+      usedAgent: loggedUsedAgent,
+      usedFallback: loggedUsedFallback,
+      answerLength: loggedAnswerLength,
+      retrievedArticleIds: summary.retrievedArticleIds,
+      latencyMs: Date.now() - startedAt,
+      error: loggedError,
+    });
   }
 }
 

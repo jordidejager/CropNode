@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { runChatPipeline } from '@/lib/knowledge/rag/pipeline';
+import type { ChatTurn } from '@/lib/knowledge/rag/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -46,14 +47,27 @@ export async function POST(request: Request) {
 
   // Parse body
   let query: string;
+  let history: ChatTurn[] = [];
   try {
-    const body = (await request.json()) as { query?: string };
+    const body = (await request.json()) as {
+      query?: string;
+      history?: Array<{ role?: string; content?: string }>;
+    };
     query = (body.query ?? '').trim();
     if (query.length < 2) {
       return NextResponse.json(
         { error: 'Query moet minstens 2 tekens bevatten' },
         { status: 400 },
       );
+    }
+    if (Array.isArray(body.history)) {
+      history = body.history
+        .filter((t): t is { role: string; content: string } =>
+          typeof t?.content === 'string' &&
+          t.content.trim().length > 0 &&
+          (t.role === 'user' || t.role === 'assistant'),
+        )
+        .map((t) => ({ role: t.role as 'user' | 'assistant', content: t.content }));
     }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
@@ -77,7 +91,7 @@ export async function POST(request: Request) {
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          for await (const event of runChatPipeline({ supabase, query })) {
+          for await (const event of runChatPipeline({ supabase, query, history })) {
             send(event);
             if (event.type === 'done') break;
           }
