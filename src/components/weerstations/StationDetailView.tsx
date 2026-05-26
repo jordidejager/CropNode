@@ -184,9 +184,13 @@ export function StationDetailView({
           <BigKPI
             icon={FlaskConical}
             label="EC"
-            value={latest.soil_conductivity_us_cm}
-            unit="µS/cm"
-            decimals={0}
+            value={
+              latest.soil_conductivity_us_cm !== null
+                ? Number(latest.soil_conductivity_us_cm) / 1000
+                : null
+            }
+            unit="mS/cm"
+            decimals={2}
             accent="emerald"
             sublabel={ecLabel(latest.soil_conductivity_us_cm)}
           />

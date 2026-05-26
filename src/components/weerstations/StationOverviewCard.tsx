@@ -166,9 +166,13 @@ export function StationOverviewCard({
               <MiniStat
                 icon={FlaskConical}
                 label="EC"
-                value={latest.soil_conductivity_us_cm}
-                unit="µS"
-                decimals={0}
+                value={
+                  latest.soil_conductivity_us_cm !== null
+                    ? Number(latest.soil_conductivity_us_cm) / 1000
+                    : null
+                }
+                unit="mS"
+                decimals={2}
                 color="text-emerald-400"
               />
             </div>

@@ -185,7 +185,7 @@ export async function handleLiveSnapshot(
           : null;
       const ec =
         soilRow.soil_conductivity_us_cm != null
-          ? `EC ${soilRow.soil_conductivity_us_cm} µS`
+          ? `EC ${(Number(soilRow.soil_conductivity_us_cm) / 1000).toFixed(2)} mS`
           : null;
       lines.push(`   ${[vwc, st, ec].filter(Boolean).join('  ·  ')}`);
     }
