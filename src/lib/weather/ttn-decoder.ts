@@ -45,6 +45,11 @@ export interface TTNUplinkPayload {
       location?: { latitude?: number; longitude?: number; altitude?: number };
     }>;
     settings?: Record<string, unknown>;
+    /** Device-level location set in the TTN console (or via gateway triangulation). */
+    locations?: {
+      user?: { latitude?: number; longitude?: number; altitude?: number; source?: string };
+      [k: string]: unknown;
+    };
   };
 }
 

@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     // 0.2 default.
     let stationLookup = await (admin as any)
       .from('physical_weather_stations')
-      .select('id, last_frame_counter, last_seen_at, mm_per_tip')
+      .select('id, user_id, last_frame_counter, last_seen_at, mm_per_tip, latitude, longitude, parcel_id')
       .eq('device_id', decoded.deviceId)
       .maybeSingle();
 
@@ -96,13 +96,22 @@ export async function POST(request: NextRequest) {
     ) {
       stationLookup = await (admin as any)
         .from('physical_weather_stations')
-        .select('id, last_frame_counter, last_seen_at')
+        .select('id, user_id, last_frame_counter, last_seen_at, latitude, longitude, parcel_id')
         .eq('device_id', decoded.deviceId)
         .maybeSingle();
     }
 
     const station = stationLookup.data as
-      | { id: string; last_frame_counter: number | null; last_seen_at: string | null; mm_per_tip?: number }
+      | {
+          id: string;
+          user_id: string;
+          last_frame_counter: number | null;
+          last_seen_at: string | null;
+          mm_per_tip?: number;
+          latitude: number | null;
+          longitude: number | null;
+          parcel_id: string | null;
+        }
       | null;
     const stationErr = stationLookup.error;
 
@@ -210,14 +219,51 @@ export async function POST(request: NextRequest) {
       throw new Error(`Measurement insert failed: ${insertErr.message}`);
     }
 
-    // 9. Update the station's heartbeat + last frame for quick dedup next time
+    // 9. Update the station's heartbeat + last frame for quick dedup next time.
+    //    Also opportunistically fill in location + parcel link from the uplink:
+    //     - TTN provides locations.user (set in TTN console) on every uplink
+    //     - If the station has no lat/lng yet, copy it
+    //     - If the station has no parcel_id yet, find the nearest user-owned
+    //       parcel within 1km and auto-link it.
+    const stationUpdate: Record<string, unknown> = {
+      last_seen_at: decoded.measuredAt,
+      last_frame_counter: decoded.frameCounter,
+    };
+
+    const userLoc = body?.uplink_message?.locations?.user;
+    const ttnLat =
+      typeof userLoc?.latitude === 'number' ? userLoc.latitude : null;
+    const ttnLng =
+      typeof userLoc?.longitude === 'number' ? userLoc.longitude : null;
+
+    if (
+      ttnLat !== null &&
+      ttnLng !== null &&
+      (station.latitude === null || station.longitude === null)
+    ) {
+      stationUpdate.latitude = ttnLat;
+      stationUpdate.longitude = ttnLng;
+    }
+
     await (admin as any)
       .from('physical_weather_stations')
-      .update({
-        last_seen_at: decoded.measuredAt,
-        last_frame_counter: decoded.frameCounter,
-      })
+      .update(stationUpdate)
       .eq('id', station.id);
+
+    // Auto-link to nearest parcel (within 1km) — only when no link exists.
+    // Runs fire-and-forget so an unrelated parcels-table problem can never
+    // break the uplink flow.
+    if (!station.parcel_id && ttnLat !== null && ttnLng !== null) {
+      autoLinkParcel(
+        admin,
+        station.id,
+        station.user_id,
+        ttnLat,
+        ttnLng
+      ).catch(err =>
+        console.warn('[TTN Webhook] auto-link parcel failed:', err)
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -263,6 +309,69 @@ interface ErrorLogEntry {
   rawBody: unknown;
   ipAddress: string | null;
   httpStatus: number;
+}
+
+/**
+ * Find the nearest user-owned parcel to a given GPS coordinate and link the
+ * station to it. Only acts within ~1km radius; otherwise we leave it unlinked
+ * so the user can do it manually. Parcels.location is a {lat,lng} JSONB.
+ */
+async function autoLinkParcel(
+  admin: any,
+  stationId: string,
+  userId: string,
+  lat: number,
+  lng: number
+): Promise<void> {
+  const { data: parcels } = await admin
+    .from('parcels')
+    .select('id, name, location')
+    .eq('user_id', userId)
+    .not('location', 'is', null);
+
+  if (!parcels || parcels.length === 0) return;
+
+  let bestId: string | null = null;
+  let bestDistMeters = Infinity;
+
+  for (const p of parcels as Array<{ id: string; name: string; location: { lat?: number; lng?: number } | null }>) {
+    const pl = p.location;
+    if (!pl || typeof pl.lat !== 'number' || typeof pl.lng !== 'number') continue;
+    const d = haversineMeters(lat, lng, pl.lat, pl.lng);
+    if (d < bestDistMeters) {
+      bestDistMeters = d;
+      bestId = p.id;
+    }
+  }
+
+  // Only link if within 1 km — beyond that we're probably looking at a
+  // different farm or a far-away parcel and shouldn't guess.
+  if (bestId && bestDistMeters <= 1000) {
+    await admin
+      .from('physical_weather_stations')
+      .update({ parcel_id: bestId })
+      .eq('id', stationId);
+    console.log(
+      `[TTN Webhook] Auto-linked station ${stationId} to parcel ${bestId} (${Math.round(bestDistMeters)}m)`
+    );
+  }
+}
+
+/** Great-circle distance between two lat/lng pairs in meters. */
+function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 async function logWebhookError(admin: any, entry: ErrorLogEntry): Promise<void> {
