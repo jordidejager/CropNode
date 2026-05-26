@@ -18,19 +18,22 @@ The user explicitly asked for this — it's not optional. **Do not skip it becau
 
 If you're only answering a question and didn't change code, you can skip the update.
 
-## ⚠️ Git Remotes — Read Before Pushing
+## ⚠️ Git Remotes — Push to BOTH
 
-This submodule has TWO remotes. **Only `cropnode` is deployed.**
+This submodule has TWO remotes. The deploy target has switched back and forth between them at different points, so the **only safe pattern is to push to both**:
 
-- `cropnode` → `github.com/jordidejager/CropNode.git` — **the live repo, deployed by Vercel**
-- `origin` → `github.com/jordidejager/AgrisprayerPro.git` — legacy/parallel mirror, NOT deployed
+- `origin` → `github.com/jordidejager/AgrisprayerPro.git` — **currently the live Vercel deploy target (as of 2026-05-26)**
+- `cropnode` → `github.com/jordidejager/CropNode.git` — kept in sync; was the deploy target earlier in April
 
 ```bash
-# Always push to cropnode for the live app
+# Push to BOTH — saves you from silently-stale production
 git push cropnode main
+git push origin main
 ```
 
-Pushing only to `origin` silently leaves Vercel out of date. If you must push to both, push `cropnode` last so the deploy reflects your latest commit. The parent repo (`/Users/jordidejager/studio`) tracks the submodule pointer — push that to its own `origin` as usual after updating the submodule.
+**Symptoms when only one is pushed:** the production WhatsApp bot / web app keeps running old code despite repeated pushes. To diagnose: compare `git log origin/main --oneline -5` vs `git log cropnode/main --oneline -5` — the one with recent commits from other automation/chats (e.g. "Trigger Vercel rebuild") is the live target.
+
+The parent repo (`/Users/jordidejager/studio`) tracks the submodule pointer — push that to its own `origin` after updating the submodule.
 
 ## Tech Stack
 
