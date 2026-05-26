@@ -14,8 +14,9 @@ interface Props {
 }
 
 const DEFAULT_MM_PER_TIP = 0.2;
-// Dragino WSC2-Compact-LS rain cup: 110 mm Ø → π × 5.5² = ~95 cm²
-const DEFAULT_APERTURE_CM2 = 95;
+// Dragino DR-RG-6P (rain probe shipped with WSC2-LS): Ø 200 mm rim →
+// π × 10² = ~314 cm² collection area, factory 0.1 mm/tip resolution.
+const DEFAULT_APERTURE_CM2 = 314;
 
 /**
  * Rain bucket calibration panel. Lets the user pour a known volume of water
@@ -185,7 +186,7 @@ export function RainCalibrationPanel({ station }: Props) {
               suffix="cm²"
               value={apertureCm2}
               onChange={setApertureCm2}
-              hint={`Default ${DEFAULT_APERTURE_CM2} (Ø 110 mm)`}
+              hint={`Default ${DEFAULT_APERTURE_CM2} (DR-RG-6P, Ø 200 mm)`}
             />
             <CalcField
               label="Tikken"
