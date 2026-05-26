@@ -29,13 +29,17 @@ export interface TTNUplinkPayload {
       illumination?: number;
       rain?: number;
       i_flag?: number;
-      // SE01-LS (soil)
-      VWC_SOIL?: number;               // volumetric water content, %
-      TEMP_SOIL?: number;              // soil temperature, °C
+      // SE01-LS (soil) — Dragino's formatter emits these as STRINGS like "25.83"
+      water_SOIL?: string | number;    // volumetric water content, %
+      temp_SOIL?: string | number;     // soil temperature, °C
       conduct_SOIL?: number;           // soil conductivity, µS/cm
-      // LMS01-LS (leaf)
-      Leaf_Moisture?: number;          // measured leaf wetness, %
-      Leaf_Temperature?: number;       // leaf surface temperature, °C
+      s_flag?: number;                 // sensor present flag (1 = probe connected)
+      // Older / alternate firmware uppercase variants — kept for resilience
+      VWC_SOIL?: number;
+      TEMP_SOIL?: number;
+      // LMS01-LS (leaf) — also strings on some firmware
+      Leaf_Moisture?: string | number; // measured leaf wetness, %
+      Leaf_Temperature?: string | number; // leaf surface temperature, °C
       [k: string]: unknown;
     };
     rx_metadata?: Array<{
@@ -141,15 +145,17 @@ export function decodeTTNUplink(body: TTNUplinkPayload): DecodedUplink {
   const rainCounter = decoded?.rain != null ? Math.round(decoded.rain) : null;
   const batteryV = numOrNull(decoded?.BatV);
 
-  // SE01-LS (soil) — only present on soil-sensor uplinks
-  const soilMoisturePct = numOrNull(decoded?.VWC_SOIL);
-  const soilTempC = numOrNull(decoded?.TEMP_SOIL);
+  // SE01-LS (soil) — only present on soil-sensor uplinks.
+  // Dragino's repository formatter emits these as strings ("25.83") on
+  // firmware 1.2.x; older builds use the uppercase variant. Read both.
+  const soilMoisturePct = parseNumLoose(decoded?.water_SOIL ?? decoded?.VWC_SOIL);
+  const soilTempC = parseNumLoose(decoded?.temp_SOIL ?? decoded?.TEMP_SOIL);
   const soilConductivityUsCm =
     decoded?.conduct_SOIL != null ? Math.round(decoded.conduct_SOIL as number) : null;
 
-  // LMS01-LS (leaf) — only present on leaf-sensor uplinks
-  const leafWetnessPctMeasured = numOrNull(decoded?.Leaf_Moisture);
-  const leafTempC = numOrNull(decoded?.Leaf_Temperature);
+  // LMS01-LS (leaf) — only present on leaf-sensor uplinks.
+  const leafWetnessPctMeasured = parseNumLoose(decoded?.Leaf_Moisture);
+  const leafTempC = parseNumLoose(decoded?.Leaf_Temperature);
 
   // Signal metadata — take the best gateway reception
   const rxMeta = body.uplink_message?.rx_metadata ?? [];
@@ -263,6 +269,16 @@ export function getHarvestYear(date: Date): number {
 function numOrNull(v: unknown): number | null {
   if (typeof v !== 'number' || !Number.isFinite(v)) return null;
   return v;
+}
+
+/** Parse a value that might be a number or a numeric string (Dragino style). */
+function parseNumLoose(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 // ---- Type mapping for DB insert ----
