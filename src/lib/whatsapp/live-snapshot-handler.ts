@@ -47,7 +47,10 @@ const LIVE_PATTERNS: RegExp[] = [
 
 export function isLiveSnapshotIntent(text: string): boolean {
   const t = text.toLowerCase().trim();
-  return LIVE_PATTERNS.some(p => p.test(t));
+  const matched = LIVE_PATTERNS.some(p => p.test(t));
+  // Debug log so we can verify the intent dispatcher is reaching this point.
+  console.log(`[LiveSnapshot] intent check on "${t}" → ${matched}`);
+  return matched;
 }
 
 // ============================================================================
