@@ -20,26 +20,30 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Try the SELECT with mm_per_tip first; if that column doesn't exist yet
-  // (migration 076 not applied), retry without it so users still see their
-  // stations. PostgREST returns code 42703 for unknown column.
-  const baseColumns = `
-      id, device_id, dev_eui, application_id, label,
-      hardware_model, firmware_version,
-      parcel_id, latitude, longitude, elevation_m,
-      active, installed_at, last_seen_at, last_frame_counter,
-      created_at, updated_at,
-      parcels ( id, name )
-    `;
-  const withCalibration = `${baseColumns}, mm_per_tip`;
+  // Try the SELECT with the optional columns first. If a column doesn't exist
+  // yet (older DBs that haven't run migration 076 / 080), retry with a
+  // smaller projection so users still see their stations.
+  // PostgREST returns code 42703 for unknown column.
+  const client = supabase as any;
+  const baseColumns =
+    'id, device_id, dev_eui, application_id, label,' +
+    ' hardware_model, firmware_version,' +
+    ' parcel_id, latitude, longitude, elevation_m,' +
+    ' active, installed_at, last_seen_at, last_frame_counter,' +
+    ' created_at, updated_at,' +
+    ' parcels ( id, name )';
+  const fullColumns = `${baseColumns}, mm_per_tip, device_kind`;
 
-  let { data, error } = await supabase
+  let { data, error } = await client
     .from('physical_weather_stations')
-    .select(withCalibration)
+    .select(fullColumns)
     .order('created_at', { ascending: true });
 
-  if (error && (error.code === '42703' || /mm_per_tip/.test(error.message))) {
-    const retry = await supabase
+  if (
+    error &&
+    (error.code === '42703' || /mm_per_tip|device_kind/.test(error.message))
+  ) {
+    const retry = await client
       .from('physical_weather_stations')
       .select(baseColumns)
       .order('created_at', { ascending: true });
@@ -64,6 +68,18 @@ interface RegisterBody {
   parcelId?: string | null;
   hardwareModel?: string;
   firmwareVersion?: string;
+  deviceKind?: 'weather' | 'soil' | 'leaf' | 'temp_probe';
+}
+
+/** Best-effort device-kind inference from the hardware model string. */
+function inferDeviceKind(
+  hardwareModel?: string
+): 'weather' | 'soil' | 'leaf' | 'temp_probe' {
+  const m = (hardwareModel ?? '').toUpperCase();
+  if (m.includes('SE01')) return 'soil';
+  if (m.includes('LMS01')) return 'leaf';
+  if (m.includes('TS01') || m.includes('DS18B20')) return 'temp_probe';
+  return 'weather';
 }
 
 export async function POST(request: NextRequest) {
@@ -116,24 +132,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Admin client unavailable' }, { status: 500 });
   }
 
-  const { data: inserted, error: insertErr } = await (admin as any)
+  const hardwareModel = body.hardwareModel?.trim() || 'WSC2-Compact-LS';
+  const deviceKind = body.deviceKind ?? inferDeviceKind(hardwareModel);
+
+  // Build base insert payload. device_kind only got introduced in migration 080
+  // — if the DB doesn't have the column yet, retry without it.
+  const basePayload: Record<string, unknown> = {
+    user_id: user.id,
+    device_id: body.deviceId.trim(),
+    dev_eui: devEui,
+    application_id: body.applicationId.trim(),
+    label: body.label?.trim() || null,
+    hardware_model: hardwareModel,
+    firmware_version: body.firmwareVersion?.trim() || null,
+    parcel_id: resolvedParcelId,
+    latitude,
+    longitude,
+    installed_at: new Date().toISOString(),
+    active: true,
+  };
+
+  let { data: inserted, error: insertErr } = await (admin as any)
     .from('physical_weather_stations')
-    .insert({
-      user_id: user.id,
-      device_id: body.deviceId.trim(),
-      dev_eui: devEui,
-      application_id: body.applicationId.trim(),
-      label: body.label?.trim() || null,
-      hardware_model: body.hardwareModel?.trim() || 'WSC2-Compact-LS',
-      firmware_version: body.firmwareVersion?.trim() || null,
-      parcel_id: body.parcelId || null,
-      latitude,
-      longitude,
-      installed_at: new Date().toISOString(),
-      active: true,
-    })
+    .insert({ ...basePayload, device_kind: deviceKind })
     .select()
     .single();
+
+  if (insertErr && (insertErr.code === '42703' || /device_kind/.test(insertErr.message))) {
+    const retry = await (admin as any)
+      .from('physical_weather_stations')
+      .insert(basePayload)
+      .select()
+      .single();
+    inserted = retry.data;
+    insertErr = retry.error;
+  }
 
   if (insertErr) {
     // Unique violation = already registered

@@ -165,6 +165,8 @@ export async function POST(request: NextRequest) {
 
     // 8. Insert measurement (plain insert — no onConflict to keep the route
     //    decoupled from the active UNIQUE-constraint shape).
+    //    Soil + leaf fields are NULL for WSC2 uplinks and vice versa — the
+    //    decoder picks up whatever decoded_payload fields are present.
     const insertRow: WeatherMeasurementInsert = {
       station_id: station.id,
       measured_at: decoded.measuredAt,
@@ -175,10 +177,17 @@ export async function POST(request: NextRequest) {
       pressure_hpa: decoded.pressureHpa,
       illuminance_lux: decoded.illuminanceLux,
       rain_counter: decoded.rainCounter,
-      battery_v: decoded.batteryV,
       rainfall_mm: rainfallMm,
       dew_point_c: decoded.dewPointC,
       wet_bulb_c: decoded.wetBulbC,
+      // SE01-LS soil sensor fields
+      soil_moisture_pct: decoded.soilMoisturePct,
+      soil_temp_c: decoded.soilTempC,
+      soil_conductivity_us_cm: decoded.soilConductivityUsCm,
+      // LMS01-LS leaf sensor fields
+      leaf_wetness_pct_measured: decoded.leafWetnessPctMeasured,
+      leaf_temp_c: decoded.leafTempC,
+      battery_v: decoded.batteryV,
       battery_status: decoded.batteryStatus,
       rssi_dbm: decoded.rssiDbm,
       snr_db: decoded.snrDb,

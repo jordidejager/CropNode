@@ -16,6 +16,10 @@ import {
   BatteryWarning,
   Wifi,
   WifiOff,
+  Sprout,
+  Leaf,
+  Waves,
+  FlaskConical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -76,12 +80,22 @@ export function StationOverviewCard({
             isStale ? 'bg-amber-500/15' : 'bg-emerald-500/15'
           )}
         >
-          <Radio
-            className={cn(
-              'h-6 w-6',
-              isStale ? 'text-amber-400' : 'text-emerald-400'
-            )}
-          />
+          {(() => {
+            const KindIcon =
+              station.device_kind === 'soil'
+                ? Sprout
+                : station.device_kind === 'leaf'
+                  ? Leaf
+                  : Radio;
+            return (
+              <KindIcon
+                className={cn(
+                  'h-6 w-6',
+                  isStale ? 'text-amber-400' : 'text-emerald-400'
+                )}
+              />
+            );
+          })()}
           {!isStale && (
             <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-emerald-400 animate-pulse ring-2 ring-slate-950" />
           )}
@@ -130,8 +144,58 @@ export function StationOverviewCard({
             </div>
           </div>
 
-          {/* KPI row */}
-          {latest && (
+          {/* KPI row — per sensor type */}
+          {latest && station.device_kind === 'soil' && (
+            <div className="mt-3.5 grid grid-cols-3 gap-2">
+              <MiniStat
+                icon={Waves}
+                label="Bodemvocht"
+                value={latest.soil_moisture_pct}
+                unit="%"
+                decimals={1}
+                color="text-sky-400"
+              />
+              <MiniStat
+                icon={Thermometer}
+                label="Bodemtemp"
+                value={latest.soil_temp_c}
+                unit="°C"
+                decimals={1}
+                color="text-orange-400"
+              />
+              <MiniStat
+                icon={FlaskConical}
+                label="EC"
+                value={latest.soil_conductivity_us_cm}
+                unit="µS"
+                decimals={0}
+                color="text-emerald-400"
+              />
+            </div>
+          )}
+
+          {latest && station.device_kind === 'leaf' && (
+            <div className="mt-3.5 grid grid-cols-2 gap-2">
+              <MiniStat
+                icon={Leaf}
+                label="Bladnat"
+                value={latest.leaf_wetness_pct_measured}
+                unit="%"
+                decimals={1}
+                color="text-emerald-400"
+              />
+              <MiniStat
+                icon={Thermometer}
+                label="Bladtemp"
+                value={latest.leaf_temp_c}
+                unit="°C"
+                decimals={1}
+                color="text-orange-400"
+              />
+            </div>
+          )}
+
+          {latest && (station.device_kind === 'weather' || !station.device_kind) && (
             <div className="mt-3.5 grid grid-cols-2 md:grid-cols-5 gap-2">
               <MiniStat
                 icon={Thermometer}

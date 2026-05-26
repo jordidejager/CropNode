@@ -44,17 +44,39 @@ export async function GET(
     sinceIso = new Date(Date.now() - hours * 3600_000).toISOString();
   }
 
-  const { data, error } = await supabase
+  // We try the full projection first (includes soil + leaf columns from
+  // migration 080). If those columns don't exist yet, fall back so the
+  // route works during the migration window.
+  const fullProjection =
+    'id, measured_at, frame_counter, temperature_c, humidity_pct, pressure_hpa,' +
+    ' illuminance_lux, rain_counter, rainfall_mm, dew_point_c, wet_bulb_c,' +
+    ' soil_moisture_pct, soil_temp_c, soil_conductivity_us_cm,' +
+    ' leaf_wetness_pct_measured, leaf_temp_c,' +
+    ' battery_v, battery_status, rssi_dbm, snr_db, gateway_count';
+  const baseProjection =
+    'id, measured_at, frame_counter, temperature_c, humidity_pct, pressure_hpa,' +
+    ' illuminance_lux, rain_counter, rainfall_mm, dew_point_c, wet_bulb_c,' +
+    ' battery_v, battery_status, rssi_dbm, snr_db, gateway_count';
+
+  let { data, error } = await supabase
     .from('weather_measurements')
-    .select(
-      'id, measured_at, frame_counter, temperature_c, humidity_pct, pressure_hpa,' +
-      ' illuminance_lux, rain_counter, rainfall_mm, dew_point_c, wet_bulb_c,' +
-      ' battery_v, battery_status, rssi_dbm, snr_db, gateway_count'
-    )
+    .select(fullProjection)
     .eq('station_id', id)
     .gte('measured_at', sinceIso)
     .order('measured_at', { ascending: false })
     .limit(Math.min(limit, 5000));
+
+  if (error && (error.code === '42703' || /soil_|leaf_/.test(error.message))) {
+    const retry = await supabase
+      .from('weather_measurements')
+      .select(baseProjection)
+      .eq('station_id', id)
+      .gte('measured_at', sinceIso)
+      .order('measured_at', { ascending: false })
+      .limit(Math.min(limit, 5000));
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

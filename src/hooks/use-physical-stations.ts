@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ---- Types ----
 
+export type DeviceKind = 'weather' | 'soil' | 'leaf' | 'temp_probe';
+
 export interface PhysicalStation {
   id: string;
   device_id: string;
@@ -21,6 +23,7 @@ export interface PhysicalStation {
   last_seen_at: string | null;
   last_frame_counter: number | null;
   mm_per_tip?: number;
+  device_kind?: DeviceKind;
   created_at: string;
   updated_at: string;
   parcels?: { id: string; name: string } | null;
@@ -30,6 +33,7 @@ export interface Measurement {
   id: number;
   measured_at: string;
   frame_counter: number;
+  // weather
   temperature_c: number | null;
   humidity_pct: number | null;
   pressure_hpa: number | null;
@@ -38,6 +42,14 @@ export interface Measurement {
   rainfall_mm: number | null;
   dew_point_c: number | null;
   wet_bulb_c: number | null;
+  // soil (SE01-LS)
+  soil_moisture_pct: number | null;
+  soil_temp_c: number | null;
+  soil_conductivity_us_cm: number | null;
+  // leaf (LMS01-LS)
+  leaf_wetness_pct_measured: number | null;
+  leaf_temp_c: number | null;
+  // shared
   battery_v: number | null;
   battery_status: 'good' | 'low' | 'critical' | null;
   rssi_dbm: number | null;

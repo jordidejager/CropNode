@@ -16,6 +16,10 @@ import {
   CheckCircle2,
   Activity,
   Zap,
+  Sprout,
+  Leaf,
+  FlaskConical,
+  Waves,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -80,7 +84,19 @@ export function StationDetailView({
                 : 'bg-emerald-500/15 border-emerald-500/30'
             )}
           >
-            <Radio className={cn('h-7 w-7', isStale ? 'text-amber-400' : 'text-emerald-400')} />
+            {(() => {
+              const KindIcon =
+                station.device_kind === 'soil'
+                  ? Sprout
+                  : station.device_kind === 'leaf'
+                    ? Leaf
+                    : Radio;
+              return (
+                <KindIcon
+                  className={cn('h-7 w-7', isStale ? 'text-amber-400' : 'text-emerald-400')}
+                />
+              );
+            })()}
             {!isStale && (
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-pulse ring-2 ring-slate-950" />
             )}
@@ -91,6 +107,14 @@ export function StationDetailView({
             </h1>
             <div className="flex items-center gap-2 text-xs text-white/50 mt-0.5 flex-wrap">
               <span className="font-mono">{station.device_id}</span>
+              {station.device_kind && station.device_kind !== 'weather' && (
+                <>
+                  <span className="text-white/25">·</span>
+                  <span className="text-emerald-300 capitalize">
+                    {station.device_kind === 'soil' ? 'Bodemsensor' : station.device_kind === 'leaf' ? 'Bladsensor' : station.device_kind}
+                  </span>
+                </>
+              )}
               {station.parcels?.name && (
                 <>
                   <span className="text-white/25">·</span>
@@ -136,8 +160,63 @@ export function StationDetailView({
         </div>
       )}
 
-      {/* Primary KPI tiles */}
-      {latest && (
+      {/* Primary KPI tiles — different per sensor type */}
+      {latest && station.device_kind === 'soil' && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <BigKPI
+            icon={Waves}
+            label="Bodemvocht"
+            value={latest.soil_moisture_pct}
+            unit="%"
+            decimals={1}
+            accent="sky"
+            sublabel={soilMoistureLabel(latest.soil_moisture_pct)}
+          />
+          <BigKPI
+            icon={Thermometer}
+            label="Bodemtemp"
+            value={latest.soil_temp_c}
+            unit="°C"
+            decimals={1}
+            accent="orange"
+            sublabel={soilTempLabel(latest.soil_temp_c)}
+          />
+          <BigKPI
+            icon={FlaskConical}
+            label="EC"
+            value={latest.soil_conductivity_us_cm}
+            unit="µS/cm"
+            decimals={0}
+            accent="emerald"
+            sublabel={ecLabel(latest.soil_conductivity_us_cm)}
+          />
+        </div>
+      )}
+
+      {latest && station.device_kind === 'leaf' && (
+        <div className="grid grid-cols-2 gap-3">
+          <BigKPI
+            icon={Leaf}
+            label="Bladnat"
+            value={latest.leaf_wetness_pct_measured}
+            unit="%"
+            decimals={1}
+            accent="emerald"
+            sublabel={leafWetnessLabel(latest.leaf_wetness_pct_measured)}
+          />
+          <BigKPI
+            icon={Thermometer}
+            label="Bladtemp"
+            value={latest.leaf_temp_c}
+            unit="°C"
+            decimals={1}
+            accent="orange"
+            sublabel="Oppervlakte"
+          />
+        </div>
+      )}
+
+      {latest && (station.device_kind === 'weather' || !station.device_kind) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <BigKPI
             icon={Thermometer}
@@ -514,6 +593,42 @@ function pressureTendency(hpa: number | null): string | undefined {
   if (hpa < 1013) return 'Licht verlaagd';
   if (hpa < 1020) return 'Gemiddeld';
   return 'Hoog — stabiel weer';
+}
+
+function soilMoistureLabel(vwc: number | null): string | undefined {
+  if (vwc === null) return undefined;
+  // Typical agronomic thresholds for clay-loam fruit soils
+  if (vwc < 15) return 'Zeer droog — bewateren';
+  if (vwc < 25) return 'Droog';
+  if (vwc < 40) return 'Optimaal';
+  if (vwc < 50) return 'Vochtig';
+  return 'Verzadigd — risico op verstikking';
+}
+
+function soilTempLabel(t: number | null): string | undefined {
+  if (t === null) return undefined;
+  if (t < 5) return 'Bodem koud — wortels passief';
+  if (t < 10) return 'Bodem koel';
+  if (t < 20) return 'Actieve wortelgroei';
+  return 'Warm';
+}
+
+function ecLabel(ec: number | null): string | undefined {
+  if (ec === null) return undefined;
+  if (ec < 200) return 'Laag — bemesting overwegen';
+  if (ec < 500) return 'Voldoende';
+  if (ec < 1000) return 'Goed';
+  if (ec < 2000) return 'Hoog';
+  return 'Zeer hoog — risico op zoutschade';
+}
+
+function leafWetnessLabel(pct: number | null): string | undefined {
+  if (pct === null) return undefined;
+  // Cornell/Mills thresholds for apple scab infection
+  if (pct < 30) return 'Droog blad';
+  if (pct < 60) return 'Licht vochtig';
+  if (pct < 90) return 'Nat — infectierisico bij 6-12°C';
+  return 'Zeer nat — actieve infectie mogelijk';
 }
 
 function computeTempTrend(

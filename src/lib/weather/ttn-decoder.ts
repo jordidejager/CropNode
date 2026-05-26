@@ -22,12 +22,20 @@ export interface TTNUplinkPayload {
     decoded_payload?: {
       BatV?: number;
       Payload_Ver?: number;
+      // WSC2-Compact-LS (weather station)
       Temperature?: number;
       Humidity?: number;
       Pressure?: string | number;      // TTN decoder returns string for Dragino
       illumination?: number;
       rain?: number;
       i_flag?: number;
+      // SE01-LS (soil)
+      VWC_SOIL?: number;               // volumetric water content, %
+      TEMP_SOIL?: number;              // soil temperature, °C
+      conduct_SOIL?: number;           // soil conductivity, µS/cm
+      // LMS01-LS (leaf)
+      Leaf_Moisture?: number;          // measured leaf wetness, %
+      Leaf_Temperature?: number;       // leaf surface temperature, °C
       [k: string]: unknown;
     };
     rx_metadata?: Array<{
@@ -49,12 +57,23 @@ export interface DecodedUplink {
   frameCounter: number;
   fPort: number;
 
-  // Raw sensor values
+  // WSC2-Compact-LS (weather)
   temperatureC: number | null;
   humidityPct: number | null;
   pressureHpa: number | null;
   illuminanceLux: number | null;
   rainCounter: number | null;
+
+  // SE01-LS (soil)
+  soilMoisturePct: number | null;
+  soilTempC: number | null;
+  soilConductivityUsCm: number | null;
+
+  // LMS01-LS (leaf)
+  leafWetnessPctMeasured: number | null;
+  leafTempC: number | null;
+
+  // Shared across all sensors
   batteryV: number | null;
 
   // Derived values (computed here)
@@ -117,6 +136,16 @@ export function decodeTTNUplink(body: TTNUplinkPayload): DecodedUplink {
   const rainCounter = decoded?.rain != null ? Math.round(decoded.rain) : null;
   const batteryV = numOrNull(decoded?.BatV);
 
+  // SE01-LS (soil) — only present on soil-sensor uplinks
+  const soilMoisturePct = numOrNull(decoded?.VWC_SOIL);
+  const soilTempC = numOrNull(decoded?.TEMP_SOIL);
+  const soilConductivityUsCm =
+    decoded?.conduct_SOIL != null ? Math.round(decoded.conduct_SOIL as number) : null;
+
+  // LMS01-LS (leaf) — only present on leaf-sensor uplinks
+  const leafWetnessPctMeasured = numOrNull(decoded?.Leaf_Moisture);
+  const leafTempC = numOrNull(decoded?.Leaf_Temperature);
+
   // Signal metadata — take the best gateway reception
   const rxMeta = body.uplink_message?.rx_metadata ?? [];
   const rssiValues = rxMeta.map(g => g.rssi).filter((v): v is number => typeof v === 'number');
@@ -137,6 +166,11 @@ export function decodeTTNUplink(body: TTNUplinkPayload): DecodedUplink {
     pressureHpa: Number.isFinite(pressureHpa as number) ? pressureHpa : null,
     illuminanceLux,
     rainCounter,
+    soilMoisturePct,
+    soilTempC,
+    soilConductivityUsCm,
+    leafWetnessPctMeasured,
+    leafTempC,
     batteryV,
     dewPointC: calcDewPoint(temperatureC, humidityPct),
     wetBulbC: calcWetBulb(temperatureC, humidityPct),
@@ -233,15 +267,24 @@ export interface WeatherMeasurementInsert {
   measured_at: string;
   frame_counter: number;
   f_port: number | null;
+  // WSC2 (weather)
   temperature_c: number | null;
   humidity_pct: number | null;
   pressure_hpa: number | null;
   illuminance_lux: number | null;
   rain_counter: number | null;
-  battery_v: number | null;
   rainfall_mm: number | null;
   dew_point_c: number | null;
   wet_bulb_c: number | null;
+  // SE01-LS (soil) — added in migration 080
+  soil_moisture_pct: number | null;
+  soil_temp_c: number | null;
+  soil_conductivity_us_cm: number | null;
+  // LMS01-LS (leaf) — added in migration 080
+  leaf_wetness_pct_measured: number | null;
+  leaf_temp_c: number | null;
+  // Shared
+  battery_v: number | null;
   battery_status: string | null;
   rssi_dbm: number | null;
   snr_db: number | null;
