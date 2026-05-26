@@ -220,11 +220,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 9. Update the station's heartbeat + last frame for quick dedup next time.
-    //    Also opportunistically fill in location + parcel link from the uplink:
+    //    Also opportunistically sync location + parcel link from the uplink:
     //     - TTN provides locations.user (set in TTN console) on every uplink
-    //     - If the station has no lat/lng yet, copy it
-    //     - If the station has no parcel_id yet, find the nearest user-owned
-    //       parcel within 1km and auto-link it.
+    //     - If the station has no lat/lng yet → copy it
+    //     - If lat/lng drifted by > 100 m vs TTN → refresh it (sensor moved)
+    //     - Re-evaluate parcel link any time lat/lng is set or refreshed
     const stationUpdate: Record<string, unknown> = {
       last_seen_at: decoded.measuredAt,
       last_frame_counter: decoded.frameCounter,
@@ -236,11 +236,22 @@ export async function POST(request: NextRequest) {
     const ttnLng =
       typeof userLoc?.longitude === 'number' ? userLoc.longitude : null;
 
-    if (
+    const stationHasNoCoords =
+      station.latitude === null || station.longitude === null;
+    const drifted =
+      !stationHasNoCoords &&
       ttnLat !== null &&
       ttnLng !== null &&
-      (station.latitude === null || station.longitude === null)
-    ) {
+      haversineMeters(
+        station.latitude as number,
+        station.longitude as number,
+        ttnLat,
+        ttnLng
+      ) > 100;
+    const shouldUpdateLocation =
+      ttnLat !== null && ttnLng !== null && (stationHasNoCoords || drifted);
+
+    if (shouldUpdateLocation) {
       stationUpdate.latitude = ttnLat;
       stationUpdate.longitude = ttnLng;
     }
@@ -250,19 +261,26 @@ export async function POST(request: NextRequest) {
       .update(stationUpdate)
       .eq('id', station.id);
 
-    // Auto-link to nearest parcel (within 1km) — only when no link exists.
-    // Runs fire-and-forget so an unrelated parcels-table problem can never
-    // break the uplink flow.
-    if (!station.parcel_id && ttnLat !== null && ttnLng !== null) {
-      autoLinkParcel(
-        admin,
-        station.id,
-        station.user_id,
-        ttnLat,
-        ttnLng
-      ).catch(err =>
-        console.warn('[TTN Webhook] auto-link parcel failed:', err)
-      );
+    // Auto-link / re-link to nearest parcel (within 1 km). Fire-and-forget.
+    //  - No parcel yet → always link to nearest within 1 km.
+    //  - Has parcel but location drifted > 100 m → re-evaluate; switch only
+    //    if a different parcel is now significantly closer (>= 50 m closer).
+    if (ttnLat !== null && ttnLng !== null) {
+      const reasonToRelink =
+        !station.parcel_id ||
+        shouldUpdateLocation; // location is being refreshed
+      if (reasonToRelink) {
+        autoLinkParcel(
+          admin,
+          station.id,
+          station.user_id,
+          ttnLat,
+          ttnLng,
+          station.parcel_id ?? null
+        ).catch(err =>
+          console.warn('[TTN Webhook] auto-link parcel failed:', err)
+        );
+      }
     }
 
     return NextResponse.json({
@@ -315,13 +333,19 @@ interface ErrorLogEntry {
  * Find the nearest user-owned parcel to a given GPS coordinate and link the
  * station to it. Only acts within ~1km radius; otherwise we leave it unlinked
  * so the user can do it manually. Parcels.location is a {lat,lng} JSONB.
+ *
+ * If a parcel is already linked (currentParcelId), only switch when:
+ *   - the closest parcel is different, AND
+ *   - it's at least 50 m closer than the current one (avoids flip-flopping
+ *     between near-identical parcels on every GPS jitter).
  */
 async function autoLinkParcel(
   admin: any,
   stationId: string,
   userId: string,
   lat: number,
-  lng: number
+  lng: number,
+  currentParcelId: string | null
 ): Promise<void> {
   const { data: parcels } = await admin
     .from('parcels')
@@ -333,6 +357,7 @@ async function autoLinkParcel(
 
   let bestId: string | null = null;
   let bestDistMeters = Infinity;
+  let currentDistMeters = Infinity;
 
   for (const p of parcels as Array<{ id: string; name: string; location: { lat?: number; lng?: number } | null }>) {
     const pl = p.location;
@@ -342,19 +367,29 @@ async function autoLinkParcel(
       bestDistMeters = d;
       bestId = p.id;
     }
+    if (p.id === currentParcelId) {
+      currentDistMeters = d;
+    }
   }
 
-  // Only link if within 1 km — beyond that we're probably looking at a
-  // different farm or a far-away parcel and shouldn't guess.
-  if (bestId && bestDistMeters <= 1000) {
-    await admin
-      .from('physical_weather_stations')
-      .update({ parcel_id: bestId })
-      .eq('id', stationId);
-    console.log(
-      `[TTN Webhook] Auto-linked station ${stationId} to parcel ${bestId} (${Math.round(bestDistMeters)}m)`
-    );
-  }
+  // Beyond 1 km we don't guess — could be a different farm.
+  if (!bestId || bestDistMeters > 1000) return;
+
+  // Already linked to the best parcel? Nothing to do.
+  if (bestId === currentParcelId) return;
+
+  // Linked to a different parcel — only switch if the new one is meaningfully
+  // closer (>= 50 m improvement). Prevents constant flipping on GPS jitter.
+  if (currentParcelId && currentDistMeters - bestDistMeters < 50) return;
+
+  await admin
+    .from('physical_weather_stations')
+    .update({ parcel_id: bestId })
+    .eq('id', stationId);
+  console.log(
+    `[TTN Webhook] Auto-linked station ${stationId} to parcel ${bestId} (${Math.round(bestDistMeters)}m)` +
+      (currentParcelId ? ` — replaced ${currentParcelId} at ${Math.round(currentDistMeters)}m` : '')
+  );
 }
 
 /** Great-circle distance between two lat/lng pairs in meters. */
