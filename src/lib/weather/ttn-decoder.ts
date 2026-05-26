@@ -21,6 +21,7 @@ export interface TTNUplinkPayload {
     frm_payload?: string;
     decoded_payload?: {
       BatV?: number;
+      Bat?: number;                    // LMS01 uses 'Bat' instead of 'BatV'
       Payload_Ver?: number;
       // WSC2-Compact-LS (weather station)
       Temperature?: number;
@@ -143,7 +144,8 @@ export function decodeTTNUplink(body: TTNUplinkPayload): DecodedUplink {
   const humidityPct = numOrNull(decoded?.Humidity);
   const illuminanceLux = decoded?.illumination != null ? Math.round(decoded.illumination) : null;
   const rainCounter = decoded?.rain != null ? Math.round(decoded.rain) : null;
-  const batteryV = numOrNull(decoded?.BatV);
+  // BatV on WSC2/SE01, Bat on LMS01 — same thing, different name
+  const batteryV = numOrNull(decoded?.BatV) ?? numOrNull(decoded?.Bat);
 
   // SE01-LS (soil) — only present on soil-sensor uplinks.
   // Dragino's repository formatter emits these as strings ("25.83") on
