@@ -20,6 +20,8 @@ import { handleProductSelection } from './product-selection-handler';
 import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditListReply } from './edit-handler';
 import { detectProductQuery, handleProductQuery } from './product-query-handler';
 import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
+import { isLiveSnapshotIntent, handleLiveSnapshot } from './live-snapshot-handler';
+import { isRotUitvalIntent, handleRotUitval } from './rot-uitval-handler';
 import { isRagQueryIntent, handleRagQuery } from './rag-handler';
 import { isLikelyHoursRegistration, handleHoursRegistration } from './hours-handler';
 import { attachGpsToNote } from './field-note-processor';
@@ -304,10 +306,25 @@ export async function handleIncomingMessage(
 
     // STATE: idle (or no active conversation) + text message
     if (messageText) {
+      // Live sensor snapshot: "nu", "status", "live", "hoe is het nu"
+      // Goes BEFORE forecast handler so "nu" doesn't get swallowed by the
+      // broader weather-forecast patterns.
+      if (isLiveSnapshotIntent(messageText)) {
+        await handleLiveSnapshot(userId, e164Phone, messageText);
+        return;
+      }
+
       // Weather forecast query: "weersverwachting", "14 daagse", "wat wordt het weer"
       // Check first — these phrases shouldn't be misread as field notes or spray input.
       if (isWeatherQueryIntent(messageText)) {
         await handleWeatherQuery(userId, e164Phone, messageText);
+        return;
+      }
+
+      // Rot-uitval: "rotte bak geleegd bij sortering van Schele"
+      // Vóór veldnotities zodat het niet als vrije notitie wordt opgeslagen.
+      if (isRotUitvalIntent(messageText)) {
+        await handleRotUitval(userId, e164Phone, messageText, waMessageId);
         return;
       }
 
