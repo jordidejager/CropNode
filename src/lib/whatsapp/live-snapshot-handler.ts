@@ -28,10 +28,7 @@ import { sendTextMessage } from './client';
 import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
-import {
-  calculateSprayWindowScore,
-  calculateDeltaT,
-} from '@/lib/weather/weather-calculations';
+import { calculateDeltaT } from '@/lib/weather/weather-calculations';
 
 // ============================================================================
 // Intent detection
@@ -88,19 +85,25 @@ export async function handleLiveSnapshot(
       return;
     }
 
-    // 2. Per station: fetch latest measurement
+    // 2. Per station: fetch latest measurement.
+    //    WSC2-Compact-LS has no anemometer — wind values live in the
+    //    Open-Meteo forecast tables, not in weather_measurements. Don't
+    //    request wind columns here or PostgREST returns 42703.
     const stationIds = stations.map((s: any) => s.id);
-    const { data: latestRows } = await (admin as any)
+    const { data: latestRows, error: rowsErr } = await (admin as any)
       .from('weather_measurements')
       .select(
-        'station_id, measured_at, temperature_c, humidity_pct, wind_speed_ms, wind_gusts_ms,' +
-          ' wind_direction, dew_point_c, rainfall_mm,' +
+        'station_id, measured_at, temperature_c, humidity_pct, pressure_hpa,' +
+          ' dew_point_c, wet_bulb_c, rainfall_mm, illuminance_lux,' +
           ' soil_moisture_pct, soil_temp_c, soil_conductivity_us_cm,' +
           ' leaf_wetness_pct_measured, leaf_temp_c,' +
           ' battery_v, battery_status'
       )
       .in('station_id', stationIds)
       .order('measured_at', { ascending: false });
+    if (rowsErr) {
+      console.error('[LiveSnapshot] measurements query failed:', rowsErr);
+    }
 
     // Group by station, keep only latest per station
     const latestByStation = new Map<string, any>();
@@ -147,12 +150,13 @@ export async function handleLiveSnapshot(
     lines.push(`📍 *${stationLabel}* · ${ageMin !== null ? formatAge(ageMin) : 'geen data'}`);
     lines.push('');
 
-    // Weather row
+    // Weather row — wind comes from forecast (WSC2-Compact-LS has no anemometer)
     if (weatherRow) {
       const tempStr = numStr(weatherRow.temperature_c, 1, '°C');
       const rvStr = weatherRow.humidity_pct !== null ? `${Math.round(weatherRow.humidity_pct)}% RV` : null;
-      const wind = formatWind(weatherRow.wind_speed_ms, weatherRow.wind_direction, weatherRow.wind_gusts_ms);
-      const headline = [tempStr, rvStr, wind].filter(Boolean).join('  ·  ');
+      const pressStr =
+        weatherRow.pressure_hpa !== null ? `${Math.round(weatherRow.pressure_hpa)} hPa` : null;
+      const headline = [tempStr, rvStr, pressStr].filter(Boolean).join('  ·  ');
       if (headline) lines.push(`🌡️ ${headline}`);
       lines.push(
         `🌧️ Vandaag tot nu: ${rainTodayMm.toFixed(1)} mm` +
@@ -160,6 +164,11 @@ export async function handleLiveSnapshot(
             ? `  ·  dauwpunt ${weatherRow.dew_point_c.toFixed(1)}°C`
             : '')
       );
+      if (weatherRow.illuminance_lux !== null && weatherRow.illuminance_lux > 0) {
+        const lux = weatherRow.illuminance_lux;
+        const luxStr = lux >= 1000 ? `${(lux / 1000).toFixed(1)}k lux` : `${lux} lux`;
+        lines.push(`☀️ Licht: ${luxStr}`);
+      }
     }
 
     // Soil row
@@ -194,22 +203,31 @@ export async function handleLiveSnapshot(
       lines.push(`   ${[lw, lt].filter(Boolean).join('  ·  ')}`);
     }
 
-    // Spuitvenster verdict (based on WSC2 if available)
-    if (weatherRow && weatherRow.temperature_c !== null && weatherRow.wind_speed_ms !== null) {
-      lines.push('');
-      const score = calculateSprayWindowScore(
-        weatherRow.wind_speed_ms,
-        weatherRow.temperature_c,
-        weatherRow.dew_point_c,
-        weatherRow.rainfall_mm ?? 0,
-        0
-      );
+    // Delta-T (spray window indicator). Full spuitvenster scoring needs wind
+    // which we don't have on the physical sensor — for now show Delta-T as
+    // the agronomic hint.
+    if (weatherRow && weatherRow.temperature_c !== null && weatherRow.dew_point_c !== null) {
       const deltaT = calculateDeltaT(weatherRow.temperature_c, weatherRow.dew_point_c);
-      const emoji =
-        score.label === 'Groen' ? '✅' : score.label === 'Oranje' ? '🟡' : '🔴';
-      const dtStr = deltaT ? `Delta-T ${deltaT.value.toFixed(1)}°C` : '';
-      lines.push(`${emoji} *Spuitvenster nu:* ${score.label.toLowerCase()}`);
-      if (dtStr) lines.push(`   ${dtStr}`);
+      if (deltaT) {
+        const emoji =
+          deltaT.value < 2
+            ? '💧'
+            : deltaT.value > 10
+              ? '🔴'
+              : deltaT.value >= 2 && deltaT.value <= 8
+                ? '✅'
+                : '🟡';
+        const label =
+          deltaT.value < 2
+            ? 'te vochtig'
+            : deltaT.value <= 8
+              ? 'ideaal'
+              : deltaT.value <= 10
+                ? 'acceptabel'
+                : 'te droog';
+        lines.push('');
+        lines.push(`${emoji} *Delta-T:* ${deltaT.value.toFixed(1)}°C (${label})`);
+      }
     }
 
     // Sensor-health hints — only when something's wrong
@@ -269,36 +287,6 @@ function formatAge(minutes: number): string {
 function numStr(v: number | null | undefined, decimals: number, unit: string): string | null {
   if (v === null || v === undefined || !Number.isFinite(v)) return null;
   return `${Number(v).toFixed(decimals)}${unit}`;
-}
-
-function formatWind(
-  speedMs: number | null,
-  direction: number | null,
-  gustsMs: number | null
-): string | null {
-  if (speedMs === null) return null;
-  const bft = msToBeaufort(speedMs);
-  const dir = direction !== null ? compassFromDeg(direction) : '';
-  const main = `${bft} Bft${dir ? ' ' + dir : ''}`;
-  if (gustsMs !== null && gustsMs > speedMs * 1.3) {
-    const gBft = msToBeaufort(gustsMs);
-    return `💨 ${main} (vlagen ${gBft})`;
-  }
-  return `💨 ${main}`;
-}
-
-function msToBeaufort(ms: number): number {
-  // Standard Beaufort scale boundaries (m/s)
-  const bounds = [0.3, 1.5, 3.3, 5.5, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6];
-  for (let b = 0; b < bounds.length; b++) {
-    if (ms < bounds[b]) return b;
-  }
-  return 12;
-}
-
-function compassFromDeg(deg: number): string {
-  const dirs = ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW'];
-  return dirs[Math.round(((deg % 360) / 360) * 8) % 8] ?? '';
 }
 
 function soilMoistureLabel(vwc: number): string {
