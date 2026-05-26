@@ -118,6 +118,16 @@ export async function handleIncomingMessage(
       return;
     }
 
+    // --- C2. Top-level live-snapshot intent: must beat every state-machine
+    //          branch so "nu" / "status" reliably reaches the live handler
+    //          regardless of any lingering awaiting_* state.
+    console.log(`[Handler] msg="${messageText}" type=${messageType} userId=${userId}`);
+    if (messageText && isLiveSnapshotIntent(messageText)) {
+      console.log('[Handler] → Routing to live snapshot');
+      await handleLiveSnapshot(userId, e164Phone, messageText);
+      return;
+    }
+
     // --- D. Handle image messages → save as field note with photo ---
     if (messageType === 'image') {
       const noteContent = messageText || '📸 Foto-notitie';
