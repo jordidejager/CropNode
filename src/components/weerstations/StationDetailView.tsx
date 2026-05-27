@@ -28,7 +28,6 @@ import {
   type Measurement,
 } from '@/hooks/use-physical-stations';
 import { StationHistoryChart } from '@/components/weather/StationHistoryChart';
-import { RainCalibrationPanel } from './RainCalibrationPanel';
 
 /**
  * Rich detail view for one physical station. Header with live status,
@@ -299,9 +298,6 @@ export function StationDetailView({
 
       {/* History chart */}
       <StationHistoryChart stationId={station.id} />
-
-      {/* Rain bucket calibration */}
-      <RainCalibrationPanel station={station} />
 
       {/* Technical footer card */}
       <TechFooter station={station} latest={latest} />

@@ -115,12 +115,25 @@ export async function GET(request: Request) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  let phenology;
+  // Fallback phenology — used when the service fails so the page still
+  // renders the empty state instead of throwing a 5xx that triggers
+  // the global error boundary.
+  const now = new Date();
+  let phenology = {
+    month: now.getUTCMonth() + 1,
+    seasonPhase: null as string | null,
+    phenologicalPhase: 'onbekend',
+  } as { month: number; seasonPhase: string | null; phenologicalPhase: string };
+
   try {
-    phenology = await getCurrentPhenology(supabase);
+    const live = await getCurrentPhenology(supabase);
+    phenology = {
+      month: live.month,
+      seasonPhase: live.seasonPhase,
+      phenologicalPhase: live.phenologicalPhase,
+    };
   } catch (err) {
-    console.warn('[action-items] phenology fetch failed:', err);
-    return NextResponse.json({ error: 'Phenology service unavailable' }, { status: 503 });
+    console.warn('[action-items] phenology fetch failed — using calendar fallback:', err);
   }
 
   const currentMonth = phenology.month;
@@ -131,11 +144,21 @@ export async function GET(request: Request) {
     ? PHASE_ORDER[phaseIdx + 1]
     : currentPhase;
 
-  // Fetch in parallel
+  // Fetch in parallel — each fetcher catches its own errors and returns []
+  // so a missing table never propagates to a 5xx response.
   const [profilesResult, adviceResult, articlesResult] = await Promise.all([
-    fetchDiseaseProfiles(supabase, cropFilter),
-    fetchProductAdvice(supabase, cropFilter, currentMonth, nextMonth, currentPhase, nextPhase),
-    fetchArticles(supabase, cropFilter, currentMonth, nextMonth, currentPhase, nextPhase),
+    fetchDiseaseProfiles(supabase, cropFilter).catch((err) => {
+      console.warn('[action-items] profiles top-level error:', err);
+      return [] as DiseaseProfileRow[];
+    }),
+    fetchProductAdvice(supabase, cropFilter, currentMonth, nextMonth, currentPhase, nextPhase).catch((err) => {
+      console.warn('[action-items] advice top-level error:', err);
+      return [] as ProductAdviceRow[];
+    }),
+    fetchArticles(supabase, cropFilter, currentMonth, nextMonth, currentPhase, nextPhase).catch((err) => {
+      console.warn('[action-items] articles top-level error:', err);
+      return [] as ArticleRow[];
+    }),
   ]);
 
   const items: ActionItem[] = [
@@ -254,24 +277,56 @@ async function fetchArticles(
   currentPhase: string,
   nextPhase: string,
 ): Promise<ArticleRow[]> {
-  let q = supabase
-    .from('knowledge_articles')
-    .select(
-      'id, title, summary, category, subcategory, crops, season_phases, relevant_months, products_mentioned, valid_until, harvest_year, fusion_sources',
-    )
-    .eq('status', 'published')
-    .or(
-      `relevant_months.cs.{${currentMonth}},relevant_months.cs.{${nextMonth}},season_phases.cs.{${currentPhase}},season_phases.cs.{${nextPhase}}`,
-    )
-    .order('fusion_sources', { ascending: false })
-    .limit(60);
-  if (cropFilter) q = q.contains('crops', [cropFilter]);
-  const { data, error } = await q;
-  if (error) {
-    console.warn('[action-items] articles fetch error:', error.message);
-    return [];
+  // Two parallel calls (months OR phases) — PostgREST's .or() with cs.{}
+  // on text-arrays is fragile; two simple queries is more reliable and
+  // we dedupe in TS afterwards.
+  const baseSelect = 'id, title, summary, category, subcategory, crops, season_phases, relevant_months, products_mentioned, valid_until, harvest_year, fusion_sources';
+
+  const buildMonthQuery = () => {
+    let q = supabase
+      .from('knowledge_articles')
+      .select(baseSelect)
+      .eq('status', 'published')
+      .overlaps('relevant_months', [currentMonth, nextMonth])
+      .order('fusion_sources', { ascending: false })
+      .limit(60);
+    if (cropFilter) q = q.contains('crops', [cropFilter]);
+    return q;
+  };
+
+  const buildPhaseQuery = () => {
+    let q = supabase
+      .from('knowledge_articles')
+      .select(baseSelect)
+      .eq('status', 'published')
+      .overlaps('season_phases', [currentPhase, nextPhase])
+      .order('fusion_sources', { ascending: false })
+      .limit(60);
+    if (cropFilter) q = q.contains('crops', [cropFilter]);
+    return q;
+  };
+
+  const [monthRes, phaseRes] = await Promise.all([
+    buildMonthQuery(),
+    buildPhaseQuery(),
+  ]);
+
+  if (monthRes.error) {
+    console.warn('[action-items] articles month-fetch error:', monthRes.error.message);
   }
-  return (data ?? []) as ArticleRow[];
+  if (phaseRes.error) {
+    console.warn('[action-items] articles phase-fetch error:', phaseRes.error.message);
+  }
+
+  const seen = new Set<string>();
+  const combined: ArticleRow[] = [];
+  for (const row of [...(monthRes.data ?? []), ...(phaseRes.data ?? [])] as ArticleRow[]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    combined.push(row);
+    if (combined.length >= 60) break;
+  }
+  return combined;
 }
 
 // ============================================
