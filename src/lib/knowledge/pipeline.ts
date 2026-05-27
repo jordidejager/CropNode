@@ -81,10 +81,12 @@ interface StoreParams {
   contentHash: string;
   needsReview: boolean;
   imageUrls?: string[];
+  /** Welk concreet model heeft de transform-stap gedaan (audit-spoor, migratie 081) */
+  transformModel?: string;
 }
 
 async function insertNewArticle(params: StoreParams): Promise<void> {
-  const { supabase, draft, embedding, contentHash, needsReview, imageUrls } = params;
+  const { supabase, draft, embedding, contentHash, needsReview, imageUrls, transformModel } = params;
 
   const status = needsReview ? 'needs_review' : 'draft';
   await withDbRetry('insert knowledge_articles', async () => {
@@ -112,6 +114,7 @@ async function insertNewArticle(params: StoreParams): Promise<void> {
       fusion_sources: 1,
       status,
       ...(imageUrls && imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+      ...(transformModel ? { transform_model: transformModel, transformed_at: new Date().toISOString() } : {}),
     });
     if (error) {
       throw new Error(`insert knowledge_articles: ${error.message}`);
@@ -304,8 +307,11 @@ export async function processScrapedItem(
   }
 
   try {
-    // 1. Transform
-    const { articles } = await transformContent({ content: item });
+    // 1. Transform — provider hangt af van de source (GKN/WUR → Claude,
+    // FC → Gemini Flash-Lite). Override mogelijk vanuit caller.
+    const transformResult = await transformContent({ content: item });
+    const { articles } = transformResult;
+    const transformModel = transformResult.meta.transformModel;
 
     // Gemini kan ook zelf besluiten dat er niets te maken valt
     if (articles.length === 0) {
@@ -378,6 +384,7 @@ export async function processScrapedItem(
           contentHash: draftHash,
           needsReview,
           imageUrls,
+          transformModel,
         });
         result.created += 1;
       }

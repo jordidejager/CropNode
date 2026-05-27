@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { ai } from '@/ai/genkit';
+import { generateClaudeStructured, type ClaudeModel } from '@/lib/ai/claude';
 import {
   KnowledgeArticleDraftSchema,
   KNOWLEDGE_CATEGORIES,
@@ -17,7 +18,32 @@ import {
 } from './types';
 import { computePhenology } from './phenology';
 
-const TRANSFORM_MODEL = 'googleai/gemini-2.5-flash-lite';
+/** Default Gemini model — gebruikt voor wekelijkse FruitConsult scrape. */
+const GEMINI_TRANSFORM_MODEL = 'googleai/gemini-2.5-flash-lite';
+/** Claude model voor evergreen content (Beeldenbank / GKN). */
+const CLAUDE_TRANSFORM_MODEL: ClaudeModel = 'claude-sonnet-4-5';
+
+/**
+ * Provider selector. Externe code geeft een van deze door — implementatie-
+ * details (welk model precies) blijven hier verstopt.
+ */
+export type TransformProvider = 'gemini' | 'claude';
+
+/**
+ * Default provider per scraper. Wekelijkse bronnen (FC) gebruiken Gemini
+ * Flash-Lite voor snelheid + kosten. Evergreen bronnen (WUR Beeldenbank,
+ * WUR e-Depot) gebruiken Claude Sonnet voor kwaliteit — de content wordt
+ * jaren bewaard, dus eenmalige investering loont.
+ */
+const DEFAULT_PROVIDER_BY_SOURCE: Record<string, TransformProvider> = {
+  fc: 'gemini',
+  gkn: 'claude',
+  'wur-edepot': 'claude',
+};
+
+export function defaultProviderForSource(sourceCode: string): TransformProvider {
+  return DEFAULT_PROVIDER_BY_SOURCE[sourceCode] ?? 'gemini';
+}
 
 // ============================================
 // System prompt
@@ -159,6 +185,11 @@ export function preFilterScrapedContent(content: ScrapedContent): PreFilterResul
 
 export interface TransformInput {
   content: ScrapedContent;
+  /**
+   * Override automatic provider selection. Default: zie defaultProviderForSource()
+   * — FC → gemini, GKN/WUR → claude.
+   */
+  provider?: TransformProvider;
 }
 
 export interface TransformResult {
@@ -168,6 +199,8 @@ export interface TransformResult {
     sourceCode: string;
     sourceIdentifier: string;
     publicationDate: string | null;
+    /** Welk concreet model is gebruikt voor transformatie (voor audit). */
+    transformModel: string;
   };
 }
 
@@ -180,6 +213,7 @@ export async function transformContent(
   input: TransformInput,
 ): Promise<TransformResult> {
   const { content } = input;
+  const provider = input.provider ?? defaultProviderForSource(content.internalSourceCode);
 
   // Compute phenology hints to seed the prompt
   const phenology = computePhenology(
@@ -189,27 +223,45 @@ export async function transformContent(
 
   const userPrompt = buildUserPrompt(content, phenology);
 
-  const result = await callWithRetry(async () => {
-    return ai.generate({
-      model: TRANSFORM_MODEL,
-      system: TRANSFORM_SYSTEM_PROMPT,
-      prompt: userPrompt,
-      output: {
+  let parsed: z.infer<typeof TransformOutputSchema>;
+  let transformModel: string;
+
+  if (provider === 'claude') {
+    const result = await callWithRetry(async () => {
+      return generateClaudeStructured({
+        system: TRANSFORM_SYSTEM_PROMPT,
+        prompt: userPrompt + '\n\nGeef alleen geldige JSON terug volgens het beschreven schema. Geen markdown-fences, geen toelichting.',
         schema: TransformOutputSchema,
-        format: 'json',
-      },
-      config: {
+        model: CLAUDE_TRANSFORM_MODEL,
+        maxTokens: 4096,
         temperature: 0.2,
-      },
+        cacheSystem: true, // system prompt is constant → cache savings
+      });
     });
-  });
-
-  const output = (result as { output?: unknown }).output;
-  if (!output) {
-    throw new Error('Transform: geen output van Gemini ontvangen');
+    parsed = result.output;
+    transformModel = result.model || CLAUDE_TRANSFORM_MODEL;
+  } else {
+    const result = await callWithRetry(async () => {
+      return ai.generate({
+        model: GEMINI_TRANSFORM_MODEL,
+        system: TRANSFORM_SYSTEM_PROMPT,
+        prompt: userPrompt,
+        output: {
+          schema: TransformOutputSchema,
+          format: 'json',
+        },
+        config: {
+          temperature: 0.2,
+        },
+      });
+    });
+    const output = (result as { output?: unknown }).output;
+    if (!output) {
+      throw new Error('Transform: geen output van Gemini ontvangen');
+    }
+    parsed = TransformOutputSchema.parse(output);
+    transformModel = GEMINI_TRANSFORM_MODEL;
   }
-
-  const parsed = TransformOutputSchema.parse(output);
 
   // Post-process: enrich with phenology defaults + public source info
   const isPublic = content.metadata.isPublicSource === true;
@@ -252,6 +304,7 @@ export async function transformContent(
       sourceCode: content.internalSourceCode,
       sourceIdentifier: content.sourceIdentifier,
       publicationDate: content.metadata.date ?? null,
+      transformModel,
     },
   };
 }
