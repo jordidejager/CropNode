@@ -29,6 +29,7 @@ import { logMessage } from './store';
 import { stripPlus } from './phone-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
 import { calculateDeltaT } from '@/lib/weather/weather-calculations';
+import { bulkEcToPoreWater, poreWaterEcLabel } from '@/lib/weather/soil-ec';
 
 // ============================================================================
 // Intent detection
@@ -183,9 +184,18 @@ export async function handleLiveSnapshot(
         soilRow.soil_temp_c !== null
           ? `${Number(soilRow.soil_temp_c).toFixed(1)}°C`
           : null;
+      // Convert sensor bulk EC → pore-water EC (ECpw ≈ ECbulk / θ) — the
+      // value that actually matches the 0.70-1.30 "normaal" range Dutch
+      // fruit growers use.
+      const ecPwUsCm = bulkEcToPoreWater(
+        soilRow.soil_conductivity_us_cm,
+        soilRow.soil_moisture_pct
+      );
+      const ecPwMs = ecPwUsCm !== null ? ecPwUsCm / 1000 : null;
+      const ecLbl = poreWaterEcLabel(ecPwMs);
       const ec =
-        soilRow.soil_conductivity_us_cm != null
-          ? `EC ${(Number(soilRow.soil_conductivity_us_cm) / 1000).toFixed(2)} mS`
+        ecPwMs !== null
+          ? `EC ${ecPwMs.toFixed(2)} mS${ecLbl ? ' (' + ecLbl.label.split(' — ')[0].toLowerCase() + ')' : ''}`
           : null;
       lines.push(`   ${[vwc, st, ec].filter(Boolean).join('  ·  ')}`);
     }

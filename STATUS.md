@@ -12,6 +12,36 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-05-27 — EC bulk → porie-water conversie (agronomisch correct)
+- ✅ Nieuwe helper `src/lib/weather/soil-ec.ts`: `bulkEcToPoreWater()` met Hilhorst-simplified formule `ECpw ≈ ECbulk / θ`, plus `poreWaterEcLabel()` met Nederlandse fruitteelt-thresholds (laag <0.30 / onder gem. <0.70 / normaal 0.70-1.30 / verhoogd <1.50 / hoog ≥1.50 mS/cm).
+- ✅ `StationDetailView.tsx`: EC-tegel toont nu `EC (porie-water)` in mS/cm + sublabel met agronomisch oordeel ("Normaal", "Hoog — droogte+zoutrisico", etc.) en bulk-sensorwaarde als context.
+- ✅ `StationOverviewCard.tsx`: MiniStat EC rekent ruwe sensorwaarde om naar porie-water.
+- ✅ `live-snapshot-handler.ts` (WhatsApp "Nu"): toont `EC X.XX mS (normaal)` ipv ruwe bulk-waarde — komt overeen met meet-protocol dat gebruiker volgt.
+- Aanleiding: gebruiker zag 0.25 mS/cm op SE01 wat agronomisch onmogelijk laag is voor boomgaard. Dragino meet bulk-EC (verdund door bodemwater), agronomisch relevant is porie-water EC = wat wortelharen "zien".
+- Files: `src/lib/weather/soil-ec.ts` (new), `src/components/weerstations/StationDetailView.tsx`, `src/components/weerstations/StationOverviewCard.tsx`, `src/lib/whatsapp/live-snapshot-handler.ts`.
+
+### 2026-04-26 — Multi-perceel registratie + hectare-verdeling
+- ✅ `RegistrationForm` mode='register' switcht naar `UnifiedParcelMultiSelect` (mode='multi'). Timer-mode blijft single-select. Meerdere subpercelen + heel-percelen tegelijk te kiezen in 1 registratie.
+- ✅ Submit-flow loopt over `parcelEntries`: per geselecteerd perceel een task_log met identieke uren/personen/datum. Heel-perceel → 1 row met `parcel_id`, losse subs → eigen row met `sub_parcel_id`. Werkt in zowel flat- als perDay-mode (cartesisch product).
+- ✅ Nieuwe toggle "Verdeel uren naar oppervlakte (hectares)" in achteraf-flow, zichtbaar wanneer ≥2 subpercelen geselecteerd. Bij aan: `hoursPerPerson` wordt geschaald naar `(sub.area / totalArea)`. Bv. 200u op (1,5ha + 0,5ha) → 150u + 50u. Inclusief live preview-lijst per subperceel.
+- ✅ Hectare-modus expandeert heel-perceel-keuzes automatisch naar individuele subs (anders kan er niet geschaald worden).
+- ✅ Fallback bij ontbrekende area-data: gelijke verdeling 1/N.
+- ✅ Cluster-helper extern al gerefactored naar `task-parcel` kind (zelfde taak + perceel = 1 cluster ongeacht datum/uren). Multi-perceel-registraties verschijnen daardoor als N losse cards in de Overzicht — per perceel een eigen cluster met alle dagen erin.
+- ✅ `handleCopyFromLast` zet ook `multiSubParcelIds` zodat "neem vorige over" werkt in multi-mode.
+- Files: `src/components/urenregistratie/RegistrationForm.tsx`.
+- Pre-existing TS-fouten in `parse-fruitmasters-order.ts`, `BiofixConfig.tsx`, `supabase-store.ts(4721)` en `orders/upload/route.ts` **niet** geraakt.
+
+### 2026-04-26 — Lopende multi-day timer: per-dag werktijden vooraf opslaan
+- ✅ Nieuwe `day_overrides JSONB` kolom op `active_task_sessions` (migratie `073_active_task_session_day_overrides.sql` — **moet nog gedraaid worden**) + view `v_active_task_sessions_enriched` recreated.
+- ✅ `ActiveTaskSession.dayOverrides` toegevoegd aan TS-type en mapper. `updateActiveTaskSession` accepteert nu `dayOverrides` als update-veld.
+- ✅ Nieuwe `DayOverridesDialog.tsx` — per-dag input voor uren+personen tijdens een lopende multi-day timer. Override-rijen krijgen "aangepast" badge + reset-knop terug naar werkschema-default.
+- ✅ Knop "Werktijden per dag" op `ActiveSessions` kaart, alleen zichtbaar bij multi-day timers. Toont "n aangepast" badge wanneer er al overrides staan.
+- ✅ `StopSessionWizard.buildMultiDayEntries` accepteert overrides en gebruikt ze als prefill — gebruiker hoeft niets opnieuw in te voeren bij afronden.
+- ✅ Bug-fix: `lastDayEndTime` useEffect in wizard schreef laatste dag opnieuw bij mount → overrides voor vandaag werden gewist. Nu alleen bij user-input via `handleLastDayEndTimeChange`.
+- ✅ RLS-bug-fix in `stopTaskSession` + `stopTaskSessionMultiDay` — `user_id` ontbrak, waardoor afronden faalde met "new row violates row-level security policy". Nu via `getCurrentUserId()` zoals `addTaskLog`.
+- Files: `src/components/urenregistratie/DayOverridesDialog.tsx` (new), `ActiveSessions.tsx`, `StopSessionWizard.tsx`, `src/lib/types.ts`, `src/lib/supabase-store.ts`, `src/hooks/use-data.ts`, `supabase/migrations/073_active_task_session_day_overrides.sql` (new).
+- Pre-existing TS-fouten in `src/lib/afzetstromen/parse-fruitmasters-order.ts` (10 stuks) **niet** geraakt — Supabase typing issue uit andere chat.
+
 ### 2026-04-25 — Weerstation historiegrafiek herzien (premium look)
 - ✅ Licht (lux) als 5e metric tab toegevoegd — iconisch geel, k-suffix bij hoge waarden.
 - ✅ Op 7-daagse range bevat de x-as nu **dag + uur** ipv alleen datum, dus diurnale patronen meteen leesbaar.

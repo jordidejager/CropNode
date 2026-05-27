@@ -22,6 +22,7 @@ import {
   FlaskConical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { bulkEcToPoreWater } from '@/lib/weather/soil-ec';
 import {
   useStationMeasurements,
   type PhysicalStation,
@@ -166,11 +167,13 @@ export function StationOverviewCard({
               <MiniStat
                 icon={FlaskConical}
                 label="EC"
-                value={
-                  latest.soil_conductivity_us_cm !== null
-                    ? Number(latest.soil_conductivity_us_cm) / 1000
-                    : null
-                }
+                value={(() => {
+                  const ecPw = bulkEcToPoreWater(
+                    latest.soil_conductivity_us_cm,
+                    latest.soil_moisture_pct
+                  );
+                  return ecPw !== null ? ecPw / 1000 : null;
+                })()}
                 unit="mS"
                 decimals={2}
                 color="text-emerald-400"

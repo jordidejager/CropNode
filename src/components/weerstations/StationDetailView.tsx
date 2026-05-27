@@ -28,6 +28,7 @@ import {
   type Measurement,
 } from '@/hooks/use-physical-stations';
 import { StationHistoryChart } from '@/components/weather/StationHistoryChart';
+import { bulkEcToPoreWater, poreWaterEcLabel } from '@/lib/weather/soil-ec';
 
 /**
  * Rich detail view for one physical station. Header with live status,
@@ -160,41 +161,56 @@ export function StationDetailView({
       )}
 
       {/* Primary KPI tiles — different per sensor type */}
-      {latest && station.device_kind === 'soil' && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <BigKPI
-            icon={Waves}
-            label="Bodemvocht"
-            value={latest.soil_moisture_pct}
-            unit="%"
-            decimals={1}
-            accent="sky"
-            sublabel={soilMoistureLabel(latest.soil_moisture_pct)}
-          />
-          <BigKPI
-            icon={Thermometer}
-            label="Bodemtemp"
-            value={latest.soil_temp_c}
-            unit="°C"
-            decimals={1}
-            accent="orange"
-            sublabel={soilTempLabel(latest.soil_temp_c)}
-          />
-          <BigKPI
-            icon={FlaskConical}
-            label="EC"
-            value={
-              latest.soil_conductivity_us_cm !== null
-                ? Number(latest.soil_conductivity_us_cm) / 1000
-                : null
-            }
-            unit="mS/cm"
-            decimals={2}
-            accent="emerald"
-            sublabel={ecLabel(latest.soil_conductivity_us_cm)}
-          />
-        </div>
-      )}
+      {latest && station.device_kind === 'soil' && (() => {
+        const ecPwUsCm = bulkEcToPoreWater(
+          latest.soil_conductivity_us_cm,
+          latest.soil_moisture_pct
+        );
+        const ecPwMs = ecPwUsCm !== null ? ecPwUsCm / 1000 : null;
+        const ecBulkMs =
+          latest.soil_conductivity_us_cm !== null
+            ? Number(latest.soil_conductivity_us_cm) / 1000
+            : null;
+        const ecPwLabel = poreWaterEcLabel(ecPwMs);
+        const ecBulkStr = ecBulkMs !== null ? `Sensor (bulk) ${ecBulkMs.toFixed(2)} mS` : undefined;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <BigKPI
+              icon={Waves}
+              label="Bodemvocht"
+              value={latest.soil_moisture_pct}
+              unit="%"
+              decimals={1}
+              accent="sky"
+              sublabel={soilMoistureLabel(latest.soil_moisture_pct)}
+            />
+            <BigKPI
+              icon={Thermometer}
+              label="Bodemtemp"
+              value={latest.soil_temp_c}
+              unit="°C"
+              decimals={1}
+              accent="orange"
+              sublabel={soilTempLabel(latest.soil_temp_c)}
+            />
+            <BigKPI
+              icon={FlaskConical}
+              label="EC (porie-water)"
+              value={ecPwMs}
+              unit="mS/cm"
+              decimals={2}
+              accent="emerald"
+              sublabel={
+                ecPwLabel
+                  ? ecBulkStr
+                    ? `${ecPwLabel.label} · ${ecBulkStr}`
+                    : ecPwLabel.label
+                  : ecBulkStr
+              }
+            />
+          </div>
+        );
+      })()}
 
       {latest && station.device_kind === 'leaf' && (
         <div className="grid grid-cols-2 gap-3">
