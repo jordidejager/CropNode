@@ -37,6 +37,7 @@ setGlobalDispatcher(new Agent({
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ai } from '../src/ai/genkit';
+import { generateClaudeStructured } from '../src/lib/ai/claude';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,10 +51,20 @@ interface CliArgs {
   dryRun: boolean;
   verbose: boolean;
   minArticles: number;
+  provider: 'gemini' | 'claude';
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { limit: null, product: null, dryRun: false, verbose: false, minArticles: 2 };
+  const out: CliArgs = {
+    limit: null,
+    product: null,
+    dryRun: false,
+    verbose: false,
+    minArticles: 2,
+    // Claude default — eenmalige extract, hoge kwaliteit > snelheid.
+    // Override met --provider=gemini voor goedkopere/snellere maar magere extracts.
+    provider: 'claude',
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--limit=')) out.limit = parseInt(a.slice(8), 10) || null;
@@ -63,12 +74,20 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a.startsWith('--min-articles=')) out.minArticles = parseInt(a.slice(15), 10) || 2;
     else if (a === '--dry-run' || a === '--dry') out.dryRun = true;
     else if (a === '--verbose' || a === '-v') out.verbose = true;
+    else if (a === '--provider=gemini' || (a === '--provider' && argv[i + 1] === 'gemini')) {
+      out.provider = 'gemini';
+      if (argv[i + 1] === 'gemini') i++;
+    } else if (a === '--provider=claude' || (a === '--provider' && argv[i + 1] === 'claude')) {
+      out.provider = 'claude';
+      if (argv[i + 1] === 'claude') i++;
+    }
   }
   return out;
 }
 
-// Mutable flag — set from CLI args in main(), used by extractProfile()
+// Mutable flags — set from CLI args in main(), used by extractProfile()
 let VERBOSE = false;
+let PROVIDER: 'gemini' | 'claude' = 'claude';
 
 const EXTRACT_MODEL = 'googleai/gemini-2.5-flash';
 
@@ -203,8 +222,10 @@ OUTPUT: JSON object exact volgens de meegegeven schema.`;
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   VERBOSE = args.verbose;
+  PROVIDER = args.provider;
 
   console.log('\n💊 Middel-profiel extractie');
+  console.log(`   provider:      ${args.provider}`);
   console.log(`   product:       ${args.product ?? 'alle'}`);
   console.log(`   limit:         ${args.limit ?? 'geen'}`);
   console.log(`   min artikelen: ${args.minArticles}`);
@@ -373,33 +394,57 @@ ARTIKELEN:
 ${block}`;
 
   try {
-    const result = await ai.generate({
-      model: EXTRACT_MODEL,
-      system: EXTRACT_SYSTEM_PROMPT,
-      prompt: userPrompt,
-      output: { schema: ProductProfileSchema, format: 'json' },
-      config: { temperature: 0.1, maxOutputTokens: 4096 },
-    });
-    const raw = (result as { output?: unknown }).output;
-    if (VERBOSE) {
-      console.log(`\n   📤 Raw Gemini output voor ${productName}:`);
-      console.log('   ' + JSON.stringify(raw, null, 2).split('\n').join('\n   '));
+    let profile: ProductProfile | null;
+
+    if (PROVIDER === 'claude') {
+      const result = await generateClaudeStructured({
+        system: EXTRACT_SYSTEM_PROMPT,
+        prompt:
+          userPrompt +
+          '\n\nGeef alleen geldige JSON terug volgens het schema. Geen markdown-fences, geen toelichting.',
+        schema: ProductProfileSchema,
+        maxTokens: 4096,
+        temperature: 0.1,
+        cacheSystem: true, // system prompt is constant → caching levert kosten-besparing
+      });
+      profile = result.output;
+      if (VERBOSE) {
+        console.log(`\n   📤 Claude output voor ${productName}:`);
+        console.log('   ' + JSON.stringify(profile, null, 2).split('\n').join('\n   '));
+      }
+    } else {
+      const result = await ai.generate({
+        model: EXTRACT_MODEL,
+        system: EXTRACT_SYSTEM_PROMPT,
+        prompt: userPrompt,
+        output: { schema: ProductProfileSchema, format: 'json' },
+        config: { temperature: 0.1, maxOutputTokens: 4096 },
+      });
+      const raw = (result as { output?: unknown }).output;
+      if (VERBOSE) {
+        console.log(`\n   📤 Raw Gemini output voor ${productName}:`);
+        console.log('   ' + JSON.stringify(raw, null, 2).split('\n').join('\n   '));
+      }
+      if (!raw) return null;
+      // Expliciete Zod parse — Genkit's `output.schema` valideert niet altijd
+      // de defaults, dus array-velden kunnen undefined blijven.
+      const parseResult = ProductProfileSchema.safeParse(raw);
+      if (!parseResult.success) {
+        console.warn(
+          `   ⚠️  Schema fout: ${parseResult.error.issues.slice(0, 2).map((i) => i.path.join('.') + ': ' + i.message).join('; ')}`,
+        );
+        return null;
+      }
+      profile = parseResult.data;
     }
-    if (!raw) return null;
-    // Expliciete Zod parse — anders blijven array-defaults achterwege en
-    // crashen .length/.slice in onze dry-run console.log.
-    const parseResult = ProductProfileSchema.safeParse(raw);
-    if (!parseResult.success) {
-      console.warn(`   ⚠️  Schema fout: ${parseResult.error.issues.slice(0, 2).map((i) => i.path.join('.') + ': ' + i.message).join('; ')}`);
-      return null;
-    }
-    const profile = parseResult.data;
-    // Forceer de product_name die we kennen (Gemini kan typo's introduceren)
+
+    if (!profile) return null;
+    // Forceer de product_name die we kennen (LLM kan typo's introduceren)
     profile.product_name = productName;
     return profile;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`   ⚠️  Gemini fout: ${msg.slice(0, 60)}`);
+    console.warn(`   ⚠️  ${PROVIDER} fout: ${msg.slice(0, 80)}`);
     return null;
   }
 }
