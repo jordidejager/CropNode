@@ -44,6 +44,8 @@ interface FullDiseaseProfile {
   susceptible_varieties: string[];
   resistant_varieties: string[];
   source_article_count: number;
+  /** Backfilled from gelinkte artikelen — zie scripts/backfill-profile-images.ts */
+  image_urls?: string[];
 }
 
 function useProfile(id: string | null) {
@@ -273,8 +275,15 @@ export default function EncyclopediaDetailPage() {
   const Icon = cfg.icon;
   const isNowActive = profile.peak_months.includes(currentMonth);
 
-  // Collect images from related articles
-  const images = relatedArticles.flatMap((a) => a.image_urls ?? []).filter(Boolean).slice(0, 6);
+  // Collect images: profile-level (backfilled, curated) first, dan related articles als aanvulling
+  const seenImages = new Set<string>();
+  const images: string[] = [];
+  for (const url of [...(profile.image_urls ?? []), ...relatedArticles.flatMap((a) => a.image_urls ?? [])]) {
+    if (!url || seenImages.has(url)) continue;
+    seenImages.add(url);
+    images.push(url);
+    if (images.length >= 12) break;
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">

@@ -12,7 +12,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
   Bug, Leaf, Search, BookOpen, CloudRain, Sprout,
-  ChevronRight, Sparkles, Apple, Shield, Swords,
+  ChevronRight, Sparkles, FlaskConical,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -48,6 +48,55 @@ function useAllProfiles() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+// ============================================
+// Middelen (knowledge_product_profile)
+// ============================================
+
+interface ProductCard {
+  id: string;
+  product_name: string;
+  active_substance: string | null;
+  product_type: string | null;
+  resistance_group: string | null;
+  crops: string[];
+  target_organisms: string[];
+  side_effects: string[];
+  strategy_summary: string | null;
+  source_article_count: number;
+}
+
+function useAllProducts() {
+  return useQuery<ProductCard[]>({
+    queryKey: ['all-product-profiles-encyclopedia'],
+    queryFn: async () => {
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from('knowledge_product_profile')
+        .select('id, product_name, active_substance, product_type, resistance_group, crops, target_organisms, side_effects, strategy_summary, source_article_count')
+        .order('source_article_count', { ascending: false });
+      if (error) {
+        // Tabel kan nog niet bestaan op stale envs → geen UI breken
+        if (/relation .* does not exist/i.test(error.message)) return [];
+        throw new Error(error.message);
+      }
+      return (data ?? []) as unknown as ProductCard[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+const PRODUCT_TYPE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
+  fungicide:      { color: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
+  insecticide:    { color: 'text-orange-300', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  acaricide:      { color: 'text-amber-300',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20' },
+  herbicide:      { color: 'text-lime-300',   bg: 'bg-lime-500/10',   border: 'border-lime-500/20' },
+  groeiregulator: { color: 'text-cyan-300',   bg: 'bg-cyan-500/10',   border: 'border-cyan-500/20' },
+  bladmeststof:   { color: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  bodemmeststof:  { color: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  bioagens:       { color: 'text-green-300',  bg: 'bg-green-500/10',  border: 'border-green-500/20' },
+  feromoon:       { color: 'text-pink-300',   bg: 'bg-pink-500/10',   border: 'border-pink-500/20' },
+};
 
 const SECTIONS = [
   {
@@ -97,6 +146,7 @@ const MONTH_LABELS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'
 export default function EncyclopediePage() {
   const [search, setSearch] = useState('');
   const { data: profiles = [], isLoading } = useAllProfiles();
+  const { data: products = [] } = useAllProducts();
   const { data: phenology } = useCurrentPhenology();
   const currentMonth = phenology?.month ?? new Date().getUTCMonth() + 1;
 
@@ -107,6 +157,18 @@ export default function EncyclopediePage() {
       (p) => p.name.toLowerCase().includes(q) || (p.latin_name ?? '').toLowerCase().includes(q),
     );
   }, [profiles, search]);
+
+  const filteredProducts = useMemo(() => {
+    if (!search) return products;
+    const q = search.toLowerCase();
+    return products.filter(
+      (p) =>
+        p.product_name.toLowerCase().includes(q) ||
+        (p.active_substance ?? '').toLowerCase().includes(q) ||
+        p.target_organisms.some((t) => t.toLowerCase().includes(q)) ||
+        p.side_effects.some((t) => t.toLowerCase().includes(q)),
+    );
+  }, [products, search]);
 
   const bySection = useMemo(() => {
     const map = new Map<string, DiseaseProfile[]>();
@@ -129,7 +191,7 @@ export default function EncyclopediePage() {
           <div>
             <h1 className="text-2xl font-light text-white">Encyclopedie</h1>
             <p className="text-sm text-white/40">
-              {profiles.length} onderwerpen · Alles over ziekten, plagen en teelttechniek
+              {profiles.length} onderwerpen · {products.length} middelen · Alles over ziekten, plagen, teelt en gewasbescherming
             </p>
           </div>
         </div>
@@ -287,6 +349,114 @@ export default function EncyclopediePage() {
               </motion.section>
             );
           })}
+
+          {/* Middelen-sectie — uit knowledge_product_profile */}
+          {filteredProducts.length > 0 && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10">
+                  <FlaskConical className="h-4 w-4 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-cyan-400">Middelen</h2>
+                  <p className="text-xs text-white/30">
+                    Spuitomstandigheden, tankmix, doelorganismen en nevenwerking
+                  </p>
+                </div>
+                <span className="ml-auto text-xs text-white/20">{filteredProducts.length}</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredProducts.map((product, i) => {
+                  const typeCfg = PRODUCT_TYPE_COLORS[product.product_type ?? ''] ?? {
+                    color: 'text-white/60',
+                    bg: 'bg-white/[0.04]',
+                    border: 'border-white/10',
+                  };
+                  return (
+                    <motion.div
+                      key={product.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                    >
+                      <Link
+                        href={`/kennisbank/encyclopedie/middel/${encodeURIComponent(product.product_name.toLowerCase().replace(/\s+/g, '-'))}?id=${product.id}`}
+                        className={cn(
+                          'group block rounded-xl border p-4 transition-all hover:border-white/20 hover:shadow-lg',
+                          'border-white/[0.06] bg-white/[0.02]',
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {product.product_type && (
+                                <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider', typeCfg.bg, typeCfg.color)}>
+                                  {product.product_type}
+                                </span>
+                              )}
+                              {product.resistance_group && (
+                                <span className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-white/40">
+                                  {product.resistance_group}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="mt-1 text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
+                              {product.product_name}
+                            </h3>
+                            {product.active_substance && (
+                              <p className="text-[11px] italic text-white/30">
+                                {product.active_substance}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {product.strategy_summary && (
+                          <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-white/40">
+                            {product.strategy_summary}
+                          </p>
+                        )}
+
+                        {product.target_organisms.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {product.target_organisms.slice(0, 4).map((t) => (
+                              <span
+                                key={t}
+                                className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {product.target_organisms.length > 4 && (
+                              <span className="text-[10px] text-white/30">+{product.target_organisms.length - 4}</span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between text-[10px] text-white/25">
+                          <div className="flex items-center gap-1">
+                            {product.crops.slice(0, 2).map((c) => (
+                              <span key={c}>{c === 'appel' ? '🍎' : c === 'peer' ? '🍐' : c}</span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>{product.source_article_count} art.</span>
+                            <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.section>
+          )}
         </div>
       )}
     </div>
