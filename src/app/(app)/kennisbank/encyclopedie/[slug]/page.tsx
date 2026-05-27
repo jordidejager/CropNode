@@ -68,7 +68,10 @@ function useProfile(id: string | null) {
   });
 }
 
-// Fetch related articles (by subcategory match)
+// Fetch related articles (by subcategory match).
+// Filtert CTGB-toepassingsvoorwaarden artikelen uit — die hebben een
+// gigantische subcategory (3000+ chars met alle target-organismes) en
+// zijn niet zinvol als "gerelateerd". CTGB-info zit al in de middelen-tabel.
 function useRelatedArticles(name: string | null) {
   return useQuery({
     queryKey: ['related-articles', name],
@@ -80,6 +83,7 @@ function useRelatedArticles(name: string | null) {
         .select('id, title, category, subcategory, image_urls')
         .eq('status', 'published')
         .ilike('subcategory', `%${name}%`)
+        .not('title', 'ilike', '%CTGB toepassingsvoorwaarden%')
         .order('fusion_sources', { ascending: false })
         .limit(8);
       return (data ?? []) as Array<{ id: string; title: string; category: string; subcategory: string | null; image_urls: string[] }>;
@@ -535,19 +539,27 @@ export default function EncyclopediaDetailPage() {
           </motion.div>
         )}
 
-        {/* Related articles */}
+        {/* Related articles — subcategory wordt afgekapt op 60 chars, want
+            CTGB-import-artikelen (en sommige andere) hebben een subcategory
+            van 3000+ chars (lijst van targets) wat de cards uitelkaar trekt. */}
         {relatedArticles.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}>
             <h3 className="mb-3 text-sm font-semibold text-white">Gerelateerde kennisartikelen ({relatedArticles.length})</h3>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {relatedArticles.map((a) => (
-                <div key={a.id} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-xs">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400/60">
-                    {a.category}{a.subcategory ? ` · ${a.subcategory}` : ''}
-                  </span>
-                  <p className="mt-0.5 text-white/70">{a.title}</p>
-                </div>
-              ))}
+              {relatedArticles.map((a) => {
+                const sub = a.subcategory ?? '';
+                const subShort = sub.length > 60
+                  ? sub.slice(0, 60).replace(/[, ]+\S*$/, '') + '…'
+                  : sub;
+                return (
+                  <div key={a.id} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-xs">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400/60">
+                      {a.category}{subShort ? ` · ${subShort}` : ''}
+                    </span>
+                    <p className="mt-0.5 line-clamp-2 text-white/70">{a.title}</p>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
