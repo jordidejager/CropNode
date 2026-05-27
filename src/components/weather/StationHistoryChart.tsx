@@ -11,16 +11,38 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useStationMeasurements } from '@/hooks/use-physical-stations';
+import {
+  useStationMeasurements,
+  type DeviceKind,
+} from '@/hooks/use-physical-stations';
 import { cn } from '@/lib/utils';
 import { LineChart as LineChartIcon, Activity } from 'lucide-react';
+import { bulkEcToPoreWater } from '@/lib/weather/soil-ec';
+
+// The history chart understands these three sensor categories. Any device_kind
+// not in this list (e.g. 'temp_probe') falls back to the weather-style view.
+type ChartKind = 'weather' | 'soil' | 'leaf';
 
 interface Props {
   stationId: string;
+  deviceKind?: DeviceKind;
 }
 
 type RangeKey = '24h' | '7d' | '30d' | '90d';
-type MetricKey = 'temperature' | 'humidity' | 'pressure' | 'rain' | 'light';
+type MetricKey =
+  // weather
+  | 'temperature'
+  | 'humidity'
+  | 'pressure'
+  | 'rain'
+  | 'light'
+  // soil
+  | 'soilMoisture'
+  | 'soilTemp'
+  | 'ecPw'
+  // leaf
+  | 'leafWetness'
+  | 'leafTemp';
 
 const RANGE_LABELS: Record<RangeKey, string> = {
   '24h': '24 uur',
@@ -37,14 +59,37 @@ interface MetricConfig {
 }
 
 const METRIC_CONFIG: Record<MetricKey, MetricConfig> = {
-  temperature: { label: 'Temperatuur',     unit: '°C',  color: '#fb923c', precision: 1 },
-  humidity:    { label: 'Luchtvochtigheid', unit: '%',   color: '#60a5fa', precision: 0 },
-  pressure:    { label: 'Luchtdruk',        unit: 'hPa', color: '#a78bfa', precision: 0 },
-  rain:        { label: 'Neerslag',         unit: 'mm',  color: '#10b981', precision: 1 },
-  light:       { label: 'Licht',            unit: 'lux', color: '#fbbf24', precision: 0 },
+  // weather
+  temperature:  { label: 'Temperatuur',     unit: '°C',     color: '#fb923c', precision: 1 },
+  humidity:     { label: 'Luchtvochtigheid', unit: '%',      color: '#60a5fa', precision: 0 },
+  pressure:     { label: 'Luchtdruk',        unit: 'hPa',    color: '#a78bfa', precision: 0 },
+  rain:         { label: 'Neerslag',         unit: 'mm',     color: '#10b981', precision: 1 },
+  light:        { label: 'Licht',            unit: 'lux',    color: '#fbbf24', precision: 0 },
+  // soil
+  soilMoisture: { label: 'Bodemvocht',       unit: '%',      color: '#38bdf8', precision: 1 },
+  soilTemp:     { label: 'Bodemtemp',        unit: '°C',     color: '#fb923c', precision: 1 },
+  ecPw:         { label: 'EC (porie-water)', unit: 'mS/cm',  color: '#10b981', precision: 2 },
+  // leaf
+  leafWetness:  { label: 'Bladnat',          unit: '%',      color: '#34d399', precision: 1 },
+  leafTemp:     { label: 'Bladtemp',         unit: '°C',     color: '#fb923c', precision: 1 },
 };
 
-const METRIC_ORDER: MetricKey[] = ['temperature', 'humidity', 'pressure', 'rain', 'light'];
+const METRICS_BY_KIND: Record<ChartKind, MetricKey[]> = {
+  weather: ['temperature', 'humidity', 'pressure', 'rain', 'light'],
+  soil:    ['soilMoisture', 'soilTemp', 'ecPw'],
+  leaf:    ['leafWetness', 'leafTemp'],
+};
+
+const SUBTITLE_BY_KIND: Record<ChartKind, string> = {
+  weather: 'Sensor-metingen van je weerstation',
+  soil:    'Sensor-metingen van je bodemsensor',
+  leaf:    'Sensor-metingen van je bladsensor',
+};
+
+function toChartKind(k: DeviceKind | undefined): ChartKind {
+  if (k === 'soil' || k === 'leaf') return k;
+  return 'weather';
+}
 
 /**
  * Time-series chart for one CropNode physical weather station.
@@ -52,9 +97,19 @@ const METRIC_ORDER: MetricKey[] = ['temperature', 'humidity', 'pressure', 'rain'
  * per chart with optional dew-point overlay on temperature. Dense tooltip
  * shows full date+time + relevant context per metric.
  */
-export function StationHistoryChart({ stationId }: Props) {
+export function StationHistoryChart({ stationId, deviceKind }: Props) {
+  const kind: ChartKind = toChartKind(deviceKind);
+  const metricOrder = METRICS_BY_KIND[kind];
+
   const [range, setRange] = useState<RangeKey>('7d');
-  const [metric, setMetric] = useState<MetricKey>('temperature');
+  const [metricState, setMetric] = useState<MetricKey>(metricOrder[0]);
+
+  // If deviceKind switches (e.g. user navigates between station types) the
+  // previously-selected metric may no longer be in the new tab list. Snap
+  // back to the first valid tab without firing an effect.
+  const metric: MetricKey = metricOrder.includes(metricState)
+    ? metricState
+    : metricOrder[0];
 
   const { data: measurements, isLoading } = useStationMeasurements(stationId, range);
 
@@ -63,17 +118,36 @@ export function StationHistoryChart({ stationId }: Props) {
     if (!measurements || measurements.length === 0) return [];
     return [...measurements]
       .reverse()
-      .map(m => ({
-        time: new Date(m.measured_at).getTime(),
-        full: formatFullLabel(m.measured_at),
-        temperature: m.temperature_c,
-        humidity: m.humidity_pct,
-        pressure: m.pressure_hpa,
-        rain: m.rainfall_mm ?? 0,
-        light: m.illuminance_lux,
-        dewPoint: m.dew_point_c,
-        wetBulb: m.wet_bulb_c,
-      }));
+      .map(m => {
+        // EC: convert bulk sensor reading → pore-water EC in mS/cm
+        const ecPwUsCm = bulkEcToPoreWater(
+          m.soil_conductivity_us_cm,
+          m.soil_moisture_pct
+        );
+        const ecPw = ecPwUsCm !== null ? ecPwUsCm / 1000 : null;
+        return {
+          time: new Date(m.measured_at).getTime(),
+          full: formatFullLabel(m.measured_at),
+          // weather
+          temperature: m.temperature_c,
+          humidity: m.humidity_pct,
+          pressure: m.pressure_hpa,
+          rain: m.rainfall_mm ?? 0,
+          light: m.illuminance_lux,
+          dewPoint: m.dew_point_c,
+          wetBulb: m.wet_bulb_c,
+          // soil
+          soilMoisture: m.soil_moisture_pct,
+          soilTemp: m.soil_temp_c,
+          ecPw,
+          ecBulkMs: m.soil_conductivity_us_cm !== null
+            ? Number(m.soil_conductivity_us_cm) / 1000
+            : null,
+          // leaf
+          leafWetness: m.leaf_wetness_pct_measured,
+          leafTemp: m.leaf_temp_c,
+        };
+      });
   }, [measurements, range]);
 
   const cfg = METRIC_CONFIG[metric];
@@ -89,7 +163,7 @@ export function StationHistoryChart({ stationId }: Props) {
           </div>
           <div>
             <h3 className="text-sm font-bold text-white">Historie</h3>
-            <p className="text-xs text-white/40">Sensor-metingen van je weerstation</p>
+            <p className="text-xs text-white/40">{SUBTITLE_BY_KIND[kind]}</p>
           </div>
         </div>
 
@@ -113,7 +187,7 @@ export function StationHistoryChart({ stationId }: Props) {
 
       {/* Metric tabs */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {METRIC_ORDER.map(k => (
+        {metricOrder.map(k => (
           <button
             key={k}
             onClick={() => setMetric(k)}
@@ -174,7 +248,9 @@ export function StationHistoryChart({ stationId }: Props) {
                 domain={
                   metric === 'rain'
                     ? [0, 'auto']
-                    : metric === 'humidity'
+                    : metric === 'humidity' ||
+                        metric === 'soilMoisture' ||
+                        metric === 'leafWetness'
                       ? [0, 100]
                       : ['auto', 'auto']
                 }
@@ -255,6 +331,7 @@ export function StationHistoryChart({ stationId }: Props) {
 interface TooltipPayloadEntry {
   payload: {
     full: string;
+    // weather
     temperature: number | null;
     humidity: number | null;
     pressure: number | null;
@@ -262,6 +339,14 @@ interface TooltipPayloadEntry {
     light: number | null;
     dewPoint: number | null;
     wetBulb: number | null;
+    // soil
+    soilMoisture: number | null;
+    soilTemp: number | null;
+    ecPw: number | null;
+    ecBulkMs: number | null;
+    // leaf
+    leafWetness: number | null;
+    leafTemp: number | null;
   };
 }
 
@@ -312,6 +397,52 @@ function CustomTooltip({
       label: 'Temperatuur',
       value: `${p.temperature.toFixed(1)} °C`,
       color: '#fb923c',
+    });
+  }
+  // Soil: show VWC context on temp/EC, soil-temp context on VWC.
+  if (metric === 'soilMoisture' && p.soilTemp !== null) {
+    rows.push({
+      label: 'Bodemtemp',
+      value: `${p.soilTemp.toFixed(1)} °C`,
+      color: '#fb923c',
+    });
+  }
+  if (metric === 'soilTemp' && p.soilMoisture !== null) {
+    rows.push({
+      label: 'Bodemvocht',
+      value: `${p.soilMoisture.toFixed(1)} %`,
+      color: '#38bdf8',
+    });
+  }
+  if (metric === 'ecPw') {
+    if (p.soilMoisture !== null) {
+      rows.push({
+        label: 'Bodemvocht',
+        value: `${p.soilMoisture.toFixed(1)} %`,
+        color: '#38bdf8',
+      });
+    }
+    if (p.ecBulkMs !== null) {
+      rows.push({
+        label: 'Sensor (bulk)',
+        value: `${p.ecBulkMs.toFixed(2)} mS/cm`,
+        color: '#94a3b8',
+      });
+    }
+  }
+  // Leaf: cross-context between wetness and leaf-temp.
+  if (metric === 'leafWetness' && p.leafTemp !== null) {
+    rows.push({
+      label: 'Bladtemp',
+      value: `${p.leafTemp.toFixed(1)} °C`,
+      color: '#fb923c',
+    });
+  }
+  if (metric === 'leafTemp' && p.leafWetness !== null) {
+    rows.push({
+      label: 'Bladnat',
+      value: `${p.leafWetness.toFixed(1)} %`,
+      color: '#34d399',
     });
   }
 

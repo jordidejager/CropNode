@@ -12,6 +12,18 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-05-27 — Historie-grafiek + secundaire KPI's sensor-bewust
+- ✅ `StationHistoryChart` accepteert nu `deviceKind` prop. Metric-tabs schakelen per sensor type:
+  - weather → Temperatuur / Luchtvochtigheid / Luchtdruk / Neerslag / Licht (ongewijzigd)
+  - **soil → Bodemvocht / Bodemtemp / EC (porie-water)**
+  - **leaf → Bladnat / Bladtemp**
+- ✅ EC in historie gebruikt dezelfde Hilhorst-conversie als KPI-tegel (bulk → porie-water).
+- ✅ Tooltip cross-context per metric (bv. EC toont VWC + bulk-waarde; leafTemp toont bladnat).
+- ✅ Subtitle ("Sensor-metingen van je …") past zich aan per sensor type.
+- ✅ `StationDetailView` secundaire rij: "Licht" HealthCard verbergt zich voor bodem/blad sensoren (geen lichtmeting op die hardware) → grid valt terug naar 2 kolommen (Accu + Signaal).
+- ✅ Doorgegeven vanuit alle 3 call sites: `StationDetailView`, `WeerstationsManager`, `OwnStationHistorySection`.
+- Files: `src/components/weather/StationHistoryChart.tsx`, `src/components/weerstations/StationDetailView.tsx`, `src/app/(app)/instellingen/weerstations/WeerstationsManager.tsx`, `src/components/weather/historie/OwnStationHistorySection.tsx`.
+
 ### 2026-05-27 — EC bulk → porie-water conversie (agronomisch correct)
 - ✅ Nieuwe helper `src/lib/weather/soil-ec.ts`: `bulkEcToPoreWater()` met Hilhorst-simplified formule `ECpw ≈ ECbulk / θ`, plus `poreWaterEcLabel()` met Nederlandse fruitteelt-thresholds (laag <0.30 / onder gem. <0.70 / normaal 0.70-1.30 / verhoogd <1.50 / hoog ≥1.50 mS/cm).
 - ✅ `StationDetailView.tsx`: EC-tegel toont nu `EC (porie-water)` in mS/cm + sublabel met agronomisch oordeel ("Normaal", "Hoog — droogte+zoutrisico", etc.) en bulk-sensorwaarde als context.

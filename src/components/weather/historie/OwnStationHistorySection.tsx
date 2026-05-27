@@ -25,6 +25,7 @@ export function OwnStationHistorySection() {
   if (!stations || stations.length === 0) return null;
 
   const activeId = selectedId ?? stations[0]!.id;
+  const activeStation = stations.find(s => s.id === activeId) ?? stations[0]!;
 
   return (
     <div className="space-y-3">
@@ -70,7 +71,7 @@ export function OwnStationHistorySection() {
         </div>
       </div>
 
-      <StationHistoryChart stationId={activeId} />
+      <StationHistoryChart stationId={activeId} deviceKind={activeStation.device_kind} />
     </div>
   );
 }

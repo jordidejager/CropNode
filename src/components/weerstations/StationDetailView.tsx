@@ -277,20 +277,29 @@ export function StationDetailView({
         </div>
       )}
 
-      {/* Secondary row — light, dew, technical health */}
-      {latest && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <HealthCard
-            title="Licht"
-            icon={Sun}
-            accent="text-amber-300"
-            main={
-              latest.illuminance_lux !== null
-                ? formatLux(latest.illuminance_lux)
-                : '—'
-            }
-            sub={daylightLabel(latest.illuminance_lux)}
-          />
+      {/* Secondary row — light (weather only), battery, signal */}
+      {latest && (() => {
+        // Soil/leaf sensors have no light sensor — drop that tile and
+        // collapse to a 2-column grid instead of leaving an empty "—".
+        const showLight = station.device_kind === 'weather' || !station.device_kind;
+        return (
+        <div className={cn(
+          'grid grid-cols-1 gap-3',
+          showLight ? 'md:grid-cols-3' : 'md:grid-cols-2'
+        )}>
+          {showLight && (
+            <HealthCard
+              title="Licht"
+              icon={Sun}
+              accent="text-amber-300"
+              main={
+                latest.illuminance_lux !== null
+                  ? formatLux(latest.illuminance_lux)
+                  : '—'
+              }
+              sub={daylightLabel(latest.illuminance_lux)}
+            />
+          )}
           <HealthCard
             title="Accu"
             icon={Zap}
@@ -310,10 +319,11 @@ export function StationDetailView({
             sub={signalDetail(latest.rssi_dbm, latest.snr_db, latest.gateway_count)}
           />
         </div>
-      )}
+        );
+      })()}
 
       {/* History chart */}
-      <StationHistoryChart stationId={station.id} />
+      <StationHistoryChart stationId={station.id} deviceKind={station.device_kind} />
 
       {/* Technical footer card */}
       <TechFooter station={station} latest={latest} />

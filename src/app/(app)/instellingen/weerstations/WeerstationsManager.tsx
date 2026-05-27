@@ -428,7 +428,7 @@ function StationDetail({
       </div>
 
       {/* History */}
-      <StationHistoryChart stationId={station.id} />
+      <StationHistoryChart stationId={station.id} deviceKind={station.device_kind} />
     </div>
   );
 }
