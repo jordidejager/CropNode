@@ -3,13 +3,15 @@
 /**
  * Ziekten & Plagen overzichtspagina — vervangt de oude mockPests.
  *
- * Haalt data uit knowledge_disease_profile (230 profielen) en toont:
+ * Haalt data uit knowledge_disease_profile (~50 profielen) en toont:
  * - Seizoens-dashboard: huidige fase + meest urgente ziekten/plagen NU
  * - Filterable grid met alle ziekten/plagen
  * - Maandactiviteits-balk per ziekte/plaag
+ * - Klik op een kaart → /kennisbank/encyclopedie/{slug}?id={id}
  */
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bug,
@@ -80,7 +82,15 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Bug; color: stri
   plaag: { label: 'Plaag', icon: Bug, color: 'text-orange-400', bg: 'bg-orange-500/10' },
   ziekte: { label: 'Ziekte', icon: Leaf, color: 'text-rose-400', bg: 'bg-rose-500/10' },
   abiotisch: { label: 'Abiotisch', icon: CloudRain, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+  groeiregulatie: { label: 'Teelttechniek', icon: Sprout, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
 };
+
+/** Best-effort slug (alleen voor URL-leesbaarheid; routing gaat op ?id=...) */
+function nameToSlug(name: string): string {
+  return encodeURIComponent(
+    name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+  );
+}
 
 const PHASE_ICONS: Record<string, typeof Sun> = {
   rust: Snowflake,
@@ -280,13 +290,27 @@ function DiseaseCard({
   const Icon = cfg.icon;
   const isNowActive = profile.peak_months.includes(currentMonth);
 
-  // Top products (max 3)
-  const topProducts = [
-    ...profile.key_preventive_products.slice(0, 2),
-    ...profile.key_curative_products.slice(0, 1),
-  ].filter(Boolean).slice(0, 3);
+  // Top products (max 3) — gededupliceerd case-insensitief zodat een middel
+  // dat in zowel preventief als curatief staat maar één keer verschijnt
+  const seenProducts = new Set<string>();
+  const topProducts: string[] = [];
+  for (const p of [
+    ...(profile.key_preventive_products ?? []),
+    ...(profile.key_curative_products ?? []),
+  ]) {
+    if (!p) continue;
+    const key = p.toLowerCase().trim();
+    if (seenProducts.has(key)) continue;
+    seenProducts.add(key);
+    topProducts.push(p);
+    if (topProducts.length >= 3) break;
+  }
 
   return (
+    <Link
+      href={`/kennisbank/encyclopedie/${nameToSlug(profile.name)}?id=${profile.id}`}
+      className="block"
+    >
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -371,5 +395,6 @@ function DiseaseCard({
         ))}
       </div>
     </motion.div>
+    </Link>
   );
 }

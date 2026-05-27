@@ -244,12 +244,21 @@ export default function EncyclopediaDetailPage() {
   const { data: relatedArticles = [] } = useRelatedArticles(profile?.name ?? null);
   const { data: productAdvice = [] } = useProductAdvice(profile?.name ?? null);
   const currentMonth = phenology?.month ?? new Date().getUTCMonth() + 1;
+  // Dedup case-insensitief — voorkomt dat "Captan" en "captan" of "Movento"
+  // en "movento OD" allebei verschijnen als 2 entries voor hetzelfde middel.
   const allProducts = [
     ...(profile?.key_preventive_products ?? []),
     ...(profile?.key_curative_products ?? []),
     ...productAdvice.map((pa) => pa.product_name),
-  ];
-  const uniqueProducts = Array.from(new Set(allProducts));
+  ].filter(Boolean);
+  const seen = new Set<string>();
+  const uniqueProducts: string[] = [];
+  for (const p of allProducts) {
+    const key = p.toLowerCase().trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueProducts.push(p);
+  }
   const { data: ctgbStatuses = {} } = useCtgbStatus(uniqueProducts);
 
   if (isLoading) {

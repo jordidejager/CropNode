@@ -126,7 +126,7 @@ export interface ScrapeOptions {
 export const KnowledgeArticleDraftSchema = z.object({
   title: z.string().min(5).max(300),
   content: z.string().min(50),
-  summary: z.string().min(10).max(500),
+  summary: z.string().min(10).max(800),
 
   category: z.enum(KNOWLEDGE_CATEGORIES),
   subcategory: z.string().nullable().optional(),
