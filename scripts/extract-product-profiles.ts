@@ -241,7 +241,14 @@ async function main() {
       }
 
       if (args.dryRun) {
-        console.log(`✓ dry-run [type=${profile.product_type ?? '?'}, targets=${profile.target_organisms.length}, omstandigheden=${[profile.optimal_temp_min, profile.optimal_humidity_min, profile.wind_speed_max_ms, profile.delta_t_min].filter((v) => v != null).length}/4]`);
+        const targets = (profile.target_organisms ?? []).length;
+        const conds = [
+          profile.optimal_temp_min,
+          profile.optimal_humidity_min,
+          profile.wind_speed_max_ms,
+          profile.delta_t_min,
+        ].filter((v) => v != null).length;
+        console.log(`✓ dry-run [type=${profile.product_type ?? '?'}, targets=${targets}, omstandigheden=${conds}/4]`);
         continue;
       }
 
@@ -346,11 +353,19 @@ async function extractProfile(
       output: { schema: ProductProfileSchema, format: 'json' },
       config: { temperature: 0.1, maxOutputTokens: 2048 },
     });
-    const parsed = (result as { output?: ProductProfile }).output;
-    if (!parsed) return null;
+    const raw = (result as { output?: unknown }).output;
+    if (!raw) return null;
+    // Expliciete Zod parse — anders blijven array-defaults achterwege en
+    // crashen .length/.slice in onze dry-run console.log.
+    const parseResult = ProductProfileSchema.safeParse(raw);
+    if (!parseResult.success) {
+      console.warn(`   ⚠️  Schema fout: ${parseResult.error.issues.slice(0, 2).map((i) => i.path.join('.') + ': ' + i.message).join('; ')}`);
+      return null;
+    }
+    const profile = parseResult.data;
     // Forceer de product_name die we kennen (Gemini kan typo's introduceren)
-    parsed.product_name = productName;
-    return parsed;
+    profile.product_name = productName;
+    return profile;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`   ⚠️  Gemini fout: ${msg.slice(0, 60)}`);

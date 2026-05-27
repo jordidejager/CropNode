@@ -391,13 +391,13 @@ function profileToActionItem(
       : `${capitalize(p.name)} — monitoring`,
     subtitle: trimToSentence(strategy, 200) + productHint,
     detail: strategy,
-    crops: p.crops,
-    phases: p.peak_phases,
-    months: p.peak_months,
+    crops: p.crops ?? [],
+    phases: p.peak_phases ?? [],
+    months: p.peak_months ?? [],
     category: p.profile_type,
     article_id: null,
     ask_chatbot: `Wat moet ik nu doen tegen ${p.name}?`,
-    sort_score: (peakNow ? 0 : peakSoon ? 50 : 100) - p.source_article_count * 0.1,
+    sort_score: (peakNow ? 0 : peakSoon ? 50 : 100) - (p.source_article_count ?? 0) * 0.1,
   };
 }
 
@@ -431,14 +431,14 @@ function adviceToActionItem(
     title,
     subtitle: `[${appType}] ${parts.join(' · ')}`,
     detail: parts.join('\n'),
-    crops: [a.crop],
+    crops: a.crop ? [a.crop] : [],
     phases: a.phenological_phases ?? [],
     months: a.relevant_months ?? [],
     category: appType,
     article_id: null,
     dosage: a.dosage,
     ask_chatbot: `Dosering en timing van ${a.product_name} tegen ${a.target} op ${a.crop}?`,
-    sort_score: (urgency === 'nu' ? 0 : urgency === 'deze_week' ? 50 : 100) - a.source_article_count * 0.1,
+    sort_score: (urgency === 'nu' ? 0 : urgency === 'deze_week' ? 50 : 100) - (a.source_article_count ?? 0) * 0.1,
   };
 }
 
@@ -449,10 +449,16 @@ function articleToActionItem(
   nextMonth: number,
   nextPhase: string,
 ): ActionItem {
-  const monthsHit = a.relevant_months.includes(currentMonth);
-  const phaseHit = a.season_phases.includes(currentPhase);
+  const months = a.relevant_months ?? [];
+  const phases = a.season_phases ?? [];
+  const crops = a.crops ?? [];
+  const monthsHit = months.includes(currentMonth);
+  const phaseHit = phases.includes(currentPhase);
   const expiringSoon =
     a.valid_until && new Date(a.valid_until).getTime() - Date.now() < 14 * 86_400_000;
+  // Touch nextMonth / nextPhase to keep them in the signature contract
+  // (used by sibling converters that may downgrade to 'voorbereiden')
+  void nextMonth; void nextPhase;
 
   const urgency: Urgency = (monthsHit && phaseHit) || expiringSoon ? 'nu' : (monthsHit || phaseHit) ? 'deze_week' : 'voorbereiden';
 
@@ -463,13 +469,13 @@ function articleToActionItem(
     title: a.title,
     subtitle: trimToSentence(a.summary ?? '', 180),
     detail: a.summary ?? '',
-    crops: a.crops,
-    phases: a.season_phases,
-    months: a.relevant_months,
+    crops,
+    phases,
+    months,
     category: a.category,
     article_id: a.id,
     ask_chatbot: `Wat moet ik weten over ${a.title.toLowerCase()}?`,
-    sort_score: (urgency === 'nu' ? 0 : urgency === 'deze_week' ? 50 : 100) - a.fusion_sources * 0.5,
+    sort_score: (urgency === 'nu' ? 0 : urgency === 'deze_week' ? 50 : 100) - (a.fusion_sources ?? 0) * 0.5,
   };
 }
 

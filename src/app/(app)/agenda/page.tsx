@@ -385,13 +385,13 @@ function ActionCard({ item, ring }: { item: ActionItem; ring: string }) {
 
           {/* Meta footer */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] text-white/40">
-            {item.crops.length > 0 && (
+            {(item.crops ?? []).length > 0 && (
               <span className="flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-0.5">
                 <AppleIcon className="h-2.5 w-2.5" />
-                {item.crops.join(' + ')}
+                {(item.crops ?? []).join(' + ')}
               </span>
             )}
-            {item.phases.slice(0, 2).map((p) => (
+            {(item.phases ?? []).slice(0, 2).map((p) => (
               <span
                 key={p}
                 className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-0.5"
@@ -399,9 +399,9 @@ function ActionCard({ item, ring }: { item: ActionItem; ring: string }) {
                 {prettyPhase(p)}
               </span>
             ))}
-            {item.months.length > 0 && (
+            {(item.months ?? []).length > 0 && (
               <span className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-0.5">
-                {formatMonths(item.months)}
+                {formatMonths(item.months ?? [])}
               </span>
             )}
           </div>
