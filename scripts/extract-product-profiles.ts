@@ -48,11 +48,12 @@ interface CliArgs {
   limit: number | null;
   product: string | null;
   dryRun: boolean;
+  verbose: boolean;
   minArticles: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { limit: null, product: null, dryRun: false, minArticles: 2 };
+  const out: CliArgs = { limit: null, product: null, dryRun: false, verbose: false, minArticles: 2 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--limit=')) out.limit = parseInt(a.slice(8), 10) || null;
@@ -61,9 +62,13 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === '--product') out.product = argv[++i] ?? null;
     else if (a.startsWith('--min-articles=')) out.minArticles = parseInt(a.slice(15), 10) || 2;
     else if (a === '--dry-run' || a === '--dry') out.dryRun = true;
+    else if (a === '--verbose' || a === '-v') out.verbose = true;
   }
   return out;
 }
+
+// Mutable flag — set from CLI args in main(), used by extractProfile()
+let VERBOSE = false;
 
 const EXTRACT_MODEL = 'googleai/gemini-2.5-flash';
 
@@ -131,10 +136,15 @@ const EXTRACT_SYSTEM_PROMPT = `Je bent een data-extractor voor CropNode (Nederla
 Je krijgt ALLE artikelen waarin een specifiek middel genoemd wordt. Destilleer daaruit één compleet PROFIEL van het middel.
 
 KRITISCHE REGELS:
-1. Extraheer ALLEEN informatie die letterlijk in de artikelen staat. Verzin NIETS.
-2. Als een veld in geen enkel artikel duidelijk genoemd wordt → laat het null/leeg.
+1. Extraheer informatie die in de artikelen voorkomt. Impliciete context telt mee:
+   - Als een artikel zegt "Bij schurftrisico Captan 1,8 kg/ha" → target_organisms moet "schurft" bevatten.
+   - Als een artikel zegt "Gazelle tegen perenbladvlo" → target_organisms moet "perenbladvlo" bevatten.
+   - Als een product in 50 artikelen voorkomt onder "schurftbestrijding" → schurft is een target.
+   Niet alleen formele "is een fungicide tegen X" zinnen; ook de praktische "spuit X bij Y" context.
+2. Verzin GEEN getallen of doseringen die nergens genoemd worden. Numerieke velden (temp, RH, wind, deltaT, watervolume, BBCH, VGT) ALLEEN invullen als een artikel een concreet getal geeft.
 3. Pak het MEEST CONSISTENTE getal/term als artikelen variëren — geen gemiddelde, geen interpolatie.
-4. Combineer NOOIT je eigen kennis over middelen. Alleen wat in de artikelen staat.
+4. Combineer NOOIT je eigen general-knowledge fabriekskennis over middelen. Alleen wat uit de meegegeven artikelen blijkt.
+5. Schrijf strategy_summary en application_advice in eigen woorden, gebaseerd op de artikelen — niet kopiëren.
 
 VELDEN UITLEG:
 - product_name: canonieke naam (Scala, Movento, GA4/7, Captan, etc.)
@@ -192,6 +202,7 @@ OUTPUT: JSON object exact volgens de meegegeven schema.`;
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  VERBOSE = args.verbose;
 
   console.log('\n💊 Middel-profiel extractie');
   console.log(`   product:       ${args.product ?? 'alle'}`);
@@ -337,13 +348,29 @@ async function extractProfile(
   productName: string,
   articles: Array<{ title: string; content: string; summary: string | null }>,
 ): Promise<ProductProfile | null> {
-  // Bundle de artikelen — beperk per-artikel-lengte zodat we onder de context-limiet blijven
+  // Bundle de artikelen — beperk per-artikel-lengte zodat we onder de context-limiet
+  // blijven én Gemini niet "verstikt" raakt en alleen een half profiel produceert.
+  const ARTICLES_PER_PROMPT = 10;
+  const CHARS_PER_ARTICLE = 2500;
   const block = articles
-    .slice(0, 15)
-    .map((a, i) => `=== Artikel ${i + 1}: ${a.title} ===\n${(a.content ?? '').slice(0, 4000)}`)
+    .slice(0, ARTICLES_PER_PROMPT)
+    .map((a, i) => `=== Artikel ${i + 1}: ${a.title} ===\n${(a.content ?? '').slice(0, CHARS_PER_ARTICLE)}`)
     .join('\n\n');
 
-  const userPrompt = `Middel: ${productName}\n\nGebaseerd op de volgende ${articles.length} artikelen, destilleer één compleet profiel van dit middel:\n\n${block}`;
+  const userPrompt = `Middel: ${productName}
+
+Onderstaande ${articles.length} artikelen noemen dit middel (top ${Math.min(ARTICLES_PER_PROMPT, articles.length)} getoond). Destilleer één compleet PROFIEL van het middel.
+
+BELANGRIJK: vul ALTIJD ALLE velden uit het output-schema in. Wanneer informatie ontbreekt:
+- array-velden → lege array []
+- numerieke velden → null
+- string-velden → null
+
+Het is OK als veel velden null/[] zijn voor exotische middelen. Maar bekende velden zoals product_type, active_substance, target_organisms, crops MOETEN gevuld zijn als er ÉNIG signaal in de artikelen staat.
+
+ARTIKELEN:
+
+${block}`;
 
   try {
     const result = await ai.generate({
@@ -351,9 +378,13 @@ async function extractProfile(
       system: EXTRACT_SYSTEM_PROMPT,
       prompt: userPrompt,
       output: { schema: ProductProfileSchema, format: 'json' },
-      config: { temperature: 0.1, maxOutputTokens: 2048 },
+      config: { temperature: 0.1, maxOutputTokens: 4096 },
     });
     const raw = (result as { output?: unknown }).output;
+    if (VERBOSE) {
+      console.log(`\n   📤 Raw Gemini output voor ${productName}:`);
+      console.log('   ' + JSON.stringify(raw, null, 2).split('\n').join('\n   '));
+    }
     if (!raw) return null;
     // Expliciete Zod parse — anders blijven array-defaults achterwege en
     // crashen .length/.slice in onze dry-run console.log.
