@@ -236,6 +236,20 @@ const TYPE_CONFIG: Record<string, { label: string; icon: typeof Bug; color: stri
 const MONTH_LABELS_FULL = ['Januari', 'Februari', 'Maart', 'April', 'Mei', 'Juni', 'Juli', 'Augustus', 'September', 'Oktober', 'November', 'December'];
 const MONTH_LABELS_SHORT = ['Jan', 'Feb', 'Mrt', 'Apr', 'Mei', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
 
+/** Dedup case-insensitief, behoud eerste voorkomen */
+function dedupProductsCi(arr: string[] | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of arr ?? []) {
+    if (!p) continue;
+    const k = p.toLowerCase().trim();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
 export default function EncyclopediaDetailPage() {
   const searchParams = useSearchParams();
   const profileId = searchParams.get('id');
@@ -387,22 +401,28 @@ export default function EncyclopediaDetailPage() {
         <ContentSection icon={Eye} title="Symptomen" content={profile.symptoms} delay={0.25} />
         <ContentSection icon={Microscope} title="Levenscyclus" content={profile.lifecycle_notes} delay={0.3} />
         <ContentSection icon={Shield} title="Preventieve aanpak" content={profile.prevention_strategy} delay={0.35}>
-          {profile.key_preventive_products.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {profile.key_preventive_products.map((p, idx) => (
-                <ProductBadge key={`prev-${idx}`} name={p} status={ctgbStatuses[p]} />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const dedup = dedupProductsCi(profile.key_preventive_products);
+            return dedup.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {dedup.map((p, idx) => (
+                  <ProductBadge key={`prev-${idx}`} name={p} status={ctgbStatuses[p]} />
+                ))}
+              </div>
+            ) : null;
+          })()}
         </ContentSection>
         <ContentSection icon={Swords} title="Curatieve aanpak" content={profile.curative_strategy} delay={0.4}>
-          {profile.key_curative_products.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {profile.key_curative_products.map((p, idx) => (
-                <ProductBadge key={`cur-${idx}`} name={p} status={ctgbStatuses[p]} />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const dedup = dedupProductsCi(profile.key_curative_products);
+            return dedup.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {dedup.map((p, idx) => (
+                  <ProductBadge key={`cur-${idx}`} name={p} status={ctgbStatuses[p]} />
+                ))}
+              </div>
+            ) : null;
+          })()}
         </ContentSection>
         {/* Detailed product advice table from knowledge_product_advice */}
         {productAdvice.length > 0 && (

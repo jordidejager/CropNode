@@ -259,10 +259,20 @@ export default function EncyclopediePage() {
                       profile.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
                     );
                     const isNowActive = profile.peak_months.includes(currentMonth);
-                    const topProducts = [
-                      ...profile.key_preventive_products.slice(0, 2),
-                      ...profile.key_curative_products.slice(0, 1),
-                    ].slice(0, 3);
+                    // Dedup case-insensitief
+                    const seenP = new Set<string>();
+                    const topProducts: string[] = [];
+                    for (const p of [
+                      ...(profile.key_preventive_products ?? []),
+                      ...(profile.key_curative_products ?? []),
+                    ]) {
+                      if (!p) continue;
+                      const k = p.toLowerCase().trim();
+                      if (seenP.has(k)) continue;
+                      seenP.add(k);
+                      topProducts.push(p);
+                      if (topProducts.length >= 3) break;
+                    }
 
                     return (
                       <motion.div
