@@ -424,75 +424,22 @@ export default function EncyclopediaDetailPage() {
             ) : null;
           })()}
         </ContentSection>
-        {/* Detailed product advice table — alleen rijen met bruikbare info,
-            gededupliceerd per (product × application_type). Twee rijen voor
-            "captan schurft appel preventief" + "captan schurft peer preventief"
-            worden samengevoegd tot één rij met crops="🍎🍐". */}
+        {/* Detailed product advice table — alleen rijen met bruikbare info
+            (dosage OF timing OF application_type) om lege rijen te skippen */}
         {(() => {
-          type Merged = {
-            product_name: string;
-            active_substance: string | null;
-            crops: Set<string>;
-            dosages: Set<string>;
-            timings: Set<string>;
-            application_type: string | null;
-            safety_interval_days: number | null;
-            country_restrictions: string | null;
-            resistance_group: string | null;
-          };
-          const usableRaw = productAdvice.filter(
-            (pa) =>
-              (pa.dosage && pa.dosage.length > 0) ||
-              (pa.timing && pa.timing.length > 0) ||
-              pa.application_type,
+          const usableAdvice = productAdvice.filter(
+            (pa) => (pa.dosage && pa.dosage.length > 0)
+              || (pa.timing && pa.timing.length > 0)
+              || pa.application_type,
           );
-          const merged = new Map<string, Merged>();
-          for (const pa of usableRaw) {
-            const key = `${(pa.product_name ?? '').toLowerCase()}|${pa.application_type ?? ''}`;
-            const existing = merged.get(key);
-            // Crop kan in oude extract-rijen "Nederland/België" zijn — die filteren
-            const validCrops = ['appel', 'peer', 'beide', 'kers', 'pruim'];
-            const cropVal = pa.crop && validCrops.includes(pa.crop.toLowerCase()) ? pa.crop : null;
-            if (existing) {
-              if (cropVal) existing.crops.add(cropVal);
-              if (pa.dosage) existing.dosages.add(pa.dosage);
-              if (pa.timing) existing.timings.add(pa.timing);
-              if (pa.country_restrictions && !existing.country_restrictions)
-                existing.country_restrictions = pa.country_restrictions;
-              if (pa.safety_interval_days && !existing.safety_interval_days)
-                existing.safety_interval_days = pa.safety_interval_days;
-            } else {
-              merged.set(key, {
-                product_name: pa.product_name,
-                active_substance: pa.active_substance,
-                crops: new Set(cropVal ? [cropVal] : []),
-                dosages: new Set(pa.dosage ? [pa.dosage] : []),
-                timings: new Set(pa.timing ? [pa.timing] : []),
-                application_type: pa.application_type,
-                safety_interval_days: pa.safety_interval_days,
-                country_restrictions: pa.country_restrictions,
-                resistance_group: pa.resistance_group,
-              });
-            }
-          }
-          const usableAdvice = Array.from(merged.values());
           if (usableAdvice.length === 0) return null;
-          const cropToEmoji = (crops: Set<string>) => {
-            const has = (c: string) => crops.has(c) || crops.has('beide');
-            const parts: string[] = [];
-            if (has('appel')) parts.push('🍎');
-            if (has('peer')) parts.push('🍐');
-            if (has('kers')) parts.push('🍒');
-            if (has('pruim')) parts.push('🫐');
-            return parts.join('') || '—';
-          };
           return (
           <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }}
             className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
             <div className="mb-3 flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-emerald-400/60" />
               <h3 className="text-sm font-semibold text-white">Gedetailleerd middelenoverzicht</h3>
-              <span className="text-[10px] text-white/30">({usableAdvice.length} middelen)</span>
+              <span className="text-[10px] text-white/30">({usableAdvice.length} adviezen)</span>
             </div>
             <div className="overflow-x-auto -mx-2 px-2">
               <table className="w-full text-xs">
@@ -514,14 +461,12 @@ export default function EncyclopediaDetailPage() {
                       : status?.status === 'vervallen' ? 'text-rose-400' : 'text-white/30';
                     const StatusIcon = status?.status === 'toegelaten' ? Check
                       : status?.status === 'vervallen' ? X : CircleDashed;
-                    const dosage = Array.from(pa.dosages).join(' / ');
-                    const timing = Array.from(pa.timings).join(' · ');
                     return (
                       <tr key={idx} className={cn('text-white/60', status?.status === 'vervallen' && 'opacity-50 line-through')}>
                         <td className="py-2 pr-3 font-medium text-white/80 no-underline" style={{ textDecoration: 'none' }}>{pa.product_name}</td>
                         <td className="py-2 pr-3 text-white/40">{pa.active_substance ?? '-'}</td>
-                        <td className="py-2 pr-3">{cropToEmoji(pa.crops)}</td>
-                        <td className="py-2 pr-3 font-mono text-[10px]">{dosage || '-'}</td>
+                        <td className="py-2 pr-3">{pa.crop === 'beide' ? '🍎🍐' : pa.crop === 'appel' ? '🍎' : '🍐'}</td>
+                        <td className="py-2 pr-3 font-mono text-[10px]">{pa.dosage ?? '-'}</td>
                         <td className="py-2 pr-3">
                           {pa.application_type && (
                             <span className={cn(
@@ -534,7 +479,7 @@ export default function EncyclopediaDetailPage() {
                             </span>
                           )}
                         </td>
-                        <td className="py-2 pr-3 max-w-[200px] truncate">{timing || '-'}</td>
+                        <td className="py-2 pr-3 max-w-[200px] truncate">{pa.timing ?? '-'}</td>
                         <td className="py-2">
                           <StatusIcon className={cn('h-3.5 w-3.5', statusColor)} />
                         </td>
