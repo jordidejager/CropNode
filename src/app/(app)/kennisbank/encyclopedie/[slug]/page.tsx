@@ -424,14 +424,22 @@ export default function EncyclopediaDetailPage() {
             ) : null;
           })()}
         </ContentSection>
-        {/* Detailed product advice table from knowledge_product_advice */}
-        {productAdvice.length > 0 && (
+        {/* Detailed product advice table — alleen rijen met bruikbare info
+            (dosage OF timing OF application_type) om lege rijen te skippen */}
+        {(() => {
+          const usableAdvice = productAdvice.filter(
+            (pa) => (pa.dosage && pa.dosage.length > 0)
+              || (pa.timing && pa.timing.length > 0)
+              || pa.application_type,
+          );
+          if (usableAdvice.length === 0) return null;
+          return (
           <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }}
             className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
             <div className="mb-3 flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-emerald-400/60" />
               <h3 className="text-sm font-semibold text-white">Gedetailleerd middelenoverzicht</h3>
-              <span className="text-[10px] text-white/30">({productAdvice.length} adviezen)</span>
+              <span className="text-[10px] text-white/30">({usableAdvice.length} adviezen)</span>
             </div>
             <div className="overflow-x-auto -mx-2 px-2">
               <table className="w-full text-xs">
@@ -447,7 +455,7 @@ export default function EncyclopediaDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
-                  {productAdvice.map((pa, idx) => {
+                  {usableAdvice.map((pa, idx) => {
                     const status = ctgbStatuses[pa.product_name];
                     const statusColor = status?.status === 'toegelaten' ? 'text-emerald-400'
                       : status?.status === 'vervallen' ? 'text-rose-400' : 'text-white/30';
@@ -481,18 +489,19 @@ export default function EncyclopediaDetailPage() {
                 </tbody>
               </table>
             </div>
-            {productAdvice.some((pa) => pa.safety_interval_days) && (
+            {usableAdvice.some((pa) => pa.safety_interval_days) && (
               <p className="mt-3 text-[10px] text-white/30">
-                VGT (veiligheidstermijn): {productAdvice.filter((pa) => pa.safety_interval_days).map((pa) => `${pa.product_name} ${pa.safety_interval_days}d`).join(' · ')}
+                VGT (veiligheidstermijn): {usableAdvice.filter((pa) => pa.safety_interval_days).map((pa) => `${pa.product_name} ${pa.safety_interval_days}d`).join(' · ')}
               </p>
             )}
-            {productAdvice.some((pa) => pa.country_restrictions) && (
+            {usableAdvice.some((pa) => pa.country_restrictions) && (
               <p className="mt-1 text-[10px] text-amber-400/60">
-                ⚠️ Let op: {productAdvice.filter((pa) => pa.country_restrictions).map((pa) => `${pa.product_name}: ${pa.country_restrictions}`).join(' · ')}
+                ⚠️ Let op: {usableAdvice.filter((pa) => pa.country_restrictions).map((pa) => `${pa.product_name}: ${pa.country_restrictions}`).join(' · ')}
               </p>
             )}
           </motion.div>
-        )}
+          );
+        })()}
 
         <ContentSection icon={Sprout} title="Biologische bestrijding" content={profile.biological_options} delay={0.45} />
         <ContentSection icon={AlertTriangle} title="Resistentiemanagement" content={profile.resistance_management} delay={0.5} />
