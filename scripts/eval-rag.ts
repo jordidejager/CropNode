@@ -16,9 +16,11 @@
 
 import { config as loadEnv } from 'dotenv';
 // Load env vars BEFORE importing anything that uses them (Genkit reads
-// GOOGLE_API_KEY at module import time).
-loadEnv({ path: '.env.local' });
-loadEnv({ path: '.env' });
+// GOOGLE_API_KEY at module import time). `override: true` is needed
+// because shell rc-files can set empty-string placeholders that dotenv
+// otherwise refuses to overwrite.
+loadEnv({ path: '.env.local', override: true });
+loadEnv({ path: '.env', override: false });
 
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';

@@ -143,7 +143,10 @@ export const KnowledgeArticleDraftSchema = z.object({
   public_source_ref: z.string().nullable().optional(),
 
   confidence_level: z.enum(['hoog', 'gemiddeld', 'laag']).default('hoog'),
-  harvest_year: z.number().int().min(2020).max(2100),
+  // Nullable: voor evergreen content (ziekte-encyclopedie van WUR/GKN) is een
+  // specifieke harvest_year niet zinvol. transform.ts vult fallback op het
+  // huidige jaar in als 'em null blijft.
+  harvest_year: z.number().int().min(2020).max(2100).nullable().optional(),
   valid_from: z.string().nullable().optional(), // YYYY-MM-DD
   valid_until: z.string().nullable().optional(),
   is_evergreen: z.boolean().default(false),

@@ -20,8 +20,10 @@
  */
 
 import { config as loadEnv } from 'dotenv';
-loadEnv({ path: '.env.local' });
-loadEnv({ path: '.env' });
+// `override: true` zodat lege strings die de shell heeft gezet (bv. via
+// een rc-file) worden vervangen door de écht ingevulde waarden uit .env.local.
+loadEnv({ path: '.env.local', override: true });
+loadEnv({ path: '.env', override: false });
 
 import { setDefaultResultOrder } from 'node:dns';
 try { setDefaultResultOrder('ipv4first'); } catch { /* older node */ }
