@@ -1,10 +1,16 @@
 /**
  * Groen Kennisnet Scraper — Confluence REST API
  *
- * Scrapes the WUR Groen Kennisnet wiki (Beeldenbank gewasbescherming)
- * for structured disease/pest knowledge relevant to fruit cultivation.
+ * Scrapes the WUR Groen Kennisnet wiki (Beeldenbank gewasbescherming —
+ * beeldenbankgewasbescherming.nl) for structured disease/pest knowledge.
  *
- * This is a PUBLIC source (WUR) → is_public_source: true, with bronvermelding.
+ * The Beeldenbank-website is a Refined-Sites frontend bovenop deze
+ * Atlassian Confluence (BEEL space). De /space/BEEL2/<id>/Peer en /Appel
+ * indexen worden opgebouwd uit `contentbylabel`-macros met label="peer"
+ * resp. "appel". We doen exact hetzelfde via CQL — 100% trefzeker en
+ * geen onderhoud meer aan title-keyword lijsten.
+ *
+ * Dit is een PUBLIEKE bron (WUR) → is_public_source: true, met bronvermelding.
  *
  * API: Confluence Cloud REST at wiki-groenkennisnet.atlassian.net
  * Space: BEEL (Beeldenbank)
@@ -15,51 +21,45 @@ import type { Scraper, ScrapedContent, ScrapeOptions } from './types';
 
 const CONFLUENCE_BASE = 'https://wiki-groenkennisnet.atlassian.net/wiki';
 const SPACE_KEY = 'BEEL';
-const LIST_URL = `https://wiki.groenkennisnet.nl/rest/api/space/${SPACE_KEY}/content/page`;
 const CONTENT_URL = `${CONFLUENCE_BASE}/rest/api/content`;
+const SEARCH_URL = `${CONFLUENCE_BASE}/rest/api/content/search`;
 const RATE_LIMIT_MS = 1500;
 
 const USER_AGENT =
   'CropNode-KennisBot/1.0 (Agricultural Knowledge Platform; contact: info@cropnode.nl)';
 
 /**
- * Fruit-relevant keywords for filtering the BEEL space.
- * Only pages whose title matches at least one keyword are scraped.
+ * Fruit crops to scrape — one CQL query per label, all results deduped by
+ * page-id. Mirrors the labels used on the Beeldenbank /Peer, /Appel etc.
+ * index pages.
  */
-const FRUIT_TITLE_KEYWORDS = [
-  'appel', 'peer', 'pruim', 'kers', 'fruit',
-  'schurft', 'meeldauw', 'monilia', 'stemphylium', 'bacterievuur',
-  'vruchtrot', 'vruchtboom', 'zwartvrucht', 'gloeosporium', 'lenticelrot',
-  'fruitmot', 'bladvlo', 'bloedluis', 'bloesemkever', 'zaagwesp',
-  'spint', 'wants', 'bladroller', 'cicade', 'roestmijt',
-  'appelglas', 'appelgras', 'appelhoekmijn', 'appelvouw', 'appelbladmin',
-  'perenknop', 'roofwants', 'suzuki', 'kersenvlieg', 'pruimenmot',
-  'pruimenzaag', 'pruimenschors',
-];
+const FRUIT_LABELS = ['appel', 'peer', 'kers', 'pruim'] as const;
+type FruitLabel = (typeof FRUIT_LABELS)[number];
+
+/** Map Confluence labels → canonical CropNode crop names */
+const LABEL_TO_CROP: Record<string, string> = {
+  appel: 'appel',
+  peer: 'peer',
+  kers: 'kers',
+  pruim: 'pruim',
+  'blauwe-bes': 'blauwe_bes',
+  blauwebes: 'blauwe_bes',
+};
 
 /**
- * Exclude pages about non-fruit crops that happen to match keywords
+ * Final safety net — even though we filter by fruit-labels, some pages get
+ * tagged broadly (e.g. "boomteelt"). Skip titles that are clearly about
+ * non-fruit crops or that are space-navigation overviews.
  */
-const EXCLUDE_KEYWORDS = [
-  'aardappel', 'tomaat', 'glastuinbouw', 'buxus', 'gladiool',
-  'tabaksratel', 'doornappel', 'aardbei', 'toprol', 'tobr',
-  'mais', 'zantedeschia', 'hyacint', 'lelie', 'tulp',
-  'peen', 'slakvormig', 'sparappel', 'destructora', 'stengel',
-  'vrijlevend', 'sclerotien',
-  // Skip overzichtspagina's
+const TITLE_EXCLUDE = [
   'examenlijst', 'fruitteelt', 'houtig klein fruit', 'overige fruitsoorten',
-  // Skip niet-hardfruit gewas-specifieke pagina's
-  'valse meeldauw', 'kleine veldkers', 'akkerkers', 'koolbladroller',
-  'eikenbladroller', 'zilverschurft', 'dahlia', 'bromelia', 'snijbonen',
-  'speerdistel', 'pruimenmot', 'pruimenzaagwesp', 'pruimenschorsmijt',
-  'pruimensharka', 'loodglans', 'melige pruimenluis', 'komkommer',
-  'kool', 'roos', 'sla', 'ui', 'aardappel', 'tulp', 'lelie', 'tomaat',
-  'chrysant', 'gerbera', 'aster', 'cyclaam',
+  'glastuinbouw', 'akkerbouw', 'sierteelt',
 ];
 
 interface WikiPage {
   id: string;
   title: string;
+  labels: string[];
 }
 
 export class GroenKennisnetScraper implements Scraper {
@@ -73,21 +73,21 @@ export class GroenKennisnetScraper implements Scraper {
   }
 
   async scrape(options: ScrapeOptions = {}): Promise<ScrapedContent[]> {
-    // 1. List all pages in the BEEL space
-    console.log('[gkn] Ophalen paginalijst...');
-    const allPages = await this.fetchAllPages();
-    console.log(`[gkn] ${allPages.length} paginas in BEEL space`);
+    // 1. List all fruit-labeled pages via CQL (per label, deduped by id)
+    console.log('[gkn] Ophalen paginalijst via CQL labels:', FRUIT_LABELS.join(', '));
+    const allPages = await this.fetchPagesByLabels(FRUIT_LABELS);
+    console.log(`[gkn] ${allPages.length} unieke pagina's met fruit-labels in BEEL`);
 
-    // 2. Filter for fruit-relevant pages
+    // 2. Lichte title-exclusie (overzichts- en niet-fruit pagina's)
     const fruitPages = allPages.filter((p) => {
       const lower = p.title.toLowerCase();
-      const isRelevant = FRUIT_TITLE_KEYWORDS.some((kw) => lower.includes(kw));
-      const isExcluded = EXCLUDE_KEYWORDS.some((kw) => lower.includes(kw));
-      return isRelevant && !isExcluded;
+      return !TITLE_EXCLUDE.some((kw) => lower.includes(kw));
     });
-    console.log(`[gkn] ${fruitPages.length} fruit-relevant paginas`);
+    if (fruitPages.length < allPages.length) {
+      console.log(`[gkn] ${allPages.length - fruitPages.length} overzichts-pagina's overgeslagen`);
+    }
 
-    // 3. Filter out already-known IDs
+    // 3. Filter out already-known IDs (incremental scrape)
     let newPages = options.fullRescan
       ? fruitPages
       : fruitPages.filter((p) => !this.knownIds.has(`gkn-${p.id}`));
@@ -95,12 +95,37 @@ export class GroenKennisnetScraper implements Scraper {
     if (options.limit && newPages.length > options.limit) {
       newPages = newPages.slice(0, options.limit);
     }
-    console.log(`[gkn] ${newPages.length} nieuwe paginas te scrapen`);
+    console.log(`[gkn] ${newPages.length} nieuwe pagina's te scrapen`);
 
-    // 4. Fetch content for each page
+    // 4. Fetch content for each page (skip in list-only mode)
     const results: ScrapedContent[] = [];
     for (const [i, page] of newPages.entries()) {
-      console.log(`[gkn] ${i + 1}/${newPages.length}: ${page.title}`);
+      console.log(`[gkn] ${i + 1}/${newPages.length}: ${page.title}  [${page.labels.join(', ')}]`);
+      const crops = this.cropsFromLabels(page.labels);
+
+      if (options.listOnly) {
+        results.push({
+          rawText: '',
+          scrapedAt: new Date(),
+          sourceType: 'research',
+          internalSourceCode: this.code,
+          sourceIdentifier: `gkn-${page.id}`,
+          metadata: {
+            title: page.title,
+            date: new Date().toISOString().slice(0, 10),
+            crops,
+            topics: [this.inferCategory(page.title, page.labels)].filter(Boolean),
+            isPublicSource: true,
+            publicSourceRef: `WUR Groen Kennisnet — ${page.title}`,
+            pageId: page.id,
+            labels: page.labels,
+            imageUrls: [],
+            imageCount: 0,
+          },
+        });
+        continue;
+      }
+
       try {
         const text = await this.fetchPageContent(page.id);
         if (!text || text.length < 50) {
@@ -125,11 +150,13 @@ export class GroenKennisnetScraper implements Scraper {
           metadata: {
             title: page.title,
             date: new Date().toISOString().slice(0, 10),
-            topics: [this.inferCategory(page.title)].filter(Boolean),
+            crops,
+            topics: [this.inferCategory(page.title, page.labels)].filter(Boolean),
             // PUBLIC source — bronvermelding toegestaan
             isPublicSource: true,
             publicSourceRef: `WUR Groen Kennisnet — ${page.title}`,
             pageId: page.id,
+            labels: page.labels,
             imageUrls,
             imageCount: imageUrls.length,
           },
@@ -142,31 +169,66 @@ export class GroenKennisnetScraper implements Scraper {
       }
     }
 
-    console.log(`[gkn] ${results.length} paginas succesvol gescraped`);
+    console.log(`[gkn] ${results.length} pagina's verwerkt (listOnly=${!!options.listOnly})`);
     return results;
   }
 
   // ============================================
-  // Page listing (via proxy domain — allows pagination)
+  // Page listing via CQL (one query per fruit label, deduped)
   // ============================================
 
-  private async fetchAllPages(): Promise<WikiPage[]> {
-    const all: WikiPage[] = [];
-    let url = `${LIST_URL}?limit=250`;
+  /**
+   * Fetch all pages tagged with at least one of `labels` in the BEEL space.
+   * Uses Confluence CQL — exactly mirrors what the Beeldenbank index pages
+   * do via the `contentbylabel` macro.
+   *
+   * Pagination: `start` parameter, `limit=50` per page (Confluence Cloud cap).
+   */
+  private async fetchPagesByLabels(labels: readonly string[]): Promise<WikiPage[]> {
+    const byId = new Map<string, WikiPage>();
 
-    while (url) {
-      const res = await this.fetchJson(url);
-      // The response structure varies: results can be top-level or under .page
-      const pages = res.results ?? res.page?.results ?? [];
-      for (const p of pages) {
-        all.push({ id: p.id, title: p.title });
+    for (const label of labels) {
+      const cql = `label = "${label}" AND space = "${SPACE_KEY}"`;
+      let start = 0;
+      let page = 0;
+      while (true) {
+        const url = `${SEARCH_URL}?cql=${encodeURIComponent(cql)}&limit=50&start=${start}&expand=metadata.labels`;
+        const res = await this.fetchJson(url);
+        const pages = (res?.results ?? []) as Array<{
+          id: string;
+          title: string;
+          metadata?: { labels?: { results?: Array<{ name: string }> } };
+        }>;
+        for (const p of pages) {
+          const labelNames = (p.metadata?.labels?.results ?? []).map((l) => l.name);
+          // Merge labels if we've seen this page before (it can match multiple)
+          const existing = byId.get(p.id);
+          if (existing) {
+            existing.labels = Array.from(new Set([...existing.labels, ...labelNames]));
+          } else {
+            byId.set(p.id, { id: p.id, title: p.title, labels: labelNames });
+          }
+        }
+        const next = res?._links?.next;
+        page += 1;
+        console.log(`[gkn]   label=${label} pagina ${page}: +${pages.length} (totaal uniek: ${byId.size})`);
+        if (!next || pages.length === 0) break;
+        start += pages.length;
+        await this.wait();
       }
-      const nextLink = res._links?.next ?? res.page?._links?.next ?? '';
-      url = nextLink ? `https://wiki.groenkennisnet.nl${nextLink}` : '';
-      if (url) await this.wait();
     }
 
-    return all;
+    return Array.from(byId.values());
+  }
+
+  /** Extract canonical crop names from Confluence labels */
+  private cropsFromLabels(labels: string[]): string[] {
+    const found = new Set<string>();
+    for (const l of labels) {
+      const mapped = LABEL_TO_CROP[l.toLowerCase()];
+      if (mapped) found.add(mapped);
+    }
+    return Array.from(found);
   }
 
   // ============================================
@@ -208,7 +270,19 @@ export class GroenKennisnetScraper implements Scraper {
   // Category inference from title
   // ============================================
 
-  private inferCategory(title: string): string {
+  private inferCategory(title: string, labels: string[] = []): string {
+    // Labels are most authoritative — Beeldenbank tags every page with one of
+    // {ziekten, insecten, aantastingen, plantengallen, ...}.
+    const labelSet = new Set(labels.map((l) => l.toLowerCase()));
+    if (labelSet.has('ziekten') || labelSet.has('schimmels') || labelSet.has('bacterien')) {
+      return 'ziekte';
+    }
+    if (labelSet.has('insecten') || labelSet.has('mijten') || labelSet.has('plagen')
+        || labelSet.has('aantastingen') || labelSet.has('plantengallen')) {
+      return 'plaag';
+    }
+
+    // Fall back on title keywords
     const lower = title.toLowerCase();
     const diseaseKw = ['schurft', 'meeldauw', 'monilia', 'stemphylium', 'vruchtrot',
       'kanker', 'bacterievuur', 'zwartvrucht', 'gloeosporium', 'lenticelrot', 'roest'];

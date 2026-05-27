@@ -106,6 +106,13 @@ export interface ScrapeOptions {
   limit?: number;
   /** Skip incremental check and re-fetch everything */
   fullRescan?: boolean;
+  /**
+   * Skip the expensive per-item content fetch — return only the index/list
+   * with title + identifier + metadata. Useful for dry-runs and previews.
+   * Scrapers MAY honor this; if they don't, they should behave like a
+   * normal scrape (it's an optimization hint, not a contract).
+   */
+  listOnly?: boolean;
 }
 
 // ============================================
