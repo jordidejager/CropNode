@@ -27,10 +27,13 @@
     "knowledge:enrich": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/enrich-disease-profiles.ts",
     "knowledge:cleanup": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/cleanup-deprecated-kb.ts",
     "knowledge:eval": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/eval-rag.ts",
+    "knowledge:scrape:gkn": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/scrape-gkn.ts",
+    "knowledge:reprocess:gkn": "NODE_OPTIONS=--dns-result-order=ipv4first tsx scripts/reprocess-gkn.ts",
     "test:rag": "tsx scripts/test-rag-pipeline.ts",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.99.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -97,6 +100,7 @@
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "tough-cookie": "^6.0.1",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
