@@ -456,11 +456,16 @@ function prettyPhase(s: string): string {
 }
 
 function formatMonths(months: number[]): string {
-  if (months.length === 0) return '';
-  const sorted = [...months].sort((a, b) => a - b);
+  // Filter alleen valide maand-nummers (1-12). DB kan ergens NULL, 0,
+  // of out-of-range hebben — MONTH_LABELS[m-1] zou dan undefined zijn
+  // en `.slice` crasht ("Cannot read properties of undefined").
+  const valid = (months ?? []).filter(
+    (m) => typeof m === 'number' && Number.isFinite(m) && m >= 1 && m <= 12,
+  );
+  if (valid.length === 0) return '';
+  const sorted = [...valid].sort((a, b) => a - b);
   const labels = sorted.map((m) => MONTH_LABELS[m - 1].slice(0, 3));
   if (labels.length <= 2) return labels.join(', ');
-  // Detect contiguous range
   const isContiguous = sorted.every((m, i) => i === 0 || m === sorted[i - 1] + 1);
   if (isContiguous) {
     return `${labels[0]} – ${labels[labels.length - 1]}`;

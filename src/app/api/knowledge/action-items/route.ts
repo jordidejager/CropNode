@@ -356,10 +356,12 @@ function profileToActionItem(
   nextMonth: number,
   nextPhase: string,
 ): ActionItem {
+  const peakMonths = p.peak_months ?? [];
+  const peakPhases = p.peak_phases ?? [];
   const peakNow =
-    p.peak_months.includes(currentMonth) || p.peak_phases.includes(currentPhase);
+    peakMonths.includes(currentMonth) || peakPhases.includes(currentPhase);
   const peakSoon =
-    p.peak_months.includes(nextMonth) || p.peak_phases.includes(nextPhase);
+    peakMonths.includes(nextMonth) || peakPhases.includes(nextPhase);
 
   const urgency: Urgency = peakNow ? 'nu' : peakSoon ? 'deze_week' : 'voorbereiden';
 
@@ -372,9 +374,9 @@ function profileToActionItem(
     '';
 
   const products =
-    peakNow && p.key_curative_products.length > 0
-      ? p.key_curative_products
-      : p.key_preventive_products;
+    peakNow && (p.key_curative_products ?? []).length > 0
+      ? (p.key_curative_products ?? [])
+      : (p.key_preventive_products ?? []);
 
   const productHint = products.length > 0
     ? ` (${products.slice(0, 3).join(', ')})`
