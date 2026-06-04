@@ -12,6 +12,14 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-04 — Bladnat-drempel gekalibreerd (50%→7%) + echte sensor in schurftmodel
+- 🔎 **Diagnose**: user meldde dat bladnat altijd "droog" toonde tijdens regen. Geen uitlees-bug — Dragino LMS01-LS `Leaf_Moisture` is een echte 0–100% (manual: "% of water drop over total leaf surface", hex/10). MAAR het meet oppervlakte-DEKKING: water beadt op, dus zelfs nat blad komt zelden boven ~10-35%. Veld-data (5 natte dagen, 348 metingen): mediaan 4.4%, p90 8%, max 35.5%, droge basislijn ~0.3-1.5%. De 50%-"nat"-drempel werd dus nóóit gehaald.
+- ✅ **Drempel → 7%** (user-keuze "gebalanceerd"): `LEAF_WET_THRESHOLD` in `lib/weather/leaf-wetness.ts` van 50→7, met data-onderbouwing in comment. Eén bron van waarheid — UI én alle ziektemodellen importeren 'm nu.
+- ✅ **Echte bladsensor in schurftmodel gewired**: `disease-service.ts` haalt nu de fysieke leaf-sensor (`physical_weather_stations` device_kind='leaf', prefer zelfde parcel) op, bucket per epoch-uur naar gemiddelde dekking%, en overschrijft `leafWetnessPct` in de uurlijkse weerinput vóór de v2-simulatie. Uren zonder sensordata houden de Open-Meteo-proxy (graceful). Apple-scab-v2 gebruikt dit in de `isWet`-check.
+- ✅ **Alle hardcoded `leafWetnessPct >= 50` vervangen** door `LEAF_WET_THRESHOLD`: apple-scab-v2, pear-scab, powdery-mildew (v1+v2), black-rot, apple-scab wet-period-detection. (Andere modellen krijgen nog geen sensordata-injectie, dus alleen consistentie — geen gedragsverandering tot ze gewired worden.)
+- UI (StationDetailView/OverviewCard/SensorOverview/dashboard) toont nu correct "Blad nat" bij ≥7% i.p.v. altijd droog. Build groen (157 pagina's).
+- ⏳ Optioneel vervolg: leaf-sensor ook injecteren in pear-scab/mildew/black-rot services (nu alleen apple-scab). En per-station drempel configureerbaar maken als 7% in de praktijk bijgesteld moet.
+
 ### 2026-06-04 — Build fix: ontbrekende RecentHours dashboard-component
 - ⚠️ Vercel-build brak ("Can't resolve '@/components/dashboard/RecentHours'"). `dashboard-client.tsx` (door eerdere chat) importeert `RecentHours` maar de component-file was untracked, nooit naar cropnode gepusht. Bij mijn dashboard-widget-commit nam ik die import mee zonder de file. **Fix**: `RecentHours.tsx` gecommit (commit 9fe480c). Hangt alleen af van `useTaskLogs` + `Skeleton` (beide al op cropnode). Clean build geverifieerd in losse worktree (143 pagina's). Les: bij stagen van een file die een andere chat ook wijzigde, check of alle imports gecommit zijn.
 

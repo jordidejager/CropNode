@@ -13,6 +13,7 @@
 
 import type { InoculumPressure } from '../types';
 import { PEAR_SCAB_CONSTANTS as PC } from './constants';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import {
   lookupPearScabSeverity,
   calculatePearScabInfectionFraction,
@@ -250,7 +251,7 @@ export function runPearScabSimulation(input: PearScabInput): PearScabResult {
     const isWet =
       isRaining ||
       step.humidityPct >= PC.WET_RH_THRESHOLD ||
-      (step.leafWetnessPct !== null && step.leafWetnessPct >= 50);
+      (step.leafWetnessPct !== null && step.leafWetnessPct >= LEAF_WET_THRESHOLD);
 
     if (isRaining) {
       minutesSinceRain = 0;

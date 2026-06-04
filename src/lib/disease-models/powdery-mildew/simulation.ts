@@ -19,6 +19,7 @@ import type {
   MildewWeatherHour,
 } from './types';
 import { MILDEW_CONSTANTS as C } from './types';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import {
   hourlyFavorabilityScore,
   classifyMildewSeverity,
@@ -36,7 +37,7 @@ function toDateStr(d: Date): string {
  * Check if leaves are currently wet (sensor or proxy).
  */
 function isLeafWet(h: MildewWeatherHour): boolean {
-  if (h.leafWetnessPct !== null && h.leafWetnessPct >= 50) return true;
+  if (h.leafWetnessPct !== null && h.leafWetnessPct >= LEAF_WET_THRESHOLD) return true;
   if (h.precipitationMm !== null && h.precipitationMm > 0.2) return true;
   // Heavy dew as proxy: RH ≥ 95% and temp near dew point
   if (h.humidityPct !== null && h.humidityPct >= 95) return true;

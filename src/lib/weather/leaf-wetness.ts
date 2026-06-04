@@ -10,14 +10,26 @@
  *      wet. Combined with temperature this drives the infection-risk lookup
  *      in the Mills table.
  *
- * We use a 50% threshold for "wet", matching the LEAF_WETNESS_THRESHOLD the
- * apple-scab wet-period detector already uses (wet-period-detection.ts). That
- * keeps the live sensor consistent with the disease model so a future wiring
- * (real sensor → scab model instead of Open-Meteo estimate) is seamless.
+ * IMPORTANT — sensor scale. The Dragino LMS01-LS reports "% of leaf surface
+ * covered by water droplets" (FDR/dielectric, 0–100%, manual confirmed). This
+ * is COVERAGE, not a binary wet/dry. Because water beads up, even a soaking-wet
+ * leaf rarely exceeds ~10–35% coverage — field data from a leaf station over 5
+ * rainy days: median 4.4%, p90 8%, max 35.5%, dry baseline ~0.3–1.5%. So a 50%
+ * "wet" threshold (our original guess) is NEVER reached and the leaf always
+ * reads "dry" during rain. We use a much lower, data-driven threshold instead.
+ *
+ * This same constant is the single source of truth for the apple-scab
+ * wet-period detector (wet-period-detection.ts imports it), so the live UI and
+ * the disease model agree on what "wet" means.
  */
 
-/** Surface-wetness % at or above which the leaf is considered "wet". */
-export const LEAF_WET_THRESHOLD = 50;
+/**
+ * Surface-coverage % at or above which the leaf is considered "wet".
+ * Calibrated to real Dragino LMS01-LS field data (see note above): 7% sits
+ * clearly above the dry baseline (~1.5%) + sensor accuracy (±3%) and flags
+ * genuine wetting events without over-triggering on noise/dew.
+ */
+export const LEAF_WET_THRESHOLD = 7;
 
 export type LeafState = 'wet' | 'dry';
 

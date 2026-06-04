@@ -19,11 +19,15 @@
  */
 
 import type { HourlyWeatherInput, WetPeriod } from '../types';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 
 const START_RH_THRESHOLD = 90; // % — high enough to start a wet period
 const WET_RH_THRESHOLD = 85; // % — keeps leaf surface wet (continuation)
 const DRY_RH_THRESHOLD = 80; // % — below this, leaf dries
-const LEAF_WETNESS_THRESHOLD = 50; // %
+// Single source of truth (shared with the live sensor UI). The Dragino
+// LMS01-LS reports leaf-surface COVERAGE %, which is low even when wet, so this
+// is a data-calibrated ~7% — not the naive 50%.
+const LEAF_WETNESS_THRESHOLD = LEAF_WET_THRESHOLD;
 const DRY_HOURS_TO_END = 4; // consecutive dry hours to end a period
 const MIN_WET_DURATION = 4; // minimum hours for a meaningful infection event
 

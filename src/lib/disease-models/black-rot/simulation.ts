@@ -18,6 +18,7 @@
  */
 
 import type { InoculumPressure } from '../types';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import {
   lookupArauzSuttonSeverity,
   calculateBlackRotInfectionFraction,
@@ -95,7 +96,7 @@ function toDateStr(d: Date): string {
 
 function isHourWet(h: BlackRotWeatherHour): boolean {
   if (h.precipitationMm !== null && h.precipitationMm > RAIN_TRIGGER_MM) return true;
-  if (h.leafWetnessPct !== null && h.leafWetnessPct >= 50) return true;
+  if (h.leafWetnessPct !== null && h.leafWetnessPct >= LEAF_WET_THRESHOLD) return true;
   if (h.humidityPct !== null && h.humidityPct >= WET_RH_THRESHOLD) return true;
   return false;
 }

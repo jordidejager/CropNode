@@ -28,6 +28,7 @@
 
 import { MILDEW_CONSTANTS as C } from './types';
 import type { MildewInput, MildewResult, MildewInfectionEvent, MildewDailyEntry } from './types';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import {
   hourlyFavorabilityScore,
   classifyMildewSeverity,
@@ -145,7 +146,7 @@ function isLeafWet(h: {
   precipitationMm: number | null;
   humidityPct: number | null;
 }): boolean {
-  if (h.leafWetnessPct !== null && h.leafWetnessPct >= 50) return true;
+  if (h.leafWetnessPct !== null && h.leafWetnessPct >= LEAF_WET_THRESHOLD) return true;
   if (h.precipitationMm !== null && h.precipitationMm > 0.2) return true;
   if (h.humidityPct !== null && h.humidityPct >= 95) return true;
   return false;

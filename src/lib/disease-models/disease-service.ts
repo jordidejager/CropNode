@@ -98,6 +98,57 @@ async function fetchWeatherChunked(
 }
 
 /**
+ * Pull the user's physical leaf-wetness sensor (Dragino LMS01-LS) readings and
+ * bucket them to hourly mean coverage %. This lets the scab model use REAL
+ * measured leaf wetness instead of the Open-Meteo humidity/rain proxy for the
+ * hours the sensor covers. Hours without sensor data (before install, or other
+ * stations) keep the proxy estimate, so it degrades gracefully.
+ *
+ * @returns Map of epoch-hour → mean leaf wetness % (empty if no leaf sensor).
+ */
+async function fetchPhysicalLeafWetnessByHour(
+  parcelId: string,
+  userId: string,
+  startDate: string,
+  supabase: SupabaseClient
+): Promise<Map<number, number>> {
+  // Find a leaf sensor — prefer one on this parcel, else any owned by the user.
+  const { data: leafStations } = await supabase
+    .from('physical_weather_stations')
+    .select('id, parcel_id')
+    .eq('user_id', userId)
+    .eq('device_kind', 'leaf');
+  if (!leafStations || leafStations.length === 0) return new Map();
+  const chosen =
+    leafStations.find((s) => s.parcel_id === parcelId) ?? leafStations[0];
+
+  const sinceIso = new Date(startDate + 'T00:00:00Z').toISOString();
+  const { data: rows } = await supabase
+    .from('weather_measurements')
+    .select('measured_at, leaf_wetness_pct_measured')
+    .eq('station_id', chosen.id)
+    .gte('measured_at', sinceIso)
+    .order('measured_at', { ascending: true })
+    .limit(5000);
+  if (!rows || rows.length === 0) return new Map();
+
+  // Bucket per absolute epoch-hour → mean coverage % (≈3 uplinks/hour).
+  const sums = new Map<number, { sum: number; n: number }>();
+  for (const r of rows) {
+    const pct = (r as { leaf_wetness_pct_measured: number | null }).leaf_wetness_pct_measured;
+    if (typeof pct !== 'number' || !Number.isFinite(pct)) continue;
+    const hourKey = Math.floor(new Date(r.measured_at).getTime() / 3_600_000);
+    const cur = sums.get(hourKey) ?? { sum: 0, n: 0 };
+    cur.sum += pct;
+    cur.n += 1;
+    sums.set(hourKey, cur);
+  }
+  const out = new Map<number, number>();
+  for (const [k, v] of sums) out.set(k, v.sum / v.n);
+  return out;
+}
+
+/**
  * Get the weather station ID for a parcel.
  */
 async function getStationForParcel(
@@ -248,6 +299,24 @@ export async function calculateDiseaseResults(
   );
 
   const weatherInput = toWeatherInput(weatherData);
+
+  // Overlay REAL physical leaf-wetness sensor data where available. For every
+  // hour the Dragino leaf sensor covered, replace the Open-Meteo leaf-wetness
+  // proxy (null) with the measured coverage %. The v2 sim + wet-period detector
+  // then judge "wet" against the calibrated LEAF_WET_THRESHOLD (~7%).
+  const leafByHour = await fetchPhysicalLeafWetnessByHour(
+    config.parcel_id,
+    config.user_id,
+    config.biofix_date,
+    supabase
+  );
+  if (leafByHour.size > 0) {
+    for (const w of weatherInput) {
+      const hourKey = Math.floor(w.timestamp.getTime() / 3_600_000);
+      const sensorPct = leafByHour.get(hourKey);
+      if (sensorPct !== undefined) w.leafWetnessPct = sensorPct;
+    }
+  }
 
   // Run v2 simulation (RIMpro-level: 30-min timestep, age-class boxcar trains)
   const biofixDate = new Date(config.biofix_date + 'T00:00:00Z');

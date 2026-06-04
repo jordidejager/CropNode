@@ -18,6 +18,7 @@ import type {
   GerminatingCohort,
   InfectionEvent,
 } from './types';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import { SIMULATION_CONSTANTS } from './types';
 import { buildWeatherSteps } from './weather-stepper';
 import { getSunTimes } from './astronomy';
@@ -284,7 +285,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
     const isWet =
       isRaining ||
       step.humidityPct >= C.WET_RH_THRESHOLD ||
-      (step.leafWetnessPct !== null && step.leafWetnessPct >= 50);
+      // Physical leaf sensor (Dragino LMS01-LS) reports coverage %, which is
+      // low even when wet — use the shared data-calibrated threshold, not 50%.
+      (step.leafWetnessPct !== null && step.leafWetnessPct >= LEAF_WET_THRESHOLD);
 
     if (isRaining) {
       minutesSinceRain = 0;
