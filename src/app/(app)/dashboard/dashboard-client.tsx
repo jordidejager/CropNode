@@ -8,8 +8,10 @@ import { DashboardGreeting } from '@/components/dashboard/DashboardGreeting';
 import { WeatherSprayStrip } from '@/components/dashboard/WeatherSprayStrip';
 import { FieldNotesCard, TasksCard } from '@/components/dashboard/FieldNotesCard';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { RecentHours } from '@/components/dashboard/RecentHours';
 import { DashboardShortcuts } from '@/components/dashboard/DashboardShortcuts';
 import { DashboardCalendar } from '@/components/dashboard/DashboardCalendar';
+import { SensorSummaryCard } from '@/components/dashboard/SensorSummaryCard';
 import type { InputMode } from '@/components/mode-selector';
 
 const HINT_CHIPS = [
@@ -138,6 +140,11 @@ export function DashboardClient() {
                     <WeatherSprayStrip />
                 </div>
 
+                {/* My sensors — live field data (only renders if user has sensors) */}
+                <div className="dashboard-fade-in dashboard-fade-in-3">
+                    <SensorSummaryCard />
+                </div>
+
                 {/* Calendar: Komende 7 dagen */}
                 <div className="dashboard-fade-in dashboard-fade-in-4">
                     <DashboardCalendar />
@@ -149,9 +156,14 @@ export function DashboardClient() {
                     <TasksCard />
                 </div>
 
-                {/* Recent Activity + Shortcuts */}
+                {/* Recent Sprayings + Recent Hours */}
                 <div className="dashboard-fade-in dashboard-fade-in-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <RecentActivity />
+                    <RecentHours />
+                </div>
+
+                {/* Shortcuts — full width met section header + aurora */}
+                <div className="dashboard-fade-in dashboard-fade-in-4">
                     <DashboardShortcuts />
                 </div>
             </div>

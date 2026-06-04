@@ -24,6 +24,10 @@ import {
 import { cn } from '@/lib/utils';
 import { bulkEcToPoreWater } from '@/lib/weather/soil-ec';
 import {
+  leafWetnessState,
+  leafWetnessDurationHours,
+} from '@/lib/weather/leaf-wetness';
+import {
   useStationMeasurements,
   type PhysicalStation,
 } from '@/hooks/use-physical-stations';
@@ -45,6 +49,11 @@ export function StationOverviewCard({
 
   const rainfall24h = useMemo(
     () => (measurements ?? []).reduce((sum, m) => sum + (m.rainfall_mm ?? 0), 0),
+    [measurements]
+  );
+
+  const leafWetHours24h = useMemo(
+    () => leafWetnessDurationHours(measurements ?? [], 24),
     [measurements]
   );
 
@@ -182,14 +191,15 @@ export function StationOverviewCard({
           )}
 
           {latest && station.device_kind === 'leaf' && (
-            <div className="mt-3.5 grid grid-cols-2 gap-2">
+            <div className="mt-3.5 grid grid-cols-3 gap-2">
+              <LeafStatusMini pct={latest.leaf_wetness_pct_measured} />
               <MiniStat
-                icon={Leaf}
-                label="Bladnat"
-                value={latest.leaf_wetness_pct_measured}
-                unit="%"
+                icon={Droplets}
+                label="Nat 24u"
+                value={leafWetHours24h}
+                unit="u"
                 decimals={1}
-                color="text-emerald-400"
+                color="text-sky-400"
               />
               <MiniStat
                 icon={Thermometer}
@@ -263,6 +273,31 @@ export function StationOverviewCard({
 }
 
 // ---- bits ----
+
+/**
+ * Compact leaf wet/dry status tile for the overview card. Shows the binary
+ * state (the useful read) instead of the raw surface percentage.
+ */
+function LeafStatusMini({ pct }: { pct: number | null }) {
+  const state = leafWetnessState(pct);
+  const isWet = state === 'wet';
+  const color = state === null ? 'text-white/40' : isWet ? 'text-emerald-400' : 'text-amber-300';
+  return (
+    <div className="rounded-lg bg-white/[0.03] border border-white/10 px-2.5 py-2">
+      <div className="flex items-center gap-1 mb-0.5">
+        <Leaf className={cn('h-3 w-3', color)} />
+        <span className="text-[9px] font-bold uppercase tracking-wider text-white/40">
+          Blad
+        </span>
+      </div>
+      <div className="flex items-baseline gap-0.5">
+        <span className={cn('text-sm font-bold tabular-nums', color)}>
+          {state === null ? '—' : isWet ? 'Nat' : 'Droog'}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function MiniStat({
   icon: Icon,

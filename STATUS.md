@@ -12,6 +12,15 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-05-27 — Bladnat als wet/droog + LWD, sensor-overzichtspagina, dashboard-widget
+- ✅ **Bladnat herzien**: LMS01 % omgezet naar agronomisch bruikbaar — `leafWetnessState()` (≥50% = nat, matcht schurftmodel-drempel) + `leafWetnessDurationHours()` (bladnatduur LWD, integreert over uplink-gaps, cap 90min). Detail/overview/dashboard tonen nu **Blad nat/droog** + **uren nat 24u** i.p.v. betekenisloze %. Historie-grafiek krijgt 50%-drempellijn. Helper: `src/lib/weather/leaf-wetness.ts`.
+- ✅ **Dag-regen aggregatie**: `src/lib/weather/daily-aggregation.ts` — `aggregateDailyRain()` (continue dag-buckets, lege dagen = 0), `aggregateHourlyRainForDay()` (uur-uitklap), `rainSinceMidnight()` (vandaag-teller).
+- ✅ **Nieuwe sub-pagina `/weerstations/overzicht`**: tab-nav (`WeerstationsTabs`) + `layout.tsx`. `SensorOverview` toont alle sensoren samen (live-kaart per sensor, kind-bewust) + `DailyRainChart` per weerstation met **dag-totalen → klik = uur-detail** + "vandaag tot nu toe" teller. Lost klacht "alleen regen per uur" op.
+- ✅ **Dashboard-widget** `SensorSummaryCard` (voor vader): temp + regen vandaag, bodemvocht + EC, bladnat-status. Rendert niets als user geen sensoren heeft. Toegevoegd onder WeatherSprayStrip in `dashboard-client.tsx`.
+- Build: 157 pagina's, `/weerstations/overzicht` (11.4 kB) compileert schoon.
+- Files: `leaf-wetness.ts`, `daily-aggregation.ts`, `WeerstationsTabs.tsx`, `DailyRainChart.tsx`, `SensorOverview.tsx`, `dashboard/SensorSummaryCard.tsx`, `weerstations/layout.tsx`, `weerstations/overzicht/page.tsx` (alle nieuw); `StationHistoryChart.tsx`, `StationDetailView.tsx`, `StationOverviewCard.tsx`, `weerstations/page.tsx`, `dashboard-client.tsx` (gewijzigd).
+- ⏳ Vervolgstap (niet gedaan): echte bladnat-sensor wiren in `wet-period-detection.ts` schurftmodel i.p.v. Open-Meteo-schatting — sensor + model gebruiken nu dezelfde 50%-drempel dus klaar om te koppelen.
+
 ### 2026-05-27 — Historie-grafiek + secundaire KPI's sensor-bewust
 - ✅ `StationHistoryChart` accepteert nu `deviceKind` prop. Metric-tabs schakelen per sensor type:
   - weather → Temperatuur / Luchtvochtigheid / Luchtdruk / Neerslag / Licht (ongewijzigd)

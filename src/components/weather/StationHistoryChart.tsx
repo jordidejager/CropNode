@@ -9,8 +9,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
+import { LEAF_WET_THRESHOLD } from '@/lib/weather/leaf-wetness';
 import {
   useStationMeasurements,
   type DeviceKind,
@@ -299,6 +301,20 @@ export function StationHistoryChart({ stationId, deviceKind }: Props) {
                   dot={false}
                   isAnimationActive={false}
                   connectNulls
+                />
+              )}
+              {metric === 'leafWetness' && (
+                <ReferenceLine
+                  y={LEAF_WET_THRESHOLD}
+                  stroke="#34d399"
+                  strokeDasharray="4 4"
+                  strokeOpacity={0.6}
+                  label={{
+                    value: 'nat-grens',
+                    position: 'right',
+                    fill: '#34d399',
+                    fontSize: 10,
+                  }}
                 />
               )}
             </ComposedChart>

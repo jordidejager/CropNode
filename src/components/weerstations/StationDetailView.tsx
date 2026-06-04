@@ -29,6 +29,12 @@ import {
 } from '@/hooks/use-physical-stations';
 import { StationHistoryChart } from '@/components/weather/StationHistoryChart';
 import { bulkEcToPoreWater, poreWaterEcLabel } from '@/lib/weather/soil-ec';
+import {
+  leafWetnessState,
+  leafStateLabel,
+  leafWetnessDurationHours,
+  leafWetnessDurationLabel,
+} from '@/lib/weather/leaf-wetness';
 
 /**
  * Rich detail view for one physical station. Header with live status,
@@ -56,6 +62,12 @@ export function StationDetailView({
   }, [measurements]);
 
   const tempTrend = useMemo(() => computeTempTrend(measurements ?? []), [measurements]);
+
+  // Leaf wetness duration over the last 24h (only meaningful for leaf sensors).
+  const leafWetHours24h = useMemo(
+    () => leafWetnessDurationHours(measurements ?? [], 24),
+    [measurements]
+  );
 
   const ageMinutes = latest
     ? Math.floor((Date.now() - new Date(latest.measured_at).getTime()) / 60_000)
@@ -212,28 +224,37 @@ export function StationDetailView({
         );
       })()}
 
-      {latest && station.device_kind === 'leaf' && (
-        <div className="grid grid-cols-2 gap-3">
-          <BigKPI
-            icon={Leaf}
-            label="Bladnat"
-            value={latest.leaf_wetness_pct_measured}
-            unit="%"
-            decimals={1}
-            accent="emerald"
-            sublabel={leafWetnessLabel(latest.leaf_wetness_pct_measured)}
-          />
-          <BigKPI
-            icon={Thermometer}
-            label="Bladtemp"
-            value={latest.leaf_temp_c}
-            unit="°C"
-            decimals={1}
-            accent="orange"
-            sublabel="Oppervlakte"
-          />
-        </div>
-      )}
+      {latest && station.device_kind === 'leaf' && (() => {
+        const state = leafWetnessState(latest.leaf_wetness_pct_measured);
+        const lwdLabel = leafWetnessDurationLabel(leafWetHours24h);
+        const pct = latest.leaf_wetness_pct_measured;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <LeafStateKPI
+              state={state}
+              pct={pct}
+            />
+            <BigKPI
+              icon={Droplets}
+              label="Bladnatduur 24u"
+              value={leafWetHours24h}
+              unit="uur"
+              decimals={1}
+              accent="sky"
+              sublabel={lwdLabel?.label ?? 'Aaneengesloten uren nat'}
+            />
+            <BigKPI
+              icon={Thermometer}
+              label="Bladtemp"
+              value={latest.leaf_temp_c}
+              unit="°C"
+              decimals={1}
+              accent="orange"
+              sublabel="Oppervlaktetemperatuur"
+            />
+          </div>
+        );
+      })()}
 
       {latest && (station.device_kind === 'weather' || !station.device_kind) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -423,6 +444,61 @@ function BigKPI({
         {sublabel && (
           <div className="text-[11px] text-white/40 mt-1">{sublabel}</div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---- Leaf wet/dry status tile ----
+
+/**
+ * Headline tile for a leaf sensor: shows the binary WET / DRY state big and
+ * clear (that's the agronomically meaningful read), with the raw surface-%
+ * kept as a small detail underneath.
+ */
+function LeafStateKPI({
+  state,
+  pct,
+}: {
+  state: 'wet' | 'dry' | null;
+  pct: number | null;
+}) {
+  const isWet = state === 'wet';
+  const accent = isWet
+    ? { gradient: 'from-emerald-500/20 to-transparent', ring: 'border-emerald-500/30', icon: 'text-emerald-400', glow: 'bg-emerald-500/15' }
+    : { gradient: 'from-amber-500/12 to-transparent', ring: 'border-amber-500/20', icon: 'text-amber-300', glow: 'bg-amber-500/10' };
+  return (
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-2xl p-4 border bg-gradient-to-br to-transparent',
+        accent.gradient,
+        accent.ring
+      )}
+    >
+      <div className={cn('absolute -top-12 -right-12 h-32 w-32 rounded-full blur-3xl', accent.glow)} />
+      <div className="relative">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Leaf className={cn('h-3.5 w-3.5', accent.icon)} />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+            Bladstatus
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={cn('text-2xl md:text-3xl font-black', isWet ? 'text-emerald-300' : 'text-amber-200')}>
+            {state === null ? '—' : leafStateLabel(state)}
+          </span>
+          {state !== null && (
+            <span
+              className={cn(
+                'h-2.5 w-2.5 rounded-full',
+                isWet ? 'bg-emerald-400 animate-pulse' : 'bg-amber-300/60'
+              )}
+            />
+          )}
+        </div>
+        <div className="text-[11px] text-white/40 mt-1">
+          {pct !== null ? `Oppervlaktevocht ${pct.toFixed(1)}%` : 'Geen meting'}
+        </div>
       </div>
     </div>
   );
@@ -646,15 +722,6 @@ function ecLabel(ec: number | null): string | undefined {
   if (ec < 1000) return 'Goed';
   if (ec < 2000) return 'Hoog';
   return 'Zeer hoog — risico op zoutschade';
-}
-
-function leafWetnessLabel(pct: number | null): string | undefined {
-  if (pct === null) return undefined;
-  // Cornell/Mills thresholds for apple scab infection
-  if (pct < 30) return 'Droog blad';
-  if (pct < 60) return 'Licht vochtig';
-  if (pct < 90) return 'Nat — infectierisico bij 6-12°C';
-  return 'Zeer nat — actieve infectie mogelijk';
 }
 
 function computeTempTrend(
