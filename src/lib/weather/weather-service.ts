@@ -463,6 +463,12 @@ export async function aggregateDaily(
     .from('weather_data_hourly')
     .select('*')
     .eq('station_id', stationId)
+    // CRITICAL: only aggregate the best_match model. Without this filter the
+    // multi-model rows (ECMWF, GFS, ICON-EU, MeteoFrance, …) for today/tomorrow
+    // get summed together, multiplying the daily precipitation total by ~7×
+    // (e.g. a real 7mm day shows as 49mm). Only near-term days are affected
+    // because multi-model data only covers the short forecast window.
+    .eq('model_name', 'best_match')
     .gte('timestamp', startOfDay)
     .lte('timestamp', endOfDay)
     .order('timestamp')

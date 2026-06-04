@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-04 — ⚠️ BUG FIX: 49mm regen-forecast (multi-model dubbeltelling) + WhatsApp gisteren-regen
+- ⚠️ **Forecast-regenbug gefixt**: `/weer` toonde vandaag 49mm regen (≈7× te hoog). Oorzaak: `aggregateDaily()` in `weather-service.ts` (regel ~462) queryde `weather_data_hourly` **zonder** `model_name`-filter, waardoor de 7 multi-model rijen (ECMWF/GFS/ICON-EU/MeteoFrance/…) voor today+tomorrow allemaal bij elkaar opgeteld werden. 7mm → 49mm. Alleen near-term dagen geraakt (multi-model dekt korte horizon). **Fix**: `.eq('model_name', 'best_match')` toegevoegd — alle andere queries (regel 265/683/710/758) filterden al correct, dit was de enige uitzondering. Robuust ongeacht refresh-volgorde.
+  - **Bestaande foute waarde**: staat nog in `weather_data_daily` voor 4 juni. Wordt hersteld bij eerstvolgende refresh — user kan refresh-knop op /weer klikken (POST /api/weather/refresh doet aggregateDaily today+yesterday), of de daily cron 06:00 herstelt 4 juni als "yesterday".
+- ✅ **WhatsApp "Nu" snapshot**: regel "🌧️ Gisteren totaal: X mm" toegevoegd tussen "Vandaag tot nu" en "Licht". Yesterday = volledige vorige lokale dag, één query splitst op timestamp. Helper `startOfYesterdayIso()` toegevoegd. File: `live-snapshot-handler.ts`.
+
 ### 2026-05-27 — Bladnat als wet/droog + LWD, sensor-overzichtspagina, dashboard-widget
 - ✅ **Bladnat herzien**: LMS01 % omgezet naar agronomisch bruikbaar — `leafWetnessState()` (≥50% = nat, matcht schurftmodel-drempel) + `leafWetnessDurationHours()` (bladnatduur LWD, integreert over uplink-gaps, cap 90min). Detail/overview/dashboard tonen nu **Blad nat/droog** + **uren nat 24u** i.p.v. betekenisloze %. Historie-grafiek krijgt 50%-drempellijn. Helper: `src/lib/weather/leaf-wetness.ts`.
 - ✅ **Dag-regen aggregatie**: `src/lib/weather/daily-aggregation.ts` — `aggregateDailyRain()` (continue dag-buckets, lege dagen = 0), `aggregateHourlyRainForDay()` (uur-uitklap), `rainSinceMidnight()` (vandaag-teller).

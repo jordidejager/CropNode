@@ -124,19 +124,29 @@ export async function handleLiveSnapshot(
     const soilRow = soilStation ? latestByStation.get(soilStation.id) : null;
     const leafRow = leafStation ? latestByStation.get(leafStation.id) : null;
 
-    // 4. Today's rainfall: sum rainfall_mm from start of day (local time)
+    // 4. Rainfall totals. Today = since local midnight. Yesterday = the full
+    //    previous local day [yesterday 00:00, today 00:00). One query covers
+    //    both windows (from yesterday 00:00 onward) and we split by timestamp.
     const startOfDayLocal = startOfTodayIso();
-    const { data: todayRain } = weatherStation
+    const startOfYesterdayLocal = startOfYesterdayIso();
+    const startOfTodayMs = new Date(startOfDayLocal).getTime();
+    const { data: rainRows } = weatherStation
       ? await (admin as any)
           .from('weather_measurements')
-          .select('rainfall_mm')
+          .select('rainfall_mm, measured_at')
           .eq('station_id', weatherStation.id)
-          .gte('measured_at', startOfDayLocal)
+          .gte('measured_at', startOfYesterdayLocal)
       : { data: [] };
-    const rainTodayMm = (todayRain ?? []).reduce(
-      (acc: number, r: any) => acc + (typeof r.rainfall_mm === 'number' ? r.rainfall_mm : 0),
-      0
-    );
+    let rainTodayMm = 0;
+    let rainYesterdayMm = 0;
+    for (const r of rainRows ?? []) {
+      const mm = typeof r.rainfall_mm === 'number' ? r.rainfall_mm : 0;
+      if (new Date(r.measured_at).getTime() >= startOfTodayMs) {
+        rainTodayMm += mm;
+      } else {
+        rainYesterdayMm += mm;
+      }
+    }
 
     // 5. Compose the message
     const lines: string[] = [];
@@ -165,6 +175,7 @@ export async function handleLiveSnapshot(
             ? `  ·  dauwpunt ${weatherRow.dew_point_c.toFixed(1)}°C`
             : '')
       );
+      lines.push(`🌧️ Gisteren totaal: ${rainYesterdayMm.toFixed(1)} mm`);
       if (weatherRow.illuminance_lux !== null && weatherRow.illuminance_lux > 0) {
         const lux = weatherRow.illuminance_lux;
         const luxStr = lux >= 1000 ? `${(lux / 1000).toFixed(1)}k lux` : `${lux} lux`;
@@ -282,6 +293,13 @@ export async function handleLiveSnapshot(
 
 function startOfTodayIso(): string {
   const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function startOfYesterdayIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
 }
