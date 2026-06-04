@@ -391,7 +391,7 @@ function ActionCard({ item, ring }: { item: ActionItem; ring: string }) {
                 {(item.crops ?? []).join(' + ')}
               </span>
             )}
-            {(item.phases ?? []).slice(0, 2).map((p) => (
+            {(item.phases ?? []).filter((p): p is string => typeof p === 'string' && p.length > 0).slice(0, 2).map((p) => (
               <span
                 key={p}
                 className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-0.5"
@@ -451,7 +451,8 @@ function labelForType(t: ActionItem['type']): string {
   }
 }
 
-function prettyPhase(s: string): string {
+function prettyPhase(s: string | null | undefined): string {
+  if (!s || typeof s !== 'string') return '';
   return s.replace(/-/g, ' ').replace(/\//g, ' / ');
 }
 
