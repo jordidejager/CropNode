@@ -50,7 +50,7 @@ export function SensorSummaryCard() {
           </div>
         </div>
         <Link
-          href="/weerstations/overzicht"
+          href="/weerstations"
           className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400/80 hover:text-emerald-400 transition-colors"
         >
           Bekijk alles

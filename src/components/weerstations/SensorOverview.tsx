@@ -30,6 +30,8 @@ import {
 } from '@/lib/weather/leaf-wetness';
 import { rainSinceMidnight } from '@/lib/weather/daily-aggregation';
 import { DailyRainChart } from './DailyRainChart';
+import { SoilTrendChart } from './SoilTrendChart';
+import { LeafWetnessChart } from './LeafWetnessChart';
 
 /**
  * Combined data overview for ALL of the grower's sensors. One scroll shows
@@ -60,7 +62,7 @@ export function SensorOverview() {
             Voeg een weerstation of bodem-/bladsensor toe om hier al je data bij elkaar te zien.
           </p>
           <Link
-            href="/weerstations"
+            href="/weerstations/stations"
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 transition-colors px-3 py-2 text-sm font-semibold"
           >
             <Plus className="h-4 w-4" />
@@ -74,6 +76,8 @@ export function SensorOverview() {
   const weatherStations = stations.filter(
     s => s.device_kind === 'weather' || !s.device_kind
   );
+  const soilStations = stations.filter(s => s.device_kind === 'soil');
+  const leafStations = stations.filter(s => s.device_kind === 'leaf');
 
   return (
     <div className="pb-12 space-y-6">
@@ -95,6 +99,16 @@ export function SensorOverview() {
       {/* Daily rain — per weather station */}
       {weatherStations.map(s => (
         <DailyRainChart key={s.id} stationId={s.id} stationLabel={s.label || s.device_id} />
+      ))}
+
+      {/* Soil moisture + EC trend — per soil station */}
+      {soilStations.map(s => (
+        <SoilTrendChart key={s.id} stationId={s.id} stationLabel={s.label || s.device_id} />
+      ))}
+
+      {/* Leaf wetness hours per day — per leaf station */}
+      {leafStations.map(s => (
+        <LeafWetnessChart key={s.id} stationId={s.id} stationLabel={s.label || s.device_id} />
       ))}
     </div>
   );

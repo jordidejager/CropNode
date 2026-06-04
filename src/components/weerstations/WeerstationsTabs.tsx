@@ -6,8 +6,8 @@ import { Radio, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { href: '/weerstations', label: 'Stations', icon: Radio, exact: true },
-  { href: '/weerstations/overzicht', label: 'Overzicht', icon: LayoutDashboard, exact: false },
+  { href: '/weerstations', label: 'Overzicht', icon: LayoutDashboard, exact: true },
+  { href: '/weerstations/stations', label: 'Stations', icon: Radio, exact: false },
 ] as const;
 
 /**

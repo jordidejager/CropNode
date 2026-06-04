@@ -12,6 +12,13 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-04 — Overzicht als startpagina + bodem- & bladnat-grafieken
+- ✅ **Overzicht is nu de /weerstations startpagina** (sidebar landt erop). Routing omgedraaid: `/weerstations` → `SensorOverview`, stations-lijst verhuisd naar `/weerstations/stations`, `/weerstations/overzicht` → redirect (back-compat). Tabs: [Overzicht] [Stations]. Links bijgewerkt (dashboard-widget → /weerstations, empty-state → /weerstations/stations).
+- ✅ **`SoilTrendChart`**: dubbele Y-as lijngrafiek met bodemvocht (%) links + porie-water EC (mS/cm) rechts, 24u/7d/30d. Per bodemsensor in overzicht.
+- ✅ **`LeafWetnessChart`**: zelfde opzet als regen-grafiek maar uren bladnat per dag (i.p.v. mm), met "vandaag tot nu" teller + klik-dag → uur-detail (minuten nat per uur). Per bladsensor in overzicht. Gebruikt nieuwe `aggregateDailyLeafWetness()` / `aggregateHourlyLeafWetForDay()` helpers (LWD-integratie met 90min gap-cap, drempel = LEAF_WET_THRESHOLD).
+- Build groen (158 pagina's).
+- Files: `weerstations/page.tsx` (→overview), `weerstations/stations/page.tsx` (new), `weerstations/overzicht/page.tsx` (→redirect), `WeerstationsTabs.tsx`, `SensorOverview.tsx`, `SoilTrendChart.tsx` (new), `LeafWetnessChart.tsx` (new), `daily-aggregation.ts`, `dashboard/SensorSummaryCard.tsx`.
+
 ### 2026-06-04 — Bladnat-drempel gekalibreerd (50%→7%) + echte sensor in schurftmodel
 - 🔎 **Diagnose**: user meldde dat bladnat altijd "droog" toonde tijdens regen. Geen uitlees-bug — Dragino LMS01-LS `Leaf_Moisture` is een echte 0–100% (manual: "% of water drop over total leaf surface", hex/10). MAAR het meet oppervlakte-DEKKING: water beadt op, dus zelfs nat blad komt zelden boven ~10-35%. Veld-data (5 natte dagen, 348 metingen): mediaan 4.4%, p90 8%, max 35.5%, droge basislijn ~0.3-1.5%. De 50%-"nat"-drempel werd dus nóóit gehaald.
 - ✅ **Drempel → 7%** (user-keuze "gebalanceerd"): `LEAF_WET_THRESHOLD` in `lib/weather/leaf-wetness.ts` van 50→7, met data-onderbouwing in comment. Eén bron van waarheid — UI én alle ziektemodellen importeren 'm nu.
