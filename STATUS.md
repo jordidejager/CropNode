@@ -12,6 +12,9 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-04 — Build fix: ontbrekende RecentHours dashboard-component
+- ⚠️ Vercel-build brak ("Can't resolve '@/components/dashboard/RecentHours'"). `dashboard-client.tsx` (door eerdere chat) importeert `RecentHours` maar de component-file was untracked, nooit naar cropnode gepusht. Bij mijn dashboard-widget-commit nam ik die import mee zonder de file. **Fix**: `RecentHours.tsx` gecommit (commit 9fe480c). Hangt alleen af van `useTaskLogs` + `Skeleton` (beide al op cropnode). Clean build geverifieerd in losse worktree (143 pagina's). Les: bij stagen van een file die een andere chat ook wijzigde, check of alle imports gecommit zijn.
+
 ### 2026-06-04 — ⚠️ BUG FIX: 49mm regen-forecast (multi-model dubbeltelling) + WhatsApp gisteren-regen
 - ⚠️ **Forecast-regenbug gefixt**: `/weer` toonde vandaag 49mm regen (≈7× te hoog). Oorzaak: `aggregateDaily()` in `weather-service.ts` (regel ~462) queryde `weather_data_hourly` **zonder** `model_name`-filter, waardoor de 7 multi-model rijen (ECMWF/GFS/ICON-EU/MeteoFrance/…) voor today+tomorrow allemaal bij elkaar opgeteld werden. 7mm → 49mm. Alleen near-term dagen geraakt (multi-model dekt korte horizon). **Fix**: `.eq('model_name', 'best_match')` toegevoegd — alle andere queries (regel 265/683/710/758) filterden al correct, dit was de enige uitzondering. Robuust ongeacht refresh-volgorde.
   - **Bestaande foute waarde**: staat nog in `weather_data_daily` voor 4 juni. Wordt hersteld bij eerstvolgende refresh — user kan refresh-knop op /weer klikken (POST /api/weather/refresh doet aggregateDaily today+yesterday), of de daily cron 06:00 herstelt 4 juni als "yesterday".
