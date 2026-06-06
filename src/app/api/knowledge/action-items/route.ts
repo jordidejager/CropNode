@@ -363,17 +363,19 @@ function profileToActionItem(
   nextPhase: string,
 ): ActionItem {
   const peakMonths = (p.peak_months ?? []).filter((m) => m >= 1 && m <= 12);
-  const peakPhases = p.peak_phases ?? [];
+  // Alleen canonieke fases tellen voor piek-detectie (filter "roze knop" etc.)
+  const peakPhases = (p.peak_phases ?? []).filter((ph) => CANONICAL_PHASES.has((ph ?? '').toLowerCase()));
 
-  // Een profiel dat (bijna) ELKE maand als "piek" markeert heeft geen echte
-  // seizoens-signaal — dat is ruis uit de extract-stap. We negeren de
-  // maand-piek dan en vallen terug op fase-match, zodat niet álle ziektes
-  // tegelijk "NU urgent" worden (was 94 items).
-  const hasFocusedPeak = peakMonths.length >= 1 && peakMonths.length <= 7;
-  const monthPeakNow = hasFocusedPeak && peakMonths.includes(currentMonth);
-  const monthPeakSoon = hasFocusedPeak && peakMonths.includes(nextMonth);
-  const phasePeakNow = peakPhases.includes(currentPhase);
-  const phasePeakSoon = peakPhases.includes(nextPhase);
+  // Een profiel dat (bijna) ELKE maand/fase als "piek" markeert heeft geen
+  // echt seizoens-signaal — dat is ruis uit de extract-stap. Negeer dan dat
+  // signaal, zodat niet álle ziektes tegelijk "NU urgent" worden (was 94).
+  // Drempels: maanden ≤7 van 12, fases ≤4 van 7.
+  const hasFocusedMonths = peakMonths.length >= 1 && peakMonths.length <= 7;
+  const hasFocusedPhases = peakPhases.length >= 1 && peakPhases.length <= 4;
+  const monthPeakNow = hasFocusedMonths && peakMonths.includes(currentMonth);
+  const monthPeakSoon = hasFocusedMonths && peakMonths.includes(nextMonth);
+  const phasePeakNow = hasFocusedPhases && peakPhases.includes(currentPhase);
+  const phasePeakSoon = hasFocusedPhases && peakPhases.includes(nextPhase);
 
   const peakNow = monthPeakNow || phasePeakNow;
   const peakSoon = monthPeakSoon || phasePeakSoon;
