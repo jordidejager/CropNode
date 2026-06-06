@@ -173,9 +173,15 @@ export async function GET(request: Request) {
     ),
   ];
 
+  // Sanitize ALL items at the API boundary — guarantee the frontend never
+  // receives null/undefined where it expects strings or arrays. This stops
+  // the recurring "Cannot read properties of null" crashes regardless of
+  // how messy the underlying DB rows are.
+  const sanitized = items.map(sanitizeActionItem);
+
   // Dedupe by title+subtitle (different sources can produce similar items)
   const seen = new Set<string>();
-  const deduped = items.filter((it) => {
+  const deduped = sanitized.filter((it) => {
     const key = `${it.type}::${it.title.toLowerCase()}::${(it.subtitle || '').slice(0, 80).toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -478,6 +484,39 @@ function articleToActionItem(
     article_id: a.id,
     ask_chatbot: `Wat moet ik weten over ${a.title.toLowerCase()}?`,
     sort_score: (urgency === 'nu' ? 0 : urgency === 'deze_week' ? 50 : 100) - (a.fusion_sources ?? 0) * 0.5,
+  };
+}
+
+/**
+ * Final safety net: guarantee every ActionItem field has the right type
+ * before it leaves the API. The frontend can then render without defensive
+ * null-checks everywhere. Filters out garbage array elements and clamps
+ * months to 1-12.
+ */
+function sanitizeActionItem(it: ActionItem): ActionItem {
+  const str = (v: unknown, fallback = ''): string =>
+    typeof v === 'string' ? v : fallback;
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+  const numArr = (v: unknown): number[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 1 && x <= 12)
+      : [];
+  return {
+    id: str(it.id, `item-${Math.round(it.sort_score ?? 0)}`),
+    type: it.type,
+    urgency: it.urgency,
+    title: str(it.title, '(zonder titel)'),
+    subtitle: str(it.subtitle),
+    detail: str(it.detail),
+    crops: strArr(it.crops),
+    phases: strArr(it.phases),
+    months: numArr(it.months),
+    category: str(it.category),
+    article_id: it.article_id ?? null,
+    dosage: it.dosage ?? null,
+    ask_chatbot: it.ask_chatbot ?? null,
+    sort_score: typeof it.sort_score === 'number' && Number.isFinite(it.sort_score) ? it.sort_score : 100,
   };
 }
 
