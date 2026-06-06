@@ -362,12 +362,21 @@ function profileToActionItem(
   nextMonth: number,
   nextPhase: string,
 ): ActionItem {
-  const peakMonths = p.peak_months ?? [];
+  const peakMonths = (p.peak_months ?? []).filter((m) => m >= 1 && m <= 12);
   const peakPhases = p.peak_phases ?? [];
-  const peakNow =
-    peakMonths.includes(currentMonth) || peakPhases.includes(currentPhase);
-  const peakSoon =
-    peakMonths.includes(nextMonth) || peakPhases.includes(nextPhase);
+
+  // Een profiel dat (bijna) ELKE maand als "piek" markeert heeft geen echte
+  // seizoens-signaal — dat is ruis uit de extract-stap. We negeren de
+  // maand-piek dan en vallen terug op fase-match, zodat niet álle ziektes
+  // tegelijk "NU urgent" worden (was 94 items).
+  const hasFocusedPeak = peakMonths.length >= 1 && peakMonths.length <= 7;
+  const monthPeakNow = hasFocusedPeak && peakMonths.includes(currentMonth);
+  const monthPeakSoon = hasFocusedPeak && peakMonths.includes(nextMonth);
+  const phasePeakNow = peakPhases.includes(currentPhase);
+  const phasePeakSoon = peakPhases.includes(nextPhase);
+
+  const peakNow = monthPeakNow || phasePeakNow;
+  const peakSoon = monthPeakSoon || phasePeakSoon;
 
   const urgency: Urgency = peakNow ? 'nu' : peakSoon ? 'deze_week' : 'voorbereiden';
 
@@ -493,6 +502,11 @@ function articleToActionItem(
  * null-checks everywhere. Filters out garbage array elements and clamps
  * months to 1-12.
  */
+const CANONICAL_CROPS = new Set(['appel', 'peer', 'kers', 'pruim', 'blauwe_bes', 'beide']);
+const CANONICAL_PHASES = new Set([
+  'rust', 'knopstadium', 'bloei', 'vruchtzetting', 'groei', 'oogst', 'nabloei',
+]);
+
 function sanitizeActionItem(it: ActionItem): ActionItem {
   const str = (v: unknown, fallback = ''): string =>
     typeof v === 'string' ? v : fallback;
@@ -500,8 +514,14 @@ function sanitizeActionItem(it: ActionItem): ActionItem {
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
   const numArr = (v: unknown): number[] =>
     Array.isArray(v)
-      ? v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 1 && x <= 12)
+      ? Array.from(new Set(v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 1 && x <= 12)))
       : [];
+  // Crops: alleen canonieke gewasnamen (filtert "Nederland", "NL", "BE" etc. eruit)
+  const cropArr = (v: unknown): string[] =>
+    Array.from(new Set(strArr(v).map((c) => c.toLowerCase()).filter((c) => CANONICAL_CROPS.has(c))));
+  // Phases: alleen canonieke fases (filtert "roze knop", "afbloei" etc. eruit)
+  const phaseArr = (v: unknown): string[] =>
+    Array.from(new Set(strArr(v).map((p) => p.toLowerCase()).filter((p) => CANONICAL_PHASES.has(p))));
   return {
     id: str(it.id, `item-${Math.round(it.sort_score ?? 0)}`),
     type: it.type,
@@ -509,8 +529,8 @@ function sanitizeActionItem(it: ActionItem): ActionItem {
     title: str(it.title, '(zonder titel)'),
     subtitle: str(it.subtitle),
     detail: str(it.detail),
-    crops: strArr(it.crops),
-    phases: strArr(it.phases),
+    crops: cropArr(it.crops),
+    phases: phaseArr(it.phases),
     months: numArr(it.months),
     category: str(it.category),
     article_id: it.article_id ?? null,
