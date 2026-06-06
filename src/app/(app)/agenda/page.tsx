@@ -158,6 +158,10 @@ export default function AgendaPage() {
     },
     staleTime: 5 * 60 * 1000,
     retry: 2,
+    // networkMode 'always' → React Query pauzeert de query NIET als de
+    // onlineManager (ten onrechte) denkt dat de browser offline is. Dit was
+    // de oorzaak van een eindeloze loading-state in sommige browsers.
+    networkMode: 'always',
   });
   const error = queryError ? (queryError as Error).message : null;
 
