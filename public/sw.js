@@ -5,7 +5,11 @@
  * Enables offline access to previously visited pages.
  */
 
-const CACHE_NAME = 'cropnode-v1';
+// Bump deze versie bij elke release waarvan je zeker wilt zijn dat
+// gebruikers schone assets krijgen — de 'activate' handler purget alle
+// caches met een andere naam. (v1 → v2: oude agenda-bundle met crash-bug
+// zat vast in cache.)
+const CACHE_NAME = 'cropnode-v2';
 const STATIC_ASSETS = [
   '/logo/cropnode-icon.svg',
   '/logo/cropnode-h-dark.svg',
