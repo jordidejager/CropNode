@@ -12,8 +12,9 @@
  *   - VOORBEREIDEN — komende maand/fase
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   CalendarDays,
@@ -134,31 +135,31 @@ const TYPE_META: Record<
 // ============================================
 
 export default function AgendaPage() {
-  const [data, setData] = useState<ApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [cropFilter, setCropFilter] = useState<'alle' | 'appel' | 'peer'>('alle');
   const [typeFilter, setTypeFilter] = useState<Set<ActionItem['type']>>(
     new Set(['ziekte', 'plaag', 'product_advies', 'artikel']),
   );
 
-  // Fetch on mount + when crop changes
-  useEffect(() => {
-    const ctrl = new AbortController();
-    setLoading(true);
-    setError(null);
-    const url = cropFilter === 'alle'
-      ? '/api/knowledge/action-items'
-      : `/api/knowledge/action-items?crop=${cropFilter}`;
-    fetch(url, { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: ApiResponse) => setData(d))
-      .catch((err) => {
-        if (err.name !== 'AbortError') setError(err.message);
-      })
-      .finally(() => setLoading(false));
-    return () => ctrl.abort();
-  }, [cropFilter]);
+  // React Query handles abort/cache/unmount correctly — voorkomt de
+  // "stuck loading" race van het oude useEffect+AbortController patroon.
+  const {
+    data = null,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery<ApiResponse>({
+    queryKey: ['agenda-action-items', cropFilter],
+    queryFn: async () => {
+      const url = cropFilter === 'alle'
+        ? '/api/knowledge/action-items'
+        : `/api/knowledge/action-items?crop=${cropFilter}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
+  const error = queryError ? (queryError as Error).message : null;
 
   const filteredItems = useMemo(() => {
     if (!data) return null;
