@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
-  MapPin, Loader2, Apple, TrendingUp, TrendingDown, Minus,
+  MapPin, Loader2,
   Sprout, Droplets, Shield, Gauge, ChevronDown,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -13,10 +13,6 @@ import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
 
 const StoryTimeline = dynamic(
   () => import('@/components/analytics/perceel/StoryTimeline').then((m) => ({ default: m.StoryTimeline })),
-  { ssr: false }
-);
-const YieldHistoryChart = dynamic(
-  () => import('@/components/analytics/perceel/YieldHistoryChart').then((m) => ({ default: m.YieldHistoryChart })),
   { ssr: false }
 );
 
@@ -113,7 +109,7 @@ function ParcelPicker({
 // ============================================================================
 
 function AutopsySection({ data }: { data: ParcelDiagnosticsData }) {
-  const { summary, yields, subParcel, profile, latestSoil } = data;
+  const { summary, profile, latestSoil } = data;
 
   // Bouw factoren-lijst op data
   const factors: Array<{
@@ -122,25 +118,7 @@ function AutopsySection({ data }: { data: ParcelDiagnosticsData }) {
     severity: 'positive' | 'neutral' | 'negative';
   }> = [];
 
-  // Factor 1: opbrengsttrend
-  if (summary.yieldChangePct != null && summary.avgKgPerHa5yr != null && summary.thisYearKgPerHa != null) {
-    const vs5yr = ((summary.thisYearKgPerHa - summary.avgKgPerHa5yr) / summary.avgKgPerHa5yr) * 100;
-    if (vs5yr < -10) {
-      factors.push({
-        label: `Opbrengst ${Math.round(vs5yr)}% onder 5-jaar gemiddelde`,
-        detail: `Dit jaar ${Math.round(summary.thisYearKgPerHa).toLocaleString('nl-NL')} kg/ha vs. gemiddeld ${Math.round(summary.avgKgPerHa5yr).toLocaleString('nl-NL')} kg/ha over de laatste 5 jaar.`,
-        severity: 'negative',
-      });
-    } else if (vs5yr > 10) {
-      factors.push({
-        label: `Opbrengst ${Math.round(vs5yr)}% boven 5-jaar gemiddelde`,
-        detail: `Dit jaar ${Math.round(summary.thisYearKgPerHa).toLocaleString('nl-NL')} kg/ha vs. gemiddeld ${Math.round(summary.avgKgPerHa5yr).toLocaleString('nl-NL')} kg/ha.`,
-        severity: 'positive',
-      });
-    }
-  }
-
-  // Factor 2: infecties
+  // Factor: infecties
   if (summary.infectionEventsThisYear >= 10) {
     factors.push({
       label: `${summary.infectionEventsThisYear} schurft-infectie-events gemeten`,
@@ -197,7 +175,7 @@ function AutopsySection({ data }: { data: ParcelDiagnosticsData }) {
   if (factors.length === 0) {
     return (
       <div className="rounded-xl border border-white/5 bg-white/[0.01] p-5 text-sm text-slate-500">
-        Geen opvallende factoren gedetecteerd. Vul meer data in (bodemanalyse, productiegeschiedenis) voor scherpere uitleg.
+        Geen opvallende factoren gedetecteerd. Vul meer data in (bodemanalyse, perceelprofiel) voor scherpere uitleg.
       </div>
     );
   }
@@ -298,12 +276,6 @@ export default function PerceelDiagnosticsPage() {
     router.push(`/analytics/perceel?id=${id}`);
   };
 
-  const peerAvg = useMemo(() => {
-    if (!data?.comparisonPeers?.length) return 0;
-    const sum = data.comparisonPeers.reduce((s, p) => s + p.avgKgPerHa, 0);
-    return sum / data.comparisonPeers.length;
-  }, [data]);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -314,7 +286,7 @@ export default function PerceelDiagnosticsPage() {
             Perceeldiagnose
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-lg">
-            Eén perceel, alle data samen — bespuitingen, weer, infecties, oogst en bodem in één verhaal.
+            Eén perceel, alle data samen — bespuitingen, weer, infecties en bodem in één verhaal.
           </p>
         </div>
         <ParcelPicker options={options} selectedId={selectedId} onSelect={handleSelect} />
@@ -339,28 +311,7 @@ export default function PerceelDiagnosticsPage() {
       {data && !loading && (
         <>
           {/* KPI row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Apple className="size-3.5 text-orange-400" />
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Oogst dit jaar</span>
-              </div>
-              <div className="text-xl font-semibold text-slate-100">
-                {data.summary.thisYearKgPerHa
-                  ? `${Math.round(data.summary.thisYearKgPerHa).toLocaleString('nl-NL')}`
-                  : '—'}
-              </div>
-              <div className="text-[10px] text-slate-500">kg/ha</div>
-              {data.summary.yieldChangePct != null && (
-                <div className={`mt-1 flex items-center gap-1 text-[10px] ${
-                  data.summary.yieldChangePct > 0 ? 'text-emerald-400' : 'text-red-400'
-                }`}>
-                  {data.summary.yieldChangePct > 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                  {data.summary.yieldChangePct > 0 ? '+' : ''}{data.summary.yieldChangePct.toFixed(0)}% t.o.v. vorig jaar
-                </div>
-              )}
-            </div>
-
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
               <div className="flex items-center gap-1.5 mb-1">
                 <Droplets className="size-3.5 text-blue-400" />
@@ -479,42 +430,8 @@ export default function PerceelDiagnosticsPage() {
           {/* Story Timeline */}
           <StoryTimeline events={data.timeline} />
 
-          {/* Yield chart */}
-          <div>
-            <YieldHistoryChart yields={data.yields} peerAvg={peerAvg} />
-            <DataSourceHint
-              variant="inline"
-              label="Opbrengstdata uit productiegeschiedenis + oogstregistraties."
-              links={[
-                { href: '/oogst/geschiedenis', text: 'Productiegeschiedenis bewerken' },
-                { href: '/oogst', text: 'Nieuwe oogstregistratie' },
-              ]}
-            />
-          </div>
-
           {/* Autopsy */}
           <AutopsySection data={data} />
-
-          {/* Peer comparison */}
-          {data.comparisonPeers.length > 0 && (
-            <div className="rounded-xl border border-white/5 bg-white/[0.01] p-4 md:p-5">
-              <h3 className="text-sm font-semibold text-slate-100 mb-3">
-                Andere percelen met {data.subParcel.variety}
-              </h3>
-              <div className="space-y-1.5">
-                {data.comparisonPeers.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleSelect(p.id)}
-                    className="w-full flex items-center justify-between text-xs hover:bg-white/5 rounded px-2 py-1.5 transition-colors"
-                  >
-                    <span className="text-slate-300">{p.name}</span>
-                    <span className="text-slate-500">{p.hectares.toFixed(2)} ha · {Math.round(p.avgKgPerHa).toLocaleString('nl-NL')} kg/ha gem.</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

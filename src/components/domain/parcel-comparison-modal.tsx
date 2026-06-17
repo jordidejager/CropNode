@@ -32,7 +32,6 @@ function ComparisonContent({ parcels }: { parcels: SprayableParcel[] }) {
       { key: 'Oppervlakte', values: parcels.map(p => p.area || 0), unit: 'ha' },
       { key: 'Bespuitingen', values: kpis.map(k => k?.sprayCount || 0), unit: '' },
       { key: 'Uren', values: kpis.map(k => k?.totalHours || 0), unit: 'u' },
-      { key: 'Oogst', values: kpis.map(k => (k?.harvestKg || 0) / 1000), unit: 'ton' },
       { key: 'Notities', values: kpis.map(k => k?.noteCount || 0), unit: '' },
     ];
 

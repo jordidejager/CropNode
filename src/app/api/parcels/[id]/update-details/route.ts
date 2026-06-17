@@ -6,7 +6,7 @@ import { apiError, apiSuccess, handleUnknownError, ErrorCodes } from '@/lib/api-
 /**
  * PUT /api/parcels/[id]/update-details
  * Server-side cascade update: wijzig crop/variety/area op sub_parcel
- * en cascade naar parcel_history + cell_sub_parcels in één transactie.
+ * en cascade naar parcel_history in één transactie.
  */
 export async function PUT(
   request: NextRequest,
@@ -76,18 +76,6 @@ export async function PUT(
       if (histError) {
         console.error('[cascade] parcel_history update failed:', histError.message);
         // Niet fataal — log maar ga door
-      }
-
-      // 3. Cascade: cell_sub_parcels (opslag)
-      if (variety !== undefined) {
-        const { error: cellError } = await adminClient
-          .from('cell_sub_parcels')
-          .update({ variety })
-          .eq('sub_parcel_id', id);
-
-        if (cellError) {
-          console.error('[cascade] cell_sub_parcels update failed:', cellError.message);
-        }
       }
     }
 

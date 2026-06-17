@@ -21,7 +21,6 @@ import { handleEditChoice, handleEditFieldSelected, handleEditInput, handleEditL
 import { detectProductQuery, handleProductQuery } from './product-query-handler';
 import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
 import { isLiveSnapshotIntent, handleLiveSnapshot } from './live-snapshot-handler';
-import { isRotUitvalIntent, handleRotUitval } from './rot-uitval-handler';
 import { isLikelyHoursRegistration, handleHoursRegistration } from './hours-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
@@ -327,13 +326,6 @@ export async function handleIncomingMessage(
       // Check first — these phrases shouldn't be misread as field notes or spray input.
       if (isWeatherQueryIntent(messageText)) {
         await handleWeatherQuery(userId, e164Phone, messageText);
-        return;
-      }
-
-      // Rot-uitval: "rotte bak geleegd bij sortering van Schele"
-      // Vóór veldnotities zodat het niet als vrije notitie wordt opgeslagen.
-      if (isRotUitvalIntent(messageText)) {
-        await handleRotUitval(userId, e164Phone, messageText, waMessageId);
         return;
       }
 

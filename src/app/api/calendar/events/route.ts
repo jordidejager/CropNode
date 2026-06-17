@@ -73,28 +73,6 @@ const tagLabels: Record<string, string> = {
   overig: 'Overig',
 };
 
-function normalizeHarvest(rows: any[]): CalendarEvent[] {
-  return rows.map((row) => ({
-    id: `harvest-${row.id}`,
-    type: 'harvest' as const,
-    title: `${row.variety || 'Oogst'} — ${row.total_crates} kisten`,
-    subtitle: row.pick_number ? `Pluk ${row.pick_number}` : undefined,
-    date: row.harvest_date,
-    parcelIds: row.sub_parcel_id ? [row.sub_parcel_id] : [],
-    parcelNames: row.sub_parcel_name ? [row.sub_parcel_name] : [],
-    color: EVENT_COLORS.harvest,
-    status: 'completed',
-    metadata: {
-      variety: row.variety,
-      pickNumber: row.pick_number,
-      totalCrates: row.total_crates,
-      qualityClass: row.quality_class,
-      weightPerCrate: row.weight_per_crate,
-      season: row.season,
-    },
-  }));
-}
-
 function normalizeActiveSessions(rows: any[]): CalendarEvent[] {
   return rows.map((row) => ({
     id: `active-task-${row.id}`,
@@ -269,7 +247,7 @@ export async function GET(request: Request) {
     const requestedTypes = new Set<CalendarEventType>(
       typesParam
         ? (typesParam.split(',') as CalendarEventType[])
-        : ['spray', 'harvest', 'task', 'disease', 'phenology', 'weather_alert', 'field_note']
+        : ['spray', 'task', 'disease', 'phenology', 'weather_alert', 'field_note']
     );
 
     // Year for phenology lookup
@@ -309,22 +287,7 @@ export async function GET(request: Request) {
       })());
     }
 
-    // 3. Harvest registrations
-    if (requestedTypes.has('harvest')) {
-      queries.push((async () => {
-        const { data, error } = await supabase
-          .from('harvest_registrations')
-          .select('id, harvest_date, variety, pick_number, total_crates, quality_class, weight_per_crate, season, sub_parcel_id')
-          .eq('user_id', user.id)
-          .gte('harvest_date', start)
-          .lte('harvest_date', end)
-          .order('harvest_date', { ascending: true });
-        if (error) { console.error('[calendar] harvest error:', error.message); return []; }
-        return normalizeHarvest(data || []);
-      })());
-    }
-
-    // 4a. Task logs (completed tasks with task type name via join)
+    // 3. Task logs (completed tasks with task type name via join)
     if (requestedTypes.has('task')) {
       queries.push((async () => {
         const { data, error } = await supabase
@@ -344,7 +307,7 @@ export async function GET(request: Request) {
       })());
     }
 
-    // 4b. Active task sessions (currently running tasks)
+    // 3b. Active task sessions (currently running tasks)
     // Query underlying table (has user_id for RLS) with task_types join
     if (requestedTypes.has('task')) {
       queries.push((async () => {

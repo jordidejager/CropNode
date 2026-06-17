@@ -128,7 +128,6 @@ export function DashboardCalendar() {
               <LegendItem color={EVENT_COLORS.disease} label="Infectie" />
               <LegendItem color={EVENT_COLORS.phenology} label="Groeifase" />
               <LegendItem color={EVENT_COLORS.field_note} label="Notitie" />
-              <LegendItem color={EVENT_COLORS.harvest} label="Oogst" />
             </div>
           </>
         )}

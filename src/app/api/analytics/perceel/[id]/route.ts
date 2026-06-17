@@ -86,22 +86,7 @@ export async function GET(
       (r: any) => Array.isArray(r.plots) && r.plots.includes(sub.name)
     );
 
-    // 4. Oogstregistraties
-    const { data: harvestRows } = await admin
-      .from('harvest_registrations')
-      .select('id, harvest_date, total_crates, quality_class, weight_per_crate, pick_number, variety, harvest_year')
-      .eq('user_id', user.id)
-      .eq('sub_parcel_id', id)
-      .order('harvest_date', { ascending: true });
-
-    // 5. Productiegeschiedenis (production_summaries)
-    const { data: prodRows } = await admin
-      .from('production_summaries')
-      .select('harvest_year, total_kg, hectares, variety')
-      .eq('user_id', user.id)
-      .eq('sub_parcel_id', id);
-
-    // 6. Infectie-events uit ziektedruk model (als geconfigureerd voor dit perceel)
+    // 4. Infectie-events uit ziektedruk model (als geconfigureerd voor dit perceel)
     const { data: diseaseConfig } = await admin
       .from('disease_model_config')
       .select('id')
@@ -120,7 +105,7 @@ export async function GET(
       infectionRows = data || [];
     }
 
-    // 7. Weer-extremen (vorst / zware regen / hitte) dichtstbijzijnde station
+    // 5. Weer-extremen (vorst / zware regen / hitte) dichtstbijzijnde station
     const { data: stations } = await admin
       .from('weather_stations')
       .select('id')
@@ -192,19 +177,6 @@ export async function GET(
       });
     });
 
-    // Oogst
-    (harvestRows || []).forEach((h: any) => {
-      const kg = (h.total_crates || 0) * (h.weight_per_crate || 18);
-      timeline.push({
-        id: `harvest-${h.id}`,
-        date: h.harvest_date,
-        type: 'harvest',
-        title: `Pluk ${h.pick_number || '?'}: ${h.total_crates || 0} kisten`,
-        subtitle: h.quality_class ? `${h.quality_class} — ~${kg.toLocaleString('nl-NL')} kg` : `~${kg.toLocaleString('nl-NL')} kg`,
-        meta: { crates: h.total_crates, qualityClass: h.quality_class, kg, pickNumber: h.pick_number },
-      });
-    });
-
     // Infectie
     infectionRows.forEach((i: any) => {
       timeline.push({
@@ -266,102 +238,12 @@ export async function GET(
     // Sorteer chronologisch
     timeline.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // --- YEARLY YIELDS ---
-    const yieldsMap = new Map<number, any>();
-
-    // Uit production_summaries
-    (prodRows || []).forEach((p: any) => {
-      if (!p.total_kg || !p.hectares || p.hectares <= 0) return;
-      yieldsMap.set(p.harvest_year, {
-        harvestYear: p.harvest_year,
-        totalKg: p.total_kg,
-        hectares: p.hectares,
-        kgPerHa: p.total_kg / p.hectares,
-        klasseIPct: null,
-        source: 'manual',
-      });
-    });
-
-    // Uit harvest_registrations per jaar aggregeren waar geen summary is
-    const byYear = new Map<number, { kg: number; totalCrates: number; klasseICrates: number; totalClassified: number }>();
-    (harvestRows || []).forEach((h: any) => {
-      const y = h.harvest_year;
-      if (!byYear.has(y)) byYear.set(y, { kg: 0, totalCrates: 0, klasseICrates: 0, totalClassified: 0 });
-      const agg = byYear.get(y)!;
-      const wpc = h.weight_per_crate || 18;
-      agg.kg += (h.total_crates || 0) * wpc;
-      agg.totalCrates += h.total_crates || 0;
-      if (h.quality_class) {
-        agg.totalClassified += h.total_crates || 0;
-        if (h.quality_class === 'Klasse I') agg.klasseICrates += h.total_crates || 0;
-      }
-    });
-    byYear.forEach((agg, year) => {
-      const existing = yieldsMap.get(year);
-      const klasseIPct = agg.totalClassified > 0 ? (agg.klasseICrates / agg.totalClassified) * 100 : null;
-      if (existing) {
-        existing.klasseIPct = klasseIPct;
-      } else if (sub.area > 0) {
-        yieldsMap.set(year, {
-          harvestYear: year,
-          totalKg: agg.kg,
-          hectares: sub.area,
-          kgPerHa: agg.kg / sub.area,
-          klasseIPct,
-          source: 'harvests',
-        });
-      }
-    });
-
-    const yields = [...yieldsMap.values()].sort((a, b) => a.harvestYear - b.harvestYear);
-
-    // --- COMPARISON PEERS (zelfde ras, andere percelen) ---
-    const { data: peerSubs } = await admin
-      .from('sub_parcels')
-      .select('id, name, variety, area')
-      .eq('user_id', user.id)
-      .eq('variety', sub.variety)
-      .neq('id', id);
-
-    const peerIds = (peerSubs || []).map((p: any) => p.id);
-    let peerProductions: any[] = [];
-    if (peerIds.length > 0) {
-      const { data } = await admin
-        .from('production_summaries')
-        .select('sub_parcel_id, total_kg, hectares, harvest_year')
-        .in('sub_parcel_id', peerIds);
-      peerProductions = data || [];
-    }
-
-    const comparisonPeers = (peerSubs || []).map((p: any) => {
-      const prodRows = peerProductions.filter(
-        (pp: any) => pp.sub_parcel_id === p.id && pp.hectares && pp.hectares > 0
-      );
-      const avg = prodRows.length
-        ? prodRows.reduce((s: number, r: any) => s + (r.total_kg / r.hectares), 0) / prodRows.length
-        : 0;
-      return { id: p.id, name: p.name, variety: p.variety, hectares: p.area, avgKgPerHa: avg };
-    }).filter((p: any) => p.avgKgPerHa > 0);
-
     // --- SUMMARY ---
     const thisYearSpuit = relevantSpuit.filter((r: any) => r.harvest_year === harvestYear);
     const thisYearTreatments = thisYearSpuit.filter((r: any) => r.registration_type === 'spraying').length;
     const thisYearFertilizations = thisYearSpuit.filter(
       (r: any) => r.registration_type === 'spreading' || (Array.isArray(r.products) && r.products.some((p: any) => p.source === 'fertilizer'))
     ).length;
-    const thisYearHarvest = byYear.get(harvestYear);
-    const thisYearHarvestKg = thisYearHarvest ? thisYearHarvest.kg : null;
-    const thisYearKgPerHa = thisYearHarvestKg && sub.area > 0 ? thisYearHarvestKg / sub.area : null;
-    const prevYear = yieldsMap.get(harvestYear - 1);
-    const prevYearKgPerHa = prevYear ? prevYear.kgPerHa : null;
-    const yieldChangePct = thisYearKgPerHa && prevYearKgPerHa
-      ? ((thisYearKgPerHa - prevYearKgPerHa) / prevYearKgPerHa) * 100
-      : null;
-
-    const recentYields = yields.filter((y: any) => y.harvestYear >= harvestYear - 5 && y.harvestYear < harvestYear);
-    const avgKgPerHa5yr = recentYields.length
-      ? recentYields.reduce((s: number, y: any) => s + y.kgPerHa, 0) / recentYields.length
-      : null;
 
     const infectionEventsThisYear = infectionRows.length;
 
@@ -392,16 +274,9 @@ export async function GET(
         : null,
       latestSoil,
       timeline,
-      yields,
-      comparisonPeers,
       summary: {
         thisYearTreatments,
         thisYearFertilizations,
-        thisYearHarvestKg,
-        thisYearKgPerHa,
-        prevYearKgPerHa,
-        yieldChangePct,
-        avgKgPerHa5yr,
         infectionEventsThisYear,
       },
       harvestYear,

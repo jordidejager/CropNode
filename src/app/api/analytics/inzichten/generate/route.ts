@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
       subParcelsRes,
       profilesRes,
       soilRes,
-      productionRes,
       spuitschriftRes,
       weatherRes,
     ] = await Promise.all([
@@ -42,7 +41,6 @@ export async function POST(req: NextRequest) {
       admin.from('sub_parcels').select('id, parcel_id, name, crop, variety, area').eq('user_id', user.id).order('name'),
       admin.from('parcel_profiles').select('*').eq('user_id', user.id),
       admin.from('soil_analyses').select('parcel_id, sub_parcel_id, organische_stof_pct, n_leverend_vermogen_kg_ha, p_plantbeschikbaar_kg_ha, p_bodemvoorraad_p_al, klei_percentage, cn_ratio, waarderingen, datum_monstername').eq('user_id', user.id).order('datum_monstername', { ascending: false }),
-      admin.from('production_summaries').select('harvest_year, sub_parcel_id, variety, total_kg, hectares, total_crates, weight_per_crate').eq('user_id', user.id).order('harvest_year', { ascending: false }),
       admin.from('spuitschrift').select('id, date, plots, products, registration_type, harvest_year').eq('user_id', user.id).order('date', { ascending: false }).limit(500),
       // Weather: get daily data for last 3 years
       (async () => {
@@ -58,7 +56,6 @@ export async function POST(req: NextRequest) {
     const subParcels = subParcelsRes.data || [];
     const profiles = profilesRes.data || [];
     const soilAnalyses = soilRes.data || [];
-    const production = productionRes.data || [];
     const spuitschrift = (spuitschriftRes.data || []) as any[];
     const weatherDaily = weatherRes.data || [];
 
@@ -71,14 +68,7 @@ export async function POST(req: NextRequest) {
       const hoofdPerceel = parcels.find((p: any) => p.id === sp.parcel_id);
       const profile = profiles.find((p: any) => p.sub_parcel_id === sp.id || p.parcel_id === sp.parcel_id);
       const soil = soilAnalyses.find((s: any) => s.sub_parcel_id === sp.id || s.parcel_id === sp.parcel_id);
-      const prod = production.filter((p: any) => p.sub_parcel_id === sp.id);
       const sprays = spuitschrift.filter((s: any) => s.plots?.includes(sp.name));
-
-      // Production per year
-      const prodPerYear: Record<number, number> = {};
-      prod.forEach((p: any) => {
-        prodPerYear[p.harvest_year] = p.total_kg;
-      });
 
       // Spray count per year
       const sprayPerYear: Record<number, number> = {};
@@ -111,11 +101,6 @@ export async function POST(req: NextRequest) {
         p_al: soil?.p_bodemvoorraad_p_al || null,
         klei_pct: soil?.klei_percentage || null,
         cn_ratio: soil?.cn_ratio || null,
-        // Production history
-        productie_kg_per_jaar: prodPerYear,
-        kg_per_ha_per_jaar: Object.fromEntries(
-          Object.entries(prodPerYear).map(([y, kg]) => [y, sp.area > 0 ? Math.round((kg as number) / sp.area) : 0])
-        ),
         // Spray history
         bespuitingen_per_jaar: sprayPerYear,
       };
@@ -152,14 +137,13 @@ export async function POST(req: NextRequest) {
       percelen: subParcels.length,
       perceelprofielen: profiles.length,
       grondmonsters: soilAnalyses.length,
-      productiejaren: [...new Set(production.map((p: any) => p.harvest_year))].length,
       spuitregistraties: spuitschrift.length,
       weerjaren: Object.keys(weatherPerYear).length,
     };
 
     // Create data hash for caching
     const dataHash = crypto.createHash('md5')
-      .update(JSON.stringify({ dataCheck, lastProd: production[0]?.harvest_year, lastSpray: spuitschrift[0]?.date }))
+      .update(JSON.stringify({ dataCheck, lastSpray: spuitschrift[0]?.date }))
       .digest('hex');
 
     // Check cache: less than 24h old and same data hash
@@ -203,7 +187,7 @@ export async function POST(req: NextRequest) {
       data_beschikbaarheid: dataCheck,
     });
 
-    const systemPrompt = `Je bent een data-analist voor een Nederlandse fruitteler. Je analyseert perceeldata, productiecijfers, bodemanalyses, spuitregistraties en weerdata om patronen en correlaties te ontdekken.
+    const systemPrompt = `Je bent een data-analist voor een Nederlandse fruitteler. Je analyseert perceeldata, bodemanalyses, spuitregistraties en weerdata om patronen en correlaties te ontdekken.
 
 REGELS:
 - Antwoord UITSLUITEND in het Nederlands
@@ -214,33 +198,34 @@ REGELS:
 
 CORRELATIE-RECEPTEN (probeer allemaal, rapporteer alleen als data beschikbaar):
 
-Productie:
-- Vergelijk kg/ha tussen rassen
-- Vergelijk kg/ha tussen onderstammen bij zelfde ras
-- Correleer plantdichtheid met kg/ha
-- Correleer leeftijd (plantjaar) met kg/ha
-- Trend productie per perceel over jaren
-
-Infrastructuur:
-- Vergelijk kg/ha bij hagelnet types
-- Vergelijk kg/ha bij irrigatie ja/nee
-- Vergelijk kg/ha bij fertigatie ja/nee
-- Vergelijk kg/ha bij teeltsystemen
+Gewasbescherming & kosten:
+- Vergelijk aantal bespuitingen per seizoen tussen percelen
+- Vergelijk aantal bespuitingen tussen rassen
+- Trend bespuitingen per perceel over jaren
+- Percelen met opvallend veel of weinig behandelingen
 
 Bodem:
-- Correleer organische stof met kg/ha
-- Correleer N-leverend vermogen met kg/ha
-- Correleer P-beschikbaar met kg/ha
+- Vergelijk organische stof tussen percelen
+- Vergelijk N-leverend vermogen tussen percelen
+- Vergelijk P-beschikbaar / P-Al tussen percelen
+- Percelen met afwijkende C/N-verhouding of kleipercentage
+
+Infrastructuur:
+- Vergelijk bodemscores en behandelintensiteit bij hagelnet types
+- Vergelijk bij irrigatie ja/nee
+- Vergelijk bij fertigatie ja/nee
+- Vergelijk bij teeltsystemen
 
 Weer:
-- Correleer totale neerslag groeiseizoen met kg/ha per jaar
-- Correleer GDD met kg/ha per jaar
-- Impact nachtvorst bloei op productie
+- Vergelijk totale neerslag groeiseizoen per jaar
+- Vergelijk GDD (warmtesom) per jaar
+- Aantal nachtvorstdagen tijdens bloei per jaar
+- Correleer weersjaren met aantal bespuitingen
 
 Uitschieters:
-- Welk perceel presteert ver onder/boven gemiddelde?
-- Percelen met dalende productietrend
-- Percelen met slechte bodemscores én lage productie
+- Welk perceel heeft slechte bodemscores?
+- Percelen met stijgende behandeltrend
+- Percelen met afwijkende bodem- of weeromstandigheden
 
 Antwoord ALLEEN met een JSON array, geen markdown of toelichting:
 [
@@ -248,7 +233,7 @@ Antwoord ALLEEN met een JSON array, geen markdown of toelichting:
     "titel": "korte conclusie (max 80 tekens)",
     "beschrijving": "2-3 zinnen met concrete cijfers",
     "type": "vergelijking|correlatie|trend|uitschieter|risico",
-    "categorie": "productie|bodem|gewasbescherming|weer|infrastructuur",
+    "categorie": "bodem|gewasbescherming|weer|infrastructuur",
     "sterkte": "sterk|matig|zwak",
     "betrokken_percelen": ["naam1", "naam2"],
     "datapunten": {"label1": waarde1, "label2": waarde2},

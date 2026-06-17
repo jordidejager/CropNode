@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Droplets, Sprout, Package, ShieldAlert, Snowflake, Sun, CloudRain, TestTube, X,
+  Droplets, Sprout, ShieldAlert, Snowflake, Sun, CloudRain, TestTube, X,
 } from 'lucide-react';
 import type { TimelineEvent, TimelineEventType } from '@/lib/analytics/perceel/types';
 
@@ -12,7 +12,6 @@ const EVENT_CONFIG: Record<TimelineEventType, {
   'spray':             { icon: Droplets,    color: 'text-blue-400',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30',    label: 'Bespuiting' },
   'fertilize-leaf':    { icon: Sprout,      color: 'text-teal-400',    bg: 'bg-teal-500/15',    border: 'border-teal-500/30',    label: 'Bladvoeding' },
   'fertilize-spread':  { icon: Sprout,      color: 'text-amber-400',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   label: 'Strooibemesting' },
-  'harvest':           { icon: Package,     color: 'text-orange-400',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  label: 'Pluk' },
   'infection':         { icon: ShieldAlert, color: 'text-red-400',     bg: 'bg-red-500/15',     border: 'border-red-500/30',     label: 'Infectierisico' },
   'frost':             { icon: Snowflake,   color: 'text-cyan-300',    bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    label: 'Nachtvorst' },
   'heatwave':          { icon: Sun,         color: 'text-red-300',     bg: 'bg-red-500/10',     border: 'border-red-400/20',     label: 'Hittedag' },
@@ -68,18 +67,6 @@ function EventDetail({ event, onClose }: { event: TimelineEvent; onClose: () => 
                 <span className="text-slate-500">{p.dosage} {p.unit}</span>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* Harvest details */}
-        {event.type === 'harvest' && event.meta && (
-          <div className="space-y-1 mt-3 pt-3 border-t border-white/10 text-xs">
-            <div className="flex justify-between"><span className="text-slate-500">Pluknummer</span><span className="text-slate-200">{event.meta.pickNumber || '—'}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Kisten</span><span className="text-slate-200">{event.meta.crates}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Geschat gewicht</span><span className="text-slate-200">{event.meta.kg?.toLocaleString('nl-NL')} kg</span></div>
-            {event.meta.qualityClass && (
-              <div className="flex justify-between"><span className="text-slate-500">Kwaliteit</span><span className="text-slate-200">{event.meta.qualityClass}</span></div>
-            )}
           </div>
         )}
 
@@ -160,7 +147,7 @@ export function StoryTimeline({ events }: StoryTimelineProps) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-100">Tijdlijn</h3>
         <div className="flex flex-wrap gap-2">
-          {(['spray', 'fertilize-leaf', 'harvest', 'infection', 'frost', 'soil-sample'] as TimelineEventType[]).map((t) => {
+          {(['spray', 'fertilize-leaf', 'infection', 'frost', 'soil-sample'] as TimelineEventType[]).map((t) => {
             const c = EVENT_CONFIG[t];
             const Icon = c.icon;
             return (

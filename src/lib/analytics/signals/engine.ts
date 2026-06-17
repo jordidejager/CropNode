@@ -7,15 +7,11 @@
 
 import type { Signal, SignalDetector, SignalDetectorContext } from './types';
 import { detectSoilDrift } from './detectors/soil-drift';
-import { detectQualityDrops } from './detectors/quality-drops';
 import { detectCostAnomalies } from './detectors/cost-anomalies';
-import { detectProductionTrends } from './detectors/production-trends';
 
 const ALL_DETECTORS: SignalDetector[] = [
   detectSoilDrift,
-  detectQualityDrops,
   detectCostAnomalies,
-  detectProductionTrends,
 ];
 
 export interface EngineResult {
@@ -30,8 +26,6 @@ export interface EngineResult {
       parcels: number;
       subParcels: number;
       soilAnalyses: number;
-      productionEntries: number;
-      harvestRegistrations: number;
       spuitschriftEntries: number;
     };
   };
@@ -39,12 +33,10 @@ export interface EngineResult {
 }
 
 async function fetchDataAvailability(admin: any, userId: string) {
-  const [parcels, sub, soil, prod, harv, spuit] = await Promise.all([
+  const [parcels, sub, soil, spuit] = await Promise.all([
     admin.from('parcels').select('id', { count: 'exact', head: true }).eq('user_id', userId),
     admin.from('sub_parcels').select('id', { count: 'exact', head: true }).eq('user_id', userId),
     admin.from('soil_analyses').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-    admin.from('production_summaries').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-    admin.from('harvest_registrations').select('id', { count: 'exact', head: true }).eq('user_id', userId),
     admin.from('spuitschrift').select('id', { count: 'exact', head: true }).eq('user_id', userId),
   ]);
 
@@ -52,8 +44,6 @@ async function fetchDataAvailability(admin: any, userId: string) {
     parcels: parcels.count || 0,
     subParcels: sub.count || 0,
     soilAnalyses: soil.count || 0,
-    productionEntries: prod.count || 0,
-    harvestRegistrations: harv.count || 0,
     spuitschriftEntries: spuit.count || 0,
   };
 }

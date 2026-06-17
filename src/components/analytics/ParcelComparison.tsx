@@ -66,9 +66,6 @@ export function ParcelComparison({ data }: ParcelComparisonProps) {
                     { label: 'Ras', key: 'variety', fmt: (v: any) => v },
                     { label: 'Behandelingen', key: 'treatmentCount', fmt: (v: number) => v.toString() },
                     { label: 'Inputkosten/ha', key: 'inputCostsPerHa', fmt: (v: number) => `€${v.toFixed(0)}` },
-                    { label: 'Oogst kg/ha', key: 'harvestKgPerHa', fmt: (v: number) => v.toLocaleString('nl-NL') },
-                    { label: 'Kosten/ton', key: 'costsPerTon', fmt: (v: number) => `€${v.toFixed(0)}` },
-                    { label: 'Kwaliteit % KI', key: 'qualityKlasseIPercent', fmt: (v: number) => `${v.toFixed(0)}%` },
                   ].map((row) => (
                     <tr key={row.label} className="border-b border-white/[0.03]">
                       <td className="py-2 text-xs">{row.label}</td>

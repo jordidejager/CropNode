@@ -6,10 +6,6 @@ import {
   ClipboardList,
   Database,
   Sprout,
-  Apple,
-  Thermometer,
-  BarChart3,
-  Truck,
   Users,
   BookOpen,
   Library,
@@ -34,10 +30,6 @@ const nodes: DiagramNode[] = [
   { id: 'seizoenswijzer', label: 'Seizoenswijzer', icon: BookOpen, color: 'amber', group: 'advies' },
   { id: 'kennisbank', label: 'Kennisbank', icon: Library, color: 'amber', group: 'advies' },
   { id: 'veldklimaat', label: 'Veldklimaat', icon: CloudSun, color: 'amber', group: 'advies' },
-  { id: 'oogst', label: 'Oogstregistratie', icon: Apple, color: 'orange', group: 'oogst' },
-  { id: 'koelcel', label: 'Koelcelbeheer', icon: Thermometer, color: 'orange', group: 'oogst' },
-  { id: 'analyse', label: 'Perceelanalyse', icon: BarChart3, color: 'orange', group: 'oogst' },
-  { id: 'aflevering', label: 'Afleveroverzicht', icon: Truck, color: 'orange', group: 'oogst' },
   { id: 'team', label: 'Team & Tasks', icon: Users, color: 'pink', group: 'team' },
 ];
 
@@ -56,10 +48,6 @@ const connections: FlowConnection[] = [
   { from: 'seizoenswijzer', to: 'slimme-invoer', label: 'advies' },
   { from: 'kennisbank', to: 'seizoenswijzer' },
   { from: 'veldklimaat', to: 'seizoenswijzer' },
-  { from: 'oogst', to: 'koelcel', label: 'inslag' },
-  { from: 'koelcel', to: 'aflevering', label: 'uitslag' },
-  { from: 'oogst', to: 'analyse' },
-  { from: 'spuitschrift', to: 'analyse', label: 'input x output' },
   { from: 'percelen', to: 'team' },
 ];
 
@@ -161,58 +149,12 @@ export function SamenhangDiagram() {
         {/* Divider */}
         <div className="my-6 border-t border-white/5 border-dashed" />
 
-        {/* Oogst flow */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-center gap-3 my-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 w-20 text-right shrink-0">Oogst</span>
-            <div className="flex items-center gap-2 flex-wrap justify-center">
-              <DiagramNodeCard node={nodes.find(n => n.id === 'oogst')!} />
-              <svg width="20" height="12" viewBox="0 0 20 12" className="text-orange-500/40 shrink-0">
-                <path d="M0 6h14M14 6l-4-4M14 6l-4 4" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              </svg>
-              <DiagramNodeCard node={nodes.find(n => n.id === 'koelcel')!} />
-              <svg width="20" height="12" viewBox="0 0 20 12" className="text-orange-500/40 shrink-0">
-                <path d="M0 6h14M14 6l-4-4M14 6l-4 4" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              </svg>
-              <DiagramNodeCard node={nodes.find(n => n.id === 'aflevering')!} />
-            </div>
-          </div>
-
-          {/* Arrow down from oogst */}
-          <div className="flex justify-center my-1">
-            <div className="flex flex-col items-center">
-              <div className="w-px h-6 bg-gradient-to-b from-orange-500/30 to-orange-500/10" />
-              <svg width="12" height="8" viewBox="0 0 12 8" className="text-orange-500/30">
-                <path d="M6 8L0 0h12z" fill="currentColor" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Analyse */}
-          <div className="flex items-center justify-center gap-3 my-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 w-20 text-right shrink-0">Analyse</span>
-            <div className="relative">
-              <div className="absolute inset-0 bg-orange-500/5 rounded-2xl blur-xl" />
-              <div className="relative flex items-center gap-2 px-5 py-3 rounded-2xl bg-orange-500/15 border-2 border-orange-500/30">
-                <BarChart3 className="size-5 text-orange-400" />
-                <div>
-                  <span className="text-sm font-black text-orange-400">Perceelanalyse</span>
-                  <span className="text-[9px] text-orange-400/60 block">input x output</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="my-6 border-t border-white/5 border-dashed" />
-
         {/* Team */}
         <div className="flex items-center justify-center gap-3 my-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 w-20 text-right shrink-0">Team</span>
           <div className="flex items-center gap-2">
             <DiagramNodeCard node={nodes.find(n => n.id === 'team')!} />
-            <span className="text-[9px] text-slate-600 font-medium">gekoppeld aan Percelen, Crop Care & Harvest Hub</span>
+            <span className="text-[9px] text-slate-600 font-medium">gekoppeld aan Percelen & Crop Care</span>
           </div>
         </div>
       </div>
@@ -224,7 +166,6 @@ export function SamenhangDiagram() {
           { color: 'sky', label: 'Databases' },
           { color: 'violet', label: 'Registraties' },
           { color: 'amber', label: 'Advies & Kennis' },
-          { color: 'orange', label: 'Oogst & Analyse' },
           { color: 'pink', label: 'Team' },
         ].map(({ color, label }) => {
           const colors = colorMap[color];

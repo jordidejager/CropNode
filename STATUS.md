@@ -12,6 +12,16 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-17 — 🗑️ Oogst & Opslag + Afzetstromen + Analytics Productie/Rendement VERWIJDERD
+- **Waarom:** verhuist naar het aparte nieuwe **StoreNode**-platform. CropNode blijft simpel. **Niet opnieuw bouwen.** Bewuste keuze: **GEEN data-export** (Jordi: bron staat elders / niet meer nodig in CropNode).
+- ✅ **Code verwijderd** (in een schone worktree off cropnode/main gebouwd zodat geen andere-chat-WIP meeglipt): `src/app/(app)/oogst/` (oogstregistratie + koelcelbeheer + geschiedenis), `src/app/(app)/afzetstromen/`, `src/app/api/afzetstromen/`, `src/components/{storage,afzetstromen,harvest}/`, Analytics **Productie** + **Rendement** pagina's + componenten, `src/lib/whatsapp/rot-uitval-handler.ts`. 67 files via `git rm`.
+- ✅ **Shared files chirurgisch getript**: `supabase-store.ts` (−1853 r, 54 functies), `use-data.ts` (−1119 r, ~50 hooks), `types.ts` (−458 r), analytics `queries/calculations/types/signals(engine,benchmark-snapshot)`, `api/analytics/{perceel,inzichten}`, `api/parcels/{reorganize,update-details}` (cell_sub_parcels-cascade weg), `api/calendar/events` (harvest-events weg), `use-parcel-{timeline,season-kpis}`, `main-parcel-view`, `parcel-comparison-modal`, `ParcelComparison`, `DashboardCalendar`, `wegwijzer-content` + `samenhang-diagram`, sidebar (2 nav-items + iconen).
+- ✅ **WhatsApp**: rot/uitval-melding (schreef naar `batch_events`) eruit gebedraad uit `message-handler.ts`. Rest van de bot intact.
+- ✅ **Behouden** (NIET aanraken): `harvest_year` KOLOM op spuitschrift/parcel_history (kosten-analytics gebruikt dit), `email_ingestions` (069, **gedeeld** met voorraad/facturen), `075` voorraad/inkoop, phenology, products, weer, soil. Analytics houdt: Seizoensdashboard (kosten), Bemesting, Ziektedruk, Inzichten, Aandachtspunten.
+- ⏳ **Jordi moet nog**: `supabase/migrations/085_drop_oogst_opslag_afzetstromen.sql` draaien in Supabase SQL Editor. ⚠️ Dit dropt definitief: `storage_cells` (~22, incl. echte koelhuis-indeling), `production_summaries` (~165 echte rijen), `batches`/`incoming_orders`/`batch_pallets` (echte Fruitmasters-data). Geen backup — alleen draaien als je 't echt niet meer nodig hebt.
+- 📌 **Andere chats**: de untracked WIP van de koelcel/afzetstromen/climate/invoices-chats in de hoofd-working-tree is **NIET** aangeraakt (laten staan). Die features zijn nu wel obsoleet in CropNode. Orphaned analytics-componenten (`CropProtectionAnalysis`/`FertilizerAnalysis`/`WeatherImpact`/`AnalyticsHero`/`AnalyticsFilterBar`/`ReportsExport`) waren al dood (analytics → /aandachtspunten redirect) — niet verwijderd, los van scope.
+- Build groen in isolated worktree (`next build` ✓).
+
 ### 2026-06-17 — 🗑️ Kennisbank + Agenda VOLLEDIG verwijderd uit CropNode
 - **Waarom:** bewuste keuze van Jordi — Kennisbank/RAG werd te complex; CropNode moet simpel blijven. Dit soort features gaan naar aparte platformen. **Niet opnieuw bouwen.**
 - ✅ **Data eerst veiliggesteld**: alle `knowledge_*` + `rag_query_log` + `phenology_reference` geëxporteerd naar `~/Desktop/cropnode-kennisbank-export-2026-06-17/` (9 tabellen, 9581 rijen, ~14MB JSON, met README). Jordi verplaatst dit naar Drive voor archief.

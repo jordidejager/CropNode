@@ -20,18 +20,10 @@ export async function buildBenchmarkSnapshot(
   const harvestYear = deriveHarvestYear(now);
   const prevYear = harvestYear - 1;
 
-  const [subParcelsRes, parcelHistoryRes, harvestRes, productionRes] = await Promise.all([
+  const [subParcelsRes, parcelHistoryRes] = await Promise.all([
     admin.from('sub_parcels').select('id, crop, variety, area').eq('user_id', userId),
     admin.from('parcel_history')
       .select('parcel_name, dosage, unit_price, harvest_year, registration_type')
-      .eq('user_id', userId)
-      .in('harvest_year', [harvestYear, prevYear]),
-    admin.from('harvest_registrations')
-      .select('sub_parcel_id, total_crates, weight_per_crate, quality_class, harvest_year')
-      .eq('user_id', userId)
-      .in('harvest_year', [harvestYear, prevYear]),
-    admin.from('production_summaries')
-      .select('sub_parcel_id, total_kg, hectares, harvest_year')
       .eq('user_id', userId)
       .in('harvest_year', [harvestYear, prevYear]),
   ]);
@@ -42,15 +34,6 @@ export async function buildBenchmarkSnapshot(
   const history = (parcelHistoryRes.data || []) as Array<{
     parcel_name: string; dosage: number; unit_price: number | null;
     harvest_year: number; registration_type: string | null;
-  }>;
-  const harvests = (harvestRes.data || []) as Array<{
-    sub_parcel_id: string | null; total_crates: number;
-    weight_per_crate: number | null; quality_class: string | null;
-    harvest_year: number;
-  }>;
-  const production = (productionRes.data || []) as Array<{
-    sub_parcel_id: string | null; total_kg: number;
-    hectares: number | null; harvest_year: number;
   }>;
 
   const benchmark = getBenchmark(getDominantCrop(subParcels));
@@ -86,54 +69,6 @@ export async function buildBenchmarkSnapshot(
     return rows.length > 0 ? Math.round(rows.length / 3.5) : null;
   }
 
-  // --- Opbrengst kg/ha ---
-  function yieldKgPerHa(year: number): number | null {
-    // Combineer production_summaries + harvest_registrations
-    const prodRows = production.filter((p) => p.harvest_year === year && p.hectares && p.hectares > 0);
-    let totalKg = 0;
-    let totalHa = 0;
-
-    const seenSp = new Set<string>();
-    prodRows.forEach((p) => {
-      if (!p.sub_parcel_id) return;
-      totalKg += p.total_kg || 0;
-      totalHa += p.hectares || 0;
-      seenSp.add(p.sub_parcel_id);
-    });
-
-    // Aanvullen met harvest_registrations (voor sp's zonder summary)
-    const harvRows = harvests.filter((h) => h.harvest_year === year && h.sub_parcel_id && !seenSp.has(h.sub_parcel_id!));
-    const bySp = new Map<string, { kg: number }>();
-    harvRows.forEach((h) => {
-      const spId = h.sub_parcel_id!;
-      const kg = (h.total_crates || 0) * (h.weight_per_crate || 18);
-      if (!bySp.has(spId)) bySp.set(spId, { kg: 0 });
-      bySp.get(spId)!.kg += kg;
-    });
-    bySp.forEach((data, spId) => {
-      const sp = subParcels.find((s) => s.id === spId);
-      if (!sp || !sp.area) return;
-      totalKg += data.kg;
-      totalHa += sp.area;
-    });
-
-    return totalHa > 0 ? totalKg / totalHa : null;
-  }
-
-  // --- Klasse I percentage ---
-  function classOnePct(year: number): number | null {
-    const rows = harvests.filter((h) => h.harvest_year === year && h.quality_class);
-    if (rows.length === 0) return null;
-    let total = 0;
-    let klasseI = 0;
-    rows.forEach((r) => {
-      const crates = r.total_crates || 0;
-      total += crates;
-      if (r.quality_class === 'Klasse I') klasseI += crates;
-    });
-    return total > 0 ? (klasseI / total) * 100 : null;
-  }
-
   const snapshots: BenchmarkSnapshot[] = [
     {
       label: 'Inputkosten/ha',
@@ -152,24 +87,6 @@ export async function buildBenchmarkSnapshot(
       unit: '×',
       higherIsBetter: false,
       tag: 'kosten',
-    },
-    {
-      label: 'Oogst',
-      current: yieldKgPerHa(prevYear), // vorig jaar is het "laatst bekende" geoogste
-      previous: yieldKgPerHa(prevYear - 1),
-      sectorAverage: benchmark.yieldKgPerHa,
-      unit: 'kg/ha',
-      higherIsBetter: true,
-      tag: 'productie',
-    },
-    {
-      label: 'Klasse I',
-      current: classOnePct(prevYear),
-      previous: classOnePct(prevYear - 1),
-      sectorAverage: benchmark.classOnePct,
-      unit: '%',
-      higherIsBetter: true,
-      tag: 'productie',
     },
   ];
 

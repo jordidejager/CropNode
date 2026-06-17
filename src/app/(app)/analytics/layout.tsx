@@ -3,7 +3,6 @@ import { PageTabs } from '@/components/layout/page-tabs';
 const tabs = [
     { label: 'Aandachtspunten', href: '/analytics/aandachtspunten' },
     { label: 'Perceeldiagnose', href: '/analytics/perceel' },
-    { label: 'Rendement', href: '/analytics/rendement' },
     { label: 'Operationeel', href: '/analytics/operations' },
     { label: 'Bemesting', href: '/analytics/bemesting' },
 ];

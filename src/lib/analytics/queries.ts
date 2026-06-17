@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/client';
 import type {
   AnalyticsData,
   AnalyticsRegistration,
-  AnalyticsHarvest,
   AnalyticsParcel,
   AnalyticsSubParcel,
   AnalyticsFilters,
@@ -25,27 +24,21 @@ export async function fetchAnalyticsData(
 
   const [
     registrationsResult,
-    harvestsResult,
     parcelsResult,
     subParcelsResult,
     prevRegistrationsResult,
-    prevHarvestsResult,
   ] = await Promise.all([
     fetchSpuitschrift(harvestYear, parcelIds, dateRange),
-    fetchHarvests(harvestYear, parcelIds),
     fetchParcels(),
     fetchSubParcels(),
     fetchSpuitschrift(harvestYear - 1, [], undefined),
-    fetchHarvests(harvestYear - 1, []),
   ]);
 
   return {
     registrations: registrationsResult,
-    harvests: harvestsResult,
     parcels: parcelsResult,
     subParcels: subParcelsResult,
     prevRegistrations: prevRegistrationsResult,
-    prevHarvests: prevHarvestsResult,
   };
 }
 
@@ -94,32 +87,6 @@ async function fetchSpuitschrift(
   return registrations;
 }
 
-async function fetchHarvests(
-  harvestYear: number,
-  parcelIds: string[]
-): Promise<AnalyticsHarvest[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from('harvest_registrations')
-    .select('id, parcel_id, sub_parcel_id, variety, harvest_date, pick_number, total_crates, quality_class, weight_per_crate, season, harvest_year')
-    .eq('harvest_year', harvestYear)
-    .order('harvest_date', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching harvests:', error);
-    return [];
-  }
-
-  let harvests = (data || []) as AnalyticsHarvest[];
-
-  if (parcelIds.length > 0) {
-    harvests = harvests.filter((h) => parcelIds.includes(h.parcel_id));
-  }
-
-  return harvests;
-}
-
 async function fetchParcels(): Promise<AnalyticsParcel[]> {
   const supabase = getSupabase();
 
@@ -158,19 +125,20 @@ async function fetchSubParcels(): Promise<AnalyticsSubParcel[]> {
 
 /**
  * Fetch available harvest years from the database.
+ * Derived from the spuitschrift (registration) table — harvest_year is the
+ * season key for cost/spray analytics.
  */
 export async function fetchAvailableHarvestYears(): Promise<number[]> {
   const supabase = getSupabase();
 
-  const [spuitRes, harvestRes] = await Promise.all([
-    supabase.from('spuitschrift').select('harvest_year').not('harvest_year', 'is', null),
-    supabase.from('harvest_registrations').select('harvest_year').not('harvest_year', 'is', null),
-  ]);
+  const { data } = await supabase
+    .from('spuitschrift')
+    .select('harvest_year')
+    .not('harvest_year', 'is', null);
 
   const years = new Set<number>();
 
-  (spuitRes.data || []).forEach((r: any) => years.add(r.harvest_year));
-  (harvestRes.data || []).forEach((r: any) => years.add(r.harvest_year));
+  (data || []).forEach((r: any) => years.add(r.harvest_year));
 
   return [...years].sort((a, b) => b - a);
 }

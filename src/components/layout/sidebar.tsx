@@ -10,8 +10,6 @@ import {
     StickyNote,
     Shield,
     Map,
-    Apple,
-    Truck,
     CloudSun,
     Radio,
     BarChart3,
@@ -125,8 +123,6 @@ const navGroups: NavGroup[] = [
         items: [
             { label: 'Gewasbescherming', href: '/gewasbescherming', icon: Shield },
             { label: 'Percelen', href: '/percelen', icon: Map },
-            { label: 'Oogst & Opslag', href: '/oogst', icon: Apple },
-            { label: 'Afzetstromen', href: '/afzetstromen', icon: Truck },
         ],
     },
     {

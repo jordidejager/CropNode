@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Sparkles, RefreshCw, Loader2, AlertTriangle,
-  CheckCircle2, XCircle, Target, MapPin, Sprout, Apple, FileText, CloudSun,
+  CheckCircle2, XCircle, MapPin, Sprout, FileText, CloudSun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SignalCard } from '@/components/analytics/aandachtspunten/SignalCard';
@@ -22,8 +22,6 @@ interface ApiResponse {
       parcels: number;
       subParcels: number;
       soilAnalyses: number;
-      productionEntries: number;
-      harvestRegistrations: number;
       spuitschriftEntries: number;
     };
   };
@@ -41,8 +39,6 @@ function DataAvailability({ data }: { data: ApiResponse['stats']['dataAvailabili
     { label: 'Percelen',              value: data.parcels,              icon: MapPin,  min: 1, key: 'parcels',       link: '/percelen',            linkText: 'Percelen beheren' },
     { label: 'Subpercelen',           value: data.subParcels,           icon: Sprout,  min: 1, key: 'subParcels',    link: '/percelen',            linkText: 'Subperceel toevoegen' },
     { label: 'Bespuitingen',          value: data.spuitschriftEntries,  icon: FileText,min: 5, key: 'spuitschrift',  link: '/slimme-invoer',       linkText: 'Bespuiting registreren' },
-    { label: 'Oogstregistraties',     value: data.harvestRegistrations, icon: Apple,   min: 1, key: 'harvests',      link: '/oogst',               linkText: 'Oogst registreren' },
-    { label: 'Productiegeschiedenis', value: data.productionEntries,    icon: Target,  min: 2, key: 'production',    link: '/oogst/geschiedenis',  linkText: 'Geschiedenis invoeren' },
     { label: 'Grondmonsters',         value: data.soilAnalyses,         icon: CloudSun,min: 1, key: 'soil',          link: '/percelen',            linkText: 'PDF uploaden' },
   ];
 

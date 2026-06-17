@@ -6,7 +6,6 @@ export type TimelineEventType =
   | 'spray'
   | 'fertilize-leaf'
   | 'fertilize-spread'
-  | 'harvest'
   | 'infection'
   | 'frost'
   | 'heatwave'
@@ -23,15 +22,6 @@ export interface TimelineEvent {
   meta?: Record<string, any>;
   /** Optionele severity voor visuele weging */
   severity?: 'low' | 'medium' | 'high';
-}
-
-export interface YearlyYield {
-  harvestYear: number;
-  totalKg: number;
-  hectares: number;
-  kgPerHa: number;
-  klasseIPct: number | null;
-  source: 'manual' | 'harvests';
 }
 
 export interface ParcelDiagnosticsData {
@@ -68,22 +58,9 @@ export interface ParcelDiagnosticsData {
     source: 'own' | 'inherited';
   } | null;
   timeline: TimelineEvent[];
-  yields: YearlyYield[];
-  comparisonPeers: Array<{
-    id: string;
-    name: string;
-    variety: string;
-    hectares: number;
-    avgKgPerHa: number;
-  }>;
   summary: {
     thisYearTreatments: number;
     thisYearFertilizations: number;
-    thisYearHarvestKg: number | null;
-    thisYearKgPerHa: number | null;
-    prevYearKgPerHa: number | null;
-    yieldChangePct: number | null;
-    avgKgPerHa5yr: number | null;
     infectionEventsThisYear: number;
   };
   harvestYear: number;

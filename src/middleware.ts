@@ -16,7 +16,7 @@ export const config = {
      * - api/whatsapp/webhook (HMAC-authed, no user session)
      * - api/weather/cron (CRON_SECRET-authed, no user session)
      *
-     * API routes with user auth (like /api/afzetstromen/*) ARE included so
+     * API routes with user auth (like /api/parcels/*) ARE included so
      * Supabase can refresh the session cookie before getUser() runs in the route.
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/whatsapp/webhook|api/weather/cron).*)',

@@ -48,27 +48,11 @@ export interface AnalyticsProduct {
   targetReason?: string;
 }
 
-export interface AnalyticsHarvest {
-  id: string;
-  parcel_id: string;
-  sub_parcel_id: string;
-  variety: string;
-  harvest_date: string;
-  pick_number: number;
-  total_crates: number;
-  quality_class: 'Klasse I' | 'Klasse II' | 'Industrie' | null;
-  weight_per_crate: number | null;
-  season: string;
-  harvest_year: number;
-}
-
 // === Calculated Analytics ===
 export interface KPIData {
   totalInputCosts: number;
   costsPerHectare: number;
   totalTreatments: number;
-  totalHarvestTons: number;
-  costsPerTon: number;
   totalHectares: number;
 }
 
@@ -116,33 +100,6 @@ export interface TreatmentTimelineEntry {
   category: 'gewasbescherming' | 'bladmeststof' | 'strooimeststof';
 }
 
-export interface HarvestPerParcel {
-  parcelId: string;
-  parcelName: string;
-  variety: string;
-  hectares: number;
-  totalKg: number;
-  kgPerHa: number;
-  totalCrates: number;
-  qualityBreakdown?: {
-    klasseI: number;
-    klasseII: number;
-    industrie: number;
-  };
-}
-
-export interface ParcelComparisonData {
-  parcelId: string;
-  parcelName: string;
-  variety: string;
-  hectares: number;
-  treatmentCount: number;
-  inputCostsPerHa: number;
-  harvestKgPerHa: number;
-  costsPerTon: number;
-  qualityKlasseIPercent: number;
-}
-
 export interface WeatherStats {
   rainDays: number;
   frostDays: number;
@@ -153,9 +110,7 @@ export interface WeatherStats {
 // === Full Analytics Data ===
 export interface AnalyticsData {
   registrations: AnalyticsRegistration[];
-  harvests: AnalyticsHarvest[];
   parcels: AnalyticsParcel[];
   subParcels: AnalyticsSubParcel[];
   prevRegistrations: AnalyticsRegistration[];
-  prevHarvests: AnalyticsHarvest[];
 }

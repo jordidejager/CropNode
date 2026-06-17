@@ -202,6 +202,25 @@ Behouden (geen kennisbank): CTGB-productdatabase (`products`/`ctgb_products`),
 `fn_search_products` (WhatsApp middel-info), `phenology_reference`
 (ziektedruk + kalender).
 
+## ~~Oogst & Opslag / Afzetstromen / Analytics Productie~~ (VERWIJDERD)
+
+Het hele post-harvest domein is uit CropNode gehaald (juni 2026) — verhuist
+naar het aparte **StoreNode** platform. **Geen** data-export (bewuste keuze).
+**Niet opnieuw bouwen.**
+
+Verwijderd: `src/app/(app)/oogst/` (oogstregistratie + koelcelbeheer +
+geschiedenis), `src/app/(app)/afzetstromen/`, `src/app/api/afzetstromen/`,
+`src/components/{storage,afzetstromen,harvest}/`, de Analytics **Productie**
++ **Rendement** pagina's, en de WhatsApp `rot-uitval-handler`. DB-opruiming:
+`085_drop_oogst_opslag_afzetstromen.sql` (dropt o.a. `harvest_registrations`,
+`production_summaries`, `storage_*`, `cold_cell_*`, `batches`/`batch_*`/
+`incoming_orders`).
+
+Behouden: `harvest_year` KOLOM op `spuitschrift`/`parcel_history`
+(kosten-analytics), `email_ingestions` (069, gedeeld met voorraad/facturen),
+`075` voorraad/inkoop, phenology, products. Analytics houdt: Seizoensdashboard
+(kosten), Bemesting, Ziektedruk, Inzichten, Aandachtspunten.
+
 ## WhatsApp Bot (`src/lib/whatsapp/`)
 
 AI-powered WhatsApp assistant for fruit growers. Users link their phone number in Instellingen, then interact via WhatsApp for spray registrations, field notes, product queries, and weather forecasts.
@@ -331,24 +350,21 @@ Bedrijfsanalyse dashboard met meerdere subpagina's via tab-navigatie. Alle data 
 ### Oogstjaar-logica (`lib/analytics/harvest-year-utils.ts`)
 - Jan-Okt registraties → `harvest_year = huidig jaar`
 - Nov-Dec registraties → `harvest_year = volgend jaar` (voorbereiding volgende oogst)
-- Database kolom `harvest_year INTEGER` op `spuitschrift`, `parcel_history`, `harvest_registrations`
+- Database kolom `harvest_year INTEGER` op `spuitschrift`, `parcel_history` (de `harvest_registrations`-tabel is verwijderd juni 2026 — zie StoreNode)
 
 ### Subpagina's
 
 **Seizoensdashboard** (`/analytics`) — Hoofdoverzicht per oogstjaar
-- KPI's: inputkosten, kosten/ha, behandelingen, oogst (ton), kosten/ton
+- KPI's: inputkosten, kosten/ha, behandelingen
 - Donut: kostenverdeling (gewasbescherming/bladmeststof/strooimeststof)
 - Stacked bar: maandelijkse kosten
 - Middelenanalyse: top 10 middelen, kosten per bespuiting, perceelkosten-tabel
-- Oogst & opbrengst: kg/ha per perceel, per ras, kosten-batenratio, best/slechtst rendabel
 - Perceelsvergelijking: radar chart met genormaliseerde waarden
 - Weerimpact: neerslag vs behandelingen, temperatuursom (GDD)
 - Export: CSV download (werkend), PDF/certificering/coöperatie (placeholder)
+- _(Oogst & opbrengst / oogst-ton / kosten-per-ton secties verwijderd juni 2026 → StoreNode)_
 
-**Productie** (`/analytics/productie`) — Productiegeschiedenis & trends
-- Data: `production_summaries` tabel (handmatig ingevoerd, per subperceel per oogstjaar) + `harvest_registrations` (dagelijkse oogstdata)
-- Jaar-trendgrafiek, ras-verdeling, perceelvergelijking, ras-ranking
-- Invoerformulier: per subperceel, gegroepeerd per hoofdperceel, auto-fill ras/hectares/kg-per-kist (peer=400, appel=350)
+**~~Productie~~ / ~~Rendement~~** — VERWIJDERD juni 2026, verhuisd naar StoreNode. De `production_summaries` + `harvest_registrations` tabellen worden gedropt (085).
 
 **Bemesting** (`/analytics/bemesting`) — Bodemkwaliteit uit grondmonsters
 - Data: `soil_analyses` tabel (Eurofins PDF's, AI-geëxtraheerd via Gemini)
@@ -362,17 +378,12 @@ Bedrijfsanalyse dashboard met meerdere subpagina's via tab-navigatie. Alle data 
 
 **Inzichten** (`/analytics/inzichten`) — AI correlatie-engine
 - API: `POST /api/analytics/inzichten/generate` — aggregeert alle bedrijfsdata → Gemini
-- Gemini zoekt top 8-12 correlaties: productie × ras/onderstam/plantdichtheid/leeftijd, bodem × productie, weer × productie, infrastructuur × productie, uitschieters
+- Gemini zoekt correlaties: bodem × weer × kosten × ziektedruk × infrastructuur, uitschieters (productie/opbrengst-correlaties verwijderd juni 2026)
 - Gecacht in `insight_results` tabel (24h, data_hash invalidatie)
 - Rate limiting: 1 call per 5 min per user
 - Mini-charts per inzichtkaart (bar, lijn, scatter, waarde-highlight)
 
-### Oogst & Opslag — Geschiedenis (`/oogst/geschiedenis`)
-- Spreadsheet-grid: subpercelen als rijen, oogstjaren (2017-heden) als kolommen
-- Gegroepeerd per hoofdperceel (op naam, niet ID — meerdere kadastrale percelen met dezelfde naam worden samengevoegd)
-- Klik op lege cel → formulier opent met perceel/ras/hectares/jaar pre-filled
-- Mini-sparklines per perceel (productietrend)
-- Hergebruikt `HistoricalDataForm` component uit analytics/productie
+### ~~Oogst & Opslag — Geschiedenis~~ (VERWIJDERD juni 2026 → StoreNode)
 
 ### Key files
 ```

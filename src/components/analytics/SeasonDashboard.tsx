@@ -44,8 +44,6 @@ export function SeasonDashboard({ data, kpiComparison }: SeasonDashboardProps) {
         <KPICard label="Inputkosten" value={current.totalInputCosts} prefix="€" changePercent={previous ? percentageChange(current.totalInputCosts, previous.totalInputCosts) : null} invertColors />
         <KPICard label="Kosten/ha" value={current.costsPerHectare} prefix="€" decimals={0} changePercent={previous ? percentageChange(current.costsPerHectare, previous.costsPerHectare) : null} invertColors />
         <KPICard label="Behandelingen" value={current.totalTreatments} changePercent={previous ? percentageChange(current.totalTreatments, previous.totalTreatments) : null} invertColors />
-        <KPICard label="Totale oogst" value={current.totalHarvestTons} suffix=" ton" decimals={1} changePercent={previous ? percentageChange(current.totalHarvestTons, previous.totalHarvestTons) : null} />
-        <KPICard label="Kosten/ton" value={current.costsPerTon} prefix="€" decimals={0} changePercent={previous ? percentageChange(current.costsPerTon, previous.costsPerTon) : null} invertColors />
       </div>
 
       {/* Charts Grid */}

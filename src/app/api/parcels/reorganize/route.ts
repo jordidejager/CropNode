@@ -158,20 +158,6 @@ export async function POST(request: NextRequest) {
       .in('parcel_id', otherParcelIds)
       .eq('user_id', user.id);
 
-    // harvest_registrations.parcel_id legacy column — repoint
-    await adminClient
-      .from('harvest_registrations')
-      .update({ parcel_id: targetParcel.id })
-      .in('parcel_id', otherParcelIds)
-      .eq('user_id', user.id);
-
-    // cell_sub_parcels.parcel_id (if used as fallback when sub_parcel_id null)
-    await adminClient
-      .from('cell_sub_parcels')
-      .update({ parcel_id: targetParcel.id })
-      .in('parcel_id', otherParcelIds)
-      .eq('user_id', user.id);
-
     // disease_model_config: lossy delete (na merge is er nog maar 1 perceel,
     // dus 1 config — behoud die van het target, verwijder de rest)
     await adminClient

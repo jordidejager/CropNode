@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase-client';
 export interface TimelineEvent {
   id: string;
   date: string; // ISO date string
-  type: 'spray' | 'note' | 'task' | 'soil' | 'harvest' | 'infection';
+  type: 'spray' | 'note' | 'task' | 'soil' | 'infection';
   title: string;
   description?: string;
   meta?: Record<string, unknown>;
@@ -12,12 +12,12 @@ export interface TimelineEvent {
 
 /**
  * Fetches all events for a parcel/sub-parcel and merges them into a sorted timeline.
- * Queries 5 tables in parallel for maximum speed.
+ * Queries 4 tables in parallel for maximum speed.
  */
 async function fetchTimeline(parcelId: string): Promise<TimelineEvent[]> {
   const events: TimelineEvent[] = [];
 
-  const [sprays, notes, tasks, soil, harvests] = await Promise.all([
+  const [sprays, notes, tasks, soil] = await Promise.all([
     // 1. Spray registrations
     supabase
       .from('parcel_history')
@@ -49,14 +49,6 @@ async function fetchTimeline(parcelId: string): Promise<TimelineEvent[]> {
       .or(`sub_parcel_id.eq.${parcelId},parcel_id.eq.${parcelId}`)
       .order('datum_monstername', { ascending: false })
       .limit(10),
-
-    // 5. Harvest registrations
-    supabase
-      .from('harvest_registrations')
-      .select('id, harvest_date, variety, total_crates, pick_number, quality_class, weight_per_crate, notes')
-      .eq('sub_parcel_id', parcelId)
-      .order('harvest_date', { ascending: false })
-      .limit(20),
   ]);
 
   // Map sprays
@@ -114,25 +106,6 @@ async function fetchTimeline(parcelId: string): Promise<TimelineEvent[]> {
         title: `Grondmonster${a.lab ? ` (${a.lab})` : ''}`,
         description: a.rapport_identificatie || (a.grondsoort_rapport ? `Grondsoort: ${a.grondsoort_rapport}` : undefined),
         meta: { status: a.extractie_status, orgStof: a.organische_stof_pct },
-      });
-    }
-  }
-
-  // Map harvests
-  if (harvests.data) {
-    for (const h of harvests.data) {
-      const kg = h.total_crates && h.weight_per_crate ? Math.round(h.total_crates * h.weight_per_crate) : null;
-      events.push({
-        id: `harvest-${h.id}`,
-        date: h.harvest_date,
-        type: 'harvest',
-        title: `Oogst${h.pick_number ? ` (pluk ${h.pick_number})` : ''}`,
-        description: [
-          h.total_crates ? `${h.total_crates} kisten` : null,
-          kg ? `${kg} kg` : null,
-          h.variety,
-        ].filter(Boolean).join(' · ') || undefined,
-        meta: { quality: h.quality_class },
       });
     }
   }
