@@ -12,6 +12,15 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-06-17 — 🗑️ Kennisbank + Agenda VOLLEDIG verwijderd uit CropNode
+- **Waarom:** bewuste keuze van Jordi — Kennisbank/RAG werd te complex; CropNode moet simpel blijven. Dit soort features gaan naar aparte platformen. **Niet opnieuw bouwen.**
+- ✅ **Data eerst veiliggesteld**: alle `knowledge_*` + `rag_query_log` + `phenology_reference` geëxporteerd naar `~/Desktop/cropnode-kennisbank-export-2026-06-17/` (9 tabellen, 9581 rijen, ~14MB JSON, met README). Jordi verplaatst dit naar Drive voor archief.
+- ✅ **Code verwijderd** (commit `94542e1`, gepusht naar cropnode/main): `src/lib/knowledge/`, `src/app/(app)/kennisbank/`, `src/app/(app)/agenda/`, `src/app/(app)/research/kennisbank/`, `src/app/api/knowledge/`, `src/components/knowledge-atlas/`, `src/lib/whatsapp/rag-handler.ts`, `src/lib/ai/claude.ts`, `src/ai/tools/knowledge-tools.ts`, `use-knowledge.ts`, `use-rag-chat.ts`, ~27 scripts. Dep `@anthropic-ai/sdk` eruit. Sidebar/dashboard/landing/wegwijzer/vercel.json cron opgeschoond. SW cache v1→v3.
+- ✅ **WhatsApp**: RAG-routing eruit, maar `detectProductQuery` → CTGB ('wat is [middel]', 'dosering X op Y') **blijft** werken (is geen kennisbank).
+- ✅ **Behouden** (geen kennisbank, niet aanraken): CTGB-productdb + `fn_search_products`, `phenology_reference` (ziektedruk + kalender), `/research` legacy hub.
+- ⏳ **Jordi moet nog**: (1) na controle van de export → `supabase/migrations/084_drop_kennisbank.sql` draaien in Supabase SQL Editor (dropt alle `knowledge_*` tabellen + `rag_query_log`; laat `phenology_reference` + `products` staan). (2) Export-map naar Drive verplaatsen.
+- Productie-build geverifieerd schoon (geen kennisbank/agenda/api/knowledge routes meer).
+
 ### 2026-06-04 — Overzicht als startpagina + bodem- & bladnat-grafieken
 - ✅ **Overzicht is nu de /weerstations startpagina** (sidebar landt erop). Routing omgedraaid: `/weerstations` → `SensorOverview`, stations-lijst verhuisd naar `/weerstations/stations`, `/weerstations/overzicht` → redirect (back-compat). Tabs: [Overzicht] [Stations]. Links bijgewerkt (dashboard-widget → /weerstations, empty-state → /weerstations/stations).
 - ✅ **`SoilTrendChart`**: dubbele Y-as lijngrafiek met bodemvocht (%) links + porie-water EC (mS/cm) rechts, 24u/7d/30d. Per bodemsensor in overzicht.
@@ -146,16 +155,8 @@
   - `src/hooks/use-cold-cell-climate.ts` (untracked)
 - **Migratie pending:** `070_cold_cell_measurements.sql`
 
-### ⏳ RAG verbeteringen (kennisbank chat)
-- **Wat:** HyDE, reranker, query logging, evaluation suite
-- **Bestanden:**
-  - `src/lib/knowledge/rag/hyde.ts` (untracked)
-  - `src/lib/knowledge/rag/reranker.ts` (untracked)
-  - `src/lib/knowledge/rag/query-log.ts` (untracked)
-  - `src/app/api/knowledge/suggestions/` (untracked)
-  - `scripts/eval-rag.ts` + `scripts/rag-golden-set.json` (untracked)
-  - `src/hooks/use-rag-chat.ts` (untracked)
-- **Migraties pending:** `067_knowledge_hybrid_search.sql`, `068_knowledge_disease_aliases.sql`
+### ✅ RAG / kennisbank chat — VERWIJDERD (2026-06-17)
+- Hele kennisbank + RAG is uit CropNode gehaald, zie Recent activity bovenaan. Niet opnieuw bouwen. Migratie `084_drop_kennisbank.sql` ruimt de DB op.
 
 ### ⏳ Storage cell duplicatie
 - **Wat:** Cellen kunnen worden gedupliceerd
@@ -180,13 +181,13 @@
 - ⏳ Fenologie dashboard widget (API: `/api/weather/phenology`, UI?)
 - ⏳ Forecast accuracy widget (API: `/api/weather/forecast-accuracy`, UI?)
 - ⏳ Spray profile selector in SprayWindowIndicator (profiles bestaan, UI niet?)
-- ⏳ Geïntegreerde alert flow: infectiemodel → kennisbank → CTGB → spuitwindow → WhatsApp
+- ~~Geïntegreerde alert flow met kennisbank~~ — vervallen, kennisbank is verwijderd (2026-06-17). Eventueel wel: infectiemodel → CTGB → spuitwindow → WhatsApp (zonder kennisbank-stap).
 
 ---
 
 ## TODO comments in code
 
-- ⚠️ `src/app/api/knowledge/chat/route.ts:43` — auth uitgeschakeld in dev (`TODO: re-enable for production`) — **security risico bij deploy**
+- ✅ ~~`src/app/api/knowledge/chat/route.ts:43` auth-TODO~~ — vervallen, hele knowledge-API verwijderd (2026-06-17).
 - ⏳ `src/app/(app)/oogst/page.tsx:267` — Day view: bulk entry spreadsheet-style nog niet geïmplementeerd
 - ⏳ `src/lib/validation-service.ts:786` — unit conversion logica ontbreekt nog (`totalDose += h.dosage; // TODO: unit conversion if needed`)
 
@@ -197,11 +198,11 @@
 > Dit lijstje is een gok op basis van untracked bestanden — Jordi check zelf via Supabase SQL Editor of `schema_migrations` tabel.
 
 - `053_performance_indexes.sql` (vandaag aangemaakt)
-- `067_knowledge_hybrid_search.sql`
-- `068_knowledge_disease_aliases.sql`
 - `069_email_ingestion.sql`
 - `070_cold_cell_measurements.sql`
 - `070_incoming_orders.sql` (⚠️ duplicate nummer met 070_cold_cell)
+- `084_drop_kennisbank.sql` ⚠️ **draaien NA controle van de export** — dropt alle `knowledge_*` tabellen + `rag_query_log`. Laat `phenology_reference` + `products` staan.
+- ~~`067_knowledge_hybrid_search.sql`, `068_knowledge_disease_aliases.sql`~~ — niet meer nodig, knowledge-tabellen worden gedropt door 084.
 
 ---
 
