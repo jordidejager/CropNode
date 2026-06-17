@@ -20,6 +20,7 @@
 - ✅ **Behouden** (geen kennisbank, niet aanraken): CTGB-productdb + `fn_search_products`, `phenology_reference` (ziektedruk + kalender), `/research` legacy hub.
 - ⏳ **Jordi moet nog**: (1) na controle van de export → `supabase/migrations/084_drop_kennisbank.sql` draaien in Supabase SQL Editor (dropt alle `knowledge_*` tabellen + `rag_query_log`; laat `phenology_reference` + `products` staan). (2) Export-map naar Drive verplaatsen.
 - Productie-build geverifieerd schoon (geen kennisbank/agenda/api/knowledge routes meer).
+- ⚠️ **Deploy-fix (commit `35f2ca0`)**: Vercel faalde sinds `94542e1` — bij het stagen van `vercel.json` was per ongeluk een `email-poll`-cron van een andere chat meegekomen, wijzend naar `/api/cron/email-poll` (untracked, niet op cropnode). Vercel valideert cron-paths → hele deploy rood → niets ging live (oude kennisbank/agenda bleef zichtbaar). Cron eruit, deploy weer groen. **→ email-import-chat: zet je `email-poll`-cron terug in `vercel.json` zodra `src/app/api/cron/email-poll/route.ts` gecommit is.** Les: `next build` valideert crons niet, check altijd de echte Vercel-status na een push.
 
 ### 2026-06-04 — Overzicht als startpagina + bodem- & bladnat-grafieken
 - ✅ **Overzicht is nu de /weerstations startpagina** (sidebar landt erop). Routing omgedraaid: `/weerstations` → `SensorOverview`, stations-lijst verhuisd naar `/weerstations/stations`, `/weerstations/overzicht` → redirect (back-compat). Tabs: [Overzicht] [Stations]. Links bijgewerkt (dashboard-widget → /weerstations, empty-state → /weerstations/stations).
