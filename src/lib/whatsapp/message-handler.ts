@@ -22,7 +22,6 @@ import { detectProductQuery, handleProductQuery } from './product-query-handler'
 import { isWeatherQueryIntent, handleWeatherQuery } from './weather-query-handler';
 import { isLiveSnapshotIntent, handleLiveSnapshot } from './live-snapshot-handler';
 import { isRotUitvalIntent, handleRotUitval } from './rot-uitval-handler';
-import { isRagQueryIntent, handleRagQuery } from './rag-handler';
 import { isLikelyHoursRegistration, handleHoursRegistration } from './hours-handler';
 import { attachGpsToNote } from './field-note-processor';
 import {
@@ -344,15 +343,8 @@ export async function handleIncomingMessage(
         return;
       }
 
-      // Knowledge base query FIRST: "hoe herken ik schurft", "wat is levenscyclus", etc.
-      // Must come BEFORE product query, because questions like "wat is perenbladvlo"
-      // would otherwise be caught by detectProductQuery as a product lookup.
-      if (isRagQueryIntent(messageText)) {
-        await handleRagQuery(userId, e164Phone, messageText, waMessageId);
-        return;
-      }
-
       // Product info query: "info delan", "dosering captan op appel"
+      // (CTGB-toelatingsinfo — los van de verwijderde Kennisbank/RAG.)
       const productQueryParams = detectProductQuery(messageText);
       if (productQueryParams) {
         await handleProductQuery(userId, e164Phone, messageText, productQueryParams);

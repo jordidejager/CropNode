@@ -6,7 +6,6 @@ import {
   Cloud,
   MapPin,
   Shield,
-  BookOpen,
   Apple,
   Users,
   Package,
@@ -161,139 +160,6 @@ function WeatherVisual({ isInView }: { isInView: boolean }) {
             <div className="text-[8px] text-slate-600 mt-0.5">
               <Droplets className="w-2 h-2 inline text-sky-400/40" /> {d.rain}%
             </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Research Hub / Kennisbank Visual ─── */
-function ResearchVisual({ isInView }: { isInView: boolean }) {
-  const lifecycleStages = [
-    { label: 'Sporen', active: true },
-    { label: 'Infectie', active: true },
-    { label: 'Symptomen', active: true },
-    { label: 'Verspreiding', active: false },
-  ];
-
-  const activeMonths = [0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0]; // J-D
-  const monthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-
-  return (
-    <div className="mt-4 space-y-3">
-      {/* Disease Card */}
-      <div className="rounded-xl bg-slate-800/40 border border-purple-500/10 p-3.5 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-sm text-slate-100 font-medium">Appelschurft</span>
-            </div>
-            <span className="text-[10px] text-slate-500 italic">Venturia inaequalis</span>
-          </div>
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={isInView ? { scale: 1 } : {}}
-            transition={{ delay: 0.6, type: 'spring' }}
-            className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[10px] font-semibold"
-          >
-            Hoog risico
-          </motion.div>
-        </div>
-
-        {/* Risk bar */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Risiconiveau</span>
-            <span className="text-[10px] text-amber-400 font-medium">78%</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-slate-800/60 overflow-hidden">
-            <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500"
-              initial={{ width: 0 }}
-              animate={isInView ? { width: '78%' } : {}}
-              transition={{ duration: 1.2, delay: 0.4, ease: 'easeOut' }}
-            />
-          </div>
-        </div>
-
-        {/* Lifecycle */}
-        <div className="mb-3">
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Lifecycle</span>
-          <div className="flex items-center mt-2 gap-1">
-            {lifecycleStages.map((stage, i) => (
-              <div key={stage.label} className="flex-1 flex items-center">
-                <div className="flex flex-col items-center flex-1">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={isInView ? { scale: 1 } : {}}
-                    transition={{ delay: 0.8 + i * 0.15, type: 'spring' }}
-                    className={`w-5 h-5 rounded-full flex items-center justify-center border ${
-                      stage.active
-                        ? 'bg-purple-500/20 border-purple-400/40'
-                        : 'bg-slate-800/40 border-slate-700/40'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${stage.active ? 'bg-purple-400' : 'bg-slate-600'}`} />
-                  </motion.div>
-                  <span className={`text-[8px] mt-1 ${stage.active ? 'text-purple-400' : 'text-slate-600'}`}>
-                    {stage.label}
-                  </span>
-                </div>
-                {i < lifecycleStages.length - 1 && (
-                  <motion.div
-                    initial={{ scaleX: 0 }}
-                    animate={isInView ? { scaleX: 1 } : {}}
-                    transition={{ delay: 0.9 + i * 0.15 }}
-                    className={`h-px flex-1 mx-0.5 origin-left ${
-                      stage.active ? 'bg-purple-500/30' : 'bg-slate-700/30'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Seasonal calendar */}
-        <div>
-          <span className="text-[9px] text-slate-500 uppercase tracking-wider font-medium">Seizoensactiviteit</span>
-          <div className="flex gap-[3px] mt-1.5">
-            {activeMonths.map((active, i) => (
-              <motion.div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <motion.div
-                  initial={{ scaleY: 0 }}
-                  animate={isInView ? { scaleY: 1 } : {}}
-                  transition={{ delay: 1.2 + i * 0.05 }}
-                  className={`w-full h-3 rounded-[2px] ${
-                    active ? 'bg-purple-500/30' : 'bg-slate-800/30'
-                  }`}
-                />
-                <span className="text-[7px] text-slate-600">{monthLabels[i]}</span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Related diseases preview */}
-      <div className="flex gap-2">
-        {[
-          { name: 'Meeldauw', risk: 'Laag', color: 'text-emerald-400 bg-emerald-500/10' },
-          { name: 'Vruchtrot', risk: 'Matig', color: 'text-amber-400 bg-amber-500/10' },
-          { name: 'Perenbladvlo', risk: 'Laag', color: 'text-emerald-400 bg-emerald-500/10' },
-        ].map((d, i) => (
-          <motion.div
-            key={d.name}
-            initial={{ opacity: 0, x: -10 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ delay: 1.5 + i * 0.1 }}
-            className="flex-1 px-2.5 py-2 rounded-lg bg-slate-800/30 border border-white/[0.04]"
-          >
-            <div className="text-[10px] text-slate-300 font-medium">{d.name}</div>
-            <span className={`text-[8px] font-medium px-1 py-0.5 rounded ${d.color}`}>{d.risk}</span>
           </motion.div>
         ))}
       </div>
@@ -1278,15 +1144,6 @@ const features = [
     size: 'medium' as const,
     color: 'emerald',
     Visual: ValidationVisual,
-  },
-  {
-    id: 'research',
-    icon: BookOpen,
-    title: 'Kennisbank',
-    description: '20+ ziekten & plagen encyclopedie met lifecycle, risiconiveau en seizoenskalender. RAG-powered artikelen en wetenschappelijke papers met AI-samenvattingen.',
-    size: 'large' as const,
-    color: 'purple',
-    Visual: ResearchVisual,
   },
   {
     id: 'fieldnotes',

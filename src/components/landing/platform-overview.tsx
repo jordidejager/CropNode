@@ -8,7 +8,6 @@ import {
   Shield,
   Cloud,
   Apple,
-  BookOpen,
   Users,
   Package,
   ArrowRight,
@@ -108,19 +107,6 @@ const modules = [
       { label: 'Subpaginas', value: '5 dashboards' },
       { label: 'AI inzichten', value: 'Gemini' },
       { label: 'Ziektedruk', value: 'Mills + PAM' },
-    ],
-  },
-  {
-    id: 'research',
-    icon: BookOpen,
-    title: 'Kennisbank',
-    color: 'purple',
-    description: 'Encyclopedie, RAG-artikelen & papers',
-    detail: 'Encyclopedie met 20+ ziekten & plagen met lifecycle-timelines en risiconiveaus. RAG-powered artikelen (wekelijks gescraped en geëmbed) met semantisch zoeken. Papers met AI-samenvattingen.',
-    metrics: [
-      { label: 'Encyclopedie', value: '20+ items' },
-      { label: 'Artikelen', value: 'RAG zoeken' },
-      { label: 'Updates', value: 'Wekelijks' },
     ],
   },
   {

@@ -47,7 +47,6 @@ const tiers = [
       'Oogst & Opslag + koelcel',
       'Analytics & AI inzichten',
       'Ziektedrukmodellering',
-      'Kennisbank & RAG-zoeken',
       'Grondmonster AI-extractie',
       'Prioriteit support',
     ],

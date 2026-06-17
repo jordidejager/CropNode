@@ -19,7 +19,7 @@ const cards = [
     title: 'Eén platform, nul chaos',
     problem: 'Alles staat overal: Excel, papier, WhatsApp',
     solution:
-      'Percelen, registraties, weer, oogst, uren, voorraad, kennisbank en analytics — 10 modules op één plek. Data stroomt automatisch door het hele platform.',
+      'Percelen, registraties, weer, oogst, uren, voorraad en analytics — alle modules op één plek. Data stroomt automatisch door het hele platform.',
   },
   {
     icon: ShieldCheck,

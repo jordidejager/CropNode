@@ -17,8 +17,6 @@ import {
     BarChart3,
     Bug,
     CalendarDays,
-    BookOpen,
-    ListTodo,
     Clock,
     Settings,
     Compass,
@@ -139,8 +137,6 @@ const navGroups: NavGroup[] = [
             { label: 'Analytics', href: '/analytics', icon: BarChart3 },
             { label: 'Ziektedruk', href: '/ziektedruk', icon: Bug },
             { label: 'Kalender', href: '/kalender', icon: CalendarDays },
-            { label: 'Agenda', href: '/agenda', icon: ListTodo, badge: 'Nieuw' },
-            { label: 'Kennisbank', href: '/kennisbank', icon: BookOpen },
         ],
     },
     {

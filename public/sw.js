@@ -9,7 +9,7 @@
 // gebruikers schone assets krijgen — de 'activate' handler purget alle
 // caches met een andere naam. (v1 → v2: oude agenda-bundle met crash-bug
 // zat vast in cache.)
-const CACHE_NAME = 'cropnode-v2';
+const CACHE_NAME = 'cropnode-v3';
 const STATIC_ASSETS = [
   '/logo/cropnode-icon.svg',
   '/logo/cropnode-h-dark.svg',

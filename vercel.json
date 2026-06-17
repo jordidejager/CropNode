@@ -13,12 +13,12 @@
       "schedule": "0 4 1 * *"
     },
     {
-      "path": "/api/knowledge/scrape",
+      "path": "/api/cron/weather-alerts",
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/cron/weather-alerts",
-      "schedule": "0 6 * * *"
+      "path": "/api/cron/email-poll",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
