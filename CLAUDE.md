@@ -318,7 +318,7 @@ Webhook → extractMessages() geeft {msg, phoneNumberId}
 ```
 
 - **Review-UI**: `/gewasbescherming/inbox` (`spray-inbox-card.tsx`, server actions in `src/app/spray-inbox-actions.ts`). Goedkeuren → `confirmRegistration()` (zelfde pad als de WhatsApp-bevestiging) + `user_preferences`-alias leren bij gecorrigeerde middelnaam. Logbook-rij blijft staan met status `Akkoord`.
-- **Vangnet-cron** `/api/cron/spray-inbox` (elke 15 min): herverwerkt rijen die >3 min in `Nieuw`/`Analyseren...` hangen.
+- **Vangnet-cron** `/api/cron/spray-inbox` (1x/dag 05:20 — Vercel Hobby staat geen sub-daily crons toe): herverwerkt rijen die >3 min in `Nieuw`/`Analyseren...` hangen. Daarnaast heeft elke hangende kaart in de inbox een knop "Opnieuw verwerken".
 - **Test zonder WhatsApp**: `npx tsx scripts/test-spray-inbox.ts --user <uuid> [--keep] "<notitie>"`.
 - Migratie `086_logbook_spray_inbox_columns.sql` (kolommen `source`, `wa_message_id`, `review_meta` op `logbook`).
 

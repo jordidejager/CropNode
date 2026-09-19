@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/spray-inbox",
-      "schedule": "*/15 * * * *"
+      "schedule": "20 5 * * *"
     }
   ]
 }
