@@ -1487,6 +1487,69 @@ export async function getLastUsedDosages(productNames: string[]): Promise<Map<st
 }
 
 /**
+ * Server-side variant of getLastUsedDosages: admin client + explicit user filter.
+ * Needed where there is no cookie session (WhatsApp webhook, cron, after()).
+ */
+export async function getLastUsedDosagesForUser(
+  userId: string,
+  productNames: string[]
+): Promise<Map<string, { dosage: number; unit: string; date: Date }>> {
+  const result = new Map<string, { dosage: number; unit: string; date: Date }>();
+  if (!userId || productNames.length === 0) return result;
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('parcel_history')
+    .select('product, dosage, unit, date')
+    .eq('user_id', userId)
+    .gt('dosage', 0)
+    .order('date', { ascending: false })
+    .limit(500);
+
+  if (error || !data) return result;
+
+  for (const productName of productNames) {
+    const normalized = productName.toLowerCase().trim();
+    const match = data.find(entry => {
+      const p = entry.product?.toLowerCase() || '';
+      return p === normalized || p.includes(normalized) || normalized.includes(p);
+    });
+    if (match) {
+      result.set(productName, { dosage: match.dosage, unit: match.unit, date: new Date(match.date) });
+    }
+  }
+  return result;
+}
+
+/**
+ * Distinct product names this user has registered before, most recent first.
+ * Server-side (admin client). Used to pick the user's own brand for an active ingredient.
+ */
+export async function getUserProductNames(userId: string): Promise<string[]> {
+  if (!userId) return [];
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('parcel_history')
+    .select('product, date')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(1000);
+
+  if (error || !data) return [];
+
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const row of data) {
+    const name = (row.product || '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
+}
+
+/**
  * Add parcel history entries for a spray application
  * Now works with SprayableParcel[] (sub-parcels as unit of work)
  * Also accepts legacy Parcel[] for backward compatibility

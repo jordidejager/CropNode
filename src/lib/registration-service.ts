@@ -14,6 +14,34 @@ import {
 } from '@/lib/supabase-store';
 import type { SpuitschriftEntry, LogbookEntry, ProductEntry } from '@/lib/types';
 import { createSprayTaskLogs } from '@/lib/spray-hours';
+import { getSupabaseAdmin } from '@/lib/supabase-client';
+
+/**
+ * Mirror a confirmed registration into field_notes as a 'transferred' note,
+ * so the raw text stays visible in the notes timeline. Never throws.
+ */
+export async function mirrorRegistrationToFieldNotes(params: {
+  userId: string;
+  rawInput: string;
+  registrationType?: 'spraying' | 'spreading';
+  spuitschriftId?: string | null;
+  source?: string;
+}): Promise<void> {
+  try {
+    const admin = getSupabaseAdmin();
+    await (admin as any).from('field_notes').insert({
+      user_id: params.userId,
+      content: params.rawInput,
+      source: params.source || 'whatsapp',
+      status: 'transferred',
+      auto_tag: params.registrationType === 'spreading' ? 'bemesting' : 'bespuiting',
+      is_pinned: false,
+      spuitschrift_id: params.spuitschriftId || null,
+    });
+  } catch (mirrorErr) {
+    console.warn('[mirrorRegistrationToFieldNotes] failed:', mirrorErr);
+  }
+}
 
 // Import addParcelHistoryEntries dynamically to avoid circular dependency
 // (it's defined in actions.ts which imports from this file)

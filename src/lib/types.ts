@@ -358,6 +358,26 @@ export type ParsedSprayDataV2 = {
   assumedTargets?: Record<string, string>;
 }
 
+export type LogbookSource = 'web' | 'whatsapp_spray';
+
+export type SprayReviewAssumption = {
+  field: 'product' | 'dosage' | 'date' | 'plots';
+  productIndex?: number;
+  from: string;
+  to: string;
+  reason: string;
+};
+
+export type SprayReviewMeta = {
+  receivedAt?: string;
+  groupId?: string;
+  processingMs?: number;
+  error?: string;
+  assumptions?: SprayReviewAssumption[];
+  uncertainFields?: string[];
+  validationFlags?: Array<{ type: 'error' | 'warning' | 'info'; message: string; field?: string }>;
+};
+
 export type LogbookEntry = {
   id: string; // Firestore ID
   rawInput: string;
@@ -368,6 +388,9 @@ export type LogbookEntry = {
   registrationType?: RegistrationType; // 'spraying' (default) of 'spreading'
   validationMessage?: string;
   originalLogbookId?: string; // Used when moving back from spuitschrift
+  source?: LogbookSource;
+  waMessageId?: string;
+  reviewMeta?: SprayReviewMeta;
 };
 
 export type SpuitschriftEntry = {

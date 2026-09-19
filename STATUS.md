@@ -12,6 +12,14 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-09-19 — 📥 Spuit-inbox: tweede WhatsApp-nummer → concepten → review in web
+- **Waarom:** de interactieve WhatsApp-spuitflow (knoppen/lijstmenu's) was te traag op de trekker; registraties werden uitgesteld/vergeten. Nieuwe opzet: apart nummer, bericht = direct concept + ack, verwerking op de achtergrond, goedkeuren in de web-app. Bestaande bot op het oude nummer ongewijzigd.
+- ✅ Webhook routeert op `metadata.phone_number_id` (`WHATSAPP_SPRAY_PHONE_NUMBER_ID`); `client.ts` kan vanaf een ander nummer sturen.
+- ✅ `src/lib/whatsapp/spray-inbox.ts`: `handleSprayInboxMessage` (insert `logbook` + ack) + `processSprayDraft` (pipeline + werkzame-stof→merk uit eigen historie + laatste dosering + user_preferences-substitutie) via Next `after()`. Vangnet-cron `/api/cron/spray-inbox` (*/15).
+- ✅ Review-UI `/gewasbescherming/inbox` + tab met teller + sidebar-badge; server actions `src/app/spray-inbox-actions.ts` (goedkeuren via `confirmRegistration`, alias leren, bewaren, verwijderen, opnieuw verwerken).
+- ✅ Bonus: AI-pad van de pipeline geeft nu `isTotal` door (`"Zwavel:25:kg:T"`), dus "25 kg totaal" werkt ook via Gemini.
+- ⏳ **Jordi moet nog**: (1) migratie `086_logbook_spray_inbox_columns.sql` draaien; (2) tweede nummer toevoegen in WhatsApp Manager (zelfde WABA/app → zelfde webhook) en het phone-number-ID als `WHATSAPP_SPRAY_PHONE_NUMBER_ID` in Vercel zetten; (3) end-to-end testen: notitie sturen → kaart in Inbox → goedkeuren. Testen zonder WhatsApp: `npx tsx scripts/test-spray-inbox.ts --user <uuid> --keep "…"`.
+
 ### 2026-06-17 — 🗑️ Oogst & Opslag + Afzetstromen + Analytics Productie/Rendement VERWIJDERD
 - **Waarom:** verhuist naar het aparte nieuwe **StoreNode**-platform. CropNode blijft simpel. **Niet opnieuw bouwen.** Bewuste keuze: **GEEN data-export** (Jordi: bron staat elders / niet meer nodig in CropNode).
 - ✅ **Code verwijderd** (in een schone worktree off cropnode/main gebouwd zodat geen andere-chat-WIP meeglipt): `src/app/(app)/oogst/` (oogstregistratie + koelcelbeheer + geschiedenis), `src/app/(app)/afzetstromen/`, `src/app/api/afzetstromen/`, `src/components/{storage,afzetstromen,harvest}/`, Analytics **Productie** + **Rendement** pagina's + componenten, `src/lib/whatsapp/rot-uitval-handler.ts`. 67 files via `git rm`.

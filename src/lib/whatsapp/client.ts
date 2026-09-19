@@ -7,8 +7,13 @@ import type { WhatsAppButton } from './types';
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v21.0';
 
-function getConfig() {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+export interface SendOptions {
+  /** Send from a different business number than WHATSAPP_PHONE_NUMBER_ID (e.g. the spray-inbox number). */
+  phoneNumberId?: string;
+}
+
+function getConfig(phoneNumberIdOverride?: string) {
+  const phoneNumberId = phoneNumberIdOverride || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 
   if (!phoneNumberId || !accessToken) {
@@ -18,8 +23,8 @@ function getConfig() {
   return { phoneNumberId, accessToken };
 }
 
-async function sendRequest(body: Record<string, unknown>): Promise<string> {
-  const { phoneNumberId, accessToken } = getConfig();
+async function sendRequest(body: Record<string, unknown>, options?: SendOptions): Promise<string> {
+  const { phoneNumberId, accessToken } = getConfig(options?.phoneNumberId);
   const url = `${WHATSAPP_API_URL}/${phoneNumberId}/messages`;
 
   const response = await fetch(url, {
@@ -48,7 +53,7 @@ async function sendRequest(body: Record<string, unknown>): Promise<string> {
  * @param text Message body (max 4096 chars)
  * @returns WhatsApp message ID
  */
-export async function sendTextMessage(to: string, text: string): Promise<string> {
+export async function sendTextMessage(to: string, text: string, options?: SendOptions): Promise<string> {
   console.log(`[WhatsApp Client] Sending text to ${to}: "${text.substring(0, 80)}..."`);
 
   return sendRequest({
@@ -56,7 +61,7 @@ export async function sendTextMessage(to: string, text: string): Promise<string>
     to,
     type: 'text',
     text: { body: text },
-  });
+  }, options);
 }
 
 /**
@@ -278,8 +283,8 @@ export async function uploadMedia(
  * Mark a message as read (sends blue checkmarks).
  * @param messageId The WhatsApp message ID (wamid.xxx)
  */
-export async function markAsRead(messageId: string): Promise<void> {
-  const { phoneNumberId, accessToken } = getConfig();
+export async function markAsRead(messageId: string, options?: SendOptions): Promise<void> {
+  const { phoneNumberId, accessToken } = getConfig(options?.phoneNumberId);
   const url = `${WHATSAPP_API_URL}/${phoneNumberId}/messages`;
 
   try {

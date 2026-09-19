@@ -12,7 +12,15 @@
 import { getSupabaseAdmin } from '@/lib/supabase-client';
 import { addPlus } from './phone-utils';
 import type { WhatsAppLinkedNumber, WhatsAppConversation, ConversationState } from './types';
-import type { SprayRegistrationGroup, ParcelHistoryEntry } from '@/lib/types';
+import type {
+  SprayRegistrationGroup,
+  ParcelHistoryEntry,
+  LogStatus,
+  LogbookSource,
+  ParsedSprayData,
+  RegistrationType,
+  SprayReviewMeta,
+} from '@/lib/types';
 import type { SprayableParcel } from '@/lib/supabase-store';
 
 // Helper: get admin client, throw if unavailable
@@ -382,6 +390,120 @@ export async function getParcelGroupsForUser(
     name: g.name,
     subParcelIds: (g.parcel_group_members || []).map((m: any) => m.sub_parcel_id),
   }));
+}
+
+// ============================================================================
+// Spray-inbox drafts (logbook rows with source = 'whatsapp_spray')
+// ============================================================================
+
+export interface SprayDraftRow {
+  id: string;
+  userId: string;
+  rawInput: string;
+  status: LogStatus;
+  date: Date;
+  createdAt: Date;
+  parsedData: ParsedSprayData | null;
+  registrationType: RegistrationType | null;
+  validationMessage: string | null;
+  source: LogbookSource;
+  waMessageId: string | null;
+  reviewMeta: SprayReviewMeta;
+}
+
+const SPRAY_DRAFT_COLUMNS = 'id, user_id, raw_input, status, date, created_at, parsed_data, registration_type, validation_message, source, wa_message_id, review_meta';
+
+export async function insertSprayDraft(params: {
+  userId: string;
+  rawInput: string;
+  waMessageId: string | null;
+  messageDate: Date;
+  status?: LogStatus;
+  parsedData?: ParsedSprayData;
+  registrationType?: RegistrationType;
+  reviewMeta?: SprayReviewMeta;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const { error } = await fromTable('logbook').insert({
+    id,
+    user_id: params.userId,
+    raw_input: params.rawInput,
+    status: params.status || 'Nieuw',
+    date: params.messageDate.toISOString(),
+    created_at: now,
+    parsed_data: params.parsedData ?? null,
+    registration_type: params.registrationType ?? null,
+    source: 'whatsapp_spray',
+    wa_message_id: params.waMessageId,
+    review_meta: params.reviewMeta ?? { receivedAt: now },
+  });
+
+  if (error) throw new Error(`insertSprayDraft: ${error.message}`);
+  return id;
+}
+
+export async function getSprayDraft(id: string): Promise<SprayDraftRow | null> {
+  const { data, error } = await fromTable('logbook')
+    .select(SPRAY_DRAFT_COLUMNS)
+    .eq('id', id)
+    .single();
+
+  if (error || !data) return null;
+  return mapSprayDraft(data);
+}
+
+export async function updateSprayDraft(id: string, patch: {
+  status?: LogStatus;
+  date?: Date;
+  parsedData?: ParsedSprayData | null;
+  registrationType?: RegistrationType | null;
+  validationMessage?: string | null;
+  reviewMeta?: SprayReviewMeta;
+}): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (patch.status !== undefined) update.status = patch.status;
+  if (patch.date !== undefined) update.date = patch.date.toISOString();
+  if (patch.parsedData !== undefined) update.parsed_data = patch.parsedData;
+  if (patch.registrationType !== undefined) update.registration_type = patch.registrationType;
+  if (patch.validationMessage !== undefined) update.validation_message = patch.validationMessage;
+  if (patch.reviewMeta !== undefined) update.review_meta = patch.reviewMeta;
+
+  const { error } = await fromTable('logbook').update(update).eq('id', id);
+  if (error) throw new Error(`updateSprayDraft: ${error.message}`);
+}
+
+/** Drafts that never finished processing (after() died, deploy mid-flight, ...). */
+export async function getStuckSprayDrafts(olderThanMs: number, limit = 10): Promise<SprayDraftRow[]> {
+  const cutoff = new Date(Date.now() - olderThanMs).toISOString();
+  const { data, error } = await fromTable('logbook')
+    .select(SPRAY_DRAFT_COLUMNS)
+    .eq('source', 'whatsapp_spray')
+    .in('status', ['Nieuw', 'Analyseren...'])
+    .lt('created_at', cutoff)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+
+  if (error || !data) return [];
+  return (data as any[]).map(mapSprayDraft);
+}
+
+function mapSprayDraft(row: any): SprayDraftRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    rawInput: row.raw_input,
+    status: row.status,
+    date: new Date(row.date),
+    createdAt: new Date(row.created_at),
+    parsedData: row.parsed_data || null,
+    registrationType: row.registration_type || null,
+    validationMessage: row.validation_message || null,
+    source: row.source || 'web',
+    waMessageId: row.wa_message_id || null,
+    reviewMeta: row.review_meta || {},
+  };
 }
 
 // ============================================================================

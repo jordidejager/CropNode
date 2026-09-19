@@ -94,6 +94,7 @@ export interface ProductEntry {
   dosage: number;
   unit: string;
   targetReason?: string;
+  isTotal?: boolean;
 }
 
 export interface RegistrationUnit {
@@ -124,14 +125,16 @@ export interface ClassifyAndParseOutput {
  * Handles Dutch decimal comma (e.g., "Syllit Flow:1,7:L" → dosage 1.7)
  */
 function parseProductString(str: string): ProductEntry {
-  const parts = str.split(':');
+  const parts = str.split(':').map(s => s.trim());
   // Replace Dutch decimal comma with dot for parseFloat
   const rawDosage = (parts[1] || '0').replace(',', '.');
-  return {
+  const entry: ProductEntry = {
     product: parts[0] || '',
     dosage: parseFloat(rawDosage) || 0,
     unit: parts[2] || 'L',
   };
+  if ((parts[3] || '').toUpperCase() === 'T') entry.isTotal = true;
+  return entry;
 }
 
 /**

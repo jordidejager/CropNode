@@ -292,11 +292,35 @@ src/lib/weather/
 
 ### Environment variables (WhatsApp-specific)
 ```env
-WHATSAPP_PHONE_NUMBER_ID=     # Meta Business phone number ID
-WHATSAPP_ACCESS_TOKEN=        # Meta Cloud API access token
-WHATSAPP_VERIFY_TOKEN=        # Webhook verification token
-WHATSAPP_APP_SECRET=          # HMAC signature verification
+WHATSAPP_PHONE_NUMBER_ID=       # Meta Business phone number ID (algemene bot)
+WHATSAPP_SPRAY_PHONE_NUMBER_ID= # Tweede nummer: spuit-inbox (zie hieronder)
+WHATSAPP_ACCESS_TOKEN=          # Meta Cloud API access token (zelfde WABA → zelfde token)
+WHATSAPP_VERIFY_TOKEN=          # Webhook verification token
+WHATSAPP_APP_SECRET=            # HMAC signature verification
 ```
+
+### Spuit-inbox (tweede nummer, `src/lib/whatsapp/spray-inbox.ts`)
+
+Apart WhatsApp-nummer **alleen** voor spuit-/bemestingsnotities. Geen knoppen, geen vragen terug:
+elk tekstbericht wordt direct als concept opgeslagen en later in de web-app gecontroleerd.
+
+```
+Webhook → extractMessages() geeft {msg, phoneNumberId}
+  phoneNumberId === WHATSAPP_SPRAY_PHONE_NUMBER_ID
+    → handleSprayInboxMessage()   — dedup, phone→user, insert logbook (source='whatsapp_spray', status 'Nieuw'), ack "✓ Genoteerd"
+    → after(() => processSprayDraft(id))   — Next.js after(): draait NA de webhook-response
+         runRegistrationPipeline() → enrichUnit():
+           • werkzame stof ("captan") → merk uit ctgb_products.werkzame_stoffen ∩ eigen historie (parcel_history)
+           • dosering ontbreekt → laatst gebruikte dosering (getLastUsedDosagesForUser)
+           • user_preferences (middel_<alias> → merk) worden vóór de pipeline in de tekst gesubstitueerd
+         → status 'Te Controleren' + review_meta {assumptions, uncertainFields, validationFlags}
+  anders → bestaande handleIncomingMessage() (ongewijzigd)
+```
+
+- **Review-UI**: `/gewasbescherming/inbox` (`spray-inbox-card.tsx`, server actions in `src/app/spray-inbox-actions.ts`). Goedkeuren → `confirmRegistration()` (zelfde pad als de WhatsApp-bevestiging) + `user_preferences`-alias leren bij gecorrigeerde middelnaam. Logbook-rij blijft staan met status `Akkoord`.
+- **Vangnet-cron** `/api/cron/spray-inbox` (elke 15 min): herverwerkt rijen die >3 min in `Nieuw`/`Analyseren...` hangen.
+- **Test zonder WhatsApp**: `npx tsx scripts/test-spray-inbox.ts --user <uuid> [--keep] "<notitie>"`.
+- Migratie `086_logbook_spray_inbox_columns.sql` (kolommen `source`, `wa_message_id`, `review_meta` op `logbook`).
 
 ## Weather Hub (`/weer`)
 

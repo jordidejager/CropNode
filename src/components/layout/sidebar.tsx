@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logout } from '@/lib/auth-actions';
 import { createClient } from '@/lib/supabase/client';
+import { useSprayInboxCount } from '@/hooks/use-data';
 import {
     Tooltip,
     TooltipContent,
@@ -149,6 +150,7 @@ const navGroups: NavGroup[] = [
 
 function SidebarContent() {
     const pathname = usePathname();
+    const { data: sprayInboxCount = 0 } = useSprayInboxCount();
 
     // Mobile sidebar state
     let mobileContext: MobileSidebarContextType | null = null;
@@ -336,7 +338,12 @@ function SidebarContent() {
                                                         {item.badge}
                                                     </span>
                                                 )}
-                                                {!item.badge && !active && (
+                                                {!item.badge && item.href === '/gewasbescherming' && sprayInboxCount > 0 && (
+                                                    <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-[11px] font-bold text-emerald-950 flex items-center justify-center tabular-nums">
+                                                        {sprayInboxCount > 99 ? '99+' : sprayInboxCount}
+                                                    </span>
+                                                )}
+                                                {!item.badge && !(item.href === '/gewasbescherming' && sprayInboxCount > 0) && !active && (
                                                     <ChevronRight className="size-3 text-slate-700 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                                                 )}
                                             </Link>

@@ -3,14 +3,13 @@
  * Handles the confirmation of a pending registration from WhatsApp.
  */
 
-import { confirmRegistration } from '@/lib/registration-service';
+import { confirmRegistration, mirrorRegistrationToFieldNotes } from '@/lib/registration-service';
 import { addParcelHistoryEntries } from '@/lib/supabase-store';
 import { invalidateContextCache } from '@/lib/registration-pipeline';
 import { sendTextMessage } from './client';
 import { updateConversationState, logMessage } from './store';
 import { formatConfirmationMessage, formatExpiredMessage, formatErrorMessage } from './format';
 import { stripPlus } from './phone-utils';
-import { getSupabaseAdmin } from '@/lib/supabase-client';
 import type { WhatsAppConversation } from './types';
 import type { SprayRegistrationGroup } from '@/lib/types';
 
@@ -79,23 +78,12 @@ export async function handleConfirmation(
     }
 
     // 4. Mirror to field_notes as transferred note (complete logbook)
-    // Link to spuitschrift so products can be individually hidden
-    try {
-      const admin = getSupabaseAdmin();
-      const rawInput = reg.rawInput || conversation.lastInput || 'WhatsApp registratie';
-      await (admin as any).from('field_notes').insert({
-        user_id: userId,
-        content: rawInput,
-        source: 'whatsapp',
-        status: 'transferred',
-        auto_tag: reg.registrationType === 'spreading' ? 'bemesting' : 'bespuiting',
-        is_pinned: false,
-        spuitschrift_id: result.spuitschriftId || null,
-      });
-    } catch (mirrorErr) {
-      // Mirror failure must never block the registration
-      console.warn('[handleConfirmation] field_notes mirror failed:', mirrorErr);
-    }
+    await mirrorRegistrationToFieldNotes({
+      userId,
+      rawInput: reg.rawInput || conversation.lastInput || 'WhatsApp registratie',
+      registrationType: reg.registrationType,
+      spuitschriftId: result.spuitschriftId,
+    });
 
     // 5. Invalidate pipeline context cache so next validation uses fresh history
     invalidateContextCache(userId);

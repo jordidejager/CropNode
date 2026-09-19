@@ -9,7 +9,9 @@
  */
 
 import { createHmac } from 'crypto';
+import { after } from 'next/server';
 import { handleIncomingMessage } from '@/lib/whatsapp/message-handler';
+import { handleSprayInboxMessage, processSprayDraft, getSprayPhoneNumberId } from '@/lib/whatsapp/spray-inbox';
 import { markAsRead } from '@/lib/whatsapp/client';
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from '@/lib/whatsapp/types';
 
@@ -66,11 +68,30 @@ export async function POST(request: Request) {
     }
 
     // 5. Process messages synchronously
-    for (const msg of messages) {
+    const sprayPhoneNumberId = getSprayPhoneNumberId();
+
+    for (const { msg, phoneNumberId } of messages) {
       try {
-        markAsRead(msg.id).catch(() => {});
+        const isSprayInbox = !!sprayPhoneNumberId && phoneNumberId === sprayPhoneNumberId;
+        markAsRead(msg.id, isSprayInbox ? { phoneNumberId } : undefined).catch(() => {});
 
         const messageText = msg.text?.body || msg.image?.caption || null;
+
+        if (isSprayInbox) {
+          console.log(`[WhatsApp Webhook] Spray-inbox message from ${msg.from}: "${messageText?.substring(0, 50) || msg.type}"`);
+          const logbookId = await handleSprayInboxMessage({
+            phoneNumber: msg.from,
+            messageText,
+            waMessageId: msg.id,
+            messageType: msg.type,
+            timestamp: msg.timestamp,
+            phoneNumberId,
+          });
+          if (logbookId) {
+            after(() => processSprayDraft(logbookId, { notifyPhone: msg.from }));
+          }
+          continue;
+        }
         const buttonReplyId = msg.interactive?.button_reply?.id
           || msg.interactive?.list_reply?.id
           || null;
@@ -134,8 +155,8 @@ function verifySignature(body: string, signature: string | null): boolean {
   return mismatch === 0;
 }
 
-function extractMessages(payload: WhatsAppWebhookPayload): WhatsAppInboundMessage[] {
-  const messages: WhatsAppInboundMessage[] = [];
+function extractMessages(payload: WhatsAppWebhookPayload): Array<{ msg: WhatsAppInboundMessage; phoneNumberId: string }> {
+  const messages: Array<{ msg: WhatsAppInboundMessage; phoneNumberId: string }> = [];
 
   if (payload.object !== 'whatsapp_business_account') return messages;
 
@@ -143,8 +164,9 @@ function extractMessages(payload: WhatsAppWebhookPayload): WhatsAppInboundMessag
     for (const change of entry.changes || []) {
       if (change.field !== 'messages') continue;
       const value = change.value;
-      if (value.messages) {
-        messages.push(...value.messages);
+      const phoneNumberId = value.metadata?.phone_number_id || '';
+      for (const msg of value.messages || []) {
+        messages.push({ msg, phoneNumberId });
       }
     }
   }

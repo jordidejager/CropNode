@@ -230,6 +230,25 @@ export function normalizeDosageUnit(dosage: number, unit: string): { dosage: num
 }
 
 // ============================================================================
+// TOTAL-AMOUNT DETECTION (AI path)
+// ============================================================================
+
+const TOTAL_PATTERN = /\b(?:in\s+totaal|totaal|in\s+het\s+geheel)\b/i;
+
+/**
+ * The AI output has no notion of "total vs per-ha"; the deterministic parser does
+ * (see deterministic-parser.ts parseSingleProduct). Mirror that here: the product's
+ * own segment of the message (split on "en" / "+" / ",") mentions "totaal".
+ */
+export function mentionsTotalNearProduct(message: string, productName: string): boolean {
+    if (!productName || !TOTAL_PATTERN.test(message)) return false;
+    const needle = productName.toLowerCase().split(/\s+/)[0]?.slice(0, 5);
+    if (!needle || needle.length < 3) return false;
+    const segments = message.split(/\s+en\s+|\s*\+\s*|(?<!\d)\s*,\s*(?=[a-zà-ü\d])/i);
+    return segments.some(seg => seg.toLowerCase().includes(needle) && TOTAL_PATTERN.test(seg));
+}
+
+// ============================================================================
 // PRODUCT RESOLUTION HELPER
 // ============================================================================
 
@@ -328,17 +347,20 @@ export async function runRegistrationPipeline(
                 isGrouped = sprayData.isGrouped;
 
                 if (sprayData.registrations?.length) {
-                    registrations = sprayData.registrations.map((reg: { plots?: string[]; products?: Array<{ product: string; dosage?: number; unit?: string }>; label?: string }) => ({
+                    type AiProduct = { product: string; dosage?: number; unit?: string; isTotal?: boolean };
+                    const toRaw = (p: AiProduct): ParsedProduct => ({
+                        product: p.product,
+                        dosage: p.dosage || 0,
+                        unit: p.unit || 'L',
+                        ...(p.isTotal || mentionsTotalNearProduct(message, p.product) ? { isTotal: true } : {}),
+                    });
+                    registrations = sprayData.registrations.map((reg: { plots?: string[]; products?: AiProduct[]; label?: string }) => ({
                         parcelIds: resolveParcelsByText(
                             (reg.plots || []).join(' '),
                             ctx.parcels,
                             ctx.parcelGroups
                         ).ids,
-                        products: (reg.products || []).map((p: { product: string; dosage?: number; unit?: string }) => ({
-                            product: p.product,
-                            dosage: p.dosage || 0,
-                            unit: p.unit || 'L',
-                        })),
+                        products: (reg.products || []).map(toRaw),
                         label: reg.label,
                     }));
                 } else {
@@ -347,10 +369,11 @@ export async function runRegistrationPipeline(
                         ctx.parcels,
                         ctx.parcelGroups
                     ).ids;
-                    rawProducts = (sprayData.products || []).map((p: { product: string; dosage?: number; unit?: string }) => ({
+                    rawProducts = (sprayData.products || []).map((p: { product: string; dosage?: number; unit?: string; isTotal?: boolean }) => ({
                         product: p.product,
                         dosage: p.dosage || 0,
                         unit: p.unit || 'L',
+                        ...(p.isTotal || mentionsTotalNearProduct(message, p.product) ? { isTotal: true } : {}),
                     }));
                 }
 

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { filterFertilizationEntries, filterCropProtectionEntries } from '@/lib/fertilization-utils';
+import { getSprayInboxEntries, getSprayInboxCount } from '@/app/spray-inbox-actions';
 import {
     getParcels,
     getSprayableParcels,  // New: uses v_sprayable_parcels view
@@ -67,6 +68,10 @@ export const queryKeys = {
     // Logbook (Slimme Invoer)
     logbookEntries: ['logbook'] as const,
     logbookEntry: (id: string) => ['logbook', id] as const,
+
+    // Spuit-inbox (WhatsApp spray drafts)
+    sprayInbox: ['spray-inbox'] as const,
+    sprayInboxCount: ['spray-inbox', 'count'] as const,
 
     // Spuitschrift
     spuitschriftEntries: ['spuitschrift'] as const,
@@ -312,6 +317,28 @@ export function useLogbookEntries() {
         queryKey: queryKeys.logbookEntries,
         queryFn: () => getLogbookEntries(),
         staleTime: 30 * 1000, // 30 seconds - logbook changes frequently
+    });
+}
+
+// ============================================
+// Spuit-inbox Hooks (WhatsApp spray drafts)
+// ============================================
+
+export function useSprayInbox() {
+    return useQuery({
+        queryKey: queryKeys.sprayInbox,
+        queryFn: () => getSprayInboxEntries(),
+        staleTime: 15 * 1000,
+        refetchInterval: 30 * 1000, // new notes + background processing show up on their own
+    });
+}
+
+export function useSprayInboxCount() {
+    return useQuery({
+        queryKey: queryKeys.sprayInboxCount,
+        queryFn: () => getSprayInboxCount(),
+        staleTime: 30 * 1000,
+        refetchInterval: 60 * 1000,
     });
 }
 
@@ -580,6 +607,7 @@ export function useInvalidateQueries() {
 
     return {
         invalidateLogbook: () => queryClient.invalidateQueries({ queryKey: queryKeys.logbookEntries }),
+        invalidateSprayInbox: () => queryClient.invalidateQueries({ queryKey: queryKeys.sprayInbox }),
         invalidateSpuitschrift: () => queryClient.invalidateQueries({ queryKey: queryKeys.spuitschriftEntries }),
         invalidateParcels: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcels }),
         invalidateParcelGroups: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcelGroups }),
