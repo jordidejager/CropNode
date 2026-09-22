@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-client';
 import type { CtgbProduct, ParsedSprayData, ProductEntry, SprayReviewAssumption, SprayReviewMeta, UserPreference } from '@/lib/types';
 import { sendTextMessage } from './client';
 import { formatUnknownNumberMessage } from './format';
+import { processFieldNote } from './field-note-processor';
 import { addPlus, stripPlus } from './phone-utils';
 import {
   getUserIdByPhone,
@@ -70,6 +71,27 @@ export async function handleSprayInboxMessage(params: {
     return null;
   }
 
+  return createSprayDraft({ userId, phoneNumber, text, waMessageId, timestamp: params.timestamp, phoneNumberId });
+}
+
+/**
+ * Store a spray note as a logbook draft and send the ack. Shared by the dedicated
+ * spray number and the general bot's spray fallback (single-number setup).
+ */
+export async function createSprayDraft(params: {
+  userId: string;
+  phoneNumber: string;
+  text: string;
+  waMessageId: string;
+  timestamp?: string;
+  /** Business number to reply from; omit for the default WHATSAPP_PHONE_NUMBER_ID. */
+  phoneNumberId?: string;
+}): Promise<string> {
+  const { userId, text, waMessageId, phoneNumberId } = params;
+  const metaPhone = stripPlus(params.phoneNumber);
+  const e164Phone = addPlus(params.phoneNumber);
+  const sendOpts = phoneNumberId ? { phoneNumberId } : undefined;
+
   const tsSeconds = Number(params.timestamp);
   const messageDate = Number.isFinite(tsSeconds) && tsSeconds > 0 ? new Date(tsSeconds * 1000) : new Date();
 
@@ -82,7 +104,7 @@ export async function handleSprayInboxMessage(params: {
   });
 
   await logMessage({ phoneNumber: e164Phone, direction: 'inbound', messageText: text, waMessageId, metadata: { channel: 'spray', logbookId } });
-  await send(SPRAY_ACK_MESSAGE);
+  await sendTextMessage(metaPhone, SPRAY_ACK_MESSAGE, sendOpts);
   await logMessage({ phoneNumber: e164Phone, direction: 'outbound', messageText: SPRAY_ACK_MESSAGE, metadata: { channel: 'spray', logbookId } });
 
   console.log(`[SprayInbox] Draft ${logbookId} created for user ${userId}`);
@@ -98,6 +120,14 @@ export interface ProcessSprayDraftOptions {
   notifyPhone?: string | null;
   /** Skip the WhatsApp failure notification (e.g. manual retry from the web UI). */
   silent?: boolean;
+  /**
+   * What to do when the text is not a spray registration at all.
+   * 'empty_card' (default, dedicated spray number): keep an editable empty card in the inbox.
+   * 'field_note' (general bot): drop the draft and store the text as a veldnotitie instead.
+   */
+  nonRegistration?: 'empty_card' | 'field_note';
+  /** Business number to send replies from (single-number setup omits it). */
+  phoneNumberId?: string;
 }
 
 export async function processSprayDraft(logbookId: string, options: ProcessSprayDraftOptions = {}): Promise<void> {
@@ -123,6 +153,12 @@ export async function processSprayDraft(logbookId: string, options: ProcessSpray
     const result = await runRegistrationPipeline(pipelineInput, draft.userId);
 
     if (result.action === 'answer_query' || !result.registration) {
+      if (options.nonRegistration === 'field_note' && options.notifyPhone) {
+        await getSupabaseAdmin().from('logbook').delete().eq('id', logbookId);
+        await processFieldNote(draft.userId, addPlus(options.notifyPhone), draft.rawInput, draft.waMessageId || `draft-${logbookId}`);
+        console.log(`[SprayInbox] Draft ${logbookId} was not a registration → stored as field note`);
+        return;
+      }
       await updateSprayDraft(logbookId, {
         status: 'Te Controleren',
         parsedData: { plots: [], products: [] },
@@ -207,7 +243,7 @@ export async function processSprayDraft(logbookId: string, options: ProcessSpray
     }).catch(err => console.error('[SprayInbox] Could not mark draft as Fout:', err));
 
     if (!options.silent) {
-      await notifyProcessingFailure(draft.userId, options.notifyPhone ?? null);
+      await notifyProcessingFailure(draft.userId, options.notifyPhone ?? null, options.phoneNumberId);
     }
   }
 }
@@ -367,9 +403,7 @@ function escapeRegExp(s: string): string {
 // Failure notification
 // ============================================================================
 
-async function notifyProcessingFailure(userId: string, phone: string | null): Promise<void> {
-  const phoneNumberId = getSprayPhoneNumberId();
-  if (!phoneNumberId) return;
+async function notifyProcessingFailure(userId: string, phone: string | null, phoneNumberId?: string): Promise<void> {
   try {
     let target = phone;
     if (!target) {
@@ -377,7 +411,7 @@ async function notifyProcessingFailure(userId: string, phone: string | null): Pr
       target = linked.find(n => n.isActive)?.phoneNumber || linked[0]?.phoneNumber || null;
     }
     if (!target) return;
-    await sendTextMessage(stripPlus(target), PROCESSING_FAILED_MESSAGE, { phoneNumberId });
+    await sendTextMessage(stripPlus(target), PROCESSING_FAILED_MESSAGE, phoneNumberId ? { phoneNumberId } : undefined);
     await logMessage({ phoneNumber: addPlus(target), direction: 'outbound', messageText: PROCESSING_FAILED_MESSAGE, metadata: { channel: 'spray' } });
   } catch (err) {
     console.warn('[SprayInbox] Failure notification could not be sent:', err);

@@ -3,6 +3,7 @@
  * Orchestrates message routing based on conversation state.
  */
 
+import { after } from 'next/server';
 import { sendTextMessage } from './client';
 import {
   getUserIdByPhone,
@@ -13,7 +14,7 @@ import {
   getSprayableParcelsForUser,
 } from './store';
 import type { WhatsAppConversation } from './types';
-import { processNewRegistration } from './registration-processor';
+import { createSprayDraft, processSprayDraft } from './spray-inbox';
 import { processFieldNote, isFieldNoteIntent } from './field-note-processor';
 import { handleConfirmation } from './confirmation-handler';
 import { handleProductSelection } from './product-selection-handler';
@@ -65,6 +66,24 @@ function checkRateLimit(phoneNumber: string): boolean {
 interface MessageExtras {
   mediaId?: string | null;
   location?: { latitude: number; longitude: number; name?: string; address?: string } | null;
+  /** Meta message timestamp (unix seconds) — becomes the draft's registration date */
+  timestamp?: string;
+}
+
+/**
+ * Spray/fertilizer fallback: store the note as an inbox draft, ack immediately and
+ * parse in the background. Replaces the old interactive confirm/edit flow — the
+ * grower reviews and approves in CropNode › Gewasbescherming › Inbox.
+ */
+async function routeToSprayInbox(
+  userId: string,
+  phoneNumber: string,
+  messageText: string,
+  waMessageId: string,
+  timestamp?: string
+): Promise<void> {
+  const logbookId = await createSprayDraft({ userId, phoneNumber, text: messageText, waMessageId, timestamp });
+  after(() => processSprayDraft(logbookId, { notifyPhone: phoneNumber, nonRegistration: 'field_note' }));
 }
 
 /**
@@ -209,7 +228,7 @@ export async function handleIncomingMessage(
       // User typed a new message instead → treat as new registration
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
-        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        await routeToSprayInbox(userId, e164Phone, messageText, waMessageId, extras?.timestamp);
         return;
       }
     }
@@ -251,7 +270,7 @@ export async function handleIncomingMessage(
       // treat it as a new registration (reset + process)
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
-        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        await routeToSprayInbox(userId, e164Phone, messageText, waMessageId, extras?.timestamp);
         return;
       }
     }
@@ -271,7 +290,7 @@ export async function handleIncomingMessage(
       // Text message → new registration
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
-        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        await routeToSprayInbox(userId, e164Phone, messageText, waMessageId, extras?.timestamp);
         return;
       }
     }
@@ -293,7 +312,7 @@ export async function handleIncomingMessage(
       // User typed something instead of picking → treat as new registration
       if (messageText) {
         await updateConversationState(conversation.id, 'cancelled');
-        await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+        await routeToSprayInbox(userId, e164Phone, messageText, waMessageId, extras?.timestamp);
         return;
       }
     }
@@ -349,7 +368,7 @@ export async function handleIncomingMessage(
         return;
       }
 
-      await processNewRegistration(userId, e164Phone, messageText, waMessageId);
+      await routeToSprayInbox(userId, e164Phone, messageText, waMessageId, extras?.timestamp);
       return;
     }
 

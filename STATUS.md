@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-09-22 — 📥 Spuit-inbox live op het bestaande nummer (geen tweede nummer)
+- Jordi houdt één WhatsApp-nummer. `message-handler.ts`: de spuit-fallback (en tekst in oude `awaiting_*`-states) gaat nu naar `routeToSprayInbox()` → concept + "✓ Genoteerd" + `after(processSprayDraft)`; niet-registraties worden veldnotitie i.p.v. lege kaart. Oude knoppenflow wordt niet meer aangeroepen (code blijft staan).
+- ✅ Migratie 086 gedraaid (door Claude via pooler `aws-1-eu-west-1`, directe DB-host is IPv6-only vanaf de Mac). Fix: `registration_type` NOT NULL → default `'spraying'` bij eerste insert.
+- ⏳ Jordi: e2e testen — spuitnotitie sturen naar het gewone nummer → Inbox → goedkeuren. Daarna: MCP voor CropNode op het StoreNode-patroon (zie memory).
+
 ### 2026-09-19 — 📥 Spuit-inbox: tweede WhatsApp-nummer → concepten → review in web
 - **Waarom:** de interactieve WhatsApp-spuitflow (knoppen/lijstmenu's) was te traag op de trekker; registraties werden uitgesteld/vergeten. Nieuwe opzet: apart nummer, bericht = direct concept + ack, verwerking op de achtergrond, goedkeuren in de web-app. Bestaande bot op het oude nummer ongewijzigd.
 - ✅ Webhook routeert op `metadata.phone_number_id` (`WHATSAPP_SPRAY_PHONE_NUMBER_ID`); `client.ts` kan vanaf een ander nummer sturen.

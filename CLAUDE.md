@@ -299,23 +299,30 @@ WHATSAPP_VERIFY_TOKEN=          # Webhook verification token
 WHATSAPP_APP_SECRET=            # HMAC signature verification
 ```
 
-### Spuit-inbox (tweede nummer, `src/lib/whatsapp/spray-inbox.ts`)
+### Spuit-inbox (`src/lib/whatsapp/spray-inbox.ts`)
 
-Apart WhatsApp-nummer **alleen** voor spuit-/bemestingsnotities. Geen knoppen, geen vragen terug:
-elk tekstbericht wordt direct als concept opgeslagen en later in de web-app gecontroleerd.
+Spuit-/bemestingsnotities worden **niet meer interactief** afgehandeld (geen Verzenden/Wijzigen-
+knoppen, geen lijstmenu's): elk bericht wordt direct als concept opgeslagen, op de achtergrond
+geparsed en in de web-app gecontroleerd/goedgekeurd.
 
 ```
-Webhook → extractMessages() geeft {msg, phoneNumberId}
-  phoneNumberId === WHATSAPP_SPRAY_PHONE_NUMBER_ID
-    → handleSprayInboxMessage()   — dedup, phone→user, insert logbook (source='whatsapp_spray', status 'Nieuw'), ack "✓ Genoteerd"
-    → after(() => processSprayDraft(id))   — Next.js after(): draait NA de webhook-response
-         runRegistrationPipeline() → enrichUnit():
-           • werkzame stof ("captan") → merk uit ctgb_products.werkzame_stoffen ∩ eigen historie (parcel_history)
-           • dosering ontbreekt → laatst gebruikte dosering (getLastUsedDosagesForUser)
-           • user_preferences (middel_<alias> → merk) worden vóór de pipeline in de tekst gesubstitueerd
-         → status 'Te Controleren' + review_meta {assumptions, uncertainFields, validationFlags}
-  anders → bestaande handleIncomingMessage() (ongewijzigd)
+message-handler.ts — fallback na weer/veldnotitie/middelvraag/uren (én bij tekst in een oude awaiting_*-state)
+  → routeToSprayInbox() → createSprayDraft(): insert logbook (source='whatsapp_spray', status 'Nieuw'), ack "✓ Genoteerd"
+  → after(() => processSprayDraft(id, { nonRegistration: 'field_note' }))   — Next.js after(): draait NA de webhook-response
+       runRegistrationPipeline() → enrichUnit():
+         • werkzame stof ("captan") → merk uit ctgb_products.werkzame_stoffen ∩ eigen historie (parcel_history)
+         • dosering ontbreekt → laatst gebruikte dosering (getLastUsedDosagesForUser)
+         • user_preferences (middel_<alias> → merk) worden vóór de pipeline in de tekst gesubstitueerd
+       → status 'Te Controleren' + review_meta {assumptions, uncertainFields, validationFlags}
+       → géén registratie (Gemini: answer_query) → draft weg, tekst wordt veldnotitie (processFieldNote)
+
+Optioneel apart spuit-nummer: zet WHATSAPP_SPRAY_PHONE_NUMBER_ID; berichten op dat nummer gaan in
+de webhook direct naar handleSprayInboxMessage() (zonder intent-routing; niet-registraties blijven
+als lege kaart in de inbox). Niet in gebruik sinds 2026-09-22 — Jordi houdt één nummer.
 ```
+
+De oude interactieve flow (`registration-processor.ts`, `edit-handler.ts`, `product-selection-handler.ts`,
+`confirmation-handler.ts`, states `awaiting_*`) wordt niet meer aangeroepen voor nieuwe berichten; code staat er nog.
 
 - **Review-UI**: `/gewasbescherming/inbox` (`spray-inbox-card.tsx`, server actions in `src/app/spray-inbox-actions.ts`). Goedkeuren → `confirmRegistration()` (zelfde pad als de WhatsApp-bevestiging) + `user_preferences`-alias leren bij gecorrigeerde middelnaam. Logbook-rij blijft staan met status `Akkoord`.
 - **Vangnet-cron** `/api/cron/spray-inbox` (1x/dag 05:20 — Vercel Hobby staat geen sub-daily crons toe): herverwerkt rijen die >3 min in `Nieuw`/`Analyseren...` hangen. Daarnaast heeft elke hangende kaart in de inbox een knop "Opnieuw verwerken".

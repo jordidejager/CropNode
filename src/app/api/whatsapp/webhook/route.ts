@@ -88,7 +88,7 @@ export async function POST(request: Request) {
             phoneNumberId,
           });
           if (logbookId) {
-            after(() => processSprayDraft(logbookId, { notifyPhone: msg.from }));
+            after(() => processSprayDraft(logbookId, { notifyPhone: msg.from, phoneNumberId }));
           }
           continue;
         }
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
           buttonReplyId,
           msg.id,
           msg.type,
-          { mediaId, location }
+          { mediaId, location, timestamp: msg.timestamp }
         );
 
         console.log(`[WhatsApp Webhook] Message ${msg.id} processed successfully`);
