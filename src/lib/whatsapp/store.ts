@@ -434,7 +434,8 @@ export async function insertSprayDraft(params: {
     date: params.messageDate.toISOString(),
     created_at: now,
     parsed_data: params.parsedData ?? null,
-    registration_type: params.registrationType ?? null,
+    // NOT NULL in the schema; processSprayDraft overwrites it with the detected type
+    registration_type: params.registrationType ?? 'spraying',
     source: 'whatsapp_spray',
     wa_message_id: params.waMessageId,
     review_meta: params.reviewMeta ?? { receivedAt: now },
