@@ -124,6 +124,7 @@ export async function getOrLoadContext(userId: string): Promise<CachedContext> {
                         source: item.source,
                         rvoId: item.rvo_id,
                         synonyms: item.synonyms || [],
+                        companyId: item.company_id ?? null,
                     };
                 });
             }),

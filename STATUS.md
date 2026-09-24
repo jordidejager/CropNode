@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-09-24 — 🏢 Bedrijfsprofielen: meerdere bedrijven per teler
+- ✅ Migratie `088_companies_bedrijfsprofielen.sql` gedraaid: `public.companies`, `parcels.company_id` (NULL = standaardbedrijf), standaardbedrijf per bestaande teler (naam uit `profiles.company_name`), triggers voor nieuwe accounts, `default_company_id()`, `v_parcel_companies`, `v_sprayable_parcels.company_id`. Getest in teruggedraaide transacties (blokken volgen hoofdperceel, max één standaard, set-null bij verwijderen, RLS).
+- ✅ UI: Instellingen › Bedrijfsprofielen; percelen (bedrijf in formulier, label + filter in lijst, "Bedrijf wijzigen" op selectie) — alles pas zichtbaar bij 2+ bedrijven; bedrijfsfilter op spuitschrift, bemestingsregister, Analytics › Operations en › Bemesting.
+- ⏳ Jordi: eigen bedrijven invullen (standaardbedrijf heet nu "Mijn bedrijf") en percelen toewijzen. StoreNode-chat: zie CLAUDE.md "Bedrijfsprofielen" voor tabel/kolommen/views.
+
 ### 2026-09-24 — 🤖 MCP-server: CropNode als Claude-connector (naast StoreNode)
 - ✅ `/api/mcp/[sleutel]` (JSON-RPC, koppelsleutel-hash in `claude_koppelsleutels`), Instellingen › Claude-koppeling (sleutel maken/intrekken, connector-instructies), middleware-uitzondering.
 - ✅ 14 tools in `src/lib/mcp/tools.ts`: percelen, percelen_status, bespuitingen, middel_info, middelen_tegen, voorraad, weer, nu, veldnotities, spuit_inbox, registreer_bespuiting (voorstel→bevestig), keur_concept_goed, verwijder_concept, veldnotitie. Alles getest tegen productie-data met `scripts/test-mcp.ts` (testregels weer verwijderd).

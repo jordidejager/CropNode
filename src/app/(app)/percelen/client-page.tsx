@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useParcels, useParcelGroups, useInvalidateQueries, useSpuitschriftEntries } from "@/hooks/use-data";
+import { useParcels, useParcelGroups, useInvalidateQueries, useSpuitschriftEntries, useCompanies } from "@/hooks/use-data";
+import { setParcelsCompany } from "@/lib/companies";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addParcel, updateParcel, deleteParcel, addSubParcel, addParcelGroup, deleteParcelGroup, setParcelGroupMembers } from "@/lib/supabase-store";
 import type { Parcel, SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel";
 import { ParcelComparisonModal } from "@/components/domain/parcel-comparison-modal";
@@ -85,6 +87,10 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const [isReorganizeOpen, setIsReorganizeOpen] = useState(false);
   const [reorganizeTab, setReorganizeTab] = useState<'auto' | 'manual'>('auto');
   const [activeGroupFilter, setActiveGroupFilter] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string>('all');
+  const [isCompanyDialogOpen, setIsCompanyDialogOpen] = useState(false);
+  const [bulkCompanyId, setBulkCompanyId] = useState<string>('');
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [groupInitialSelectedIds, setGroupInitialSelectedIds] = useState<Set<string> | undefined>(undefined);
 
   const { toast } = useToast();
@@ -92,6 +98,9 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const { data: parcelGroups = [] } = useParcelGroups();
   const { data: spuitschriftEntries = [] } = useSpuitschriftEntries();
   const { invalidateParcels, invalidateParcelGroups } = useInvalidateQueries();
+  const { data: companies = [] } = useCompanies();
+  const hasMultipleCompanies = companies.length > 1;
+  const companyById = useMemo(() => new Map(companies.map(c => [c.id, c])), [companies]);
 
   // Find last spray for selected main parcel
   const lastSprayForParcel = useMemo(() => {
@@ -118,6 +127,10 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
   const filteredParcels = useMemo(() => {
     let result = parcels;
 
+    if (hasMultipleCompanies && companyFilter !== 'all') {
+      result = result.filter(p => p.companyId === companyFilter);
+    }
+
     // Group filter
     if (activeGroupMemberIds) {
       result = result.filter(p => activeGroupMemberIds.has(p.id));
@@ -143,7 +156,7 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     }
 
     return result;
-  }, [parcels, searchQuery, selectedCrops, selectedVarieties]);
+  }, [parcels, searchQuery, selectedCrops, selectedVarieties, activeGroupMemberIds, hasMultipleCompanies, companyFilter]);
 
   // Group parcels by parcelName for main parcel view
   const groupedParcels = useMemo(() => {
@@ -320,6 +333,43 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
       return next;
     });
   }, [selectedParcelIds]);
+
+  const companyCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const seen = new Set<string>();
+    parcels.forEach(p => {
+      if (!p.companyId || seen.has(p.parcelId)) return;
+      seen.add(p.parcelId);
+      counts.set(p.companyId, (counts.get(p.companyId) || 0) + 1);
+    });
+    return counts;
+  }, [parcels]);
+
+  const selectedMainParcelIds = useMemo(() => {
+    const ids = new Set<string>();
+    parcels.forEach(p => { if (selectedParcelIds.has(p.id) && p.parcelId && p.parcelId !== p.id) ids.add(p.parcelId); });
+    return [...ids];
+  }, [parcels, selectedParcelIds]);
+
+  const handleBulkCompanySave = async () => {
+    const company = companyById.get(bulkCompanyId);
+    if (!company || selectedMainParcelIds.length === 0) return;
+    setIsSavingCompany(true);
+    try {
+      await setParcelsCompany(selectedMainParcelIds, company);
+      toast({
+        title: 'Bedrijf gewijzigd',
+        description: `${selectedMainParcelIds.length} ${selectedMainParcelIds.length === 1 ? 'perceel' : 'percelen'} → ${company.name}. Blokken volgen hun hoofdperceel.`,
+      });
+      invalidateParcels();
+      setIsCompanyDialogOpen(false);
+      setSelectedParcelIds(new Set());
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Wijzigen mislukt', description: error instanceof Error ? error.message : undefined });
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
 
   const getSortIcon = (column: string) => {
     if (sortColumn !== column) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
@@ -757,6 +807,34 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                     </button>
                   </div>
 
+                {/* Bedrijf filter (alleen bij 2+ bedrijven) */}
+                {hasMultipleCompanies && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest mr-1">Bedrijf</span>
+                    <button
+                      onClick={() => setCompanyFilter('all')}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                        companyFilter === 'all' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                      }`}
+                    >
+                      Alle
+                    </button>
+                    {companies.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => setCompanyFilter(companyFilter === c.id ? 'all' : c.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                          companyFilter === c.id ? 'bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/40' : 'bg-white/5 text-white/40 hover:bg-white/10'
+                        }`}
+                      >
+                        <Building2 className="h-3 w-3" />
+                        {c.name}
+                        <span className="text-[10px] opacity-50">({companyCounts.get(c.id) || 0})</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Gewas filters */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest mr-1">Gewas</span>
@@ -921,6 +999,12 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
+                              {hasMultipleCompanies && group.subParcels[0]?.companyId && (
+                                <span className="inline-flex items-center gap-1 mr-1.5 px-1.5 py-0.5 rounded-md bg-sky-500/10 text-[10px] font-bold text-sky-300/80">
+                                  <Building2 className="h-2.5 w-2.5" />
+                                  {companyById.get(group.subParcels[0].companyId!)?.name ?? 'Onbekend bedrijf'}
+                                </span>
+                              )}
                               {group.varieties.slice(0, 4).map((v, i) => (
                                 <span key={v} className="text-[11px] text-white/25">
                                   {i > 0 && <span className="mr-1.5">&middot;</span>}{v}
@@ -1094,6 +1178,19 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                       Vergelijk
                     </button>
                   )}
+                  {hasMultipleCompanies && selectedMainParcelIds.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const firstSelected = parcels.find(p => selectedParcelIds.has(p.id));
+                        setBulkCompanyId(firstSelected?.companyId || companies.find(c => c.isDefault)?.id || '');
+                        setIsCompanyDialogOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 text-sky-300 text-xs font-bold hover:bg-sky-500/25 transition-all"
+                    >
+                      <Building2 className="h-3.5 w-3.5" />
+                      Bedrijf wijzigen
+                    </button>
+                  )}
                   <button
                     onClick={() => { setGroupInitialSelectedIds(new Set(selectedParcelIds)); setIsGroupDialogOpen(true); }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/15 text-primary text-xs font-bold hover:bg-primary/25 transition-all duration-200 hover:shadow-lg hover:shadow-primary/10"
@@ -1112,6 +1209,34 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
                 </motion.div>
               )}
             </AnimatePresence>
+
+            <Dialog open={isCompanyDialogOpen} onOpenChange={setIsCompanyDialogOpen}>
+              <DialogContent className="sm:max-w-[440px]">
+                <DialogHeader>
+                  <DialogTitle>Bedrijf wijzigen</DialogTitle>
+                  <DialogDescription>
+                    {selectedMainParcelIds.length} {selectedMainParcelIds.length === 1 ? 'hoofdperceel' : 'hoofdpercelen'} naar een ander bedrijf.
+                    Alle blokken van deze percelen gaan mee; registraties volgen automatisch.
+                  </DialogDescription>
+                </DialogHeader>
+                <Select value={bulkCompanyId} onValueChange={setBulkCompanyId}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Kies bedrijf" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (standaard)' : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCompanyDialogOpen(false)}>Annuleren</Button>
+                  <Button onClick={handleBulkCompanySave} disabled={!bulkCompanyId || isSavingCompany}>
+                    {isSavingCompany ? 'Opslaan…' : 'Opslaan'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           <Card className="bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 h-[calc(100vh-24rem)] overflow-hidden relative rounded-3xl">

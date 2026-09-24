@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Lock, MessageCircle, Clock, Mail, ArrowRight, Radio, Sparkles } from 'lucide-react';
+import { Settings, Lock, MessageCircle, Clock, Mail, ArrowRight, Radio, Sparkles, Building2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import Link from 'next/link';
 
@@ -63,6 +63,21 @@ export default function InstellingenPage() {
               <p className="text-xs text-white/40 mt-0.5">
                 Werkrooster, uurtarieven en minuten per hectare bij bespuiting
               </p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-white/40" />
+          </div>
+        </Link>
+
+        {/* Bedrijfsprofielen */}
+        <Link
+          href="/instellingen/bedrijven"
+          className="block rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Building2 className="h-4 w-4 text-emerald-400" />
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-white/80">Bedrijfsprofielen</h2>
+              <p className="text-xs text-white/25 mt-0.5">Bedrijfsgegevens (GGN, telernummer, KvK) en meerdere bedrijven</p>
             </div>
             <ArrowRight className="h-4 w-4 text-white/40" />
           </div>

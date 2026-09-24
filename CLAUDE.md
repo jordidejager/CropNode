@@ -329,6 +329,17 @@ De oude interactieve flow (`registration-processor.ts`, `edit-handler.ts`, `prod
 - **Test zonder WhatsApp**: `npx tsx scripts/test-spray-inbox.ts --user <uuid> [--keep] "<notitie>"`.
 - Migratie `086_logbook_spray_inbox_columns.sql` (kolommen `source`, `wa_message_id`, `review_meta` op `logbook`).
 
+## Bedrijfsprofielen (meerdere bedrijven per teler)
+
+Sommige telers hebben meer dan één bedrijf (bijv. maatschap + B.V.). **Gedeeld datamodel met StoreNode — namen niet wijzigen.**
+
+- `public.companies` (id, user_id, name, address, postal_code, city, country, ggn, gln, grower_number, kvk, is_default, created_at); precies één `is_default` per `user_id` (partial unique index). RLS op `auth.uid() = user_id`.
+- `public.parcels.company_id` (nullable, `ON DELETE SET NULL`): **NULL = standaardbedrijf**. Subpercelen hebben geen kolom en volgen het hoofdperceel; registraties hebben geen kolom (bedrijf volgt uit perceel).
+- Helpers: `default_company_id(user_id)`, view `v_parcel_companies` (parcel_id, user_id, company_id, effective_company_id, company_name), en `v_sprayable_parcels.company_id` (effectief bedrijf per blok).
+- Triggers: nieuw account → standaardbedrijf "Mijn bedrijf"; profiel-insert neemt `company_name` over.
+- App: `src/lib/companies.ts` (CRUD; standaardbedrijf wordt als NULL opgeslagen; bij wisselen van standaard worden NULL-percelen eerst vastgezet op het oude bedrijf), `useCompanies`/`useCompanyFilter` + `<CompanyFilter>` (rendert niets bij 1 bedrijf). Schermen: Instellingen › Bedrijfsprofielen, percelen (formulier, label, filter, "Bedrijf wijzigen" op selectie), filters op spuitschrift, bemestingsregister, Analytics › Operations (`?company=`) en Analytics › Bemesting.
+- Migratie `088_companies_bedrijfsprofielen.sql`.
+
 ## MCP-server voor Claude (`/api/mcp/[sleutel]`, `src/lib/mcp/`)
 
 Een Claude-chat (claude.ai custom connector of Claude Code) praat via MCP met de gegevens van

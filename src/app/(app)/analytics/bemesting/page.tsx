@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
+import { CompanyFilter } from '@/components/company-filter';
+import { useCompanies } from '@/hooks/use-data';
 import dynamic from 'next/dynamic';
 import {
   Sprout, Leaf, FlaskConical, Droplets, MapPin, FileText,
@@ -255,6 +257,8 @@ export default function BemestingPage() {
   const [parcels, setParcels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const { data: companies = [] } = useCompanies();
+  const [companyId, setCompanyId] = useState<string>('all');
 
   useEffect(() => {
     async function load() {
@@ -264,7 +268,7 @@ export default function BemestingPage() {
       const [analysesData, spRes, pRes] = await Promise.all([
         fetchSoilAnalyses(),
         supabase.from('sub_parcels').select('id, parcel_id, name, crop, variety, area').order('name'),
-        supabase.from('parcels').select('id, name, area').order('name'),
+        supabase.from('parcels').select('id, name, area, company_id').order('name'),
       ]);
 
       setAnalyses(analysesData);
@@ -275,9 +279,21 @@ export default function BemestingPage() {
     load();
   }, []);
 
+  // Bedrijfsfilter: company_id NULL = standaardbedrijf; blokken volgen hun hoofdperceel.
+  const filteredParcels = useMemo(() => {
+    if (companyId === 'all' || companies.length < 2) return parcels;
+    const defaultId = companies.find((c) => c.isDefault)?.id ?? null;
+    return parcels.filter((p) => (p.company_id ?? defaultId) === companyId);
+  }, [parcels, companies, companyId]);
+  const filteredSubParcels = useMemo(() => {
+    if (filteredParcels === parcels) return subParcels;
+    const ids = new Set(filteredParcels.map((p) => p.id));
+    return subParcels.filter((sp) => ids.has(sp.parcel_id));
+  }, [subParcels, filteredParcels, parcels]);
+
   const groups = useMemo(
-    () => buildHoofdPerceelBemesting(analyses, subParcels, parcels),
-    [analyses, subParcels, parcels]
+    () => buildHoofdPerceelBemesting(analyses, filteredSubParcels, filteredParcels),
+    [analyses, filteredSubParcels, filteredParcels]
   );
 
   const stats = useMemo(() => calculateBemestingStats(groups), [groups]);
@@ -333,7 +349,7 @@ export default function BemestingPage() {
     );
   }
 
-  if (groups.length === 0) {
+  if (groups.length === 0 && companyId === 'all') {
     return <BemestingEmptyState />;
   }
 
@@ -350,8 +366,11 @@ export default function BemestingPage() {
             Overzicht van grondmonsters per perceel — bodemwaarden worden overgenomen naar subpercelen
           </p>
         </div>
-        <div className="text-xs text-slate-600">
-          {stats.totalHoofdPercelen} {stats.totalHoofdPercelen === 1 ? 'perceel' : 'percelen'} · {stats.totalSubParcels} blokken met data
+        <div className="flex flex-col items-end gap-2">
+          <CompanyFilter companies={companies} value={companyId} onChange={setCompanyId} />
+          <div className="text-xs text-slate-600">
+            {stats.totalHoofdPercelen} {stats.totalHoofdPercelen === 1 ? 'perceel' : 'percelen'} · {stats.totalSubParcels} blokken met data
+          </div>
         </div>
       </div>
 

@@ -25,7 +25,7 @@ function getNRequirement(variety: string): number {
   return N_REQUIREMENT_KG_HA.default;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createServerClient();
     const user = await resolveUser(supabase);
@@ -34,16 +34,17 @@ export async function GET() {
     const admin = getSupabaseAdmin();
     const now = new Date();
     const harvestYear = deriveHarvestYear(now);
+    const companyFilter = new URL(request.url).searchParams.get('company');
 
     const [parcelsRes, subParcelsRes, spuitRes, parcelHistRes, soilRes, diseaseCfgRes] = await Promise.all([
-      admin.from('parcels').select('id, name').eq('user_id', user.id),
+      admin.from('parcels').select('id, name, company_id').eq('user_id', user.id),
       admin.from('sub_parcels').select('id, parcel_id, name, crop, variety, area').eq('user_id', user.id),
       admin.from('spuitschrift')
         .select('id, date, plots, products, registration_type, harvest_year')
         .eq('user_id', user.id)
         .eq('harvest_year', harvestYear),
       admin.from('parcel_history')
-        .select('parcel_name, product, dosage, unit, unit_price, harvest_year, registration_type, date')
+        .select('parcel_id, parcel_name, product, dosage, unit, unit_price, harvest_year, registration_type, date')
         .eq('user_id', user.id)
         .eq('harvest_year', harvestYear),
       admin.from('soil_analyses')
@@ -56,14 +57,35 @@ export async function GET() {
         .eq('harvest_year', harvestYear),
     ]);
 
-    const parcels = (parcelsRes.data || []) as Array<{ id: string; name: string }>;
-    const subParcels = (subParcelsRes.data || []) as Array<{
+    let parcels = (parcelsRes.data || []) as Array<{ id: string; name: string; company_id: string | null }>;
+    let subParcels = (subParcelsRes.data || []) as Array<{
       id: string; parcel_id: string; name: string; crop: string; variety: string; area: number;
     }>;
-    const spuitRows = (spuitRes.data || []) as any[];
-    const parcelHist = (parcelHistRes.data || []) as any[];
+    let spuitRows = (spuitRes.data || []) as any[];
+    let parcelHist = (parcelHistRes.data || []) as any[];
     const soilRows = (soilRes.data || []) as any[];
-    const diseaseCfg = (diseaseCfgRes.data || []) as any[];
+    let diseaseCfg = (diseaseCfgRes.data || []) as any[];
+
+    // Bedrijfsfilter: percelen zonder company_id horen bij het standaardbedrijf; blokken en
+    // registraties volgen hun hoofdperceel.
+    if (companyFilter) {
+      const { data: defaultCompany } = await (admin as any)
+        .from('companies')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_default', true)
+        .maybeSingle();
+      const defaultId = defaultCompany?.id ?? null;
+      parcels = parcels.filter((p) => (p.company_id ?? defaultId) === companyFilter);
+      const mainIds = new Set(parcels.map((p) => p.id));
+      subParcels = subParcels.filter((sp) => mainIds.has(sp.parcel_id));
+      const subIds = new Set(subParcels.map((sp) => sp.id));
+      spuitRows = spuitRows
+        .map((r) => ({ ...r, plots: (r.plots || []).filter((plot: string) => subIds.has(plot)) }))
+        .filter((r) => r.plots.length > 0);
+      parcelHist = parcelHist.filter((h) => subIds.has(h.parcel_id));
+      diseaseCfg = diseaseCfg.filter((d) => mainIds.has(d.parcel_id) || subIds.has(d.parcel_id));
+    }
 
     const parcelMap = new Map(parcels.map((p) => [p.id, p.name]));
 

@@ -13,6 +13,25 @@ export type Parcel = {
   // Commonly used fields (may come from primary subParcel)
   variety?: string;
   crop?: string;
+  /** Bedrijf (companies.id); null/undefined = standaardbedrijf van de teler. */
+  companyId?: string | null;
+};
+
+/** Bedrijfsprofiel (public.companies). Precies één is_default per teler. */
+export type Company = {
+  id: string;
+  userId: string;
+  name: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  ggn: string;
+  gln: string;
+  growerNumber: string;
+  kvk: string;
+  isDefault: boolean;
+  createdAt: string | null;
 };
 
 export type WeightedValue<T> = {

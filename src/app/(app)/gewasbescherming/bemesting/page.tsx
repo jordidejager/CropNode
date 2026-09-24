@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFertilizationEntries, useSpuitschriftEntries, useParcels, useInvalidateQueries } from '@/hooks/use-data';
+import { useFertilizationEntries, useSpuitschriftEntries, useParcels, useInvalidateQueries, useCompanyFilter } from '@/hooks/use-data';
+import { CompanyFilter } from '@/components/company-filter';
 import { SpuitschriftEntry } from '@/lib/types';
 import type { SprayableParcel } from '@/lib/supabase-store';
 import { isTankmixEntry } from '@/lib/fertilization-utils';
@@ -389,6 +390,17 @@ export default function BemestingsregisterPage() {
     const isLoading = isLoadingEntries || isLoadingParcels;
     const isError = isErrorEntries || isErrorParcels;
 
+    // Bedrijfsfilter (alleen zichtbaar bij 2+ bedrijven); het bedrijf volgt uit het perceel.
+    const companyFilter = useCompanyFilter(allParcels);
+    const visibleEntries = React.useMemo(
+        () => (companyFilter.active ? entries.filter(e => e.plots.some(companyFilter.matchesPlot)) : entries),
+        [entries, companyFilter.active, companyFilter.matchesPlot]
+    );
+    const visibleParcels = React.useMemo(
+        () => (companyFilter.active ? allParcels.filter(p => companyFilter.matchesPlot(p.id)) : allParcels),
+        [allParcels, companyFilter.active, companyFilter.matchesPlot]
+    );
+
     const currentYear = new Date().getFullYear();
     const entriesThisYear = entries.filter(e => new Date(e.date).getFullYear() === currentYear).length;
 
@@ -465,6 +477,7 @@ export default function BemestingsregisterPage() {
             {header}
 
             <Tabs defaultValue="chronological" className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                 <TabsList className="h-12 p-1 bg-white/[0.04] border border-white/10">
                     <TabsTrigger value="chronological" className="h-10 px-6 text-base data-[state=active]:bg-lime-500/15 data-[state=active]:text-lime-400">
                         Chronologisch
@@ -473,16 +486,18 @@ export default function BemestingsregisterPage() {
                         Per perceel
                     </TabsTrigger>
                 </TabsList>
+                <CompanyFilter companies={companyFilter.companies} value={companyFilter.companyId} onChange={companyFilter.setCompanyId} className="h-12" />
+                </div>
                 <TabsContent value="chronological" className="mt-0">
                     <ChronologicalView
-                        entries={entries}
+                        entries={visibleEntries}
                         allParcels={allParcels}
                         originalEntries={rawEntries}
                         onAction={handleAction}
                     />
                 </TabsContent>
                 <TabsContent value="by_parcel" className="mt-0">
-                    <ParcelHistoryView allParcels={allParcels} entries={entries} />
+                    <ParcelHistoryView allParcels={visibleParcels} entries={visibleEntries} />
                 </TabsContent>
             </Tabs>
         </div>

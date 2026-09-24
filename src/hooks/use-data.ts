@@ -5,6 +5,8 @@ import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { filterFertilizationEntries, filterCropProtectionEntries } from '@/lib/fertilization-utils';
 import { getSprayInboxEntries, getSprayInboxCount } from '@/app/spray-inbox-actions';
+import { getCompanies } from '@/lib/companies';
+import type { Company } from '@/lib/types';
 import {
     getParcels,
     getSprayableParcels,  // New: uses v_sprayable_parcels view
@@ -62,6 +64,7 @@ import type {
 export const queryKeys = {
     // Parcels
     parcels: ['parcels'] as const,
+    companies: ['companies'] as const,
     parcel: (id: string) => ['parcels', id] as const,
     parcelGroups: ['parcel-groups'] as const,
 
@@ -135,6 +138,32 @@ export function useParcels() {
         queryFn: getSprayableParcels,  // Uses new view
         staleTime: 10 * 60 * 1000, // 10 minutes - parcels don't change often
     });
+}
+
+/** Bedrijfsprofielen van de teler (standaardbedrijf eerst). */
+export function useCompanies() {
+    return useQuery({
+        queryKey: queryKeys.companies,
+        queryFn: getCompanies,
+        staleTime: 10 * 60 * 1000,
+    });
+}
+
+/**
+ * Bedrijfsfilter voor overzichten. `enabled` is alleen true bij 2+ bedrijven;
+ * `matchesPlot(subParcelId)` is altijd true zolang er geen bedrijf gekozen is.
+ */
+export function useCompanyFilter(parcels: { id: string; companyId: string | null }[]) {
+    const { data: companies = [] } = useCompanies();
+    const [companyId, setCompanyId] = React.useState<string>('all');
+    const enabled = companies.length > 1;
+    const plotCompany = React.useMemo(() => new Map(parcels.map(p => [p.id, p.companyId])), [parcels]);
+    const active = enabled && companyId !== 'all';
+    const matchesPlot = React.useCallback(
+        (plotId: string) => !active || plotCompany.get(plotId) === companyId,
+        [active, plotCompany, companyId]
+    );
+    return { companies: companies as Company[], enabled, companyId: active ? companyId : 'all', setCompanyId, matchesPlot, active };
 }
 
 export function useParcelGroups() {
@@ -610,6 +639,7 @@ export function useInvalidateQueries() {
         invalidateSprayInbox: () => queryClient.invalidateQueries({ queryKey: queryKeys.sprayInbox }),
         invalidateSpuitschrift: () => queryClient.invalidateQueries({ queryKey: queryKeys.spuitschriftEntries }),
         invalidateParcels: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcels }),
+        invalidateCompanies: () => queryClient.invalidateQueries({ queryKey: queryKeys.companies }),
         invalidateParcelGroups: () => queryClient.invalidateQueries({ queryKey: queryKeys.parcelGroups }),
         invalidateInventory: () => queryClient.invalidateQueries({ queryKey: queryKeys.inventoryMovements }),
         invalidateGewasHistorie: (parcelId: string) => queryClient.invalidateQueries({ queryKey: queryKeys.gewasHistorie(parcelId) }),

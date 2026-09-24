@@ -301,6 +301,7 @@ export async function applyLocationFilterDb(
     source: item.source,
     rvoId: item.rvo_id,
     synonyms: item.synonyms || [],
+    companyId: item.company_id ?? null,
   }));
 
   // Apply exclude filters client-side

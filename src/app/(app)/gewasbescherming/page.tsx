@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useCropProtectionEntries, useParcels, useInvalidateQueries, useCtgbProducts } from '@/hooks/use-data';
+import { useCropProtectionEntries, useParcels, useInvalidateQueries, useCtgbProducts, useCompanyFilter } from '@/hooks/use-data';
+import { CompanyFilter } from '@/components/company-filter';
 import { SpuitschriftEntry, ProductEntry } from '@/lib/types';
 import type { SprayableParcel } from '@/lib/supabase-store';
 import { Card, CardContent } from '@/components/ui/card';
@@ -636,6 +637,17 @@ export default function SpuitschriftPage() {
     const isLoading = isLoadingEntries || isLoadingParcels || isLoadingProducts;
     const isError = isErrorEntries || isErrorParcels;
 
+    // Bedrijfsfilter (alleen zichtbaar bij 2+ bedrijven); het bedrijf volgt uit het perceel.
+    const companyFilter = useCompanyFilter(allParcels);
+    const visibleEntries = React.useMemo(
+        () => (companyFilter.active ? entries.filter(e => e.plots.some(companyFilter.matchesPlot)) : entries),
+        [entries, companyFilter.active, companyFilter.matchesPlot]
+    );
+    const visibleParcels = React.useMemo(
+        () => (companyFilter.active ? allParcels.filter(p => companyFilter.matchesPlot(p.id)) : allParcels),
+        [allParcels, companyFilter.active, companyFilter.matchesPlot]
+    );
+
     const [isNewSprayDialogOpen, setIsNewSprayDialogOpen] = React.useState(false);
 
     const allProductNames = React.useMemo(() =>
@@ -728,6 +740,7 @@ export default function SpuitschriftPage() {
                     </SpotlightCard>
                 ) : (
                     <Tabs defaultValue="chronological" className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                         <TabsList className="h-12 p-1 bg-white/[0.04] border border-white/10">
                             <TabsTrigger value="chronological" className="h-10 px-6 text-base data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400">
                                 Chronologisch
@@ -736,10 +749,12 @@ export default function SpuitschriftPage() {
                                 Per perceel
                             </TabsTrigger>
                         </TabsList>
+                        <CompanyFilter companies={companyFilter.companies} value={companyFilter.companyId} onChange={companyFilter.setCompanyId} className="h-12" />
+                        </div>
                         <TabsContent value="chronological" className="mt-0">
-                            {entries.length > 0 ? (
+                            {visibleEntries.length > 0 ? (
                                 <ChronologicalView
-                                    entries={entries}
+                                    entries={visibleEntries}
                                     allParcels={allParcels}
                                     allProducts={allProductNames}
                                     onAction={handleAction}
@@ -755,7 +770,7 @@ export default function SpuitschriftPage() {
                             )}
                         </TabsContent>
                         <TabsContent value="by_parcel" className="mt-0">
-                            <ParcelHistoryView allParcels={allParcels} entries={entries} />
+                            <ParcelHistoryView allParcels={visibleParcels} entries={visibleEntries} />
                         </TabsContent>
                     </Tabs>
                 )}

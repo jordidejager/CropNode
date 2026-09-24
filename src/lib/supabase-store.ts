@@ -563,6 +563,8 @@ export interface SprayableParcel {
   source: string | null;
   rvoId: string | null;
   synonyms: string[];   // Alternative names for Smart Input matching
+  /** Effectief bedrijf (via hoofdperceel; standaardbedrijf als het perceel er geen heeft). */
+  companyId: string | null;
 }
 
 // Keep ActiveParcel as alias for backward compatibility
@@ -586,7 +588,7 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
     // First try the view — include location/geometry/parent info for map & detail views
     let query = client
       .from('v_sprayable_parcels')
-      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id');
+      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id, company_id');
 
     // Explicitly filter by user_id for data isolation
     if (userId) {
@@ -649,6 +651,7 @@ export async function getSprayableParcels(): Promise<SprayableParcel[]> {
       geometry: null,
       source: null,
       rvoId: null,
+      companyId: null,
     })) as SprayableParcel[];
   });
 }
@@ -715,6 +718,7 @@ function mapToSprayableParcel(item: any): SprayableParcel {
     source: item.source,
     rvoId: item.rvo_id,
     synonyms: item.synonyms || [],
+    companyId: item.company_id ?? null,
   };
 }
 
@@ -739,7 +743,7 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
     // First try the view
     let query = client
       .from('v_sprayable_parcels')
-      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id')
+      .select('id, name, area, crop, variety, parcel_id, parcel_name, location, geometry, source, rvo_id, synonyms, user_id, company_id')
       .in('id', ids);
 
     if (userId) {
@@ -800,6 +804,7 @@ export async function getSprayableParcelsById(ids: string[]): Promise<SprayableP
       geometry: null as any,
       source: null,
       rvoId: null,
+      companyId: null,
     })) as SprayableParcel[];
   });
 }
@@ -910,6 +915,7 @@ export async function getParcels(): Promise<Parcel[]> {
       geometry,
       source: item.source,
       rvoId: item.rvo_id,
+      companyId: item.company_id ?? null,
       crop,  // Sourced from sub_parcels first
       variety,  // Sourced from sub_parcels first
       subParcels: allSubParcels.map((sp: any) => ({
@@ -1057,6 +1063,7 @@ export async function addParcel(parcel: Omit<Parcel, 'id'>): Promise<Parcel> {
       geometry: geometryToSave || null,
       source: parcel.source || "MANUAL",
       rvo_id: parcel.rvoId || null,
+      company_id: parcel.companyId || null,
     })
     .select()
     .single();
@@ -1085,6 +1092,7 @@ export async function updateParcel(parcel: Parcel): Promise<void> {
       geometry: geometryToSave,
       source: data.source,
       rvo_id: data.rvoId,
+      ...(data.companyId !== undefined ? { company_id: data.companyId || null } : {}),
     })
     .eq('id', id);
 
@@ -1214,6 +1222,7 @@ export async function getParcelsByIds(ids: string[]): Promise<Parcel[]> {
       geometry,
       source: item.source,
       rvoId: item.rvo_id,
+      companyId: item.company_id ?? null,
       crop,  // Now correctly sourced from sub_parcels
       variety,  // Now correctly sourced from sub_parcels
       subParcels: allSubParcels.map((sp: any) => ({

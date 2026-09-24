@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Wrench, Droplets, Sprout, Shield, AlertTriangle, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { DataSourceHint } from '@/components/analytics/shared/DataSourceHint';
+import { CompanyFilter } from '@/components/company-filter';
+import { useCompanies } from '@/hooks/use-data';
 
 interface OperationsData {
   harvestYear: number;
@@ -68,12 +70,15 @@ export default function OperationsPage() {
   const [data, setData] = useState<OperationsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: companies = [] } = useCompanies();
+  const [companyId, setCompanyId] = useState<string>('all');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/analytics/operations', { cache: 'no-store' });
+      const qs = companyId !== 'all' ? `?company=${encodeURIComponent(companyId)}` : '';
+      const res = await fetch(`/api/analytics/operations${qs}`, { cache: 'no-store' });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Fout');
       setData(json);
@@ -82,20 +87,23 @@ export default function OperationsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   useEffect(() => { load(); }, [load]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-          <Wrench className="size-5 text-emerald-400" />
-          Operationele intelligentie
-        </h1>
-        <p className="text-xs text-slate-500 mt-1 max-w-lg">
-          Middelenmix, bemestingsbalans en resistentie-management voor oogstjaar {data?.harvestYear || '…'}.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <Wrench className="size-5 text-emerald-400" />
+            Operationele intelligentie
+          </h1>
+          <p className="text-xs text-slate-500 mt-1 max-w-lg">
+            Middelenmix, bemestingsbalans en resistentie-management voor oogstjaar {data?.harvestYear || '…'}.
+          </p>
+        </div>
+        <CompanyFilter companies={companies} value={companyId} onChange={setCompanyId} />
       </div>
 
       {loading && !data && (

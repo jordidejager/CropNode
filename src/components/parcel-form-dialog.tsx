@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label"
 import type { Parcel, RvoParcel } from "@/lib/types"
 import { calculateAreaHectares, calculateCenter } from "@/lib/rvo-api"
 import { MapPin, Check, X, Pencil, MousePointerClick } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useCompanies } from "@/hooks/use-data"
 import dynamic from "next/dynamic"
 
 const RvoMap = dynamic(
@@ -38,6 +40,7 @@ const formSchema = z.object({
   area: z.coerce.number().min(0.01, "Oppervlakte moet groter dan 0 zijn"),
   location: z.object({ lat: z.number(), lng: z.number() }).optional(),
   geometry: z.any().optional(),
+  companyId: z.string().nullable().optional(),
 })
 
 type ParcelFormValues = z.infer<typeof formSchema>
@@ -78,6 +81,9 @@ export function ParcelFormDialog({
   })
 
   const watchedLocation = watch("location")
+  const watchedCompanyId = watch("companyId")
+  const { data: companies = [] } = useCompanies()
+  const defaultCompanyId = companies.find(c => c.isDefault)?.id ?? null
   const watchedGeometry = watch("geometry")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false);
@@ -88,14 +94,15 @@ export function ParcelFormDialog({
   useEffect(() => {
     if (isOpen) {
       if (parcel) {
-        reset({ ...parcel, location: parcel.location || undefined, geometry: parcel.geometry || undefined });
+        reset({ ...parcel, location: parcel.location || undefined, geometry: parcel.geometry || undefined, companyId: parcel.companyId ?? null });
       } else if (rvoData) {
         reset({
           id: undefined,
           name: rvoData.name,
           area: rvoData.area,
           location: rvoData.location,
-          geometry: rvoData.geometry
+          geometry: rvoData.geometry,
+          companyId: null,
         });
       } else {
         reset({
@@ -103,7 +110,8 @@ export function ParcelFormDialog({
           name: "",
           area: 0.0,
           location: undefined,
-          geometry: undefined
+          geometry: undefined,
+          companyId: null,
         })
       }
     }
@@ -163,7 +171,8 @@ export function ParcelFormDialog({
 
   const processSubmit: SubmitHandler<ParcelFormValues> = async (data) => {
     setIsSubmitting(true)
-    await onSubmit(data)
+    // Standaardbedrijf wordt opgeslagen als NULL (parcels.company_id).
+    await onSubmit({ ...data, companyId: data.companyId && data.companyId !== defaultCompanyId ? data.companyId : null })
     setIsSubmitting(false)
     handleClose()
   }
@@ -214,6 +223,29 @@ export function ParcelFormDialog({
                 )}
               </div>
             </div>
+
+            {companies.length > 1 && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Bedrijf</Label>
+                <div className="col-span-3">
+                  <Select
+                    value={watchedCompanyId || defaultCompanyId || undefined}
+                    onValueChange={v => setValue("companyId", v)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Kies bedrijf" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}{c.isDefault ? " (standaard)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-4 items-start gap-4 pt-2">
               <Label className="text-right mt-2">
