@@ -12,6 +12,13 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-09-24 — 🤖 MCP-server: CropNode als Claude-connector (naast StoreNode)
+- ✅ `/api/mcp/[sleutel]` (JSON-RPC, koppelsleutel-hash in `claude_koppelsleutels`), Instellingen › Claude-koppeling (sleutel maken/intrekken, connector-instructies), middleware-uitzondering.
+- ✅ 14 tools in `src/lib/mcp/tools.ts`: percelen, percelen_status, bespuitingen, middel_info, middelen_tegen, voorraad, weer, nu, veldnotities, spuit_inbox, registreer_bespuiting (voorstel→bevestig), keur_concept_goed, verwijder_concept, veldnotitie. Alles getest tegen productie-data met `scripts/test-mcp.ts` (testregels weer verwijderd).
+- ✅ Bijvangst: `getLastUsedDosagesForUser`/`getUserProductNames` lezen nu uit `spuitschrift` (parcel_history was leeg → "vorige keer"-dosering werkte niet in de spuit-inbox); parser kent nu "soriale 0,5" (naam vóór getal zonder eenheid); `field_notes.source` accepteert `'claude'`.
+- ✅ Migratie 087 gedraaid (door Claude via pooler).
+- ⏳ Jordi: in Instellingen › Claude-koppeling een sleutel maken → in Claude als custom connector "CropNode" toevoegen naast StoreNode → testen: "welke percelen heb ik de laatste 3 weken niet met captan gedaan?", "registreer: …".
+
 ### 2026-09-22 — 📥 Spuit-inbox live op het bestaande nummer (geen tweede nummer)
 - Jordi houdt één WhatsApp-nummer. `message-handler.ts`: de spuit-fallback (en tekst in oude `awaiting_*`-states) gaat nu naar `routeToSprayInbox()` → concept + "✓ Genoteerd" + `after(processSprayDraft)`; niet-registraties worden veldnotitie i.p.v. lege kaart. Oude knoppenflow wordt niet meer aangeroepen (code blijft staan).
 - ✅ Migratie 086 gedraaid (door Claude via pooler `aws-1-eu-west-1`, directe DB-host is IPv6-only vanaf de Mac). Fix: `registration_type` NOT NULL → default `'spraying'` bij eerste insert.

@@ -54,7 +54,7 @@ export interface ConfirmRegistrationParams {
   rawInput?: string;
   validationMessage?: string | null;
   registrationType?: 'spraying' | 'spreading';
-  registrationSource?: 'web' | 'whatsapp';
+  registrationSource?: 'web' | 'whatsapp' | 'claude';
 }
 
 export interface ConfirmRegistrationResult {

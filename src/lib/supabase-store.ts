@@ -1488,7 +1488,8 @@ export async function getLastUsedDosages(productNames: string[]): Promise<Map<st
 
 /**
  * Server-side variant of getLastUsedDosages: admin client + explicit user filter.
- * Needed where there is no cookie session (WhatsApp webhook, cron, after()).
+ * Reads the spuitschrift (source of truth; parcel_history can be empty for older data).
+ * Needed where there is no cookie session (WhatsApp webhook, cron, after(), MCP).
  */
 export async function getLastUsedDosagesForUser(
   userId: string,
@@ -1497,25 +1498,14 @@ export async function getLastUsedDosagesForUser(
   const result = new Map<string, { dosage: number; unit: string; date: Date }>();
   if (!userId || productNames.length === 0) return result;
 
-  const { data, error } = await getSupabaseAdmin()
-    .from('parcel_history')
-    .select('product, dosage, unit, date')
-    .eq('user_id', userId)
-    .gt('dosage', 0)
-    .order('date', { ascending: false })
-    .limit(500);
-
-  if (error || !data) return result;
-
+  const history = await getUserProductHistory(userId);
   for (const productName of productNames) {
     const normalized = productName.toLowerCase().trim();
-    const match = data.find(entry => {
-      const p = entry.product?.toLowerCase() || '';
-      return p === normalized || p.includes(normalized) || normalized.includes(p);
+    const match = history.find(h => {
+      const p = h.product.toLowerCase();
+      return h.dosage > 0 && (p === normalized || p.includes(normalized) || normalized.includes(p));
     });
-    if (match) {
-      result.set(productName, { dosage: match.dosage, unit: match.unit, date: new Date(match.date) });
-    }
+    if (match) result.set(productName, { dosage: match.dosage, unit: match.unit, date: match.date });
   }
   return result;
 }
@@ -1525,28 +1515,39 @@ export async function getLastUsedDosagesForUser(
  * Server-side (admin client). Used to pick the user's own brand for an active ingredient.
  */
 export async function getUserProductNames(userId: string): Promise<string[]> {
-  if (!userId) return [];
-
-  const { data, error } = await getSupabaseAdmin()
-    .from('parcel_history')
-    .select('product, date')
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
-    .limit(1000);
-
-  if (error || !data) return [];
-
+  const history = await getUserProductHistory(userId);
   const seen = new Set<string>();
   const names: string[] = [];
-  for (const row of data) {
-    const name = (row.product || '').trim();
-    if (!name) continue;
-    const key = name.toLowerCase();
+  for (const h of history) {
+    const key = h.product.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    names.push(name);
+    names.push(h.product);
   }
   return names;
+}
+
+/** Flattened product usage from the user's spuitschrift, newest first (max ~300 registrations). */
+async function getUserProductHistory(userId: string): Promise<Array<{ product: string; dosage: number; unit: string; date: Date }>> {
+  if (!userId) return [];
+  const { data, error } = await getSupabaseAdmin()
+    .from('spuitschrift')
+    .select('date, products')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(300);
+  if (error || !data) return [];
+
+  const out: Array<{ product: string; dosage: number; unit: string; date: Date }> = [];
+  for (const row of data) {
+    const date = new Date(row.date);
+    for (const p of (row.products as ProductEntry[] | null) || []) {
+      const product = (p?.product || '').trim();
+      if (!product) continue;
+      out.push({ product, dosage: Number(p.dosage) || 0, unit: (p.unit || '').replace('/ha', '') || 'L', date });
+    }
+  }
+  return out;
 }
 
 /**

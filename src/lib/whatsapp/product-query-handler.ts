@@ -359,3 +359,50 @@ function renderCropGroups(lines: string[], groups: CropGroup[]): void {
     if (g.phi) lines.push(`  Veiligheidstermijn: ${g.phi}`);
   }
 }
+
+// ============================================================================
+// Text builders (MCP / assistant use — no WhatsApp)
+// ============================================================================
+
+export async function buildProductInfoText(productQuery: string, crop?: string): Promise<string> {
+  const admin = getSupabaseAdmin();
+  if (!admin) throw new Error('Admin client niet beschikbaar');
+
+  const { data: searchResults, error: searchErr } = await (admin as any).rpc('fn_search_products', {
+    search_query: productQuery,
+    filter_source: null,
+  });
+  if (searchErr || !searchResults?.length) {
+    return `Middel "${productQuery}" niet gevonden in de CTGB/meststoffen-database. Probeer een andere spelling of de merknaam.`;
+  }
+  const bestMatch = searchResults[0];
+  const { data: card } = await (admin as any).from('v_product_card').select('*').eq('product_id', bestMatch.product_id).maybeSingle();
+
+  const targetCrop = (crop || 'appel').toLowerCase();
+  const { data: cropData } = await (admin as any).rpc('fn_get_product_for_crop', { p_product_name: bestMatch.name, p_gewas: targetCrop });
+  let peerInfo: any = null;
+  if (!crop) {
+    const { data: peerData } = await (admin as any).rpc('fn_get_product_for_crop', { p_product_name: bestMatch.name, p_gewas: 'peer' });
+    if (peerData?.length > 0) peerInfo = peerData;
+  }
+  const alternatives = searchResults.slice(1, 4).map((r: any) => r.name).filter(Boolean);
+  const text = formatProductCard(bestMatch, card, cropData?.length ? cropData : null, peerInfo, targetCrop);
+  return alternatives.length ? `${text}\n\nAndere treffers: ${alternatives.join(', ')}` : text;
+}
+
+export async function buildOrganismText(organism: string, crop?: string): Promise<string> {
+  const admin = getSupabaseAdmin();
+  if (!admin) throw new Error('Admin client niet beschikbaar');
+  const { data: results, error } = await (admin as any).rpc('fn_find_products_for_organism', {
+    p_doelorganisme: organism,
+    p_gewas: (crop || 'appel').toLowerCase(),
+    p_product_type: null,
+  });
+  if (error || !results?.length) return `Geen middelen gevonden tegen "${organism}"${crop ? ` op ${crop}` : ''}.`;
+  const lines = [`Middelen tegen ${organism}${crop ? ` op ${crop}` : ' op appel'}:`];
+  for (const r of results.slice(0, 12)) {
+    lines.push(`- ${r.product_name}${r.frac_code ? ` (${r.frac_code})` : ''}${r.dosering ? ` — ${r.dosering}` : ''}`);
+  }
+  if (results.length > 12) lines.push(`… en ${results.length - 12} andere.`);
+  return lines.join('\n');
+}

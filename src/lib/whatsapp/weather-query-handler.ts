@@ -147,6 +147,49 @@ export async function handleWeatherQuery(
 }
 
 // ============================================================================
+// Text-only forecast (MCP / assistant use — no chart, no WhatsApp)
+// ============================================================================
+
+export async function buildForecastText(userId: string, dagen = 7): Promise<{ ok: boolean; text: string }> {
+  const resolved = await resolveStationForUser(userId);
+  if (!resolved) {
+    return { ok: false, text: 'Geen weerstation gevonden. Voeg eerst een perceel met locatie toe in CropNode.' };
+  }
+  const admin = getSupabaseAdmin();
+  if (!admin) throw new Error('Admin client niet beschikbaar');
+
+  const [bestMatchDays, multiModel] = await Promise.all([
+    fetchBestMatchDailyAggregates(resolved.stationId, admin as any),
+    getMultiModelForecast(resolved.stationId, admin as any),
+  ]);
+  if (bestMatchDays.length === 0) {
+    return { ok: false, text: `Nog geen weerdata voor station ${resolved.stationName}. Open Weer in de CropNode-app om de verwachting te initialiseren.` };
+  }
+
+  const n = Math.min(14, Math.max(1, Math.round(dagen)));
+  const days = bestMatchDays.slice(0, n);
+  const stdevByDate = computeMultiModelStdev(multiModel.models);
+  const summaryDays: DaySummaryInput[] = days.map(d => ({
+    date: d.date,
+    weekday: weekdayShort(d.date),
+    tmin: d.tmin,
+    tmax: d.tmax,
+    precipMm: d.precipMm,
+    precipModelStdev: stdevByDate.get(d.date) ?? 0,
+    windMaxMs: d.windMeanMs,
+  }));
+  const metrics = computeMetrics(summaryDays);
+  const summary = await summarizeWeatherForecast({ stationName: resolved.stationName, days: summaryDays, metrics })
+    .catch(() => buildFallbackSummary(summaryDays, metrics));
+
+  const table = summaryDays
+    .map(d => `${d.weekday} ${d.date.slice(8)}-${d.date.slice(5, 7)}: ${Math.round(d.tmin)}–${Math.round(d.tmax)}°C · ${d.precipMm.toFixed(1)} mm${d.precipModelStdev > 3 ? ' (onzeker)' : ''} · wind ${d.windMaxMs.toFixed(0)} m/s`)
+    .join('\n');
+
+  return { ok: true, text: `Weerstation ${resolved.stationName} — ${n} dagen\n\n${summary}\n\n${table}` };
+}
+
+// ============================================================================
 // Station resolution
 // ============================================================================
 

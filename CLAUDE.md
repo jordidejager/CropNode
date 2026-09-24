@@ -329,6 +329,28 @@ De oude interactieve flow (`registration-processor.ts`, `edit-handler.ts`, `prod
 - **Test zonder WhatsApp**: `npx tsx scripts/test-spray-inbox.ts --user <uuid> [--keep] "<notitie>"`.
 - Migratie `086_logbook_spray_inbox_columns.sql` (kolommen `source`, `wa_message_id`, `review_meta` op `logbook`).
 
+## MCP-server voor Claude (`/api/mcp/[sleutel]`, `src/lib/mcp/`)
+
+Een Claude-chat (claude.ai custom connector of Claude Code) praat via MCP met de gegevens van
+één gebruiker en legt er registraties in vast. Zelfde opzet als de StoreNode-MCP, zodat beide
+connectors in één chat werken ("personal fruitteelt-assistent").
+
+- **Auth**: koppelsleutel per gebruiker (Instellingen › Claude-koppeling → `claude_koppelsleutels`,
+  alleen sha256-hash opgeslagen, intrekbaar). Sleutel in de URL of als `Authorization: Bearer`.
+  Route is uitgesloten van de auth-middleware; alle data-toegang via admin-client + expliciet `user_id`.
+- **Protocol**: stateless JSON-RPC 2.0 over POST (`initialize`, `ping`, `tools/list`, `tools/call`),
+  GET → 405, OPTIONS → 204. `src/lib/mcp/server.ts` bevat de `instructions` voor Claude.
+- **Tools** (`src/lib/mcp/tools.ts`, Nederlands snake_case, tekst-output):
+  lezen `percelen`, `percelen_status` (laatste toepassing per perceel; "welke percelen heb ik nog niet gedaan"),
+  `bespuitingen`, `middel_info`, `middelen_tegen`, `voorraad`, `weer`, `nu`, `veldnotities`, `spuit_inbox`;
+  schrijven `registreer_bespuiting` en `keur_concept_goed` (**voorstel-en-bevestig**: eerste call zonder
+  `bevestig` geeft `VOORSTEL`, opslaan pas met `bevestig=true`), `verwijder_concept`, `veldnotitie` (direct).
+- **Hergebruik**: `runRegistrationPipeline` + `enrichUnit` + `confirmRegistration` (bron `'claude'`),
+  `spray-inbox-approve.ts` (gedeeld met de web-inbox), `buildForecastText`, `buildLiveSnapshotText`,
+  `buildProductInfoText`, `inventory-stock.ts`.
+- **Testen zonder Claude**: `npx tsx scripts/test-mcp.ts --user <uuid> <tool> '<json>'` (direct) of
+  `--http <url-met-sleutel> tools/list` (JSON-RPC). Migratie `087_claude_koppelsleutels.sql`.
+
 ## Weather Hub (`/weer`)
 
 Weather dashboard with multi-model forecasts, radar, and spray window detection.

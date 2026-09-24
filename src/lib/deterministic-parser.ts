@@ -963,6 +963,19 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
     }
   }
 
+  // Pattern 4b: "productName dosage" WITHOUT unit (e.g., "soriale 0,5", "merpan 1,5")
+  const matchE = s.match(/^([a-zà-ü][\w\s®*-]*?)\s+(\d+[.,]?\d*)$/i);
+  if (matchE) {
+    const name = matchE[1].trim();
+    if (name.length >= 3 && !CROP_STOP_WORDS.has(name.toLowerCase())) {
+      return withTotal({
+        product: name,
+        dosage: parseFloat(matchE[2].replace(',', '.')),
+        unit: '', // Empty: let resolveProducts determine unit from CTGB data
+      });
+    }
+  }
+
   // Pattern 5: Product name only (no dosage) - e.g., "Surround"
   const nameOnly = s.replace(/\s+/g, ' ').trim();
   if (nameOnly.length >= 3 && !CROP_STOP_WORDS.has(nameOnly.toLowerCase()) && !/^\d/.test(nameOnly)) {

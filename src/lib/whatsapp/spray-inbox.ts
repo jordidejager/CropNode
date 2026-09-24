@@ -367,7 +367,7 @@ function pickDraftDate(pipelineDate: Date, messageDate: Date): Date {
 // User preferences (admin client — no cookie session here)
 // ============================================================================
 
-async function getUserPreferencesAdmin(userId: string): Promise<UserPreference[]> {
+export async function getUserPreferencesAdmin(userId: string): Promise<UserPreference[]> {
   const { data, error } = await getSupabaseAdmin()
     .from('user_preferences')
     .select('id, alias, preferred')
