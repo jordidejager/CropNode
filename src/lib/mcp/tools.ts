@@ -166,6 +166,23 @@ function compactWarnings(messages: string[]): string[] {
   return out;
 }
 
+/**
+ * Middelen die niet in de CTGB-/meststoffendatabase staan blokkeren niet: ze worden
+ * opgeslagen onder de naam die de gebruiker gaf (bijv. "huwasan"). Wel melden we het,
+ * met eventuele suggesties, zodat de gebruiker een tikfout nog kan corrigeren.
+ */
+function onbekendNotitie(p: ProductEntry): string {
+  if (p.resolved !== false) return '';
+  const sugg = p.suggestions?.length ? `; bedoelde je ${p.suggestions.slice(0, 3).map(s => s.naam).join(' / ')}?` : '';
+  return ` — staat niet in de database, wordt opgeslagen als "${p.product}"${sugg}`;
+}
+
+/** Strip parse-only fields before saving to the spuitschrift. */
+function opslagMiddel(p: ProductEntry): ProductEntry {
+  const { suggestions: _s, resolved: _r, availableDoelorganismen: _d, ...rest } = p;
+  return rest;
+}
+
 // ── Tools ────────────────────────────────────────────────────────────────
 
 const DATUM_DESC = '"vandaag" (standaard), "gisteren" of YYYY-MM-DD, optioneel met tijd (bijv. "2026-09-22 07:30").';
@@ -306,7 +323,7 @@ export const TOOLS: ToolDefinitie[] = [
   {
     name: 'registreer_bespuiting',
     description:
-      'Registreert een bespuiting of bemesting in het spuitschrift. Geef de registratie als gewone zin met percelen, middelen en doseringen (bijv. "busje en jachthoek oude met merpan 1,5 kg, soriale 0,5 en 25 kg totaal zwavel"). Dosering is per hectare tenzij er "totaal" bij staat. Roep EERST aan zonder bevestig: je krijgt een VOORSTEL met herkende percelen, middelen, doseringen en waarschuwingen; leg dat aan de gebruiker voor en roep na een expliciet "ja" opnieuw aan met bevestig=true en exact dezelfde tekst.',
+      'Registreert een bespuiting of bemesting in het spuitschrift. Geef de registratie als gewone zin met percelen, middelen en doseringen (bijv. "busje en jachthoek oude met merpan 1,5 kg, soriale 0,5 en 25 kg totaal zwavel"). Dosering is per hectare tenzij er "totaal" bij staat. Middelen die niet in de database staan mogen gewoon: ze worden opgeslagen onder de naam die de gebruiker noemt. Roep EERST aan zonder bevestig: je krijgt een VOORSTEL met herkende percelen, middelen, doseringen en waarschuwingen; leg dat aan de gebruiker voor en roep na een expliciet "ja" opnieuw aan met bevestig=true en exact dezelfde tekst.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -561,7 +578,7 @@ async function spuitInbox(ctx: McpContext): Promise<ToolResultaat> {
   return { tekst: [`${entries.length} concept(en) te controleren:`, '', ...entries.map((e, i) => conceptTekst(ctx, e, i + 1))].join('\n\n') };
 }
 
-function vindProduct(ctx: McpContext, naam: string, historie: string[]): { naam: string; source?: 'ctgb' | 'fertilizer'; twijfel?: string } {
+function vindProduct(ctx: McpContext, naam: string, historie: string[]): { naam: string; source?: 'ctgb' | 'fertilizer'; twijfel?: string; onbekend?: boolean } {
   const exact = ctx.products.find(p => normaliseer(p.naam) === normaliseer(naam));
   if (exact) return { naam: exact.naam, source: 'ctgb' };
   const fert = ctx.fertilizers.find(fp => normaliseer(fp.name) === normaliseer(naam));
@@ -577,7 +594,7 @@ function vindProduct(ctx: McpContext, naam: string, historie: string[]): { naam:
   }
   const mf = zoek(naam, ctx.fertilizers, fp => fp.name);
   if (mf.beste && mf.zekerheid >= 70) return { naam: mf.beste.name, source: 'fertilizer' };
-  return { naam, twijfel: `"${naam}" niet gevonden in de middelen-/meststoffendatabase` };
+  return { naam, onbekend: true };
 }
 
 async function keurConceptGoed(ctx: McpContext, args: Args): Promise<ToolResultaat> {
@@ -602,7 +619,7 @@ async function keurConceptGoed(ctx: McpContext, args: Args): Promise<ToolResulta
     products = (args.middelen as Args[]).map(m => {
       const v = vindProduct(ctx, str(m.naam), historie);
       if (v.twijfel) problemen.push(v.twijfel);
-      return { product: v.naam, dosage: num(m.dosering) ?? 0, unit: str(m.eenheid) || 'L', ...(v.source ? { source: v.source } : {}) };
+      return { product: v.naam, dosage: num(m.dosering) ?? 0, unit: str(m.eenheid) || 'L', ...(v.source ? { source: v.source } : {}), ...(v.onbekend ? { resolved: false } : {}) };
     });
   }
   const date = str(args.datum) ? datumArg(args.datum, e.date) : e.date;
@@ -611,19 +628,17 @@ async function keurConceptGoed(ctx: McpContext, args: Args): Promise<ToolResulta
   if (plots.length === 0) problemen.push('Geen percelen — geef de percelen op.');
   if (products.length === 0) problemen.push('Geen middelen — geef de middelen op.');
   for (const p of products) if (!p.dosage || p.dosage <= 0) problemen.push(`Dosering voor ${p.product} ontbreekt (per ha).`);
-  for (const p of products) if (p.resolved === false) problemen.push(`Middel "${p.product}" is niet herkend${p.suggestions?.length ? `; bedoel je ${p.suggestions.map(s => s.naam).join(' / ')}?` : ''}`);
-
   const { tekst: pTekst, ha } = perceelNamen(ctx, plots);
   const voorstel = [
     `Concept [${e.id.slice(0, 8)}] → spuitschrift`,
     `- Datum: ${ddt(date)} · ${registrationType === 'spreading' ? 'strooien' : 'spuiten'}`,
     `- Percelen: ${pTekst || '—'}`,
-    ...products.map(p => `- ${middelRegel(p, ha)}`),
+    ...products.map(p => `- ${middelRegel(p, ha)}${onbekendNotitie(p)}`),
   ];
   if (problemen.length) return { tekst: ['Nog niet opgeslagen. Controleer:', ...problemen.map(p => `- ${p}`), '', 'Voorstel tot nu toe:', ...voorstel].join('\n') };
   if (args.bevestig !== true) return { tekst: ['VOORSTEL (nog niet opgeslagen):', ...voorstel, '', 'Klopt dit? Roep dan opnieuw aan met bevestig=true.'].join('\n') };
 
-  const edit: SprayDraftEdit = { date, plots, products, registrationType };
+  const edit: SprayDraftEdit = { date, plots, products: products.map(opslagMiddel), registrationType };
   const r = await approveSprayDraftForUser(ctx.userId, e.id, edit, 'claude');
   if (!r.success) return { tekst: `Opslaan mislukt: ${r.message}`, fout: true };
   return { tekst: ['Opgeslagen in spuitschrift ✓', ...voorstel].join('\n') };
@@ -664,18 +679,17 @@ async function registreerBespuiting(ctx: McpContext, args: Args): Promise<ToolRe
     const { tekst: pTekst, ha } = perceelNamen(ctx, u.plots);
     if (units.length > 1) voorstel.push(`Deel ${i + 1}${u.label ? ` (${u.label})` : ''}:`);
     voorstel.push(`- Percelen: ${u.plots.length ? pTekst : '— geen herkend'}`);
-    for (const p of u.products) voorstel.push(`- ${middelRegel(p, ha)}`);
+    for (const p of u.products) voorstel.push(`- ${middelRegel(p, ha)}${onbekendNotitie(p)}`);
     for (const a of u.assumptions) voorstel.push(`  · aanname: ${a.field === 'product' ? `${a.to} ← ${a.from}` : a.to} (${a.reason})`);
     if (u.plots.length === 0) problemen.push(`Geen percelen herkend in "${tekst}". Bekende percelen: ${ctx.parcels.map(p => p.name).join(', ')}.`);
     if (u.products.length === 0) problemen.push('Geen middelen herkend.');
     for (const p of u.products) {
-      if (p.resolved === false) problemen.push(`Middel "${p.product}" niet herkend${p.suggestions?.length ? `; bedoel je ${p.suggestions.map(s => s.naam).join(' / ')}?` : ''}. Vraag de gebruiker.`);
       if (!p.dosage || p.dosage <= 0) problemen.push(`Dosering voor ${p.product} ontbreekt (per ha, of "totaal").`);
     }
     for (const veld of u.uncertainFields) if (veld.endsWith('.product')) {
       const idx = Number(/\[(\d+)\]/.exec(veld)?.[1]);
       const p = u.products[idx];
-      if (p?.suggestions?.length) problemen.push(`${p.product} is een gok; alternatieven: ${p.suggestions.map(s => s.naam).join(' / ')}. Vraag de gebruiker welke.`);
+      if (p?.resolved !== false && p?.suggestions?.length) voorstel.push(`  · ${p.product} is gekozen uit meerdere; alternatieven: ${p.suggestions.map(s => s.naam).join(' / ')}`);
     }
   });
 
@@ -697,7 +711,7 @@ async function registreerBespuiting(ctx: McpContext, args: Args): Promise<ToolRe
       {
         userId: ctx.userId,
         plots: u.plots,
-        products: u.products,
+        products: u.products.map(opslagMiddel),
         date: datum,
         rawInput: tekst,
         validationMessage: warnings.length ? warnings.map(w => `⚠️ ${w}`).join('\n') : null,
