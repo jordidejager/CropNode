@@ -22,6 +22,7 @@ import { laadContext, type McpContext } from './context';
 import { SPRAY_TOOLS, bespuitingen, bespuitingAanpassen, registreerBespuiting, resolvePercelenInvoer, vindProduct } from './spray';
 import { sprayedArea } from '@/lib/spray-records';
 import { EXTRA_TOOLS, uren, urenAanpassen, urenRegistreren, veldnotitieAanpassen, voorraadBijwerken } from './extra';
+import { KLUS_TOOLS, klussen, klusStarten, klusStoppen, klusWijzigen, oogstVoortgang, werkschema, werkschemaWijzigen } from './klussen';
 import {
   normaliseer,
   percelenVanNaam,
@@ -172,6 +173,7 @@ export const TOOLS: ToolDefinitie[] = [
   },
   ...SPRAY_TOOLS,
   ...EXTRA_TOOLS,
+  ...KLUS_TOOLS,
 ];
 
 // ── Uitvoering ───────────────────────────────────────────────────────────
@@ -183,6 +185,13 @@ export async function voerToolUit(userId: string, naam: string, args: Args): Pro
     case 'bespuitingen': return bespuitingen(await laadContext(userId), args);
     case 'bespuiting_aanpassen': return bespuitingAanpassen(await laadContext(userId), args);
     case 'uren': return uren(await laadContext(userId), args);
+    case 'klussen': return klussen(await laadContext(userId), args);
+    case 'klus_starten': return klusStarten(await laadContext(userId), args);
+    case 'klus_wijzigen': return klusWijzigen(await laadContext(userId), args);
+    case 'klus_stoppen': return klusStoppen(await laadContext(userId), args);
+    case 'werkschema': return werkschema(await laadContext(userId));
+    case 'werkschema_wijzigen': return werkschemaWijzigen(await laadContext(userId), args);
+    case 'oogst_voortgang': return oogstVoortgang(await laadContext(userId), args);
     case 'uren_registreren': return urenRegistreren(await laadContext(userId), args);
     case 'uren_aanpassen': return urenAanpassen(await laadContext(userId), args);
     case 'voorraad_bijwerken': return voorraadBijwerken(await laadContext(userId), args);

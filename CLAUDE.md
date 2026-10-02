@@ -363,6 +363,15 @@ connectors in één chat werken ("personal fruitteelt-assistent").
   (`rebuildSprayDerivedRecords`), ook bij wijzigen via de web-app. Spuituren rekenen ook met het gespoten oppervlak
   (`removeSprayTaskLogs`/`createSprayTaskLogs` in `spray-hours.ts`). Migraties 089 (kolommen + `spuitschrift.notes`) en 090
   (trigger: `parcel_history.harvest_year` uit datum — tot 2026-10-02 faalde elke historie-insert sinds april stil; teruggevuld).
+- **Uren via klussen** (`src/lib/mcp/klussen.ts`, v1.2.0): klus = `active_task_sessions` (taak × (deel)perceel × man vanaf
+  starttijd). Uren per dag = `day_overrides` [{date, hoursPerPerson, peopleCount}] (zelfde formaat als de web-app) of werkschema
+  (eerste dag vanaf starttijd, vandaag tot nu, afgerond op 0,5 u). Tools: `klussen`, `klus_starten`, `klus_wijzigen`
+  (dag-afwijking, `personen_vanaf` zet eerdere dagen vast, start corrigeren), `klus_stoppen` (→ `task_logs` per dag, of
+  `weggooien`), `werkschema`, `werkschema_wijzigen`, `oogst_voortgang` (leest `storenode.partijen`/`oogstregels`). Alle
+  datums in Europe/Amsterdam (server = UTC). `uren_registreren` zonder uren = per dag volgens werkschema.
+- **`public.v_storenode_uren`** (migratie 091, gedeeld contract met StoreNode): per dag × taak × (sub)perceel × registratie;
+  `task_logs` uitgesplitst naar werkdag-gewicht, lopende klussen t/m vandaag (`lopend=true`). Hulpfunctie
+  `werkschema_netto_uren(user, datum, van, tot)` rekent als `calcNettoHoursWithBreaks`. Kolomnamen niet wijzigen zonder StoreNode.
 - **Hergebruik**: `runRegistrationPipeline` + `enrichUnit` + `confirmRegistration` (bron `'claude'`),
   `spray-inbox-approve.ts` (gedeeld met de web-inbox), `buildForecastText`, `buildLiveSnapshotText`,
   `buildProductInfoText`, `inventory-stock.ts`.

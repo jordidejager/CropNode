@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-02 — ⏱️ Uren via MCP: klussen, werkschema, oogstvoortgang + v_storenode_uren
+- ✅ MCP v1.2.0: `klussen`, `klus_starten`, `klus_wijzigen` (ziek/later/eerder/niet gewerkt per dag, `personen_vanaf`), `klus_stoppen` (→ task_logs per dag), `werkschema(_wijzigen)`, `oogst_voortgang` (StoreNode-pluk per perceel + kg/manuur); `uren_registreren` zonder uren = werkschema per dag. Getest met testklus (opgeruimd).
+- ✅ Migratie 091: `public.v_storenode_uren` + `werkschema_netto_uren()` (contract StoreNode); totaal view = totaal task_logs.
+- ⚠️ Twee timers lopen sinds het voorjaar: Sorteren · Schele · 8 man sinds 28-04 (~10.000 manuren) en Aanbinden · Jachthoek Nieuwe Conference · 3 man sinds 01-05 (~3.700 manuren). Tellen mee in v_storenode_uren (lopend=true). Jordi beslist: stoppen op echte einddatum of weggooien (`klus_stoppen`).
+
 ### 2026-10-02 — 🤖 MCP: deels gespoten percelen, bespuitingen aanpassen, uren & voorraad
 - ✅ `registreer_bespuiting`: percelen met deel/ha, middelen met dosering óf totaal (verdeeld over gespoten oppervlak), datum + tijd, opmerking; tolerant voor "gisteravond"/"helft van"; "huwasan 3 liter per hectare" splitst goed. Nieuw `bespuiting_aanpassen` (zoeken/wijzigen/verwijderen, was→wordt). Nieuw: `uren`, `uren_registreren`, `uren_aanpassen`, `voorraad_bijwerken`, `veldnotitie_aanpassen`; codes in `bespuitingen`/`veldnotities`.
 - ✅ Migratie 089 (`spuitschrift.plot_areas`, `spuitschrift.notes`, `parcel_history.sprayed_area`) en 090 (trigger `harvest_year`) gedraaid. Web: spuitschrift/bemesting tonen "x van y ha" en de opmerking; wijzigen via web behoudt deels-gespoten oppervlak.

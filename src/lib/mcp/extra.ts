@@ -10,17 +10,10 @@ import type { McpContext } from './context';
 import { resolvePercelenInvoer, vindProduct, bepaalMoment } from './spray';
 import { getUserProductNames } from '@/lib/supabase-store';
 import { dd, ddt, f, normaliseer, num, percelenVanNaam, str, zoek, type Args, type ToolDefinitie, type ToolResultaat } from './util';
+import { dagArg, laadWerkschema, nl, schemaUren, tijdArg } from './klussen';
 
 const isoDag = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** Werkdagen zoals de app rekent: ma–vr 1, za 0,5, zo 0 (minimaal 1). */
-function werkdagen(van: Date, tot: Date): number {
-  let n = 0;
-  const c = new Date(van); c.setHours(0, 0, 0, 0);
-  const e = new Date(tot); e.setHours(0, 0, 0, 0);
-  while (c <= e) { const w = c.getDay(); n += w === 0 ? 0 : w === 6 ? 0.5 : 1; c.setDate(c.getDate() + 1); }
-  return n || 1;
-}
 
 export const EXTRA_TOOLS: ToolDefinitie[] = [
   {
@@ -38,12 +31,14 @@ export const EXTRA_TOOLS: ToolDefinitie[] = [
   {
     name: 'uren_registreren',
     description:
-      'Registreert gewerkte uren. uren = uren PER PERSOON per dag; personen standaard 1. Meerdere dagen: datum = eerste dag, tot_datum = laatste dag (werkdagen: ma–vr 1, za 0,5, zo 0). Optioneel één perceel. Taak moet een bestaand taaktype zijn (zie uren), of nieuwe_taak=true om het aan te maken. Spuituren worden automatisch uit het spuitschrift berekend; die hoef je niet apart te registreren. Eerst VOORSTEL, opslaan met bevestig=true.',
+      'Registreert losse of achteraf gewerkte uren (voor een ploeg die nog bezig is: klus_starten). uren = uren PER PERSOON per dag; laat uren weg om per dag het werkschema te gebruiken (eventueel met begin/eind). Meerdere dagen: datum + tot_datum (één regel per werkdag). personen standaard 1. Optioneel één perceel. Taak = bestaand taaktype (zie uren) of nieuwe_taak=true. Spuituren NIET registreren (automatisch uit het spuitschrift). Eerst VOORSTEL, opslaan met bevestig=true.',
     inputSchema: {
       type: 'object',
       properties: {
         taak: { type: 'string', description: 'Bijv. "snoeien", "dunnen", "plukken".' },
-        uren: { type: 'number', description: 'Uren per persoon per dag.' },
+        uren: { type: 'number', description: 'Uren per persoon per dag. Weglaten = volgens werkschema.' },
+        begin: { type: 'string', description: 'Begintijd (alleen zonder uren), bijv. "10:00".' },
+        eind: { type: 'string', description: 'Eindtijd (alleen zonder uren), bijv. "15:00".' },
         personen: { type: 'number' },
         datum: { type: 'string', description: '"vandaag" (standaard), "gisteren", YYYY-MM-DD.' },
         tot_datum: { type: 'string', description: 'Laatste dag bij een meerdaagse klus.' },
@@ -52,7 +47,7 @@ export const EXTRA_TOOLS: ToolDefinitie[] = [
         nieuwe_taak: { type: 'boolean', description: 'true = taaktype aanmaken als het nog niet bestaat.' },
         bevestig: { type: 'boolean' },
       },
-      required: ['taak', 'uren'],
+      required: ['taak'],
       additionalProperties: false,
     },
   },
@@ -180,22 +175,43 @@ export async function urenRegistreren(ctx: McpContext, args: Args): Promise<Tool
   const nieuw = !taak && args.nieuwe_taak === true;
   if (!taak && !nieuw) problemen.push(`Taak "${taakNaam}" bestaat niet. Bestaande taken: ${taken.map(t => t.name).join(', ')}. Gebruik er één, of nieuwe_taak=true.`);
   const urenPP = num(args.uren);
-  if (!urenPP || urenPP <= 0 || urenPP > 24) problemen.push('Geef uren per persoon per dag (0–24).');
+  if (urenPP != null && (urenPP <= 0 || urenPP > 24)) problemen.push('Uren per persoon per dag moet tussen 0 en 24 liggen.');
   const personen = Math.max(1, Math.round(num(args.personen) ?? 1));
-  const van = bepaalMoment(args.datum, '12:00', '');
-  const tot = str(args.tot_datum) ? bepaalMoment(args.tot_datum, '12:00', '') : van;
-  if (tot < van) problemen.push('tot_datum ligt vóór datum.');
-  const dagen = isoDag(van) === isoDag(tot) ? 1 : werkdagen(van, tot);
+  const vandaag = nl(new Date()).datum;
+  const van = dagArg(args.datum, vandaag);
+  const tot = str(args.tot_datum) ? dagArg(args.tot_datum) : van;
+  if (!van || !tot) problemen.push('Datum niet begrepen.');
+  else if (tot < van) problemen.push('tot_datum ligt vóór datum.');
+  const begin = tijdArg(args.begin);
+  const eind = tijdArg(args.eind);
   const perceel = enkelPerceel(ctx, str(args.perceel));
   if (perceel.probleem) problemen.push(perceel.probleem);
   const opmerking = str(args.opmerking) || null;
 
+  // Uren per dag: opgegeven uren, of volgens werkschema (met optioneel begin/eind)
+  const schema = urenPP == null ? await laadWerkschema(ctx.userId) : null;
+  const dagen: Array<{ datum: string; urenPP: number }> = [];
+  if (van && tot && tot >= van) {
+    for (let d = van; d <= tot; d = new Date(new Date(`${d}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10)) {
+      const u = urenPP ?? schemaUren(schema!, d, begin, eind);
+      if (u > 0) dagen.push({ datum: d, urenPP: u });
+    }
+  }
+  if (urenPP != null && van && tot && van !== tot) {
+    // Vaste uren over meerdere dagen: alleen dagen die volgens het werkschema werkdagen zijn
+    const ws = await laadWerkschema(ctx.userId);
+    for (let i = dagen.length - 1; i >= 0; i--) if (schemaUren(ws, dagen[i].datum) === 0) dagen.splice(i, 1);
+  }
+  if (van && tot && !dagen.length && !problemen.length) problemen.push('Geen werkuren in die periode volgens het werkschema; geef uren op.');
+  const totaal = dagen.reduce((s, d) => s + d.urenPP * personen, 0);
+
   const naamTaak = taak?.name ?? taakNaam;
   const voorstel = [
-    `Uren: ${naamTaak}${nieuw ? ' (NIEUW taaktype)' : ''}`,
-    `- ${isoDag(van) === isoDag(tot) ? dd(van) : `${dd(van)} t/m ${dd(tot)} (${f(dagen, 1)} werkdagen)`}`,
-    `- ${personen} ${personen === 1 ? 'persoon' : 'personen'} × ${f(urenPP || 0, 2)} u${dagen !== 1 ? ` × ${f(dagen, 1)} dagen` : ''} = ${f(personen * (urenPP || 0) * dagen, 2)} u`,
-    ...(perceel.id ? [`- Perceel: ${ctx.parcels.find(p => p.id === perceel.id)?.name}`] : []),
+    `Uren: ${naamTaak}${nieuw ? ' (NIEUW taaktype)' : ''}${perceel.id ? ` · ${ctx.parcels.find(p => p.id === perceel.id)?.name}` : ''} · ${personen} ${personen === 1 ? 'persoon' : 'personen'}`,
+    ...(dagen.length <= 10
+      ? dagen.map(d => `- ${dd(new Date(`${d.datum}T12:00:00Z`))}: ${personen} × ${f(d.urenPP, 2)} u${urenPP == null ? ' (werkschema)' : ''}`)
+      : [`- ${dagen.length} dagen ${dd(new Date(`${dagen[0].datum}T12:00:00Z`))} t/m ${dd(new Date(`${dagen[dagen.length - 1].datum}T12:00:00Z`))}${urenPP == null ? ' (uren volgens werkschema)' : ` × ${f(urenPP, 2)} u`}`]),
+    `- totaal ${f(totaal, 1)} manuren`,
     ...(opmerking ? [`- Opmerking: ${opmerking}`] : []),
   ];
   if (problemen.length) return { tekst: ['Nog niet opgeslagen. Controleer:', ...problemen.map(p => `- ${p}`), '', ...voorstel].join('\n') };
@@ -207,19 +223,21 @@ export async function urenRegistreren(ctx: McpContext, args: Args): Promise<Tool
     if (error) return { tekst: `Taaktype aanmaken mislukt: ${error.message}`, fout: true };
     taak = data;
   }
-  const { data: row, error } = await admin.from('task_logs').insert({
+  const blok = perceel.id ? ctx.parcels.find(p => p.id === perceel.id) : null;
+  const { data: rows, error } = await admin.from('task_logs').insert(dagen.map(d => ({
     user_id: ctx.userId,
-    start_date: isoDag(van),
-    end_date: isoDag(tot),
-    days: dagen,
+    start_date: d.datum,
+    end_date: d.datum,
+    days: 1,
     sub_parcel_id: perceel.id,
+    parcel_id: blok?.parcelId ?? null,
     task_type_id: taak!.id,
     people_count: personen,
-    hours_per_person: urenPP,
+    hours_per_person: d.urenPP,
     notes: opmerking,
-  }).select('id').single();
+  }))).select('id');
   if (error) return { tekst: `Opslaan mislukt: ${error.message}`, fout: true };
-  return { tekst: [`Opgeslagen ✓ (code ${String(row.id).slice(0, 8)})`, ...voorstel].join('\n') };
+  return { tekst: [`Opgeslagen ✓ (${rows.length} ${rows.length === 1 ? 'regel' : 'regels'}, code ${rows.map((r: any) => String(r.id).slice(0, 8)).slice(0, 3).join(', ')}${rows.length > 3 ? ', …' : ''})`, ...voorstel].join('\n') };
 }
 
 export async function urenAanpassen(ctx: McpContext, args: Args): Promise<ToolResultaat> {
