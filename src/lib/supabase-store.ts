@@ -114,7 +114,7 @@ export async function getSpuitschriftEntry(id: string, userId?: string | null): 
 
   let query = client
     .from('spuitschrift')
-    .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source')
+    .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source, plot_areas, notes')
     .eq('id', id);
 
   // When using admin client, also filter by user_id for multi-user safety
@@ -142,7 +142,7 @@ export async function getSpuitschriftEntries(options?: { limit?: number; harvest
     const userId = await getCurrentUserId();
     let query = supabase
       .from('spuitschrift')
-      .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source');
+      .select('id, user_id, original_logbook_id, original_raw_input, date, created_at, plots, products, registration_type, validation_message, status, harvest_year, registration_source, plot_areas, notes');
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -213,6 +213,8 @@ export async function addSpuitschriftEntry(
     })(),
     // registration_source: 'web' (default) or 'whatsapp' — only set if present
     ...((entry as any).registrationSource && { registration_source: (entry as any).registrationSource }),
+    ...(entry.plotAreas && Object.keys(entry.plotAreas).length > 0 ? { plot_areas: entry.plotAreas } : {}),
+    ...(entry.notes ? { notes: entry.notes } : {}),
   };
 
   // Use supabaseAdmin to bypass RLS (server actions don't have cookie access)
@@ -299,6 +301,8 @@ export async function updateSpuitschriftEntry(
     products?: ProductEntry[];
     validationMessage?: string | null;
     status?: 'Akkoord' | 'Waarschuwing';
+    plotAreas?: Record<string, number>;
+    notes?: string | null;
   },
   providedUserId?: string | null
 ): Promise<SpuitschriftEntry> {
@@ -324,6 +328,14 @@ export async function updateSpuitschriftEntry(
   if (updates.status !== undefined) {
     updatePayload.status = updates.status;
   }
+  if (updates.notes !== undefined) {
+    updatePayload.notes = updates.notes;
+  }
+  if (updates.date !== undefined) {
+    const d = updates.date instanceof Date ? updates.date : new Date(updates.date);
+    const month = d.getMonth() + 1;
+    updatePayload.harvest_year = month >= 11 ? d.getFullYear() + 1 : d.getFullYear();
+  }
 
   // Use supabaseAdmin to bypass RLS (server actions don't have cookie access)
   const adminClient = getSupabaseAdmin();
@@ -337,95 +349,33 @@ export async function updateSpuitschriftEntry(
       .from('spuitschrift')
       .update(updatePayload as any)
       .eq('id', entryId)
+      .eq('user_id', userId)
       .select()
       .single();
 
     if (error) throw new Error(error.message);
     if (!data) throw new Error('Geen data ontvangen van database');
 
-    // If plots or products changed, we need to update parcel_history and inventory_movements
-    if (updates.plots !== undefined || updates.products !== undefined) {
-      // Delete old parcel_history and inventory_movements
-      await adminClient
-        .from('parcel_history')
-        .delete()
-        .eq('spuitschrift_id', entryId);
-
-      await adminClient
-        .from('inventory_movements')
-        .delete()
-        .eq('reference_id', entryId);
-
-      // Re-create parcel_history and inventory_movements with new data
-      const finalPlots = updates.plots ?? data.plots;
-      const finalProducts = updates.products ?? data.products;
-      const finalDate = updates.date ?? new Date(data.date);
-
-      // Fetch sprayable parcels for the new plots
-      const sprayableParcels = await getSprayableParcelsById(finalPlots);
-      const sprayableParcelMap = new Map(sprayableParcels.map(p => [p.id, p]));
-
-      const historyEntries: any[] = [];
-      const inventoryEntries: any[] = [];
-      const productUsage: Record<string, { totalAmount: number; unit: string; parcelIds: Set<string> }> = {};
-
-      for (const subParcelId of finalPlots) {
-        const sprayableParcel = sprayableParcelMap.get(subParcelId);
-        if (!sprayableParcel) continue;
-
-        for (const productEntry of finalProducts) {
-          historyEntries.push({
-            id: crypto.randomUUID(),
-            user_id: userId,
-            log_id: data.original_logbook_id || entryId,
-            spuitschrift_id: entryId,
-            parcel_id: sprayableParcel.id,
-            parcel_name: sprayableParcel.name,
-            crop: sprayableParcel.crop,
-            variety: sprayableParcel.variety,
-            product: productEntry.product,
-            dosage: productEntry.dosage,
-            unit: productEntry.unit,
-            date: finalDate instanceof Date ? finalDate.toISOString() : finalDate,
-          });
-
-          if (!productUsage[productEntry.product]) {
-            productUsage[productEntry.product] = { totalAmount: 0, unit: productEntry.unit, parcelIds: new Set() };
-          }
-          if (sprayableParcel.area) {
-            productUsage[productEntry.product].totalAmount += productEntry.dosage * sprayableParcel.area;
-          }
-          productUsage[productEntry.product].parcelIds.add(subParcelId);
-        }
+    // Plots, middelen, oppervlak of datum gewijzigd → historie en voorraad opnieuw opbouwen
+    if (updates.plots !== undefined || updates.products !== undefined || updates.plotAreas !== undefined || updates.date !== undefined) {
+      const finalPlots: string[] = updates.plots ?? data.plots ?? [];
+      const keptAreas: Record<string, number> = {};
+      const sourceAreas: Record<string, number> = updates.plotAreas ?? data.plot_areas ?? {};
+      for (const id of finalPlots) if (sourceAreas[id] != null) keptAreas[id] = sourceAreas[id];
+      if (updates.plotAreas !== undefined || updates.plots !== undefined) {
+        await adminClient.from('spuitschrift').update({ plot_areas: keptAreas } as any).eq('id', entryId);
       }
-
-      // Create inventory movements
-      for (const [productName, usage] of Object.entries(productUsage)) {
-        if (usage.totalAmount > 0) {
-          inventoryEntries.push({
-            id: crypto.randomUUID(),
-            user_id: userId,
-            product_name: productName,
-            quantity: -usage.totalAmount,
-            unit: usage.unit,
-            type: 'usage',
-            date: finalDate instanceof Date ? finalDate.toISOString() : finalDate,
-            description: `Gebruikt op ${usage.parcelIds.size} perce${usage.parcelIds.size > 1 ? 'len' : 'el'}`,
-            reference_id: entryId,
-          });
-        }
-      }
-
-      // Insert new records
-      if (historyEntries.length > 0) {
-        const { error: historyError } = await adminClient.from('parcel_history').insert(historyEntries);
-        if (historyError) console.error('Error inserting parcel history:', historyError);
-      }
-
-      if (inventoryEntries.length > 0) {
-        const { error: invError } = await adminClient.from('inventory_movements').insert(inventoryEntries);
-        if (invError) console.error('Error inserting inventory movements:', invError);
-      }
+      const { rebuildSprayDerivedRecords } = await import('@/lib/spray-records');
+      await rebuildSprayDerivedRecords({
+        userId,
+        spuitschriftId: entryId,
+        logId: data.original_logbook_id || entryId,
+        plots: finalPlots,
+        products: updates.products ?? data.products ?? [],
+        date: updates.date ?? new Date(data.date),
+        registrationType: data.registration_type || 'spraying',
+        plotAreas: keptAreas,
+      });
     }
 
     return {
@@ -1584,6 +1534,7 @@ export async function addParcelHistoryEntries({
   const userId = providedUserId ?? await getCurrentUserId();
   const { id: logId, parsedData } = logbookEntry;
   const { plots, products } = parsedData;
+  const plotAreas = parsedData.plotAreas || {};
 
   if (!isConfirmation) {
     // Delete existing history and inventory for this log entry
@@ -1628,14 +1579,17 @@ export async function addParcelHistoryEntries({
             unit: productEntry.unit,
             date: new Date(logbookEntry.date).toISOString(),
             registration_type: logbookEntry.registrationType || 'spraying',
+            sprayed_area: plotAreas[sprayableParcel.id] ?? null,
+            harvest_year: (() => { const d = new Date(logbookEntry.date); return d.getMonth() + 1 >= 11 ? d.getFullYear() + 1 : d.getFullYear(); })(),
           });
         }
 
         if (!productUsage[productEntry.product]) {
           productUsage[productEntry.product] = { totalAmount: 0, unit: productEntry.unit, parcelIds: new Set() };
         }
-        if (sprayableParcel.area) {
-          productUsage[productEntry.product].totalAmount += productEntry.dosage * sprayableParcel.area;
+        const usedArea = plotAreas[sprayableParcel.id] ?? sprayableParcel.area;
+        if (usedArea) {
+          productUsage[productEntry.product].totalAmount += productEntry.dosage * usedArea;
         }
         productUsage[productEntry.product].parcelIds.add(subParcelId);
       });
@@ -1670,6 +1624,7 @@ export async function addParcelHistoryEntries({
               unit: productEntry.unit,
               date: new Date(logbookEntry.date).toISOString(),
               registration_type: logbookEntry.registrationType || 'spraying',
+              harvest_year: (() => { const d = new Date(logbookEntry.date); return d.getMonth() + 1 >= 11 ? d.getFullYear() + 1 : d.getFullYear(); })(),
             });
           }
 
@@ -1710,7 +1665,7 @@ export async function addParcelHistoryEntries({
     if (error) {
       // Retry without columns that may not exist yet (before migrations are run)
       console.warn('[saveRelatedData] parcel_history insert failed, retrying with minimal columns:', error.message);
-      const cleanedEntries = historyEntries.map(({ registration_type, log_id, spuitschrift_id, ...rest }: any) => rest);
+      const cleanedEntries = historyEntries.map(({ registration_type, log_id, spuitschrift_id, sprayed_area, ...rest }: any) => rest);
       const { error: retryError } = await dbClient.from('parcel_history').insert(cleanedEntries);
       if (retryError) {
         console.error('[saveRelatedData] parcel_history insert failed even with minimal columns:', retryError.message);

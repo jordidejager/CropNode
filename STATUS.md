@@ -12,6 +12,12 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-02 — 🤖 MCP: deels gespoten percelen, bespuitingen aanpassen, uren & voorraad
+- ✅ `registreer_bespuiting`: percelen met deel/ha, middelen met dosering óf totaal (verdeeld over gespoten oppervlak), datum + tijd, opmerking; tolerant voor "gisteravond"/"helft van"; "huwasan 3 liter per hectare" splitst goed. Nieuw `bespuiting_aanpassen` (zoeken/wijzigen/verwijderen, was→wordt). Nieuw: `uren`, `uren_registreren`, `uren_aanpassen`, `voorraad_bijwerken`, `veldnotitie_aanpassen`; codes in `bespuitingen`/`veldnotities`.
+- ✅ Migratie 089 (`spuitschrift.plot_areas`, `spuitschrift.notes`, `parcel_history.sprayed_area`) en 090 (trigger `harvest_year`) gedraaid. Web: spuitschrift/bemesting tonen "x van y ha" en de opmerking; wijzigen via web behoudt deels-gespoten oppervlak.
+- ⚠️ Gevonden + opgelost: sinds april 2026 werd geen `parcel_history` meer geschreven (`harvest_year` NOT NULL) → interval-/wachttijdcontroles misten recente bespuitingen. 919 regels teruggevuld voor 40 registraties.
+- ⏳ Oude automatische spuituren van 18-04 (Delan DF, 31 regels) hebben geen bijbehorende registratie meer — niet door deze chat aangemaakt; laten staan, Jordi kan beslissen.
+
 ### 2026-09-24 — 🏢 Bedrijfsprofielen: meerdere bedrijven per teler
 - ✅ Migratie `088_companies_bedrijfsprofielen.sql` gedraaid: `public.companies`, `parcels.company_id` (NULL = standaardbedrijf), standaardbedrijf per bestaande teler (naam uit `profiles.company_name`), triggers voor nieuwe accounts, `default_company_id()`, `v_parcel_companies`, `v_sprayable_parcels.company_id`. Getest in teruggedraaide transacties (blokken volgen hoofdperceel, max één standaard, set-null bij verwijderen, RLS).
 - ✅ UI: Instellingen › Bedrijfsprofielen; percelen (bedrijf in formulier, label + filter in lijst, "Bedrijf wijzigen" op selectie) — alles pas zichtbaar bij 2+ bedrijven; bedrijfsfilter op spuitschrift, bemestingsregister, Analytics › Operations en › Bemesting.

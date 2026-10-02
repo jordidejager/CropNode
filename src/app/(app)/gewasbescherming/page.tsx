@@ -62,7 +62,10 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
     const productOptions: ComboboxOption[] = allProducts.map(p => ({ value: p, label: p }));
 
     const selectedParcels = allParcels.filter(p => entry.plots.includes(p.id));
-    const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    // Gespoten oppervlak: deels gespoten blokken via entry.plotAreas
+    const fullArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    const totalArea = selectedParcels.reduce((sum, p) => sum + (entry.plotAreas?.[p.id] ?? p.area ?? 0), 0);
+    const isPartial = totalArea < fullArea - 0.0001;
 
     const productsWithTotals = entry.products.map(product => ({
         ...product,
@@ -151,7 +154,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
     };
 
     const editedSelectedParcels = allParcels.filter(p => editedPlots.includes(p.id));
-    const editedTotalArea = editedSelectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    const editedTotalArea = editedSelectedParcels.reduce((sum, p) => sum + (entry.plotAreas?.[p.id] ?? p.area ?? 0), 0);
 
     const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
     const [isDeleting, startDeleteTransition] = React.useTransition();
@@ -216,12 +219,15 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                     ) : (
                         <p className="text-sm text-slate-500 italic">Geen middelen</p>
                     )}
+                    {entry.notes && (
+                        <p className="text-xs text-slate-400 italic mt-1.5 line-clamp-2">“{entry.notes}”</p>
+                    )}
                 </div>
                 <div className="hidden sm:flex flex-col items-end text-right mr-2 pt-0.5 shrink-0">
                     <p className="text-sm text-slate-300 font-medium">
                         {selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}
                     </p>
-                    <p className="text-sm text-slate-500">{totalArea.toFixed(2)} ha</p>
+                    <p className="text-sm text-slate-500">{isPartial ? `${totalArea.toFixed(2)} van ${fullArea.toFixed(2)}` : totalArea.toFixed(2)} ha</p>
                 </div>
                 <ChevronDown
                     className={cn(
@@ -403,7 +409,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                                             {selectedParcels.map(p => (
                                                 <div key={p.id} className="flex justify-between gap-4">
                                                     <span>{p.name} <span className="text-slate-500">({p.variety})</span></span>
-                                                    <span className="tabular-nums shrink-0">{p.area ? p.area.toFixed(2) : '0.00'} ha</span>
+                                                    <span className="tabular-nums shrink-0">{entry.plotAreas?.[p.id] != null ? `${entry.plotAreas[p.id].toFixed(2)} van ${(p.area || 0).toFixed(2)}` : (p.area ? p.area.toFixed(2) : '0.00')} ha</span>
                                                 </div>
                                             ))}
                                         </div>

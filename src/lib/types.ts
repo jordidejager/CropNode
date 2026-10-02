@@ -318,6 +318,8 @@ export type ParsedSprayData = {
   plots: string[];
   products: ProductEntry[];
   assumedTargets?: Record<string, string>;
+  /** Gespoten ha per blok voor gedeeltelijk gespoten blokken; ontbreekt = volledig blok. */
+  plotAreas?: Record<string, number>;
 }
 
 // ============================================
@@ -424,6 +426,10 @@ export type SpuitschriftEntry = {
   registrationType: RegistrationType; // 'spraying' (bespuiting) of 'spreading' (strooien)
   validationMessage?: string;
   status: 'Akkoord' | 'Waarschuwing';
+  /** Gespoten ha per blok voor gedeeltelijk gespoten blokken; ontbreekt = volledig blok. */
+  plotAreas?: Record<string, number>;
+  /** Vrije opmerking bij de registratie. */
+  notes?: string | null;
 }
 
 export type ParcelHistoryEntry = {

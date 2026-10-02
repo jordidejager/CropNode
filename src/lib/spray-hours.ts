@@ -156,3 +156,36 @@ export async function createSprayTaskLogs(params: CreateSprayTaskLogsParams): Pr
   const totalHours = taskLogs.reduce((sum, t) => sum + t.hours_per_person, 0);
   console.log(`[spray-hours] Created ${taskLogs.length} task logs for ${plotIds.length} parcels (${totalHours.toFixed(1)}u total, ${minutesPerHa} min/ha)`);
 }
+
+/**
+ * Verwijdert de automatisch aangemaakte spuituren van een registratie (zelfde datum, blokken
+ * en middelen-samenvatting als createSprayTaskLogs). Gebruikt bij wijzigen/verwijderen.
+ */
+export async function removeSprayTaskLogs(params: {
+  userId: string;
+  date: Date | string;
+  plotIds: string[];
+  products: ProductEntry[];
+}): Promise<number> {
+  const { getSupabaseAdmin } = await import('@/lib/supabase-client');
+  const supabase = getSupabaseAdmin() as any;
+  if (!supabase || params.plotIds.length === 0) return 0;
+  const d = params.date instanceof Date ? params.date : new Date(params.date);
+  const dateStr = d.toISOString().split('T')[0];
+  const productSummary = params.products
+    .map(p => `${p.product}${p.dosage ? ` ${p.dosage} ${p.unit || 'L'}/ha` : ''}`)
+    .join(', ');
+  const { data, error } = await supabase
+    .from('task_logs')
+    .delete()
+    .eq('user_id', params.userId)
+    .eq('start_date', dateStr)
+    .in('sub_parcel_id', params.plotIds)
+    .like('notes', `Bespuiting: ${productSummary.replace(/[%_]/g, '\\$&')} (%`)
+    .select('id');
+  if (error) {
+    console.warn('[spray-hours] removeSprayTaskLogs failed:', error.message);
+    return 0;
+  }
+  return (data || []).length;
+}

@@ -55,6 +55,9 @@ export interface ConfirmRegistrationParams {
   validationMessage?: string | null;
   registrationType?: 'spraying' | 'spreading';
   registrationSource?: 'web' | 'whatsapp' | 'claude';
+  /** Gespoten ha per blok voor gedeeltelijk gespoten blokken. */
+  plotAreas?: Record<string, number>;
+  notes?: string | null;
 }
 
 export interface ConfirmRegistrationResult {
@@ -128,6 +131,8 @@ export async function confirmRegistration(
       createdAt: new Date(),
       ...(validationMessage && { validationMessage }),
       ...(params.registrationSource && { registrationSource: params.registrationSource }),
+      ...(params.plotAreas && Object.keys(params.plotAreas).length > 0 ? { plotAreas: params.plotAreas } : {}),
+      ...(params.notes ? { notes: params.notes } : {}),
     };
 
     const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry as any, params.userId);
@@ -143,6 +148,7 @@ export async function confirmRegistration(
         parsedData: {
           plots: params.plots,
           products: finalProducts,
+          plotAreas: params.plotAreas,
         },
         registrationType: params.registrationType || 'spraying',
         validationMessage: validationMessage || undefined,
@@ -172,7 +178,9 @@ export async function confirmRegistration(
         plotIds: params.plots,
         date: entryDate,
         products: finalProducts,
-        sprayableParcels: sprayableParcels.length > 0 ? sprayableParcels : await getSprayableParcelsById(params.plots),
+        // Spuituren rekenen met het gespoten oppervlak (deels gespoten blokken)
+        sprayableParcels: (sprayableParcels.length > 0 ? sprayableParcels : await getSprayableParcelsById(params.plots))
+          .map(p => (params.plotAreas?.[p.id] ? { ...p, area: params.plotAreas[p.id] } : p)),
       }).catch(err => {
         console.error('[confirmRegistration] Spray task logs failed (non-blocking):', err);
       });

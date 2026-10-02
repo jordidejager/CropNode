@@ -14,6 +14,8 @@ export interface SprayDraftEdit {
   plots: string[];
   products: ProductEntry[];
   registrationType: RegistrationType;
+  /** Gespoten ha per blok voor gedeeltelijk gespoten blokken. */
+  plotAreas?: Record<string, number>;
 }
 
 export type DraftActionResult = { success: boolean; message?: string };
@@ -135,6 +137,7 @@ export async function approveSprayDraftForUser(
       validationMessage: null,
       registrationType: edit.registrationType,
       registrationSource: source,
+      plotAreas: edit.plotAreas,
     },
     async ({ logbookEntry, sprayableParcels, isConfirmation, spuitschriftId }) => {
       await addParcelHistoryEntries({ logbookEntry, sprayableParcels, isConfirmation, spuitschriftId, providedUserId: userId });

@@ -20,13 +20,15 @@ export function rpcFout(id: RpcVerzoek['id'], code: number, message: string) {
 }
 
 const INSTRUCTIONS =
-  'CropNode is de gewasbeschermings-, bemestings-, weer- en notitie-administratie van deze fruitteler (appel/peer, Jager Tech). ' +
+  'CropNode is de gewasbeschermings-, bemestings-, uren-, voorraad-, weer- en notitie-administratie van deze fruitteler (appel/peer, Jager Tech). ' +
   'Antwoord in het Nederlands, nuchter en kort. ' +
-  'Registreren (registreer_bespuiting, keur_concept_goed): roep EERST aan zonder bevestig, leg het VOORSTEL letterlijk aan de gebruiker voor en roep pas na een expliciet "ja" opnieuw aan met bevestig=true en dezelfde gegevens. ' +
-  'Perceel- en middelnamen mogen slordig zijn; de tools zoeken fuzzy en melden twijfel — vraag dan door in plaats van te gokken. Gebruik de tool percelen om namen te herkennen. Een middel dat niet in de database staat is geen reden om te stoppen: het wordt opgeslagen onder de naam die de gebruiker noemt. ' +
-  'Doseringen zijn per hectare, tenzij de gebruiker "totaal" zegt (dan rekent CropNode het om naar per ha). ' +
-  'Voor "wat/welke percelen heb ik (niet) gedaan" gebruik je percelen_status; voor "wat heb ik gespoten" bespuitingen. ' +
-  'Oogst, kisten, koelcellen en sortering horen bij StoreNode (aparte connector), niet bij CropNode.';
+  'SCHRIJVEN (registreer_bespuiting, bespuiting_aanpassen, keur_concept_goed, uren_registreren, uren_aanpassen, voorraad_bijwerken, verwijderen): roep EERST aan zonder bevestig, leg het VOORSTEL aan de gebruiker voor en roep pas na een expliciet "ja" opnieuw aan met bevestig=true en exact dezelfde argumenten. ' +
+  'NIEUW vs CORRECTIE: een nieuwe bespuiting → registreer_bespuiting. Iets toevoegen aan, wijzigen in of weghalen uit een bestaande bespuiting (middel erbij, andere dosering, ander perceel/deel, andere tijd, of verwijderen) → bespuiting_aanpassen, NOOIT een tweede registratie. Zonder zoekterm pakt bespuiting_aanpassen de laatst ingevoerde registratie. ' +
+  'registreer_bespuiting: geef bij voorkeur percelen en middelen gestructureerd mee. Deels gespoten perceel → percelen[{naam, deel:"helft"|"kwart"|"een derde"} of {naam, ha:3.33}]. Middel: dosering (per ha) óf totaal (totale hoeveelheid; CropNode verdeelt die over het GESPOTEN oppervlak). Zet in middelen.naam alleen de naam, zonder dosering. Tijd: datum + tijd (bijv. datum "gisteren", tijd "20:00"). ' +
+  'Perceel- en middelnamen mogen slordig zijn; de tools zoeken fuzzy (ook op oude namen/synoniemen) en melden twijfel — vraag dan door in plaats van te gokken. Gebruik de tool percelen om namen te herkennen. Een middel dat niet in de database staat mag gewoon: het wordt opgeslagen onder de naam die de gebruiker noemt. ' +
+  'Lezen: percelen_status ("welke percelen heb ik (niet) gedaan"), bespuitingen (met codes voor aanpassen), uren, voorraad, veldnotities (met codes), spuit_inbox (WhatsApp-concepten), weer, nu, middel_info, middelen_tegen. ' +
+  'Spuituren worden automatisch uit het spuitschrift berekend; registreer die niet apart met uren_registreren. Verbruik door bespuitingen wordt automatisch van de voorraad afgeboekt; voorraad_bijwerken is voor leveringen en tellingen. ' +
+  'Oogst, kisten, koelcellen, verladingen en sortering horen bij StoreNode (aparte connector), niet bij CropNode.';
 
 export async function handleRpc(userId: string, verzoek: RpcVerzoek): Promise<unknown | null> {
   const { id, method, params } = verzoek;
@@ -40,7 +42,7 @@ export async function handleRpc(userId: string, verzoek: RpcVerzoek): Promise<un
         result: {
           protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : MCP_PROTOCOL,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'CropNode', version: '1.0.0' },
+          serverInfo: { name: 'CropNode', version: '1.1.0' },
           instructions: INSTRUCTIONS,
         },
       };

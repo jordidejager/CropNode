@@ -550,7 +550,13 @@ export function resolveParcelsByText(
   lower = lower.replace(/\b(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)(?:avonds?|ochtends?|middags?|nachts?|morgens?)?\b/g, ' ');
 
   // Strip other date/time words (including "vanavond", "vanochtend", etc.)
-  lower = lower.replace(/\b(?:vandaag|gisteren|eergisteren|vorige|afgelopen|vanavond|vanochtend|vanmiddag|vannacht|vanmorgen)\b/g, ' ');
+  lower = lower.replace(/\b(?:vandaag|(?:eer)?gister(?:en|avond|middag|ochtend|morgen|nacht)|vorige|afgelopen|vanavond|vanochtend|vanmiddag|vannacht|vanmorgen)\b/g, ' ');
+
+  // Strip clock times ("om 20:00", "20u", "8 uur") and partial-area phrases ("helft van", "3,33 ha van")
+  lower = lower.replace(/\b(?:om\s+)?\d{1,2}(?:[:.]\d{2})?\s*(?:uur|u)\b/g, ' ');
+  lower = lower.replace(/\b(?:om\s+)?\d{1,2}:\d{2}\b/g, ' ');
+  lower = lower.replace(/\b(?:de\s+|een\s+|twee\s+)?(?:helft|halve|kwart|derde|deel|stuk)\s+(?:van\s+)?(?:het\s+|de\s+)?/g, ' ');
+  lower = lower.replace(/\b\d+(?:[.,]\d+)?\s*(?:ha|hectare)\s+(?:van\s+)?(?:het\s+|de\s+)?/g, ' ');
 
   // Strip filler/verb words that shouldn't be in parcel resolution
   lower = lower.replace(/\b(?:gespoten|gespuit|bespoten|behandeld|gedaan|gestrooid|bemest|uitgereden|avond|ochtend|middag|nacht)\b/g, ' ');
@@ -903,7 +909,13 @@ function parseSingleProduct(segment: string): ParsedProduct | null {
   const totalPattern = /\b(?:in\s+totaal|totaal|in\s+het\s+geheel)\b/i;
   const hasTotal = totalPattern.test(segment);
   const cleaned = hasTotal ? segment.replace(totalPattern, ' ').replace(/\s+/g, ' ').trim() : segment;
-  const s = cleaned.trim();
+  // "3 liter per hectare", "per ha", "p/ha", "liters" → canonical "3 l"; "huwasan per hectare" → "huwasan"
+  const s = cleaned
+    .replace(/\s*(?:per|p\/|\/)\s*(?:hectare|ha)\b\.?/gi, ' ')
+    .replace(/\bliters\b/gi, 'liter')
+    .replace(/\bkilo(?:gram)?s?\b/gi, 'kg')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   // Apply isTotal flag to whatever is returned below
   const withTotal = (p: ParsedProduct | null): ParsedProduct | null => {

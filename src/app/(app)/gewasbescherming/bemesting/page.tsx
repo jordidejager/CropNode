@@ -42,7 +42,10 @@ interface FertilizationEntryCardProps {
 function FertilizationEntryCard({ entry, allParcels, isTankmix, onAction }: FertilizationEntryCardProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const selectedParcels = allParcels.filter(p => entry.plots.includes(p.id));
-    const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    // Gespoten oppervlak: deels gespoten blokken via entry.plotAreas
+    const fullArea = selectedParcels.reduce((sum, p) => sum + (p.area || 0), 0);
+    const totalArea = selectedParcels.reduce((sum, p) => sum + (entry.plotAreas?.[p.id] ?? p.area ?? 0), 0);
+    const isPartial = totalArea < fullArea - 0.0001;
     const { toast } = useToast();
     const { invalidateSpuitschrift, invalidateInventory } = useInvalidateQueries();
     const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
@@ -118,7 +121,7 @@ function FertilizationEntryCard({ entry, allParcels, isTankmix, onAction }: Fert
                     <p className="text-sm text-slate-300 font-medium">
                         {selectedParcels.length} perce{selectedParcels.length !== 1 ? 'len' : 'el'}
                     </p>
-                    <p className="text-sm text-slate-500">{totalArea.toFixed(2)} ha</p>
+                    <p className="text-sm text-slate-500">{isPartial ? `${totalArea.toFixed(2)} van ${fullArea.toFixed(2)}` : totalArea.toFixed(2)} ha</p>
                 </div>
                 <ChevronDown
                     className={cn(
@@ -179,7 +182,7 @@ function FertilizationEntryCard({ entry, allParcels, isTankmix, onAction }: Fert
                                     {selectedParcels.map(p => (
                                         <div key={p.id} className="flex justify-between gap-4">
                                             <span>{p.name} <span className="text-slate-500">({p.variety})</span></span>
-                                            <span className="tabular-nums shrink-0">{p.area ? p.area.toFixed(2) : '0.00'} ha</span>
+                                            <span className="tabular-nums shrink-0">{entry.plotAreas?.[p.id] != null ? `${entry.plotAreas[p.id].toFixed(2)} van ${(p.area || 0).toFixed(2)}` : (p.area ? p.area.toFixed(2) : '0.00')} ha</span>
                                         </div>
                                     ))}
                                 </div>

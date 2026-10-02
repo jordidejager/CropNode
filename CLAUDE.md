@@ -351,11 +351,18 @@ connectors in één chat werken ("personal fruitteelt-assistent").
   Route is uitgesloten van de auth-middleware; alle data-toegang via admin-client + expliciet `user_id`.
 - **Protocol**: stateless JSON-RPC 2.0 over POST (`initialize`, `ping`, `tools/list`, `tools/call`),
   GET → 405, OPTIONS → 204. `src/lib/mcp/server.ts` bevat de `instructions` voor Claude.
-- **Tools** (`src/lib/mcp/tools.ts`, Nederlands snake_case, tekst-output):
-  lezen `percelen`, `percelen_status` (laatste toepassing per perceel; "welke percelen heb ik nog niet gedaan"),
-  `bespuitingen`, `middel_info`, `middelen_tegen`, `voorraad`, `weer`, `nu`, `veldnotities`, `spuit_inbox`;
-  schrijven `registreer_bespuiting` en `keur_concept_goed` (**voorstel-en-bevestig**: eerste call zonder
-  `bevestig` geeft `VOORSTEL`, opslaan pas met `bevestig=true`), `verwijder_concept`, `veldnotitie` (direct).
+- **Tools** (`src/lib/mcp/tools.ts` + `spray.ts` + `extra.ts`, Nederlands snake_case, tekst-output; helpers in `util.ts`):
+  lezen `percelen`, `percelen_status`, `bespuitingen` (met codes), `middel_info`, `middelen_tegen`, `voorraad`, `weer`, `nu`,
+  `veldnotities` (met codes), `spuit_inbox`, `uren`;
+  schrijven `registreer_bespuiting`, `bespuiting_aanpassen` (zoeken/wijzigen/verwijderen, was→wordt), `keur_concept_goed`,
+  `uren_registreren`, `uren_aanpassen`, `voorraad_bijwerken` (levering/telling) — allemaal **voorstel-en-bevestig**
+  (eerste call zonder `bevestig` → `VOORSTEL`, opslaan met `bevestig=true`); direct: `veldnotitie`, `veldnotitie_aanpassen`, `verwijder_concept`.
+- **Deels gespoten percelen**: `spuitschrift.plot_areas` = { blok-id: gespoten ha } (leeg = heel blok), `parcel_history.sprayed_area`.
+  Dosering blijft per ha; verbruik = dosering × gespoten oppervlak; een opgegeven totaal (`ProductEntry.totalAmount`) wordt over
+  het gespoten oppervlak verdeeld. Historie + voorraad worden op één plek herbouwd: `src/lib/spray-records.ts`
+  (`rebuildSprayDerivedRecords`), ook bij wijzigen via de web-app. Spuituren rekenen ook met het gespoten oppervlak
+  (`removeSprayTaskLogs`/`createSprayTaskLogs` in `spray-hours.ts`). Migraties 089 (kolommen + `spuitschrift.notes`) en 090
+  (trigger: `parcel_history.harvest_year` uit datum — tot 2026-10-02 faalde elke historie-insert sinds april stil; teruggevuld).
 - **Hergebruik**: `runRegistrationPipeline` + `enrichUnit` + `confirmRegistration` (bron `'claude'`),
   `spray-inbox-approve.ts` (gedeeld met de web-inbox), `buildForecastText`, `buildLiveSnapshotText`,
   `buildProductInfoText`, `inventory-stock.ts`.
