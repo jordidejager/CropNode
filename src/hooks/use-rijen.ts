@@ -74,6 +74,8 @@ export function useRijenkaart(perceelId: string | null | undefined) {
     enabled: !!perceelId,
     staleTime: 30 * 1000,
     retry: opnieuwProberen,
+    // De app staat globaal op refetchOnMount: false; rijen moeten na wijzigingen elders vers zijn
+    refetchOnMount: true,
   });
 }
 
@@ -84,6 +86,8 @@ export function useRijenOverzicht() {
     queryFn: () => getRijenOverzichtAction(),
     staleTime: 60 * 1000,
     retry: opnieuwProberen,
+    // De app staat globaal op refetchOnMount: false; rijen moeten na wijzigingen elders vers zijn
+    refetchOnMount: true,
   });
 }
 
@@ -97,6 +101,8 @@ export function useRijenVoorBespuitingen(spuitschriftIds: readonly string[]) {
     enabled: ids.length > 0,
     staleTime: 60 * 1000,
     retry: opnieuwProberen,
+    // De app staat globaal op refetchOnMount: false; rijen moeten na wijzigingen elders vers zijn
+    refetchOnMount: true,
   });
 }
 
@@ -110,6 +116,8 @@ export function useRijenVoorNotities(veldnotitieIds: readonly string[]) {
     enabled: ids.length > 0,
     staleTime: 60 * 1000,
     retry: opnieuwProberen,
+    // De app staat globaal op refetchOnMount: false; rijen moeten na wijzigingen elders vers zijn
+    refetchOnMount: true,
   });
 }
 

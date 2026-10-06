@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,7 @@ import {
     Save,
     X,
     Loader2,
+    Rows3,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -72,6 +74,8 @@ export function MainParcelView({
     lastSpray
 }: MainParcelViewProps) {
     const subParcels = parcel.subParcels || []
+    // Hoofdperceel-id voor de rijenkaart (alleen aanwezig als dit een SprayableParcel is)
+    const rijenkaartPerceelId = (parcel as unknown as { parcelId?: string }).parcelId
     const { data: seasonKPIs } = useParcelSeasonKPIs(parcel.id)
     const [isEditing, setIsEditing] = React.useState(false)
     const [editSaving, setEditSaving] = React.useState(false)
@@ -278,6 +282,17 @@ export function MainParcelView({
                     </div>
                 </div>
             </div>
+
+            {/* Rijenkaart (beta): eigen regel onder de kop, zodat de bestaande knoppen in de kop niet verschuiven */}
+            {rijenkaartPerceelId && (
+                <div className="-mt-3 flex">
+                    <Button asChild variant="outline" className="min-h-[44px] bg-white/5 border-white/10 text-white font-bold rounded-full gap-2">
+                        <Link href={`/percelen/rijen/${encodeURIComponent(rijenkaartPerceelId)}`}>
+                            <Rows3 className="h-4 w-4" /> Rijenkaart (beta)
+                        </Link>
+                    </Button>
+                </div>
+            )}
 
             {/* Inline Edit panel */}
             {isEditing && (

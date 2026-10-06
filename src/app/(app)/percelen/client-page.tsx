@@ -9,7 +9,7 @@ import type { Parcel, SubParcel, RvoParcel } from "@/lib/types";
 import type { SprayableParcel } from "@/lib/supabase-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes, Building2 } from "lucide-react";
+import { PlusCircle, Map as MapIcon, LayoutList, List, Search, ArrowLeft, Layers, Grid3X3, ArrowUpDown, ArrowUp, ArrowDown, Eye, Apple, Leaf, Pencil, X as XIcon, FolderPlus, Trash2, ChevronDown, ChevronRight, Merge, FlaskConical, TreePine, Boxes, Building2, Rows3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SoilAnalysisPanel } from "@/components/domain/soil-analysis-panel";
 import { ParcelComparisonModal } from "@/components/domain/parcel-comparison-modal";
@@ -30,6 +30,7 @@ import { RvoParcelSheet } from "@/components/rvo-map/rvo-parcel-sheet";
 import { RvoMultiSelectBar } from "@/components/rvo-map/rvo-multi-select-bar";
 import { calculateAreaHectares, calculateCenter } from "@/lib/rvo-api";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 const RvoMap = dynamic(
   () => import("@/components/rvo-map/rvo-map").then((m) => m.RvoMap),
@@ -577,6 +578,8 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
     const varietySet = new Set(gp.subParcels.map(p => p.variety).filter(Boolean));
     // Use the first sub_parcel's parcelId as the real parcels-table ID (for grondmonster upload)
     const realParcelId = (gp.subParcels[0] as unknown as { parcelId?: string })?.parcelId;
+    // Rijenkaart (beta): alleen als alle blokken bij hetzelfde hoofdperceel horen
+    const rijenkaartPerceelId = realParcelId && gp.subParcels.every(p => (p as unknown as { parcelId?: string }).parcelId === realParcelId) ? realParcelId : null;
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
@@ -617,6 +620,17 @@ export function PercelenClientPage({ forcedView }: { forcedView?: 'list' | 'map'
             </div>
           </div>
         </div>
+
+        {/* Rijenkaart (beta): eigen regel onder de kop */}
+        {rijenkaartPerceelId && (
+          <div className="-mt-3 flex">
+            <Button asChild variant="outline" className="min-h-[44px] bg-white/5 border-white/10 text-white font-bold rounded-full gap-2">
+              <Link href={`/percelen/rijen/${encodeURIComponent(rijenkaartPerceelId)}`}>
+                <Rows3 className="h-4 w-4" /> Rijenkaart (beta)
+              </Link>
+            </Button>
+          </div>
+        )}
 
         {/* KPI cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
