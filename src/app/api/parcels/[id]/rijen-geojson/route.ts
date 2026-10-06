@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase-client';
 import { apiError, ErrorCodes } from '@/lib/api-utils';
@@ -18,8 +19,11 @@ export async function GET(
     const { id } = await params;
     const supabase = await createServerClient();
 
-    let user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    let user = userData.user;
+    // Alleen bij een onbereikbare auth-server terugvallen op de (ongeverifieerde) cookie-sessie,
+    // nooit bij een ongeldige of vervalste token.
+    if (!user && userError && isAuthRetryableFetchError(userError)) {
       const { data: sessionData } = await supabase.auth.getSession();
       user = sessionData?.session?.user || null;
     }

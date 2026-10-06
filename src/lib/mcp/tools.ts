@@ -24,6 +24,18 @@ import { sprayedArea } from '@/lib/spray-records';
 import { EXTRA_TOOLS, uren, urenAanpassen, urenRegistreren, veldnotitieAanpassen, voorraadBijwerken } from './extra';
 import { KLUS_TOOLS, klussen, klusStarten, klusStoppen, klusWijzigen, oogstVoortgang, werkschema, werkschemaWijzigen } from './klussen';
 import {
+  RIJEN_TOOLS,
+  boomBijPositie,
+  hoofdpercelenVan,
+  resolveRijen,
+  rijenArg,
+  rijenSamenvattingPerPerceel,
+  rijenTekstVoorNotities,
+  rijenTool,
+  type RijenResolutie,
+} from './rijen';
+import { koppelNotitieAanRijen } from '@/lib/rijen/koppelingen';
+import {
   normaliseer,
   percelenVanNaam,
   str,
@@ -54,7 +66,7 @@ export const TOOLS: ToolDefinitie[] = [
   {
     name: 'percelen',
     description:
-      'Alle spuitbare percelen (blokken) van de teler: naam, gewas, ras, hectares, hoofdperceel en perceelgroepen. Gebruik dit om slordige perceelnamen van de gebruiker te herkennen vóór je registreert.',
+      'Alle spuitbare percelen (blokken) van de teler: naam, gewas, ras, hectares, hoofdperceel en perceelgroepen. Gebruik dit om slordige perceelnamen van de gebruiker te herkennen vóór je registreert. Heeft een perceel rijen (rijenkaart, beta), dan staat er een regel met rijbereik, blokken, bestuivers en rij-oppervlak (details: tool rijen).',
     inputSchema: { type: 'object', properties: { gewas: { type: 'string', description: 'Alleen dit gewas, bijv. "appel" of "peer".' } }, additionalProperties: false },
   },
   {
@@ -119,13 +131,18 @@ export const TOOLS: ToolDefinitie[] = [
   },
   {
     name: 'veldnotitie',
-    description: 'Slaat een veldnotitie op (observatie, herinnering, opmerking), optioneel gekoppeld aan percelen. Slaat direct op — geen bevestiging nodig.',
+    description: 'Slaat een veldnotitie op (observatie, herinnering, opmerking), optioneel gekoppeld aan percelen, en optioneel aan rijen van één perceel (rijenkaart, beta) met positie_m. Slaat direct op — geen bevestiging nodig.',
     inputSchema: {
       type: 'object',
       properties: {
         tekst: { type: 'string' },
         percelen: { type: 'array', items: { type: 'string' }, description: 'Perceelnamen zoals de gebruiker ze noemt.' },
         datum: { type: 'string', description: DATUM_DESC },
+        rijen: {
+          type: 'string',
+          description: 'Optioneel (rijenkaart, beta): rijen binnen het ENE perceel in percelen, bijv. "12", "3-5" of "blok Conference 2018". Vereist precies één perceel in percelen.',
+        },
+        positie_m: { type: 'number', description: 'Optioneel: plek in de rij in meters vanaf het begin van de rij (alleen bij precies één rij).' },
       },
       required: ['tekst'],
       additionalProperties: false,
@@ -174,6 +191,7 @@ export const TOOLS: ToolDefinitie[] = [
   ...SPRAY_TOOLS,
   ...EXTRA_TOOLS,
   ...KLUS_TOOLS,
+  ...RIJEN_TOOLS,
 ];
 
 // ── Uitvoering ───────────────────────────────────────────────────────────
@@ -213,6 +231,7 @@ export async function voerToolUit(userId: string, naam: string, args: Args): Pro
     case 'keur_concept_goed': return keurConceptGoed(await laadContext(userId), args);
     case 'verwijder_concept': return verwijderConcept(userId, args);
     case 'registreer_bespuiting': return registreerBespuiting(await laadContext(userId), args);
+    case 'rijen': return rijenTool(await laadContext(userId), args);
     default:
       return { tekst: `Onbekende tool: ${naam}`, fout: true };
   }
@@ -220,7 +239,7 @@ export async function voerToolUit(userId: string, naam: string, args: Args): Pro
 
 // ── Lezen ────────────────────────────────────────────────────────────────
 
-function percelen(ctx: McpContext, args: Args): ToolResultaat {
+async function percelen(ctx: McpContext, args: Args): Promise<ToolResultaat> {
   const gewas = normaliseer(str(args.gewas));
   const lijst = ctx.parcels.filter(p => !gewas || normaliseer(p.crop || '').includes(gewas));
   if (lijst.length === 0) return { tekst: gewas ? `Geen percelen met gewas "${str(args.gewas)}".` : 'Geen spuitbare percelen gevonden. Voeg percelen toe in CropNode.' };
@@ -229,10 +248,21 @@ function percelen(ctx: McpContext, args: Args): ToolResultaat {
     const k = (p as any).parcelName || p.name;
     perHoofd.set(k, [...(perHoofd.get(k) || []), p]);
   }
+  // Rijenkaart (beta): per hoofdperceel met rijen één extra regel; zonder rijen blijft de uitvoer gelijk
+  const rijenPerPerceel = await rijenSamenvattingPerPerceel(ctx.userId, [...new Set(lijst.map(p => p.parcelId).filter(Boolean))]);
   const regels: string[] = [];
   for (const [hoofd, ps] of [...perHoofd.entries()].sort((a, b) => a[0].localeCompare(b[0], 'nl'))) {
     regels.push(`${hoofd}${ps.length > 1 ? ` (${ps.length} blokken)` : ''}`);
     for (const p of ps) regels.push(`  - ${p.name} · ${p.crop || '?'}${p.variety ? ` ${p.variety}` : ''} · ${p.area ? `${f(p.area, 2)} ha` : 'ha onbekend'}`);
+    if (rijenPerPerceel.size) {
+      const pids = [...new Set(ps.map(p => p.parcelId))];
+      for (const pid of pids) {
+        const samenvatting = rijenPerPerceel.get(pid);
+        // Twee hoofdpercelen met dezelfde naam: noem de blokken erbij
+        const welke = pids.length > 1 ? `(${ps.filter(p => p.parcelId === pid).map(p => p.name).join(', ')}) ` : '';
+        if (samenvatting) regels.push(`  ${welke}${samenvatting}`);
+      }
+    }
   }
   const totaal = lijst.reduce((s, p) => s + (p.area || 0), 0);
   regels.push('', `Totaal ${lijst.length} percelen · ${f(totaal, 2)} ha`);
@@ -320,11 +350,13 @@ async function veldnotities(ctx: McpContext, args: Args): Promise<ToolResultaat>
   const { data, error } = await q;
   if (error) return { tekst: `Notities ophalen mislukt: ${error.message}`, fout: true };
   if (!data?.length) return { tekst: `Geen veldnotities in de laatste ${dagen} dagen.` };
+  // Rijenkaart (beta): " · rij 12 (34 m, boom 52)" bij notities op rijen
+  const rijenPerNotitie = await rijenTekstVoorNotities(ctx.userId, data.map(n => String(n.id)));
   return {
     tekst: data
       .map(n => {
         const namen = ((n.parcel_ids as string[] | null) || []).map(id => ctx.parcels.find(p => p.id === id)?.name || '?');
-        const meta = [n.status !== 'open' ? n.status : null, n.auto_tag, n.source, namen.length ? namen.join(', ') : null, n.due_date ? `herinnering ${dd(new Date(n.due_date))}` : null].filter(Boolean).join(' · ');
+        const meta = [n.status !== 'open' ? n.status : null, n.auto_tag, n.source, namen.length ? namen.join(', ') : null, rijenPerNotitie[String(n.id)] ?? null, n.due_date ? `herinnering ${dd(new Date(n.due_date))}` : null].filter(Boolean).join(' · ');
         return `- [${String(n.id).slice(0, 8)}] ${ddt(new Date(n.created_at))}: ${n.content}${meta ? `\n    (${meta})` : ''}`;
       })
       .join('\n'),
@@ -344,20 +376,86 @@ async function veldnotitie(ctx: McpContext, args: Args): Promise<ToolResultaat> 
     if (ps.length) gevonden.push(...ps.filter(p => !gevonden.includes(p)));
     else nietGevonden.push(n);
   }
+
+  // Rijenkaart (beta): optioneel op rijen (+ positie) binnen precies één perceel
+  const rijenTekst = rijenArg(args.rijen);
+  const positieGegeven = args.positie_m !== undefined && args.positie_m !== null;
+  if (positieGegeven && !rijenTekst) return { tekst: 'positie_m kan alleen samen met rijen (precies één rij).', fout: true };
+  let rijen: { perceelNaam: string; res: RijenResolutie; positieM: number | null } | null = null;
+  if (rijenTekst) {
+    if (nietGevonden.length) return { tekst: `Perceel niet gevonden: ${nietGevonden.join(', ')}. Bij rijen moet percelen precies één bekend perceel bevatten.`, fout: true };
+    const hoofd = hoofdpercelenVan(gevonden);
+    if (hoofd.length !== 1) {
+      return {
+        tekst: hoofd.length === 0
+          ? 'Geef bij rijen ook het perceel op in percelen (precies één), bijv. percelen ["Steketee"] en rijen "12".'
+          : `Rijen kunnen alleen bij precies één perceel; percelen raakt er ${hoofd.length} (${hoofd.map(h => h.naam).join(', ')}).`,
+        fout: true,
+      };
+    }
+    const positieM = positieGegeven ? num(args.positie_m) : null;
+    if (positieGegeven && (positieM == null || positieM < 0)) return { tekst: 'positie_m moet een getal van 0 of meer zijn (meters vanaf het begin van de rij).', fout: true };
+    const res = await resolveRijen(ctx.userId, hoofd[0].id, rijenTekst, hoofd[0].naam);
+    if (res.fouten.length) return { tekst: `Niet opgeslagen: ${res.fouten.map(x => x.replace(/\.?$/, '.')).join(' ')}`, fout: true };
+    if (positieM != null && res.rijIds.length !== 1) return { tekst: `positie_m kan alleen bij precies één rij; "${rijenTekst}" is ${res.omschrijving}.`, fout: true };
+    rijen = { perceelNaam: hoofd[0].naam, res, positieM };
+  }
+
   const datum = str(args.datum) ? datumArg(args.datum) : new Date();
-  const { error } = await (getSupabaseAdmin() as any).from('field_notes').insert({
-    user_id: ctx.userId,
-    content: tekst,
-    source: 'claude',
-    status: 'open',
-    is_pinned: false,
-    parcel_ids: gevonden.length ? gevonden.map(p => p.id) : null,
-    created_at: datum.toISOString(),
-  });
-  if (error) return { tekst: `Opslaan mislukt: ${error.message}`, fout: true };
-  return {
-    tekst: `Genoteerd ✓${gevonden.length ? ` bij ${gevonden.map(p => p.name).join(', ')}` : ''}${nietGevonden.length ? ` (perceel niet gevonden: ${nietGevonden.join(', ')})` : ''}`,
-  };
+  if (!rijen) {
+    const { error } = await (getSupabaseAdmin() as any).from('field_notes').insert({
+      user_id: ctx.userId,
+      content: tekst,
+      source: 'claude',
+      status: 'open',
+      is_pinned: false,
+      parcel_ids: gevonden.length ? gevonden.map(p => p.id) : null,
+      created_at: datum.toISOString(),
+    });
+    if (error) return { tekst: `Opslaan mislukt: ${error.message}`, fout: true };
+    return {
+      tekst: `Genoteerd ✓${gevonden.length ? ` bij ${gevonden.map(p => p.name).join(', ')}` : ''}${nietGevonden.length ? ` (perceel niet gevonden: ${nietGevonden.join(', ')})` : ''}`,
+    };
+  }
+
+  // Met rijen: parcel_ids = subpercelen van de rijen (als bekend), daarna koppelen
+  const admin = getSupabaseAdmin() as any;
+  const subIds = [...new Set(rijen.res.rijen.map(r => r.subParcelId).filter((s): s is string => !!s))];
+  const { data, error } = await admin
+    .from('field_notes')
+    .insert({
+      user_id: ctx.userId,
+      content: tekst,
+      source: 'claude',
+      status: 'open',
+      is_pinned: false,
+      parcel_ids: subIds.length ? subIds : gevonden.map(p => p.id),
+      created_at: datum.toISOString(),
+    })
+    .select('id')
+    .single();
+  if (error || !data?.id) return { tekst: `Opslaan mislukt: ${error?.message ?? 'geen id terug'}`, fout: true };
+  const positieM = rijen.positieM;
+  try {
+    await koppelNotitieAanRijen(ctx.userId, String(data.id), rijen.res.rijIds.map(rijId => ({ rijId, positieM })));
+  } catch (e) {
+    // Geen notitie zonder rijkoppeling achterlaten
+    await admin.from('field_notes').delete().eq('id', data.id).eq('user_id', ctx.userId);
+    return { tekst: `Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`, fout: true };
+  }
+
+  let waar = rijen.res.omschrijving;
+  let opmerking = '';
+  if (positieM != null && rijen.res.rijen.length === 1) {
+    const r = rijen.res.rijen[0];
+    // Zoals koppelNotitieAanRijen opslaat: begrensd op de rijlengte en afgerond op cm
+    const voorbijEind = r.lengteM > 0 && positieM > r.lengteM;
+    const pos = Math.round((voorbijEind ? r.lengteM : positieM) * 100) / 100;
+    const boom = boomBijPositie(pos, r.boomafstandM);
+    waar = `rij ${r.nummer} (${f(pos, 1)} m${boom != null ? `, boom ~${boom}` : ''})`;
+    if (voorbijEind) opmerking = ` — de rij is ${f(r.lengteM, 1)} m lang; positie op het eind gezet`;
+  }
+  return { tekst: `Genoteerd ✓ bij ${rijen.perceelNaam} ${waar}${opmerking}` };
 }
 
 function conceptTekst(ctx: McpContext, e: LogbookEntry, index: number): string {

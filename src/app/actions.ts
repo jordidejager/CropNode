@@ -58,6 +58,8 @@ import { parseSprayApplication } from '@/ai/flows/parse-spray-application';
 import { parseSoilReport } from '@/ai/flows/parse-soil-report';
 import { addSoilSample } from '@/lib/supabase-store';
 import pdf from 'pdf-parse';
+import { cleanPlotAreas } from '@/lib/spray-records';
+import { koppelBespuitingAanRijen, ontkoppelBespuitingVanRijen, rijSelectieNaarPlots, vervallenRijkoppelingen, type RijSelectieOppervlak } from '@/lib/rijen/koppelingen';
 
 // ============================================
 // Auth Helper - Get current user ID from server-side auth
@@ -982,6 +984,8 @@ export async function updateSpuitschriftEntryAction(
     status?: 'Akkoord' | 'Waarschuwing';
     errorCount?: number;
     warningCount?: number;
+    /** Rijenkaart (beta): rijen waarvan de koppeling met deze bespuiting is vervallen, bv. "rij 1–20 (Steketee)" */
+    rijkoppelingVervallen?: string;
 }> {
     try {
         // Get current user ID from server-side auth
@@ -1106,6 +1110,18 @@ export async function updateSpuitschriftEntryAction(
         const status: 'Akkoord' | 'Waarschuwing' = warningCount > 0 ? 'Waarschuwing' : 'Akkoord';
         const validationMessage = validationMessages.length > 0 ? validationMessages.join('\n') : null;
 
+        // Rijenkaart (beta): gaat er een subperceel uit, dan vervalt de koppeling met de rijen daarin
+        // (zoals bespuiting_aanpassen in de MCP). Geen subperceel eruit of geen koppelingen: niets.
+        let vervallenRijen: { rijIds: string[]; omschrijving: string } | null = null;
+        if (updates.plots !== undefined && existingEntry.plots.some(id => !finalPlots.includes(id))) {
+            try {
+                vervallenRijen = await vervallenRijkoppelingen(userId, entryId, finalPlots);
+            } catch (rijFout) {
+                console.error('[updateSpuitschriftEntryAction] Rijkoppelingen controleren mislukt:', rijFout);
+                return { success: false, message: 'De rijkoppelingen (rijenkaart) konden niet worden gecontroleerd. Probeer het opnieuw.' };
+            }
+        }
+
         // Update the entry
         await dbUpdateSpuitschriftEntry(entryId, {
             date: finalDate,
@@ -1115,17 +1131,30 @@ export async function updateSpuitschriftEntryAction(
             status,
         }, userId);
 
+        let rijkoppelingVervallen: string | undefined;
+        let message = 'Wijzigingen opgeslagen.';
+        if (vervallenRijen && vervallenRijen.rijIds.length > 0) {
+            try {
+                await ontkoppelBespuitingVanRijen(userId, entryId, vervallenRijen.rijIds);
+                rijkoppelingVervallen = vervallenRijen.omschrijving;
+            } catch (rijFout) {
+                console.error('[updateSpuitschriftEntryAction] Rijkoppeling verwijderen mislukt:', rijFout);
+                message = `Wijzigingen opgeslagen, maar de rijkoppeling (${vervallenRijen.omschrijving}) kon niet worden verwijderd.`;
+            }
+        }
+
         revalidatePath('/');
         revalidatePath('/crop-care/logs');
         revalidatePath('/crop-care/inventory');
 
         return {
             success: true,
-            message: 'Wijzigingen opgeslagen.',
+            message,
             validationMessage,
             status,
             errorCount,
             warningCount,
+            ...(rijkoppelingVervallen ? { rijkoppelingVervallen } : {}),
         };
     } catch (error) {
         console.error('[updateSpuitschriftEntryAction] Error:', error);
@@ -1869,6 +1898,13 @@ interface AddManualSprayEntryInput {
     plots: string[];
     products: ProductEntry[];
     notes?: string;
+    /**
+     * Rijenkaart (beta): alleen deze rijen zijn behandeld. Leeg of afwezig = hele
+     * subpercelen (ongewijzigd gedrag). Met rijen worden de subpercelen van de
+     * betrokken percelen vervangen door die van de rijen en wordt het gespoten
+     * oppervlak (plot_areas) uit de rijen berekend.
+     */
+    rijIds?: string[];
 }
 
 /**
@@ -1884,10 +1920,14 @@ export async function addManualSprayEntry(
             return { success: false, message: 'Niet ingelogd. Log opnieuw in.' };
         }
 
-        const { date, plots, products, notes } = input;
+        const { date, products, notes } = input;
+        let plots = input.plots;
+        // Rijenkaart (beta): optionele rijselectie. Leeg/afwezig → exact het bestaande pad.
+        const invoerRijIds = Array.isArray(input.rijIds) ? input.rijIds : [];
+        const metRijen = invoerRijIds.length > 0;
 
         // Validation: must have at least one parcel and one product
-        if (!plots || plots.length === 0) {
+        if ((!plots || plots.length === 0) && !metRijen) {
             return { success: false, message: 'Selecteer minimaal één perceel.' };
         }
 
@@ -1901,10 +1941,47 @@ export async function addManualSprayEntry(
             return { success: false, message: 'Voeg minimaal één middel met naam toe.' };
         }
 
+        // Rijselectie → subpercelen + gespoten oppervlak (alleen met rijen)
+        let rijSelectie: RijSelectieOppervlak | null = null;
+        let rijPlotAreas: Record<string, number> | undefined;
+        let sprayableVooraf: SprayableParcel[] | null = null;
+        if (metRijen) {
+            try {
+                rijSelectie = await rijSelectieNaarPlots(userId, invoerRijIds);
+            } catch (e) {
+                return { success: false, message: e instanceof Error && e.message ? e.message : 'Rijselectie kon niet worden verwerkt.' };
+            }
+            if (rijSelectie.rijIds.length === 0 || rijSelectie.plots.length === 0) {
+                return { success: false, message: 'De rijselectie bevat geen rijen die gespoten kunnen worden.' };
+            }
+
+            // Subpercelen van de percelen uit de rijselectie die niet bij de rijen horen, vervallen;
+            // de subpercelen van de rijen komen erbij.
+            const rijPercelen = new Set(rijSelectie.perPerceel.map(p => p.perceelId));
+            const rijPlots = new Set(rijSelectie.plots);
+            const invoerPlots = plots ?? [];
+            sprayableVooraf = await getSprayableParcelsById(Array.from(new Set([...invoerPlots, ...rijSelectie.plots])));
+            const hoofdperceelVan = new Map(sprayableVooraf.map(p => [p.id, p.parcelId]));
+            plots = Array.from(new Set([
+                ...invoerPlots.filter(id => {
+                    const perceelId = hoofdperceelVan.get(id);
+                    return !(perceelId && rijPercelen.has(perceelId) && !rijPlots.has(id));
+                }),
+                ...rijSelectie.plots,
+            ]));
+
+            // Gespoten oppervlak alleen voor de subpercelen van de rijen; een waarde ≥ het volledige
+            // subperceel betekent "volledig gespoten" en wordt (zoals elders) niet opgeslagen.
+            const volledig = new Map<string, number | null>(sprayableVooraf.map(p => [p.id, p.area ?? null]));
+            rijPlotAreas = cleanPlotAreas(rijSelectie.plotAreas, rijSelectie.plots, volledig);
+        }
+
         // Fetch parcels for validation and history
         const [allParcels, sprayableParcels] = await Promise.all([
             getParcels(),
-            getSprayableParcelsById(plots)
+            sprayableVooraf
+                ? Promise.resolve(sprayableVooraf.filter(p => plots.includes(p.id)))
+                : getSprayableParcelsById(plots)
         ]);
 
         // Run CTGB validation
@@ -1937,9 +2014,24 @@ export async function addManualSprayEntry(
             status: warningCount > 0 ? 'Waarschuwing' : 'Akkoord',
             createdAt: new Date(),
             ...(validationMessage && { validationMessage }),
+            ...(rijPlotAreas && Object.keys(rijPlotAreas).length > 0 ? { plotAreas: rijPlotAreas } : {}),
         };
 
         const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry, userId);
+
+        // Rijenkaart (beta): rijen aan de registratie koppelen; lukt dat niet, dan geen half werk
+        if (rijSelectie) {
+            try {
+                await koppelBespuitingAanRijen(userId, newSpuitschriftEntry.id, rijSelectie.rijIds);
+            } catch (koppelFout) {
+                console.error('[addManualSprayEntry] Rijen koppelen mislukt, registratie wordt teruggedraaid:', koppelFout);
+                await dbDeleteSpuitschriftEntry(newSpuitschriftEntry.id, userId).catch(rollbackFout => {
+                    console.error('[addManualSprayEntry] CRITICAL: terugdraaien mislukt:', rollbackFout);
+                });
+                const reden = koppelFout instanceof Error && koppelFout.message ? ` (${koppelFout.message})` : '';
+                return { success: false, message: `De bespuiting is niet opgeslagen: de rijen konden niet worden gekoppeld${reden}. Probeer het opnieuw.` };
+            }
+        }
 
         // Create dummy logbook entry for parcel history function
         const dummyLogbookEntry: LogbookEntry = {
@@ -1951,6 +2043,7 @@ export async function addManualSprayEntry(
             parsedData: {
                 plots: plots,
                 products: finalProducts,
+                ...(rijPlotAreas && Object.keys(rijPlotAreas).length > 0 ? { plotAreas: rijPlotAreas } : {}),
             },
             validationMessage: validationMessage || undefined,
         };

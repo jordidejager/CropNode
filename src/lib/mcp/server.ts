@@ -28,6 +28,9 @@ const INSTRUCTIONS =
   'Perceel- en middelnamen mogen slordig zijn; de tools zoeken fuzzy (ook op oude namen/synoniemen) en melden twijfel — vraag dan door in plaats van te gokken. Gebruik de tool percelen om namen te herkennen. Een middel dat niet in de database staat mag gewoon: het wordt opgeslagen onder de naam die de gebruiker noemt. ' +
   'Lezen: percelen_status ("welke percelen heb ik (niet) gedaan"), bespuitingen (met codes voor aanpassen), uren, voorraad, veldnotities (met codes), spuit_inbox (WhatsApp-concepten), weer, nu, middel_info, middelen_tegen. ' +
   'UREN: een ploeg die ergens bezig is = een KLUS. "Vanaf vandaag met 6 man plukken op Spoor" → klus_starten; uren tellen dan automatisch per werkdag volgens het werkschema. Afwijkingen (iemand ziek, later begonnen, eerder gestopt, niet gewerkt) → klus_wijzigen met datum; ploeg blijvend kleiner/groter → klus_wijzigen met personen_vanaf; deel van de ploeg ergens anders → personen_vanaf op de ene klus + klus_starten voor de andere; perceel klaar → klus_stoppen (legt de uren per dag vast). "Wat loopt er?" → klussen. Losse of achteraf gewerkte uren → uren_registreren (uren weglaten = werkschema). Werktijden structureel anders → werkschema_wijzigen. Gebruik oogst_voortgang (StoreNode-pluk per perceel: eerste/laatste plukdag, kisten, kg, kg per manuur) om bij plukken/sorteren te vragen of een perceel klaar is en om uren achteraf voor te stellen. Waarschuw bij klussen die al weken lopen. ' +
+  'RIJEN (beta): percelen kunnen rijen hebben; de tool rijen toont per perceel de blokken, rijnummers, bestuiverrijen en het rij-oppervlak (percelen toont een korte regel). ' +
+  'Alleen een deel van de rijen gespoten → registreer_bespuiting met percelen[{naam, rijen:"1-20, 24"}] (of rijen op topniveau als het om één perceel gaat), niet samen met deel/ha; rijen mag ook een bloknaam zijn ("blok Conference 2018"), "bestuivers" of "alle behalve 5". ' +
+  'Notitie bij een rij → veldnotitie met percelen [precies één perceel], rijen "12" en optioneel positie_m (meters vanaf het begin van de rij). Geen rijen bekend → gewoon zonder rijen werken. ' +
   'Spuituren worden automatisch uit het spuitschrift berekend; registreer die niet apart. Verbruik door bespuitingen wordt automatisch van de voorraad afgeboekt; voorraad_bijwerken is voor leveringen en tellingen. ' +
   'Oogst, kisten, koelcellen, verladingen en sortering horen bij StoreNode (aparte connector), niet bij CropNode.';
 
@@ -43,7 +46,7 @@ export async function handleRpc(userId: string, verzoek: RpcVerzoek): Promise<un
         result: {
           protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : MCP_PROTOCOL,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'CropNode', version: '1.2.0' },
+          serverInfo: { name: 'CropNode', version: '1.3.0' },
           instructions: INSTRUCTIONS,
         },
       };

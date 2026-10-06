@@ -18,6 +18,7 @@ import {
     CheckCircle2,
     AlertTriangle,
     Sparkles,
+    Rows3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,16 @@ import type { CtgbProduct, ProductEntry } from '@/lib/types';
 import { addManualSprayEntry } from '@/app/actions';
 import { GlowOrb } from '@/components/ui/premium';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
+import { getRijenkaartAction, rijSelectieOppervlakAction } from '@/app/rijen-actions';
+import { rijenQueryKeys, useInvalidateRijen } from '@/hooks/use-rijen';
+import { formatteerBereiken } from '@/lib/rijen/selectie';
+import {
+    RijSelectieSectie,
+    rijSelectieRegel,
+    vatRijSelectieSamen,
+    type RijPerceelResultaat,
+} from './rij-selectie-sectie';
 
 interface ProductRow {
     id: string;
@@ -63,6 +74,11 @@ interface NewSprayDialogProps {
     onOpenChange: (open: boolean) => void;
     parcels: SprayableParcel[];
     onSuccess?: () => void;
+    /**
+     * Rijenkaart (beta): open de dialoog met een rijselectie voor dit perceel (bv. vanaf de
+     * rijenkaart). De subpercelen van de rijen worden voorgeselecteerd.
+     */
+    initieleRijSelectie?: { perceelId: string; rijIds: string[] };
 }
 
 type Step = 0 | 1 | 2 | 3;
@@ -81,11 +97,23 @@ export function NewSprayDialog({
     onOpenChange,
     parcels,
     onSuccess,
+    initieleRijSelectie,
 }: NewSprayDialogProps) {
     const { toast } = useToast();
     const { data: parcelGroups = [] } = useParcelGroups();
     const { data: parcelGroupOptions = [] } = useParcelGroupOptions();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+    // Rijenkaart (beta): rijselectie per hoofdperceel (leeg = hele perceel)
+    const queryClient = useQueryClient();
+    const { invalideerAlles: invalideerRijen } = useInvalidateRijen();
+    const [rijTekst, setRijTekst] = React.useState<Record<string, string>>({});
+    const [rijResultaten, setRijResultaten] = React.useState<Record<string, RijPerceelResultaat>>({});
+    const initieelRef = React.useRef(initieleRijSelectie);
+    initieelRef.current = initieleRijSelectie;
+    const parcelsRef = React.useRef(parcels);
+    parcelsRef.current = parcels;
+    const prefillToken = React.useRef(0);
 
     // Wizard state
     const [step, setStep] = React.useState<Step>(0);
@@ -115,13 +143,93 @@ export function NewSprayDialog({
             setNotes('');
             setSaveValidation(null);
             setIsSubmitting(false);
+            setRijTekst({});
+            setRijResultaten({});
+            prefillToken.current++;
+
+            const init = initieelRef.current;
+            if (init?.perceelId && Array.isArray(init.rijIds) && init.rijIds.length > 0) {
+                void vulInitieleRijSelectie(init.perceelId, init.rijIds, prefillToken.current);
+            }
         }
     }, [open]);
+
+    /**
+     * Rijselectie vanaf de rijenkaart: subpercelen van de rijen selecteren en het rijveld
+     * van het perceel vullen met de rijnummers (bv. "1–20, 24").
+     */
+    async function vulInitieleRijSelectie(perceelId: string, rijIds: string[], token: number) {
+        const subpercelenVanPerceel = () =>
+            parcelsRef.current.filter(p => p.parcelId === perceelId).map(p => p.id);
+        // Direct: alle subpercelen van het perceel; wordt verfijnd zodra de rijselectie bekend is
+        setSelectedParcelIds(subpercelenVanPerceel());
+
+        const [oppervlak, kaart] = await Promise.allSettled([
+            rijSelectieOppervlakAction(rijIds),
+            queryClient.fetchQuery({
+                queryKey: rijenQueryKeys.kaart(perceelId),
+                queryFn: () => getRijenkaartAction(perceelId),
+                staleTime: 30 * 1000,
+            }),
+        ]);
+        if (token !== prefillToken.current) return;
+
+        let nummers: number[] = [];
+        if (oppervlak.status === 'fulfilled') {
+            nummers = oppervlak.value.perPerceel.find(p => p.perceelId === perceelId)?.nummers ?? [];
+        }
+        if (nummers.length === 0 && kaart.status === 'fulfilled' && kaart.value) {
+            const ids = new Set(rijIds);
+            nummers = kaart.value.rijen.filter(r => ids.has(r.id) && r.status === 'actief').map(r => r.nummer);
+        }
+        if (nummers.length > 0) {
+            setRijTekst(prev => ({ ...prev, [perceelId]: formatteerBereiken(nummers) }));
+        }
+
+        // Subpercelen: die van de rijen; anders (rijselectie onbruikbaar) alle subpercelen van het perceel
+        let plots: string[] = [];
+        if (oppervlak.status === 'fulfilled') plots = oppervlak.value.plots;
+        if (plots.length === 0) plots = subpercelenVanPerceel();
+        if (plots.length === 0 && kaart.status === 'fulfilled' && kaart.value) {
+            plots = kaart.value.perceel.subpercelen.map(s => s.id);
+        }
+        if (plots.length > 0) {
+            const vanPerceel = new Set([...subpercelenVanPerceel(), ...plots]);
+            setSelectedParcelIds(prev => Array.from(new Set([...prev.filter(id => !vanPerceel.has(id)), ...plots])));
+        }
+    }
+
+    const handleRijTekstChange = React.useCallback((perceelId: string, tekst: string) => {
+        setRijTekst(prev => ({ ...prev, [perceelId]: tekst }));
+    }, []);
+
+    const handleRijResultaat = React.useCallback((resultaat: RijPerceelResultaat) => {
+        setRijResultaten(prev => {
+            const oud = prev[resultaat.perceelId];
+            if (
+                oud &&
+                oud.tekst === resultaat.tekst &&
+                oud.status === resultaat.status &&
+                oud.oppervlak === resultaat.oppervlak &&
+                oud.sleutel === resultaat.sleutel &&
+                oud.fouten.join('\n') === resultaat.fouten.join('\n')
+            ) {
+                return prev;
+            }
+            return { ...prev, [resultaat.perceelId]: resultaat };
+        });
+    }, []);
+
+    const rijSamenvatting = React.useMemo(
+        () => vatRijSelectieSamen(parcels, selectedParcelIds, rijTekst, rijResultaten),
+        [parcels, selectedParcelIds, rijTekst, rijResultaten],
+    );
+    const metRijen = rijSamenvatting.rijIds.length > 0;
 
     // ── Step validation ────────────────────────────────
     const canAdvance: Record<Step, boolean> = {
         0: true, // datum altijd gezet
-        1: selectedParcelIds.length > 0,
+        1: selectedParcelIds.length > 0 && !rijSamenvatting.blokkeert,
         2: products.some(p => p.product.trim() && p.dosage > 0),
         3: true,
     };
@@ -154,6 +262,7 @@ export function NewSprayDialog({
     const handleSubmit = async () => {
         const validProducts = products.filter(p => p.product.trim() && p.dosage > 0);
         if (!validProducts.length || !selectedParcelIds.length) return;
+        if (rijSamenvatting.blokkeert) return;
 
         setIsSubmitting(true);
         setSaveValidation(null);
@@ -170,9 +279,10 @@ export function NewSprayDialog({
 
             const result = await addManualSprayEntry({
                 date: applicationDate,
-                plots: selectedParcelIds,
+                plots: rijSamenvatting.plots,
                 products: productEntries,
                 notes: notes.trim() || undefined,
+                ...(metRijen ? { rijIds: rijSamenvatting.rijIds } : {}),
             });
 
             if (result.success) {
@@ -180,6 +290,7 @@ export function NewSprayDialog({
                     title: 'Bespuiting toegevoegd',
                     description: 'De bespuiting is succesvol geregistreerd.',
                 });
+                if (metRijen) void invalideerRijen();
                 onOpenChange(false);
                 onSuccess?.();
             } else {
@@ -200,8 +311,10 @@ export function NewSprayDialog({
         }
     };
 
-    const selectedParcels = parcels.filter(p => selectedParcelIds.includes(p.id));
-    const totalArea = selectedParcels.reduce((s, p) => s + (p.area || 0), 0);
+    // Zonder rijselectie: plots === selectedParcelIds en totaal = volle oppervlak (ongewijzigd)
+    const selectedParcels = parcels.filter(p => rijSamenvatting.plots.includes(p.id));
+    const totalArea = rijSamenvatting.totaalHa;
+    const rijRegels = rijSamenvatting.actief.map(a => ({ sleutel: a.perceelId, tekst: rijSelectieRegel(a) }));
     const validProducts = products.filter(p => p.product.trim() && p.dosage > 0);
 
     return (
@@ -296,6 +409,18 @@ export function NewSprayDialog({
                                     favoriteGroups={parcelGroups}
                                     totalArea={totalArea}
                                     selectedCount={selectedParcels.length}
+                                    metRijen={metRijen}
+                                    rijSectie={
+                                        <RijSelectieSectie
+                                            parcels={parcels}
+                                            selectedIds={selectedParcelIds}
+                                            teksten={rijTekst}
+                                            resultaten={rijResultaten}
+                                            onTekstChange={handleRijTekstChange}
+                                            onResultaat={handleRijResultaat}
+                                            standaardOpen={!!initieleRijSelectie}
+                                        />
+                                    }
                                 />
                             )}
                             {step === 2 && (
@@ -313,6 +438,7 @@ export function NewSprayDialog({
                                     time={time}
                                     selectedParcels={selectedParcels}
                                     totalArea={totalArea}
+                                    rijRegels={rijRegels}
                                     products={validProducts}
                                     notes={notes}
                                     onNotesChange={setNotes}
@@ -359,7 +485,7 @@ export function NewSprayDialog({
                             type="button"
                             size="lg"
                             onClick={handleSubmit}
-                            disabled={isSubmitting || validProducts.length === 0 || selectedParcelIds.length === 0}
+                            disabled={isSubmitting || validProducts.length === 0 || selectedParcelIds.length === 0 || rijSamenvatting.blokkeert}
                             className="h-12 px-6 text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-900 disabled:bg-slate-700 disabled:text-slate-400"
                         >
                             {isSubmitting ? (
@@ -506,6 +632,8 @@ function StepParcels({
     favoriteGroups,
     totalArea,
     selectedCount,
+    metRijen = false,
+    rijSectie,
 }: {
     parcels: SprayableParcel[];
     selectedIds: string[];
@@ -514,6 +642,10 @@ function StepParcels({
     favoriteGroups: ParcelGroup[];
     totalArea: number;
     selectedCount: number;
+    /** Rijenkaart (beta): totaal bevat rij-oppervlak */
+    metRijen?: boolean;
+    /** Rijenkaart (beta): "Alleen bepaalde rijen?"-sectie onder de multiselect */
+    rijSectie?: React.ReactNode;
 }) {
     return (
         <div className="space-y-6">
@@ -536,6 +668,8 @@ function StepParcels({
                 </div>
             </div>
 
+            {rijSectie}
+
             {/* Live feedback */}
             {selectedCount > 0 ? (
                 <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
@@ -546,7 +680,9 @@ function StepParcels({
                         <p className="text-xl font-bold text-white">
                             {selectedCount} {selectedCount === 1 ? 'perceel' : 'percelen'} geselecteerd
                         </p>
-                        <p className="text-base text-emerald-400">Totaal {totalArea.toFixed(2)} hectare</p>
+                        <p className="text-base text-emerald-400">
+                            Totaal {totalArea.toFixed(2)} hectare{metRijen && <span className="text-slate-400"> · met rijselectie</span>}
+                        </p>
                     </div>
                 </div>
             ) : (
@@ -704,6 +840,7 @@ function StepConfirm({
     time,
     selectedParcels,
     totalArea,
+    rijRegels = [],
     products,
     notes,
     onNotesChange,
@@ -713,6 +850,8 @@ function StepConfirm({
     time: string;
     selectedParcels: SprayableParcel[];
     totalArea: number;
+    /** Rijenkaart (beta): per perceel bv. "Rijen 1–20 (Steketee) · 0,61 ha" */
+    rijRegels?: { sleutel: string; tekst: string }[];
     products: ProductRow[];
     notes: string;
     onNotesChange: (v: string) => void;
@@ -757,6 +896,16 @@ function StepConfirm({
                                 </Badge>
                             ))}
                         </div>
+                        {rijRegels.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                                {rijRegels.map(regel => (
+                                    <p key={regel.sleutel} className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
+                                        <Rows3 className="h-4 w-4 shrink-0" />
+                                        {regel.tekst}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

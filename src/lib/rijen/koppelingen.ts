@@ -271,6 +271,71 @@ export async function koppelBespuitingAanRijen(userId: string, spuitschriftId: s
   }
 }
 
+/**
+ * Rijkoppelingen van een bespuiting die vervallen als de plots wijzigen (bewerken op de web): een rij
+ * blijft gekoppeld zolang zijn subperceel (of, als de rij geen subperceel heeft, een subperceel van zijn
+ * perceel) nog in plots staat. Zelfde regel als bespuiting_aanpassen in de MCP; bij de web-bewerking
+ * verandert plot_areas van blijvende subpercelen niet. Geen koppelingen → leeg.
+ */
+export async function vervallenRijkoppelingen(
+  userId: string,
+  spuitschriftId: string,
+  plots: string[],
+): Promise<{ rijIds: string[]; omschrijving: string }> {
+  const koppelingen = await allePaginas((van, tot) =>
+    db()
+      .from('bespuiting_rijen')
+      .select('rij_id')
+      .eq('user_id', userId)
+      .eq('bespuiting_id', spuitschriftId)
+      .order('rij_id', { ascending: true })
+      .range(van, tot),
+  'Rijkoppelingen ophalen');
+  if (koppelingen.length === 0) return { rijIds: [], omschrijving: '' };
+
+  const rijen = await laadRijenOpId(userId, uniek(koppelingen.map(k => String(k.rij_id))));
+  const plotSet = new Set(plots);
+  // Subpercelen per perceel, alleen nodig voor rijen zonder eigen subperceel
+  const zonderSub = uniek(rijen.filter(r => !r.sub_parcel_id).map(r => String(r.perceel_id)));
+  const subsPerPerceel = new Map<string, string[]>();
+  for (const stuk of inStukken(zonderSub)) {
+    const { data, error } = await db().from('sub_parcels').select('id, parcel_id').in('parcel_id', stuk);
+    if (error) throw dbFout(error, 'Subpercelen ophalen');
+    for (const s of (data ?? []) as DbRij[]) {
+      subsPerPerceel.set(String(s.parcel_id), [...(subsPerPerceel.get(String(s.parcel_id)) ?? []), String(s.id)]);
+    }
+  }
+  const vervallen = rijen.filter(r => {
+    const subs = r.sub_parcel_id ? [String(r.sub_parcel_id)] : subsPerPerceel.get(String(r.perceel_id)) ?? [];
+    return !subs.some(id => plotSet.has(id));
+  });
+  if (vervallen.length === 0) return { rijIds: [], omschrijving: '' };
+
+  const namen = await perceelNamen(userId, vervallen.map(r => String(r.perceel_id)));
+  const omschrijving = Array.from(groepeerPerPerceel(vervallen, r => String(r.perceel_id)).entries())
+    .map(([perceelId, lijst]) => {
+      const nummers = lijst.map(r => getalOf(r.nummer, 0)).sort((a, b) => a - b);
+      const naam = namen.get(perceelId)?.naam;
+      return `${rijTekst(nummers)}${naam ? ` (${naam})` : ''}`;
+    })
+    .join(', ');
+  return { rijIds: vervallen.map(r => String(r.id)), omschrijving };
+}
+
+/** Verwijdert de koppeling tussen een bespuiting en deze rijen (de registratie zelf blijft ongewijzigd). */
+export async function ontkoppelBespuitingVanRijen(userId: string, spuitschriftId: string, rijIds: string[]): Promise<void> {
+  const ids = vereisUuids(rijIds);
+  for (const stuk of inStukken(ids)) {
+    const { error } = await db()
+      .from('bespuiting_rijen')
+      .delete()
+      .eq('user_id', userId)
+      .eq('bespuiting_id', spuitschriftId)
+      .in('rij_id', stuk);
+    if (error) throw dbFout(error, 'Rijkoppeling verwijderen');
+  }
+}
+
 /** Koppelt een veldnotitie aan rijen (met optionele positie in meters vanaf het begin van de rij). */
 export async function koppelNotitieAanRijen(userId: string, veldnotitieId: string, rijen: RijKoppeling[]): Promise<void> {
   vereisUuids([veldnotitieId], 'veldnotitie-id');

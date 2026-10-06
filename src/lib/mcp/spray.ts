@@ -26,6 +26,21 @@ import { createSprayTaskLogs, removeSprayTaskLogs } from '@/lib/spray-hours';
 import type { ProductEntry, RegistrationType } from '@/lib/types';
 import type { McpContext } from './context';
 import {
+  hoofdpercelenVan,
+  koppelingenTekst,
+  ontkoppelRijenVanBespuiting,
+  perceelHeeftActieveRijen,
+  rijenArg,
+  rijenBereik,
+  rijenKeuzeTekst,
+  rijenNaarPlots,
+  rijenTekstVoorBespuitingen,
+  rijenUitTekst,
+  rijKoppelingenVanBespuiting,
+  type BespuitingRijKoppeling,
+  type RijenKeuze,
+} from './rijen';
+import {
   compactWarnings,
   dd,
   ddt,
@@ -310,13 +325,15 @@ function middelRegelOpp(p: ProductEntry, gespotenHa: number): string {
   return `${p.product}${bron} ${f(p.dosage, 3)} ${eenheid}/ha${herkomst}${onbekendNotitie(p)}`;
 }
 
-function registratieBlok(ctx: McpContext, r: { date: Date; plots: string[]; products: ProductEntry[]; plotAreas?: PlotAreas | null; registrationType?: string; notes?: string | null }): string[] {
+function registratieBlok(ctx: McpContext, r: { date: Date; plots: string[]; products: ProductEntry[]; plotAreas?: PlotAreas | null; registrationType?: string; notes?: string | null; rijen?: string[] }): string[] {
   const opp = oppervlak(ctx, r.plots, r.plotAreas);
   const kop = `${r.registrationType === 'spreading' ? 'Bemesting' : 'Bespuiting'} ${ddt(r.date)} · ${f(opp.gespoten, 2)} ha gespoten${opp.gespoten < opp.vol - 0.0001 ? ` (van ${f(opp.vol, 2)} ha)` : ''}`;
   return [
     kop,
     '- Percelen:',
     ...(opp.regels.length ? opp.regels : ['  - geen']),
+    // Rijenkaart (beta): alleen als er rijen bij horen
+    ...(r.rijen?.length ? r.rijen.map(x => `  · ${x}`) : []),
     '- Middelen:',
     ...(r.products.length ? r.products.map(p => `  - ${middelRegelOpp(p, opp.gespoten)}`) : ['  - geen']),
     ...(r.notes ? [`- Opmerking: ${r.notes}`] : []),
@@ -356,6 +373,22 @@ const PERCELEN_SCHEMA = {
   },
 };
 
+/** Zoals PERCELEN_SCHEMA, plus optioneel 'rijen' per perceel (alleen registreer_bespuiting). */
+const PERCELEN_MET_RIJEN_SCHEMA = {
+  ...PERCELEN_SCHEMA,
+  description: `${PERCELEN_SCHEMA.description} Alleen bepaalde rijen gespoten (rijenkaart, beta): {"naam":"steketee","rijen":"1-20, 24"} — niet samen met deel/ha.`,
+  items: {
+    ...PERCELEN_SCHEMA.items,
+    properties: {
+      ...PERCELEN_SCHEMA.items.properties,
+      rijen: {
+        type: 'string',
+        description: 'Optioneel: alleen deze rijen van dit perceel, bijv. "1-20, 24", "1 t/m 20", "blok Conference 2018", "bestuivers" of "alle behalve 5" (zie tool rijen). Het naam-item moet dan precies één perceel zijn.',
+      },
+    },
+  },
+};
+
 const MIDDELEN_SCHEMA = {
   type: 'array',
   description: 'Middelen. Geef per middel óf dosering (per ha) óf totaal (totale hoeveelheid; wordt verdeeld over het gespoten oppervlak). Alleen de naam in "naam", zonder dosering.',
@@ -391,13 +424,17 @@ export const SPRAY_TOOLS: ToolDefinitie[] = [
   {
     name: 'registreer_bespuiting',
     description:
-      'Registreert een NIEUWE bespuiting of bemesting in het spuitschrift. Voorkeur: geef percelen en middelen gestructureerd (percelen met deel/ha als niet het hele perceel is gespoten; middelen met dosering per ha óf totaal). Alleen "tekst" mag ook (bijv. "gisteravond busje en jachthoek oude met merpan 1,5 kg en 25 kg totaal zwavel"). Een totaal wordt verdeeld over het GESPOTEN oppervlak. Middelen die niet in de database staan mogen gewoon (opgeslagen onder de genoemde naam). Datum en tijd: gebruik datum + tijd (bijv. datum "gisteren", tijd "20:00"). Roep EERST aan zonder bevestig → VOORSTEL; na een expliciet "ja" opnieuw met bevestig=true en exact dezelfde argumenten. Een correctie op een bestaande registratie: gebruik bespuiting_aanpassen, niet deze tool.',
+      'Registreert een NIEUWE bespuiting of bemesting in het spuitschrift. Voorkeur: geef percelen en middelen gestructureerd (percelen met deel/ha als niet het hele perceel is gespoten; middelen met dosering per ha óf totaal). Alleen "tekst" mag ook (bijv. "gisteravond busje en jachthoek oude met merpan 1,5 kg en 25 kg totaal zwavel"). Een totaal wordt verdeeld over het GESPOTEN oppervlak. Middelen die niet in de database staan mogen gewoon (opgeslagen onder de genoemde naam). Datum en tijd: gebruik datum + tijd (bijv. datum "gisteren", tijd "20:00"). Roep EERST aan zonder bevestig → VOORSTEL; na een expliciet "ja" opnieuw met bevestig=true en exact dezelfde argumenten. Een correctie op een bestaande registratie: gebruik bespuiting_aanpassen, niet deze tool. Alleen een deel van de rijen gespoten (rijenkaart, beta): rijen per perceel (percelen[{naam, rijen}]) of op topniveau bij één perceel; het gespoten oppervlak wordt dan uit de rijen berekend.',
     inputSchema: {
       type: 'object',
       properties: {
         tekst: { type: 'string', description: 'De registratie in gewone woorden (optioneel als percelen én middelen zijn opgegeven; wordt als oorspronkelijke invoer bewaard).' },
-        percelen: PERCELEN_SCHEMA,
+        percelen: PERCELEN_MET_RIJEN_SCHEMA,
         middelen: MIDDELEN_SCHEMA,
+        rijen: {
+          type: 'string',
+          description: 'Optioneel (rijenkaart, beta): alleen deze rijen, bijv. "1-20" of "blok Conference 2018". Alleen als de registratie precies één perceel raakt; anders rijen per perceel opgeven.',
+        },
         datum: { type: 'string', description: '"vandaag", "gisteren", "eergisteren", YYYY-MM-DD of "12 september".' },
         tijd: { type: 'string', description: 'Tijd, bijv. "20:00", "8 uur", "avond".' },
         type: { type: 'string', enum: ['spuiten', 'strooien'], description: 'Standaard spuiten (ook bladmeststoffen); "strooien" voor gestrooide meststoffen.' },
@@ -410,7 +447,7 @@ export const SPRAY_TOOLS: ToolDefinitie[] = [
   {
     name: 'bespuiting_aanpassen',
     description:
-      'Corrigeert of verwijdert een BESTAANDE registratie in het spuitschrift. Zoek met code (uit bespuitingen), of met datum/perceel/middel; zonder zoekterm de laatst ingevoerde registratie. Bij meerdere treffers krijg je een lijst met codes: kies er één en roep opnieuw aan met code. Wijzigingen: middel_toevoegen, middel_weghalen, dosering_wijzigen, percelen (vervangt alle percelen), perceel_toevoegen, perceel_weghalen, nieuwe_datum/nieuwe_tijd, opmerking; of verwijderen=true. Altijd eerst een VOORSTEL (was → wordt); pas met bevestig=true wordt opgeslagen of verwijderd. Voorraad, middelverbruik en perceelhistorie worden automatisch bijgewerkt.',
+      'Corrigeert of verwijdert een BESTAANDE registratie in het spuitschrift. Zoek met code (uit bespuitingen), of met datum/perceel/middel; zonder zoekterm de laatst ingevoerde registratie. Bij meerdere treffers krijg je een lijst met codes: kies er één en roep opnieuw aan met code. Wijzigingen: middel_toevoegen, middel_weghalen, dosering_wijzigen, percelen (vervangt alle percelen), perceel_toevoegen, perceel_weghalen, nieuwe_datum/nieuwe_tijd, opmerking; of verwijderen=true. Altijd eerst een VOORSTEL (was → wordt); pas met bevestig=true wordt opgeslagen of verwijderd. Voorraad, middelverbruik en perceelhistorie worden automatisch bijgewerkt. Rijkoppelingen (rijenkaart) vervallen voor percelen die eruit gaan of een ander gespoten deel krijgen; dat staat in het voorstel.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -471,7 +508,7 @@ function rij(r: any): Registratie {
   };
 }
 
-function regKorte(ctx: McpContext, r: Registratie): string {
+function regKorte(ctx: McpContext, r: Registratie, rijen?: string): string {
   const opp = oppervlak(ctx, r.plots, r.plotAreas);
   const namen = r.plots.map(id => {
     const p = ctx.parcels.find(x => x.id === id);
@@ -479,7 +516,7 @@ function regKorte(ctx: McpContext, r: Registratie): string {
     return `${p?.name ?? '?'}${deels ? ` (${f(r.plotAreas[id], 2)} van ${f(p?.area || 0, 2)} ha)` : ''}`;
   });
   const mids = r.products.map(p => `${p.product} ${p.dosage > 0 ? `${f(p.dosage, 3)} ${(p.unit || '').replace('/ha', '')}/ha` : '?'}`).join('; ');
-  return `[${r.id.slice(0, 8)}] ${ddt(r.date)} · ${r.registrationType === 'spreading' ? 'gestrooid' : 'gespoten'} op ${namen.join(', ')} · ${f(opp.gespoten, 2)} ha\n    ${mids}${r.notes ? `\n    opmerking: ${r.notes}` : ''}${r.source && r.source !== 'web' ? ` · via ${r.source}` : ''}`;
+  return `[${r.id.slice(0, 8)}] ${ddt(r.date)} · ${r.registrationType === 'spreading' ? 'gestrooid' : 'gespoten'} op ${namen.join(', ')} · ${f(opp.gespoten, 2)} ha${rijen ? ` · ${rijen}` : ''}\n    ${mids}${r.notes ? `\n    opmerking: ${r.notes}` : ''}${r.source && r.source !== 'web' ? ` · via ${r.source}` : ''}`;
 }
 
 export async function bespuitingen(ctx: McpContext, args: Args): Promise<ToolResultaat> {
@@ -512,7 +549,9 @@ export async function bespuitingen(ctx: McpContext, args: Args): Promise<ToolRes
   ).slice(0, 50);
 
   if (rows.length === 0) return { tekst: `Geen registraties tussen ${dd(van)} en ${dd(tot)}${str(args.perceel) ? ` op ${str(args.perceel)}` : ''}${middel ? ` met ${str(args.middel)}` : ''}.` };
-  return { tekst: [`${rows.length} registratie(s) ${dd(van)} t/m ${dd(tot)} (code tussen [ ] voor bespuiting_aanpassen):`, ...rows.map(r => `- ${regKorte(ctx, r)}`)].join('\n') };
+  // Rijenkaart (beta): " · rijen 1–20 (Steketee)" bij registraties met rijkoppeling
+  const rijenPerRegistratie = await rijenTekstVoorBespuitingen(ctx.userId, rows.map(r => r.id));
+  return { tekst: [`${rows.length} registratie(s) ${dd(van)} t/m ${dd(tot)} (code tussen [ ] voor bespuiting_aanpassen):`, ...rows.map(r => `- ${regKorte(ctx, r, rijenPerRegistratie[r.id])}`)].join('\n') };
 }
 
 // ── registreer_bespuiting ───────────────────────────────────────────────
@@ -523,6 +562,114 @@ interface Eenheid {
   products: ProductEntry[];
   label?: string;
   aannames: string[];
+}
+
+/**
+ * Rijenkaart (beta): 'rijen' per perceel-item of op topniveau. De plots van dat hoofdperceel
+ * worden vervangen door de subpercelen van de rijen, met het gespoten oppervlak uit de rijen.
+ * Zonder 'rijen' gebeurt er niets (lege lijst, eenheden ongewijzigd).
+ */
+async function pasRijenToe(ctx: McpContext, args: Args, eenheden: Eenheid[], problemen: string[], notities: string[], uitTekst?: string): Promise<RijenKeuze[]> {
+  const items = Array.isArray(args.percelen) ? (args.percelen as unknown[]) : [];
+  // Rijen uit de vrije tekst gelden als rijen op topniveau
+  const topTekst = rijenArg(args.rijen) || uitTekst || '';
+  const info = items.map(item => {
+    const r = (typeof item === 'string' ? { naam: item } : item && typeof item === 'object' ? item : {}) as Args;
+    const naam = str(r.naam);
+    const ps = naam ? percelenVanNaam(ctx, naam) : [];
+    return {
+      naam,
+      plots: ps.map(p => p.id),
+      hoofd: hoofdpercelenVan(ps),
+      rijen: rijenArg(r.rijen),
+      heeftDeel: r.deel !== undefined || r.ha !== undefined,
+    };
+  });
+  const metRijen = info.filter(i => i.rijen);
+  if (!topTekst && metRijen.length === 0) return [];
+  if (topTekst && metRijen.length) {
+    problemen.push('Geef rijen óf op topniveau óf per perceel op, niet allebei.');
+    return [];
+  }
+
+  /** genoemd = subpercelen van dit hoofdperceel die in de invoer stonden (om tegenspraak met de rijen te melden) */
+  const doelen: { perceel: { id: string; naam: string }; tekst: string; genoemd: string[] }[] = [];
+  if (topTekst) {
+    if (eenheden.length > 1) {
+      problemen.push('De tekst bevat meerdere varianten; rijen kunnen alleen bij één variant. Geef rijen per perceel op (percelen [{naam, rijen}]) of registreer per variant.');
+      return [];
+    }
+    const ps = (eenheden[0]?.plots ?? []).map(id => ctx.parcels.find(p => p.id === id)).filter(Boolean) as SprayableParcel[];
+    const hoofd = hoofdpercelenVan(ps);
+    if (hoofd.length === 0) return []; // "Geen percelen herkend" volgt bij de controles
+    if (hoofd.length > 1) {
+      problemen.push(`Deze registratie raakt ${hoofd.length} percelen (${hoofd.map(h => h.naam).join(', ')}); geef rijen per perceel op (percelen [{"naam":"…","rijen":"1-20"}]).`);
+      return [];
+    }
+    const metDeel = info.find(i => i.heeftDeel && i.hoofd.some(h => h.id === hoofd[0].id));
+    if (metDeel) {
+      problemen.push(`Bij ${metDeel.naam}: geef óf rijen óf deel/ha op, niet allebei.`);
+      return [];
+    }
+    doelen.push({ perceel: hoofd[0], tekst: topTekst, genoemd: ps.map(p => p.id) });
+  } else {
+    for (const i of metRijen) {
+      if (i.heeftDeel) { problemen.push(`Bij ${i.naam || 'een perceel'}: geef óf rijen óf deel/ha op, niet allebei.`); continue; }
+      if (i.hoofd.length === 0) continue; // "Perceel … niet gevonden" komt uit resolvePercelenInvoer
+      if (i.hoofd.length > 1) {
+        problemen.push(`"${i.naam}" past op meerdere percelen (${i.hoofd.map(h => h.naam).join(', ')}); rijen horen bij precies één perceel. Noem dat perceel.`);
+        continue;
+      }
+      if (info.filter(x => x.hoofd.some(h => h.id === i.hoofd[0].id)).length > 1) {
+        problemen.push(`${i.hoofd[0].naam} staat meer dan eens in percelen; geef alle rijen van dit perceel in één item op (bijv. "1-3, 10-12").`);
+        continue;
+      }
+      doelen.push({ perceel: i.hoofd[0], tekst: i.rijen, genoemd: i.plots });
+    }
+  }
+
+  const e = eenheden[0];
+  const keuzes: RijenKeuze[] = [];
+  if (!e) return keuzes;
+  const naamVan = (id: string) => ctx.parcels.find(p => p.id === id)?.name ?? `onbekend blok ${id.slice(0, 8)}`;
+  for (const d of doelen) {
+    const r = await rijenNaarPlots(ctx.userId, d.perceel, d.tekst);
+    if (r.fouten) { problemen.push(...r.fouten); continue; }
+    const k = r.keuze;
+    const subsVanPerceel = ctx.parcels.filter(p => p.parcelId === d.perceel.id).map(p => p.id);
+    // Tegenspraak: een bepaald blok (subperceel) genoemd, maar de rijen liggen (deels) in een ander blok
+    const genoemd = d.genoemd.filter(id => subsVanPerceel.includes(id));
+    const buiten = k.plots.filter(id => !genoemd.includes(id));
+    if (genoemd.length > 0 && genoemd.length < subsVanPerceel.length && buiten.length > 0) {
+      const bereik = rijenBereik(k.nummers);
+      const tekst = `${bereik.charAt(0).toUpperCase()}${bereik.slice(1)} van ${d.perceel.naam} ${k.nummers.length === 1 ? 'ligt' : 'liggen (deels)'} in ${buiten.map(naamVan).join(', ')}, niet in ${genoemd.map(naamVan).join(', ')}`;
+      if (items.length > 0) {
+        problemen.push(`${tekst}. Noem het hele perceel (${d.perceel.naam}) of kies rijen binnen het genoemde blok.`);
+        continue;
+      }
+      notities.push(`let op: ${tekst.charAt(0).toLowerCase()}${tekst.slice(1)}; de rijen bepalen waar gespoten is`);
+    }
+    // Plots van dit hoofdperceel vervangen (op dezelfde plek in de lijst) door de subpercelen van de rijen,
+    // in de volgorde waarin ze al stonden
+    const volgorde = (id: string) => {
+      const i = e.plots.indexOf(id);
+      return i >= 0 ? i : e.plots.length + ctx.parcels.findIndex(p => p.id === id);
+    };
+    const rijPlots = [...k.plots].sort((a, b) => volgorde(a) - volgorde(b));
+    const vanPerceel = new Set([...subsVanPerceel, ...k.plots]);
+    const plots: string[] = [];
+    let ingevoegd = false;
+    for (const id of e.plots) {
+      if (!vanPerceel.has(id)) { plots.push(id); continue; }
+      if (!ingevoegd) { plots.push(...rijPlots); ingevoegd = true; }
+    }
+    if (!ingevoegd) plots.push(...rijPlots);
+    e.plots = plots;
+    for (const id of Object.keys(e.plotAreas)) if (vanPerceel.has(id)) delete e.plotAreas[id];
+    Object.assign(e.plotAreas, k.plotAreas);
+    keuzes.push(k);
+  }
+  return keuzes;
 }
 
 export async function registreerBespuiting(ctx: McpContext, args: Args): Promise<ToolResultaat> {
@@ -540,29 +687,60 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
   let pipelineDatum: Date | null = null;
   let pipelineType: RegistrationType | undefined;
 
+  // 0. Rijenkaart (beta): rijnummers in de vrije tekst ("rij 1 t/m 20", "rijen 3-7 en 12") eruit halen,
+  //    anders leest de pipeline ze als dosering of datum. Alleen als de tekst de percelen bepaalt (geen
+  //    gestructureerde percelen: dan is tekst alleen de bewaarde invoer) en de gebruiker rijen heeft.
+  //    Zonder rijen: tekst ongewijzigd.
+  const explicieteRijen = !!rijenArg(args.rijen)
+    || (Array.isArray(args.percelen) && (args.percelen as unknown[]).some(item => !!item && typeof item === 'object' && !!rijenArg((item as Args).rijen)));
+  let tekstRijen = tekst && !heeftPercelen ? await rijenUitTekst(ctx, tekst) : null;
+  let leesTekst = tekstRijen ? tekstRijen.rest : tekst;
+
   // 1. Tekst parsen als percelen of middelen niet gestructureerd zijn opgegeven
-  if (tekst && (!heeftPercelen || !heeftMiddelen)) {
+  const leesTekstIn = async (invoerTekst: string) => {
     const prefs = await getUserPreferencesAdmin(ctx.userId);
-    const { text: invoer, substitutions } = applyUserPreferencesToText(tekst, prefs);
-    for (const s of substitutions) notities.push(`${s.to} ← "${s.from}" (jouw voorkeur)`);
+    const { text: invoer, substitutions } = applyUserPreferencesToText(invoerTekst, prefs);
+    const voorkeurNotities = substitutions.map(s => `${s.to} ← "${s.from}" (jouw voorkeur)`);
     const result = await runRegistrationPipeline(invoer, ctx.userId);
-    if (result.registration) {
-      pipelineDatum = new Date(result.registration.date);
-      pipelineType = result.registration.registrationType;
-      const lastUsed = await getLastUsedDosagesForUser(
-        ctx.userId,
-        result.registration.units.flatMap(u => u.products).filter(p => !p.dosage).map(p => p.product)
-      );
-      eenheden = result.registration.units.map(u => {
-        const e = enrichUnit(u.products, ctx.products, historie, lastUsed);
-        return {
-          plots: u.plots,
-          plotAreas: {},
-          products: e.products.map(p => ({ ...p, product: p.resolved === false ? schoneMiddelNaam(p.product) || p.product : p.product })),
-          label: u.label,
-          aannames: e.assumptions.map(a => `${a.field === 'product' ? `${a.to} ← ${a.from}` : `${a.to}`} (${a.reason})`),
-        };
-      });
+    if (!result.registration) return { voorkeurNotities, registratie: null };
+    const lastUsed = await getLastUsedDosagesForUser(
+      ctx.userId,
+      result.registration.units.flatMap(u => u.products).filter(p => !p.dosage).map(p => p.product)
+    );
+    const units: Eenheid[] = result.registration.units.map(u => {
+      const e = enrichUnit(u.products, ctx.products, historie, lastUsed);
+      return {
+        plots: u.plots,
+        plotAreas: {},
+        products: e.products.map(p => ({ ...p, product: p.resolved === false ? schoneMiddelNaam(p.product) || p.product : p.product })),
+        label: u.label,
+        aannames: e.assumptions.map(a => `${a.field === 'product' ? `${a.to} ← ${a.from}` : `${a.to}`} (${a.reason})`),
+      };
+    });
+    return {
+      voorkeurNotities,
+      registratie: { datum: new Date(result.registration.date), type: result.registration.registrationType, eenheden: units },
+    };
+  };
+  if (tekst && (!heeftPercelen || !heeftMiddelen)) {
+    let gelezen = await leesTekstIn(leesTekst);
+    // Rijen uit de tekst gelden alleen als de registratie precies één perceel raakt dat zelf actieve rijen
+    // heeft; anders de oorspronkelijke tekst opnieuw lezen, precies zoals zonder rijenkaart (niet blokkeren)
+    if (tekstRijen && !explicieteRijen) {
+      const units = gelezen.registratie?.eenheden ?? [];
+      const ps = units.length === 1 ? (units[0].plots.map(id => ctx.parcels.find(p => p.id === id)).filter(Boolean) as SprayableParcel[]) : [];
+      const hoofd = hoofdpercelenVan(ps);
+      if (hoofd.length !== 1 || !(await perceelHeeftActieveRijen(ctx.userId, hoofd[0].id))) {
+        tekstRijen = null;
+        leesTekst = tekst;
+        gelezen = await leesTekstIn(tekst);
+      }
+    }
+    notities.push(...gelezen.voorkeurNotities);
+    if (gelezen.registratie) {
+      pipelineDatum = gelezen.registratie.datum;
+      pipelineType = gelezen.registratie.type;
+      eenheden = gelezen.registratie.eenheden;
     } else if (!heeftPercelen && !heeftMiddelen) {
       return { tekst: `Dit lees ik niet als een registratie: "${tekst}". Noem percelen én middelen, of geef ze op via percelen/middelen.`, fout: true };
     }
@@ -582,9 +760,11 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
     eenheden = [{ plots, plotAreas: p ? p.plotAreas : {}, products, aannames: m ? [] : eenheden.flatMap(e => e.aannames) }];
   } else if (tekst) {
     // Alleen tekst: "helft van", "3,33 ha" toepassen als het eenduidig is
-    const deel = deelUitTekst(tekst);
+    const deel = deelUitTekst(leesTekst);
     if (deel) {
-      if (eenheden.length === 1) {
+      if (explicieteRijen || tekstRijen) {
+        problemen.push(`In de tekst staat een deel ("${deel.woord}") én er zijn rijen opgegeven; kies één van beide.`);
+      } else if (eenheden.length === 1) {
         const ps = eenheden[0].plots.map(id => ctx.parcels.find(x => x.id === id)).filter(Boolean) as SprayableParcel[];
         verdeel(ps, { factor: deel.factor ?? null, ha: deel.ha ?? null }, eenheden[0].plotAreas, problemen, ps.length === 1 ? ps[0].name : 'de percelen');
         notities.push(`gespoten deel uit de tekst: "${deel.woord}"`);
@@ -593,6 +773,13 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
       }
     }
   }
+
+  // 2b. Rijenkaart (beta): rijen → plots + gespoten oppervlak van dat perceel (zonder rijen: niets)
+  if (tekstRijen) {
+    const woorden = tekstRijen.gevonden.map(g => `"${g}"`).join(', ');
+    notities.push(explicieteRijen ? `rijen in de tekst (${woorden}) genegeerd; de opgegeven rijen gelden` : `rijen uit de tekst: ${woorden}`);
+  }
+  const rijKeuzes = await pasRijenToe(ctx, args, eenheden, problemen, notities, explicieteRijen ? undefined : tekstRijen?.selectie);
 
   // 3. Controles + totalen verdelen over gespoten oppervlak
   for (const e of eenheden) {
@@ -603,7 +790,7 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
     for (const p of e.products) if (!(p.dosage > 0)) problemen.push(`Dosering voor ${p.product} ontbreekt (per ha, of totaal).`);
   }
 
-  const moment = bepaalMoment(args.datum, args.tijd, tekst, pipelineDatum);
+  const moment = bepaalMoment(args.datum, args.tijd, leesTekst, pipelineDatum);
   const type: RegistrationType =
     str(args.type) === 'strooien' ? 'spreading' : str(args.type) === 'spuiten' ? 'spraying'
       : pipelineType ?? (/\b(gestrooid|strooien|uitgereden|kunstmest)\b/i.test(tekst) ? 'spreading' : 'spraying');
@@ -613,7 +800,7 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
   const validaties: Array<{ message: string | null; warnings: string[] }> = [];
   for (const [i, e] of eenheden.entries()) {
     if (eenheden.length > 1) voorstel.push(`Deel ${i + 1}${e.label ? ` (${e.label})` : ''}:`);
-    voorstel.push(...registratieBlok(ctx, { date: moment, plots: e.plots, products: e.products, plotAreas: e.plotAreas, registrationType: type, notes: opmerking }));
+    voorstel.push(...registratieBlok(ctx, { date: moment, plots: e.plots, products: e.products, plotAreas: e.plotAreas, registrationType: type, notes: opmerking, ...(i === 0 && rijKeuzes.length ? { rijen: rijKeuzes.map(rijenKeuzeTekst) } : {}) }));
     for (const a of e.aannames) voorstel.push(`  · aanname: ${a}`);
     const v = await valideer(ctx, e.plots, e.products, moment);
     problemen.push(...v.errors.map(x => `Blokkerend: ${x}`));
@@ -626,7 +813,9 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
   if (problemen.length) return { tekst: ['Nog niet opgeslagen. Controleer:', ...[...new Set(problemen)].map(p => `- ${p}`), '', 'Voorstel tot nu toe:', ...voorstel].join('\n') };
   if (args.bevestig !== true) return { tekst: ['VOORSTEL (nog niet opgeslagen):', ...voorstel, '', 'Klopt dit? Roep dan opnieuw aan met bevestig=true en exact dezelfde argumenten.'].join('\n') };
 
-  const rawInput = tekst || eenheden.map(e => `${e.plots.map(id => ctx.parcels.find(p => p.id === id)?.name).join(', ')} met ${e.products.map(p => `${p.product} ${f(p.dosage, 3)} ${p.unit}/ha`).join(', ')}`).join('; ');
+  const rawInput = tekst || eenheden.map(e => `${e.plots.map(id => ctx.parcels.find(p => p.id === id)?.name).join(', ')} met ${e.products.map(p => `${p.product} ${f(p.dosage, 3)} ${p.unit}/ha`).join(', ')}`).join('; ')
+    + (rijKeuzes.length ? ` (${rijKeuzes.map(k => `${k.perceelNaam} ${rijenBereik(k.nummers)}`).join(', ')})` : '');
+  const rijIds = rijKeuzes.flatMap(k => k.rijIds);
   const opgeslagen: string[] = [];
   for (const [i, e] of eenheden.entries()) {
     const r = await confirmRegistration(
@@ -641,6 +830,8 @@ export async function registreerBespuiting(ctx: McpContext, args: Args): Promise
         registrationSource: 'claude',
         plotAreas: e.plotAreas,
         notes: opmerking,
+        // Rijenkaart (beta): rijen alleen bij één eenheid (afgedwongen in pasRijenToe)
+        ...(i === 0 && rijIds.length ? { rijIds } : {}),
       },
       async ({ logbookEntry, sprayableParcels, isConfirmation, spuitschriftId }) => {
         await addParcelHistoryEntries({ logbookEntry, sprayableParcels, isConfirmation, spuitschriftId, providedUserId: ctx.userId });
@@ -688,15 +879,24 @@ export async function bespuitingAanpassen(ctx: McpContext, args: Args): Promise<
   const { rows, gezocht } = await zoekRegistraties(ctx, args);
   if (rows.length === 0) return { tekst: gezocht ? 'Geen registratie gevonden met die zoekgegevens. Gebruik bespuitingen om codes op te zoeken.' : 'Er staan nog geen registraties in het spuitschrift.', fout: true };
   if (rows.length > 1) {
-    return { tekst: [`${rows.length} registraties gevonden — kies er één en roep opnieuw aan met code:`, ...rows.map(r => `- ${regKorte(ctx, r)}`)].join('\n') };
+    const rijenPerRegistratie = await rijenTekstVoorBespuitingen(ctx.userId, rows.map(r => r.id));
+    return { tekst: [`${rows.length} registraties gevonden — kies er één en roep opnieuw aan met code:`, ...rows.map(r => `- ${regKorte(ctx, r, rijenPerRegistratie[r.id])}`)].join('\n') };
   }
   const was = rows[0];
   const historie = await getUserProductNames(ctx.userId);
   const problemen: string[] = [];
+  // Rijenkaart (beta): bestaande rijkoppelingen van deze registratie (meestal geen)
+  let koppelingenOnbekend = false;
+  const koppelingen: BespuitingRijKoppeling[] = await rijKoppelingenVanBespuiting(ctx.userId, was.id).catch(err => {
+    console.warn('[mcp] rijkoppelingen ophalen mislukt:', err instanceof Error ? err.message : err);
+    koppelingenOnbekend = true;
+    return [];
+  });
+  const rijenRegel = (lijst: BespuitingRijKoppeling[]) => (lijst.length ? { rijen: [koppelingenTekst(ctx, lijst)] } : {});
 
   // ── Verwijderen
   if (args.verwijderen === true) {
-    const blok = registratieBlok(ctx, { ...was, notes: was.notes });
+    const blok = registratieBlok(ctx, { ...was, notes: was.notes, ...rijenRegel(koppelingen) });
     if (args.bevestig !== true) return { tekst: ['VOORSTEL — deze registratie VERWIJDEREN (nog niet gedaan):', `[${was.id.slice(0, 8)}]`, ...blok, '', 'Voorraad en middelverbruik worden teruggeboekt. Zeker weten? Roep opnieuw aan met verwijderen=true, bevestig=true en code.'].join('\n') };
     await deleteSpuitschriftEntry(was.id, ctx.userId);
     await removeSprayTaskLogs({ userId: ctx.userId, date: was.date, plotIds: was.plots, products: was.products });
@@ -783,8 +983,13 @@ export async function bespuitingAanpassen(ctx: McpContext, args: Args): Promise<
     notes = str(args.opmerking) || null;
     wijzigingen.push('opmerking');
   }
+  const rijenInPercelen = [args.percelen, args.perceel_toevoegen].some(v =>
+    Array.isArray(v) && (v as unknown[]).some(item => !!item && typeof item === 'object' && !!rijenArg((item as Args).rijen)));
+  if (rijenInPercelen) {
+    problemen.push('Rijen kun je niet via bespuiting_aanpassen wijzigen. Verwijder de registratie en registreer hem opnieuw met rijen, of pas de rijen aan in CropNode.');
+  }
 
-  const wasBlok = registratieBlok(ctx, was);
+  const wasBlok = registratieBlok(ctx, { ...was, ...rijenRegel(koppelingen) });
   if (wijzigingen.length === 0) {
     return { tekst: [`Gevonden [${was.id.slice(0, 8)}] — geen wijziging opgegeven:`, ...wasBlok, '', 'Geef aan wat er moet veranderen (middel_toevoegen, middel_weghalen, dosering_wijzigen, percelen, perceel_toevoegen, perceel_weghalen, nieuwe_datum, nieuwe_tijd, opmerking) of verwijderen=true.'].join('\n') };
   }
@@ -794,13 +999,28 @@ export async function bespuitingAanpassen(ctx: McpContext, args: Args): Promise<
   const opp = oppervlak(ctx, plots, plotAreas);
   products = verdeelTotalen(products, opp.gespoten);
   if (plots.length === 0) problemen.push('Na deze wijziging blijven er geen percelen over; gebruik verwijderen=true om de hele registratie te verwijderen.');
+  // Rijenkaart (beta): konden de rijkoppelingen niet gelezen worden, dan geen percelen of perceel-delen wijzigen
+  // (anders blijven koppelingen naar rijen staan die er niet meer bij horen); middel/datum/opmerking mag wel
+  const plotsGewijzigd = plots.length !== was.plots.length || plots.some(id => !was.plots.includes(id) || plotAreas[id] !== was.plotAreas[id]);
+  if (koppelingenOnbekend && plotsGewijzigd) problemen.push('De rijkoppelingen (rijenkaart) konden niet worden gecontroleerd; probeer het zo opnieuw.');
   if (products.length === 0) problemen.push('Na deze wijziging blijven er geen middelen over; gebruik verwijderen=true om de hele registratie te verwijderen.');
   for (const p of products) if (!(p.dosage > 0)) problemen.push(`Dosering voor ${p.product} ontbreekt (per ha, of totaal).`);
 
+  // Rijkoppeling blijft alleen als het subperceel van de rij er nog in staat met hetzelfde gespoten deel
+  const rijBlijft = (k: BespuitingRijKoppeling) => {
+    const subs = k.subParcelId ? [k.subParcelId] : ctx.parcels.filter(p => p.parcelId === k.perceelId).map(p => p.id);
+    return subs.some(id => plots.includes(id) && plotAreas[id] === was.plotAreas[id]);
+  };
+  const blijvendeRijen = koppelingen.filter(rijBlijft);
+  const vervallenRijen = koppelingen.filter(k => !rijBlijft(k));
+
   const v = await valideer(ctx, plots, products, date, was.id);
   problemen.push(...v.errors.map(x => `Blokkerend: ${x}`));
-  const wordtBlok = registratieBlok(ctx, { date, plots, products, plotAreas, registrationType: was.registrationType, notes });
-  const voorstel = [`Registratie [${was.id.slice(0, 8)}]`, '', 'WAS:', ...wasBlok, '', 'WORDT:', ...wordtBlok, ...(v.warnings.length ? ['', 'Waarschuwingen:', ...v.warnings.map(w => `- ${w}`)] : [])];
+  const wordtBlok = registratieBlok(ctx, { date, plots, products, plotAreas, registrationType: was.registrationType, notes, ...rijenRegel(blijvendeRijen) });
+  const rijMelding = vervallenRijen.length
+    ? ['', `Rijkoppeling vervalt: ${koppelingenTekst(ctx, vervallenRijen)} — dat subperceel staat er niet meer (met hetzelfde gespoten deel) in.`]
+    : [];
+  const voorstel = [`Registratie [${was.id.slice(0, 8)}]`, '', 'WAS:', ...wasBlok, '', 'WORDT:', ...wordtBlok, ...rijMelding, ...(v.warnings.length ? ['', 'Waarschuwingen:', ...v.warnings.map(w => `- ${w}`)] : [])];
 
   if (problemen.length) return { tekst: ['Nog niet opgeslagen. Controleer:', ...[...new Set(problemen)].map(p => `- ${p}`), '', ...voorstel].join('\n') };
   if (args.bevestig !== true) return { tekst: ['VOORSTEL (nog niet opgeslagen):', ...voorstel, '', 'Klopt dit? Roep opnieuw aan met dezelfde argumenten + code en bevestig=true.'].join('\n') };
@@ -830,5 +1050,21 @@ export async function bespuitingAanpassen(ctx: McpContext, args: Args): Promise<
     }).catch(err => console.warn('[mcp] spuituren herberekenen mislukt:', err));
   }
   invalidateContextCache(ctx.userId);
-  return { tekst: [`Aangepast ✓ [${was.id.slice(0, 8)}] — voorraad, middelverbruik, perceelhistorie en spuituren bijgewerkt.`, ...wordtBlok].join('\n') };
+  if (vervallenRijen.length) {
+    try {
+      await ontkoppelRijenVanBespuiting(ctx.userId, was.id, vervallenRijen.map(k => k.rijId));
+    } catch (err) {
+      return {
+        tekst: [`Aangepast ✓ [${was.id.slice(0, 8)}], maar de rijkoppeling (${koppelingenTekst(ctx, vervallenRijen)}) kon niet worden verwijderd: ${err instanceof Error ? err.message : String(err)}`, ...wordtBlok].join('\n'),
+        fout: true,
+      };
+    }
+  }
+  return {
+    tekst: [
+      `Aangepast ✓ [${was.id.slice(0, 8)}] — voorraad, middelverbruik, perceelhistorie en spuituren bijgewerkt.`,
+      ...wordtBlok,
+      ...(vervallenRijen.length ? [`Rijkoppeling verwijderd: ${koppelingenTekst(ctx, vervallenRijen)}`] : []),
+    ].join('\n'),
+  };
 }

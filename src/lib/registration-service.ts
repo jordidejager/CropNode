@@ -58,6 +58,11 @@ export interface ConfirmRegistrationParams {
   /** Gespoten ha per blok voor gedeeltelijk gespoten blokken. */
   plotAreas?: Record<string, number>;
   notes?: string | null;
+  /**
+   * Rijenkaart (beta): rijen waarop gespoten is. Na een geslaagde insert gekoppeld via
+   * bespuiting_rijen; mislukt dat, dan wordt de registratie teruggedraaid. Zonder rijIds: geen verschil.
+   */
+  rijIds?: string[];
 }
 
 export interface ConfirmRegistrationResult {
@@ -136,6 +141,20 @@ export async function confirmRegistration(
     };
 
     const newSpuitschriftEntry = await addSpuitschriftEntry(spuitschriftEntry as any, params.userId);
+
+    // Rijenkaart (beta): rijen koppelen; mislukt dat → registratie verwijderen (zelfde rollback als bij de historie)
+    if (params.rijIds && params.rijIds.length > 0) {
+      try {
+        const { koppelBespuitingAanRijen } = await import('@/lib/rijen/koppelingen');
+        await koppelBespuitingAanRijen(params.userId, newSpuitschriftEntry.id, params.rijIds);
+      } catch (rijenError) {
+        console.error('[confirmRegistration] Rijkoppeling failed, rolling back spuitschrift:', rijenError);
+        await dbDeleteSpuitschriftEntry(newSpuitschriftEntry.id, params.userId).catch(rollbackErr => {
+          console.error('[confirmRegistration] CRITICAL: Rollback also failed:', rollbackErr);
+        });
+        throw rijenError;
+      }
+    }
 
     // Create parcel history (if function provided)
     if (addParcelHistoryFn) {

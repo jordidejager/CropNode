@@ -40,6 +40,9 @@ import {
   TagLegend,
 } from '@/components/veldnotities/primitives';
 import { tagTokens, type FieldNoteTag, type ObservationCategory as ObservationCategoryLocal } from '@/lib/veldnotities/tag-colors';
+import { useRijenVoorNotities } from '@/hooks/use-rijen';
+import { formatteerBereiken } from '@/lib/rijen/selectie';
+import type { NotitieRijInfo } from '@/lib/rijen/koppelingen';
 
 // ============================================================================
 // TAG CONFIG
@@ -601,11 +604,49 @@ function ProductLockRow({ spuitschriftId, products, hiddenProducts }: {
 }
 
 // ============================================================================
+// RIJ-BADGE (rijenkaart beta)
+// ============================================================================
+
+/** "Rij 12 · boom 52", "Rij 12 · 34 m" of "Rijen 1–20" (meerdere percelen: met perceelnaam). */
+function rijBadgeTekst(rijen: NotitieRijInfo[]): string {
+  const delen = rijen.map(info => {
+    if (info.rijen.length === 1) {
+      const r = info.rijen[0];
+      const plek = r.boomnummer !== null
+        ? ` · boom ${r.boomnummer}`
+        : r.positieM !== null ? ` · ${Math.round(r.positieM)} m` : '';
+      return `Rij ${r.nummer}${r.status === 'gerooid' ? ' (gerooid)' : ''}${plek}`;
+    }
+    return `${info.nummers.length === 1 ? 'Rij' : 'Rijen'} ${formatteerBereiken(info.nummers)}`;
+  });
+  if (rijen.length === 1) return delen[0];
+  return rijen.map((info, i) => `${info.perceelNaam} ${delen[i].charAt(0).toLowerCase()}${delen[i].slice(1)}`.trim()).join(', ');
+}
+
+function RijBadge({ rijen, dimmed }: { rijen: NotitieRijInfo[]; dimmed?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center h-[22px] px-2 rounded-full border text-[10px] font-semibold max-w-[220px]',
+        dimmed
+          ? 'bg-white/[0.03] border-white/[0.08] text-white/35'
+          : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300',
+      )}
+      title={rijen.map(r => `${r.perceelNaam}: ${r.omschrijving}`).join(' · ')}
+    >
+      <span className="truncate">{rijBadgeTekst(rijen)}</span>
+    </span>
+  );
+}
+
+// ============================================================================
 // NOTE CARD
 // ============================================================================
 
-function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, onEdit, onUpdateParcel, onTransfer, onPhotoClick, onObservationFilter }: {
+function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, onEdit, onUpdateParcel, onTransfer, onPhotoClick, onObservationFilter, rijen }: {
   note: FieldNote;
+  /** Rijenkaart (beta): gekoppelde rijen (ontbreekt = geen rijen) */
+  rijen?: NotitieRijInfo[];
   onToggleStatus: () => void;
   onTogglePin: () => void;
   onToggleLock: () => void;
@@ -789,6 +830,11 @@ function NoteCard({ note, onToggleStatus, onTogglePin, onToggleLock, onDelete, o
               ).values()].slice(0, 4).map(sp => (
                 <ParcelBadgePrimitive key={sp.parcel_name || sp.id} parcel={sp} size="sm" />
               ))}
+
+              {/* Rijenkaart (beta): rij + boom */}
+              {rijen && rijen.length > 0 && (
+                <RijBadge rijen={rijen} dimmed={isDone || isTransferred} />
+              )}
 
               {/* Observation — klikbaar filter */}
               {note.observation_subject && (
@@ -1776,6 +1822,9 @@ export function VeldnotitiesClient() {
   const queryClient = useQueryClient();
   const { data: notes, isLoading } = useFieldNotes();
   const { data: parcels = [] } = useParcels();
+  // Rijenkaart (beta): rijen bij notities (alleen notities met rijen komen terug)
+  const notitieIds = useMemo(() => (notes ?? []).map(n => n.id), [notes]);
+  const { data: rijenPerNotitie } = useRijenVoorNotities(notitieIds);
   const createMutation = useCreateFieldNote();
   const updateMutation = useUpdateFieldNote();
   const deleteMutation = useDeleteFieldNote();
@@ -2075,6 +2124,7 @@ export function VeldnotitiesClient() {
                       onTransfer={() => handleDirectTransfer(note)}
                       onPhotoClick={(url) => setLightboxUrl(url)}
                       onObservationFilter={(subject) => setActiveObservation(subject)}
+                      rijen={rijenPerNotitie?.[note.id]}
                     />
                   ))}
                 </AnimatePresence>

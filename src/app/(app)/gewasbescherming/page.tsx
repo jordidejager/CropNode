@@ -28,10 +28,22 @@ import { CropIcon } from '@/components/ui/crop-icon';
 import { NewSprayDialog, EditableProduct, EditableParcels, formatTotalUsage } from '@/components/spuitschrift';
 import { SectionHeader, SpotlightCard, GlowOrb } from '@/components/ui/premium';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useInvalidateRijen, useRijenVoorBespuitingen } from '@/hooks/use-rijen';
+import { formatteerBereiken } from '@/lib/rijen/selectie';
+import type { BespuitingRijenInfo } from '@/lib/rijen/koppelingen';
 
 const formatDate = (date: Date) => {
     return format(date, 'dd MMMM yyyy \'om\' HH:mm', { locale: nl });
 };
+
+/** Rijenkaart (beta): "Rijen 1–20" (één perceel) of "Rijen Steketee 1–20, Thuis 3–5". */
+function rijenBadgeTekst(rijen: BespuitingRijenInfo[]): string {
+    if (rijen.length === 1) {
+        const nummers = rijen[0].nummers;
+        return `${nummers.length === 1 ? 'Rij' : 'Rijen'} ${formatteerBereiken(nummers)}`;
+    }
+    return `Rijen ${rijen.map(r => `${r.perceelNaam} ${formatteerBereiken(r.nummers)}`.trim()).join(', ')}`;
+}
 
 // ============================================
 // Spuitschrift Entry Card (SpotlightCard variant)
@@ -42,9 +54,11 @@ interface SpuitschriftEntryCardProps {
     allParcels: SprayableParcel[];
     allProducts: string[];
     onAction: () => void;
+    /** Rijenkaart (beta): gekoppelde rijen per perceel (ontbreekt = geen rijen) */
+    rijen?: BespuitingRijenInfo[];
 }
 
-function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: SpuitschriftEntryCardProps) {
+function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction, rijen }: SpuitschriftEntryCardProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [isEditing, setIsEditing] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
@@ -58,6 +72,7 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
     } | null>(null);
     const { toast } = useToast();
     const { invalidateSpuitschrift, invalidateInventory } = useInvalidateQueries();
+    const { invalideerAlles: invalideerRijen } = useInvalidateRijen();
 
     const productOptions: ComboboxOption[] = allProducts.map(p => ({ value: p, label: p }));
 
@@ -124,11 +139,20 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
             });
 
             if (result.success) {
-                toast({ title: 'Opgeslagen', description: 'De wijzigingen zijn opgeslagen.' });
+                toast({
+                    title: 'Opgeslagen',
+                    description: result.rijkoppelingVervallen
+                        ? `De wijzigingen zijn opgeslagen. Rijkoppeling vervallen: ${result.rijkoppelingVervallen}.`
+                        : result.message && result.message !== 'Wijzigingen opgeslagen.'
+                            ? result.message
+                            : 'De wijzigingen zijn opgeslagen.',
+                });
                 setIsEditing(false);
                 setValidationResult(null);
                 invalidateSpuitschrift();
                 invalidateInventory();
+                // Rijenkaart (beta): badge, kaart en rijstatus volgen de vervallen koppeling
+                if (rijen && rijen.length > 0) invalideerRijen();
                 onAction();
             } else {
                 setValidationResult({
@@ -187,6 +211,15 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                         {entry.registrationType === 'spreading' && (
                             <Badge variant="outline" className="text-xs px-2.5 py-1 bg-teal-500/10 border-teal-500/30 text-teal-400">
                                 Strooien
+                            </Badge>
+                        )}
+                        {rijen && rijen.length > 0 && (
+                            <Badge
+                                variant="outline"
+                                className="text-xs px-2.5 py-1 bg-emerald-500/10 border-emerald-500/30 text-emerald-400 max-w-[240px]"
+                                title={rijen.map(r => `${r.perceelNaam}: ${r.omschrijving}`).join(' · ')}
+                            >
+                                <span className="truncate">{rijenBadgeTekst(rijen)}</span>
                             </Badge>
                         )}
                     </div>
@@ -354,6 +387,11 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                                             allParcels={allParcels}
                                             onChange={setEditedPlots}
                                         />
+                                        {rijen && rijen.length > 0 && entry.plots.some(id => !editedPlots.includes(id)) && (
+                                            <p className="text-xs text-amber-300/90">
+                                                Deze bespuiting is op rijen geregistreerd ({rijenBadgeTekst(rijen)}). Voor rijen in een subperceel dat je weghaalt, vervalt de rijkoppeling bij opslaan.
+                                            </p>
+                                        )}
                                     </div>
 
                                     <div className="space-y-3">
@@ -406,12 +444,15 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
                                     <div>
                                         <h4 className="font-semibold text-base mb-2 text-white">Percelen ({totalArea.toFixed(2)} ha totaal)</h4>
                                         <div className="text-sm text-slate-400 space-y-1.5">
-                                            {selectedParcels.map(p => (
+                                            {selectedParcels.map(p => {
+                                                const rijInfo = rijen?.find(r => r.perceelId === p.parcelId);
+                                                return (
                                                 <div key={p.id} className="flex justify-between gap-4">
-                                                    <span>{p.name} <span className="text-slate-500">({p.variety})</span></span>
+                                                    <span>{p.name} <span className="text-slate-500">({p.variety})</span>{rijInfo && <span className="text-emerald-400/90"> · {rijInfo.omschrijving}</span>}</span>
                                                     <span className="tabular-nums shrink-0">{entry.plotAreas?.[p.id] != null ? `${entry.plotAreas[p.id].toFixed(2)} van ${(p.area || 0).toFixed(2)}` : (p.area ? p.area.toFixed(2) : '0.00')} ha</span>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                     <div>
@@ -514,11 +555,13 @@ function SpuitschriftEntryCard({ entry, allParcels, allProducts, onAction }: Spu
 // Chronological View Component
 // ============================================
 
-function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
+function ChronologicalView({ entries, allParcels, allProducts, onAction, rijenPerBespuiting }: {
     entries: SpuitschriftEntry[];
     allParcels: SprayableParcel[];
     allProducts: string[];
     onAction: () => void;
+    /** Rijenkaart (beta): gekoppelde rijen per bespuiting-id */
+    rijenPerBespuiting?: Record<string, BespuitingRijenInfo[]>;
 }) {
     return (
         <div className="space-y-3">
@@ -529,6 +572,7 @@ function ChronologicalView({ entries, allParcels, allProducts, onAction }: {
                     allParcels={allParcels}
                     allProducts={allProducts}
                     onAction={onAction}
+                    rijen={rijenPerBespuiting?.[entry.id]}
                 />
             ))}
         </div>
@@ -654,6 +698,10 @@ export default function SpuitschriftPage() {
         [allParcels, companyFilter.active, companyFilter.matchesPlot]
     );
 
+    // Rijenkaart (beta): rijen bij de zichtbare bespuitingen (alleen bespuitingen met rijen komen terug)
+    const visibleEntryIds = React.useMemo(() => visibleEntries.map(e => e.id), [visibleEntries]);
+    const { data: rijenPerBespuiting } = useRijenVoorBespuitingen(visibleEntryIds);
+
     const [isNewSprayDialogOpen, setIsNewSprayDialogOpen] = React.useState(false);
 
     const allProductNames = React.useMemo(() =>
@@ -764,6 +812,7 @@ export default function SpuitschriftPage() {
                                     allParcels={allParcels}
                                     allProducts={allProductNames}
                                     onAction={handleAction}
+                                    rijenPerBespuiting={rijenPerBespuiting}
                                 />
                             ) : (
                                 <SpotlightCard color="emerald">

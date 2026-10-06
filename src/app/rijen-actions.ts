@@ -10,6 +10,7 @@
  * `rijenFoutmelding(err)` uit '@/hooks/use-rijen' om hem in de UI te tonen.
  */
 
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import {
   laadRijenkaart,
@@ -56,10 +57,15 @@ const FOUT_PREFIX = 'rijenkaart:';
 
 async function requireUserId(): Promise<string> {
   const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
   if (user?.id) return user.id;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user?.id) return session.user.id;
+  // Alleen als de auth-server onbereikbaar is terugvallen op de cookie-sessie. Bij een ongeldige of
+  // vervalste token (AuthApiError, bv. bad_jwt) nooit: getSession() controleert de handtekening niet,
+  // en alle rijen-functies draaien met de admin-client voor dit user_id.
+  if (error && isAuthRetryableFetchError(error)) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) return session.user.id;
+  }
   throw new Error('Niet ingelogd.');
 }
 
