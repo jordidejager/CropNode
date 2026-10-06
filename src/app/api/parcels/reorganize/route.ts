@@ -51,8 +51,27 @@ export async function POST(request: NextRequest) {
       return apiError('Niet alle percelen gevonden of geen toegang', ErrorCodes.NOT_FOUND, 404);
     }
 
+    // 1b. Rijenkaart (beta): rijen, blokken en rij-instellingen hangen met ON DELETE CASCADE aan het
+    // perceel en zouden bij stap 8 stil verdwijnen (ook gerooide rijen en de rijkoppelingen van
+    // bespuitingen/notities). Heeft precies één perceel rijen, dan wordt dát het doel; hebben er meer,
+    // dan weigeren. Zonder rijen verandert er niets.
+    const rijenCheck = await percelenMetRijen(user.id, parcelIds);
+    if ('fout' in rijenCheck) {
+      return apiError('Fout bij controleren van rijen (rijenkaart)', ErrorCodes.INTERNAL_ERROR, 500);
+    }
+    const metRijen = rijenCheck.ids;
+    if (metRijen.size > 1) {
+      const namen = parcels.filter(p => metRijen.has(p.id)).map(p => p.name).join(', ');
+      return apiError(
+        `Samenvoegen kan nog niet: ${namen} hebben elk rijen of rij-instellingen (Rijen (beta)). Voeg alleen percelen samen waarvan hooguit één perceel rijen heeft, anders gaan rijen en hun koppelingen verloren.`,
+        ErrorCodes.BAD_REQUEST,
+        409,
+      );
+    }
+
     // 2. Pick the first parcel as the "target" — we'll update it and delete the rest
-    const targetParcel = parcels[0];
+    //    (rijenkaart: het perceel met rijen, zodat die rijen blijven bestaan)
+    const targetParcel = parcels.find(p => metRijen.has(p.id)) ?? parcels[0];
     const otherParcelIds = parcelIds.filter(id => id !== targetParcel.id);
 
     // 3. Merge geometries into a MultiPolygon (if available)
@@ -185,6 +204,24 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return handleUnknownError(error, 'parcels/reorganize');
   }
+}
+
+/** Percelen (uit parcelIds) met rijen, blokken of rij-instellingen (rijenkaart, beta). */
+async function percelenMetRijen(userId: string, parcelIds: string[]): Promise<{ ids: Set<string> } | { fout: true }> {
+  const admin = createServiceRoleClient();
+  const ids = new Set<string>();
+  for (const id of parcelIds) {
+    for (const tabel of ['rijen', 'blokken', 'perceel_rijinstellingen'] as const) {
+      const { count, error } = await admin
+        .from(tabel)
+        .select('perceel_id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('perceel_id', id);
+      if (error) return { fout: true };
+      if (count) { ids.add(id); break; }
+    }
+  }
+  return { ids };
 }
 
 /**

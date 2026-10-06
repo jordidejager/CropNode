@@ -253,6 +253,14 @@ export interface RijParameters {
   beginkantGraden?: number | null;
 }
 
+/**
+ * Wat te doen met een rijlijn die het perceel meerdere keren doorsnijdt (inham, pad, gat,
+ * tweede deel van een MultiPolygon):
+ *  - 'langste' (standaard): alleen het langste stuk wordt een rij, met `controleren`;
+ *  - 'alle': elk stuk wordt een eigen rij, met kopakkers aan beide uiteinden van elk stuk.
+ */
+export type RijStukkenKeuze = 'langste' | 'alle';
+
 export interface GegenereerdeRij {
   /** Loodrechte offset t.o.v. het zwaartepunt (langs de normaal) */
   offsetM: number;
@@ -261,8 +269,20 @@ export interface GegenereerdeRij {
   /** begin → eind in WGS84 */
   coordinates: LngLat[];
   lengteM: number;
-  /** true als de lijn het perceel meerdere keren doorsnijdt (langste stuk gekozen) */
+  /**
+   * true als de lijn het perceel meerdere keren doorsnijdt. Bij stukken 'langste': het langste
+   * stuk is gekozen. Bij 'alle': de lijn levert meer dan één rij op (alle stukken gemarkeerd).
+   */
   controleren: boolean;
+  /** Positie van het midden van de rij langs d = (sin θ, cos θ), t.o.v. het zwaartepunt */
+  langsM?: number;
+  /** 0-based volgnummer van het stuk op deze rijlijn, in volgorde langs d (bij 'langste' altijd 0) */
+  stukIndex?: number;
+  /**
+   * Aantal stukken op deze rijlijn dat na de kopakkers minstens minLengte lang is (bij 'langste'
+   * dus het aantal rijen dat 'alle' op deze lijn zou maken)
+   */
+  aantalStukken?: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import {
   naarWGS,
   normaalVector,
   perceelNaarRD,
+  puntInPerceel,
   richtingVector,
 } from '../lib/rijen/geo';
 import {
@@ -26,13 +27,15 @@ import {
   puntOpRij,
   referentielijnNaarParameters,
   rijAanRand,
+  rijLangs,
   rijOffset,
   rijOppervlakHa,
   rijTussen,
   startzijdeGraden,
   vindStartIndex,
 } from '../lib/rijen/generatie';
-import type { LngLat, PerceelRD, RijParameters, XY } from '../lib/rijen/types';
+import type { GegenereerdeRij, LngLat, PerceelRD, Rij, RijInstellingen, RijParameters, XY } from '../lib/rijen/types';
+import { maakOpslaanPlan } from '../components/rijenkaart/rijen-hulp';
 
 let passed = 0;
 let failed = 0;
@@ -625,6 +628,789 @@ test('rijAanRand: rand + (rand − buur)', () => {
   const r = rijAanRand(rand, buur).map(naarRD);
   dichtbij(afstand(r[0], [CENTRUM[0] - 3, CENTRUM[1] + 38]), 0, 0.002, 'begin');
   dichtbij(afstand(r[1], [CENTRUM[0] - 3, CENTRUM[1] - 42]), 0, 0.002, 'eind');
+});
+
+// ---- Onderbroken rijen: alle stukken ----
+
+console.log("\nOnderbroken rijen (stukken 'alle'):");
+
+/** U-vorm 60 × 100 m, inham x 30..40 van y 40 tot 100 (linkerpoot 30 m, rechterpoot 20 m) */
+function uVorm(): PerceelRD {
+  return polygoon(lokaal([
+    [0, 0], [60, 0], [60, 100], [40, 100], [40, 40], [30, 40], [30, 100], [0, 100],
+  ]));
+}
+
+/** Lokale x/y (t.o.v. CENTRUM) van begin en eind */
+function lok(r: GegenereerdeRij): { bx: number; by: number; ex: number; ey: number } {
+  return {
+    bx: r.coordsRD[0][0] - CENTRUM[0],
+    by: r.coordsRD[0][1] - CENTRUM[1],
+    ex: r.coordsRD[1][0] - CENTRUM[0],
+    ey: r.coordsRD[1][1] - CENTRUM[1],
+  };
+}
+
+/** Gesorteerd op offset oplopend, daarna langsM oplopend */
+function controleerSortering(rijen: GegenereerdeRij[]) {
+  for (let i = 1; i < rijen.length; i++) {
+    const a = rijen[i - 1];
+    const b = rijen[i];
+    assert.ok(a.offsetM <= b.offsetM, `offset ${a.offsetM} > ${b.offsetM}`);
+    if (a.offsetM === b.offsetM) assert.ok(a.langsM! < b.langsM!, `langs ${a.langsM} ≥ ${b.langsM} bij gelijke offset`);
+  }
+}
+
+/** Stukken per rijlijn (sleutel = offset) */
+function perLijn(rijen: GegenereerdeRij[]): Map<number, GegenereerdeRij[]> {
+  const m = new Map<number, GegenereerdeRij[]>();
+  for (const r of rijen) m.set(r.offsetM, [...(m.get(r.offsetM) ?? []), r]);
+  return m;
+}
+
+/** Zoals v_rijen de geometrie teruggeeft: GeoJSON met 7 decimalen */
+function rond7(c: LngLat): LngLat {
+  return [Math.round(c[0] * 1e7) / 1e7, Math.round(c[1] * 1e7) / 1e7];
+}
+
+test('U-vorm, θ = 90: elke lijn door de inham geeft 2 stukken, beide controleren, kopakker aan beide uiteinden', () => {
+  const perceel = uVorm();
+  const rijen = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'alle' });
+  controleerSortering(rijen);
+  const lijnen = perLijn(rijen);
+  let doorInham = 0;
+  let heel = 0;
+  for (const stukken of lijnen.values()) {
+    const y = lok(stukken[0]).by;
+    if (y > 40) {
+      doorInham++;
+      assert.strictEqual(stukken.length, 2, `lijn y=${y.toFixed(2)}`);
+      const [west, oost] = stukken;
+      // θ = 90: begin aan de oostkant (+d), dus begin x > eind x
+      dichtbij(west.lengteM, 30 - 12, CM, 'lengte linkerpoot');
+      dichtbij(lok(west).bx, 30 - 6, CM, 'begin linkerpoot (kopakker aan de inham)');
+      dichtbij(lok(west).ex, 6, CM, 'eind linkerpoot');
+      dichtbij(oost.lengteM, 20 - 12, CM, 'lengte rechterpoot');
+      dichtbij(lok(oost).bx, 60 - 6, CM, 'begin rechterpoot');
+      dichtbij(lok(oost).ex, 40 + 6, CM, 'eind rechterpoot (kopakker aan de inham)');
+      for (const [i, r] of [west, oost].entries()) {
+        assert.strictEqual(r.controleren, true);
+        assert.strictEqual(r.stukIndex, i);
+        assert.strictEqual(r.aantalStukken, 2);
+      }
+      // langsM = x van het midden t.o.v. het zwaartepunt (d = oost)
+      dichtbij(west.langsM!, CENTRUM[0] + 15 - perceel.zwaartepunt[0], CM, 'langsM west');
+      dichtbij(oost.langsM!, CENTRUM[0] + 50 - perceel.zwaartepunt[0], CM, 'langsM oost');
+    } else {
+      heel++;
+      assert.strictEqual(stukken.length, 1);
+      const [r] = stukken;
+      assert.strictEqual(r.controleren, false);
+      assert.strictEqual(r.stukIndex, 0);
+      assert.strictEqual(r.aantalStukken, 1);
+      dichtbij(r.lengteM, 60 - 12, CM, 'lengte hele breedte');
+    }
+  }
+  assert.strictEqual(doorInham, 20, 'lijnen door de inham');
+  assert.ok(heel === 13 || heel === 14, `lijnen onder de inham: ${heel}`);
+  assert.strictEqual(rijen.length, 2 * doorInham + heel);
+});
+
+test("U-vorm: 'langste' (standaard) blijft het oude resultaat en vult langsM/stukIndex/aantalStukken", () => {
+  const perceel = uVorm();
+  const standaard = genereerRijen(perceel, params({ richtingGraden: 90 }));
+  const langste = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'langste' });
+  const onzin = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'onzin' as unknown as 'alle' });
+  assert.deepStrictEqual(langste, standaard);
+  assert.deepStrictEqual(onzin, standaard);
+  const alle = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'alle' });
+  for (const r of standaard) {
+    assert.strictEqual(r.stukIndex, 0);
+    dichtbij(r.langsM!, rijLangs(perceel, 90, r.coordsRD), 1e-9, 'langsM = rijLangs');
+    // het langste stuk is precies de westelijke rij van 'alle' op dezelfde lijn
+    const zelfde = alle.filter(a => a.offsetM === r.offsetM);
+    assert.strictEqual(r.aantalStukken, zelfde.length);
+    const west = zelfde[0];
+    assert.deepStrictEqual(r.coordsRD, west.coordsRD);
+    assert.strictEqual(r.controleren, west.controleren);
+  }
+  assert.strictEqual(standaard.filter(r => r.aantalStukken === 2).length, 20);
+});
+
+test("U-vorm: minLengteM laat het korte stuk vallen; bij 'alle' dan geen controleren meer", () => {
+  const perceel = uVorm();
+  // rechterpoot: 20 − 12 = 8 m < 10 m
+  const alle = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'alle', minLengteM: 10 });
+  const langste = genereerRijen(perceel, params({ richtingGraden: 90 }), { minLengteM: 10 });
+  assert.strictEqual(alle.length, langste.length);
+  for (const r of alle) {
+    assert.strictEqual(r.controleren, false);
+    assert.strictEqual(r.aantalStukken, 1);
+    if (lok(r).by > 40) dichtbij(lok(r).bx, 24, CM, 'boven de inham alleen de linkerpoot');
+    else dichtbij(r.lengteM, 48, CM, 'onder de inham de hele breedte');
+  }
+  // 'langste' blijft (zoals altijd) markeren dat de lijn onderbroken is
+  assert.strictEqual(langste.filter(r => r.controleren).length, 20);
+  for (const r of langste) assert.strictEqual(r.aantalStukken, 1);
+});
+
+test("U-vorm 'alle': asymmetrische kopakker en beginkant west gelden per stuk", () => {
+  const perceel = uVorm();
+  const rijen = genereerRijen(
+    perceel,
+    params({ richtingGraden: 90, kopakkerBeginM: 2, kopakkerEindM: 4, beginkantGraden: 270 }),
+    { stukken: 'alle' },
+  );
+  const lijn = [...perLijn(rijen).values()].find(st => lok(st[0]).by > 40)!;
+  const [west, oost] = lijn;
+  // begin aan de westkant: 2 m kopakker aan de west-uiteinden, 4 m aan de oost-uiteinden
+  dichtbij(lok(west).bx, 2, CM, 'begin west');
+  dichtbij(lok(west).ex, 30 - 4, CM, 'eind west');
+  dichtbij(lok(oost).bx, 40 + 2, CM, 'begin oost');
+  dichtbij(lok(oost).ex, 60 - 4, CM, 'eind oost');
+  dichtbij(west.lengteM, 24, CM, 'lengte west');
+  dichtbij(oost.lengteM, 14, CM, 'lengte oost');
+  // volgorde langs d (oost) blijft: west eerst, ook met de beginkant omgedraaid
+  assert.strictEqual(west.stukIndex, 0);
+  assert.strictEqual(oost.stukIndex, 1);
+  assert.ok(west.langsM! < oost.langsM!);
+});
+
+test("MultiPolygon achter elkaar 'alle': beide delen een rij, beide controleren", () => {
+  const perceel = multiPolygoon(
+    [lokaal([[0, 0], [30, 0], [30, 100], [0, 100]])],
+    [lokaal([[0, 120], [30, 120], [30, 150], [0, 150]])],
+  );
+  const rijen = genereerRijen(perceel, params({ richtingGraden: 0 }), { stukken: 'alle' });
+  controleerSortering(rijen);
+  assert.strictEqual(rijen.length, 20);
+  const lijnen = perLijn(rijen);
+  assert.strictEqual(lijnen.size, 10);
+  for (const [zuid, noord] of lijnen.values()) {
+    for (const r of [zuid, noord]) {
+      assert.strictEqual(r.controleren, true);
+      assert.strictEqual(r.aantalStukken, 2);
+    }
+    assert.strictEqual(zuid.stukIndex, 0);
+    assert.strictEqual(noord.stukIndex, 1);
+    dichtbij(zuid.lengteM, 88, CM, 'lengte zuidelijk deel');
+    dichtbij(lok(zuid).by, 94, CM, 'begin zuid');
+    dichtbij(lok(zuid).ey, 6, CM, 'eind zuid');
+    dichtbij(noord.lengteM, 18, CM, 'lengte noordelijk deel');
+    dichtbij(lok(noord).by, 144, CM, 'begin noord');
+    dichtbij(lok(noord).ey, 126, CM, 'eind noord');
+    dichtbij(noord.langsM! - zuid.langsM!, 135 - 50, CM, 'afstand tussen de middens');
+  }
+  // rij-oppervlak: 10 × (88 + 18) × 3 m
+  dichtbij(rijOppervlakHa(rijen.map(r => ({ lengteM: r.lengteM, rijafstandM: 3 }))), 0.318, 1e-4, 'oppervlak');
+});
+
+test("polygoon met gat 'alle': rijen door het gat worden twee stukken", () => {
+  // 60 × 100 m met gat x 20..40, y 30..50 → stukken [0,30] en [50,100]
+  const perceel = polygoon(
+    lokaal([[0, 0], [60, 0], [60, 100], [0, 100]]),
+    lokaal([[20, 30], [40, 30], [40, 50], [20, 50]]),
+  );
+  const rijen = genereerRijen(perceel, params({ richtingGraden: 0 }), { stukken: 'alle' });
+  controleerSortering(rijen);
+  const lijnen = perLijn(rijen);
+  assert.strictEqual(lijnen.size, 20);
+  let doorGat = 0;
+  for (const stukken of lijnen.values()) {
+    const x = lok(stukken[0]).bx;
+    if (x > 20 && x < 40) {
+      doorGat++;
+      assert.strictEqual(stukken.length, 2);
+      const [zuid, noord] = stukken;
+      assert.ok(zuid.controleren && noord.controleren);
+      dichtbij(zuid.lengteM, 30 - 12, CM, 'zuidelijk stuk');
+      dichtbij(lok(zuid).by, 24, CM, 'begin zuid (kopakker aan het gat)');
+      dichtbij(noord.lengteM, 50 - 12, CM, 'noordelijk stuk');
+      dichtbij(lok(noord).ey, 56, CM, 'eind noord (kopakker aan het gat)');
+    } else {
+      assert.strictEqual(stukken.length, 1);
+      assert.strictEqual(stukken[0].controleren, false);
+      dichtbij(stukken[0].lengteM, 88, CM, 'lengte');
+    }
+  }
+  assert.strictEqual(doorGat, 6);
+  assert.strictEqual(rijen.length, 26);
+  // 'alle' levert precies de zuidelijke stukken extra op t.o.v. 'langste'
+  const langste = genereerRijen(perceel, params({ richtingGraden: 0 }));
+  const som = (rs: GegenereerdeRij[]) => rs.reduce((t, r) => t + r.lengteM, 0);
+  dichtbij(som(rijen) - som(langste), 6 * 18, CM, 'extra rijlengte');
+});
+
+test("openingen < 1 m blijven overbrugd, ook bij 'alle'", () => {
+  const paal = polygoon(
+    lokaal([[0, 0], [60, 0], [60, 100], [0, 100]]),
+    lokaal([[31.2, 49.7], [31.8, 49.7], [31.8, 50.3], [31.2, 50.3]]),
+  );
+  const naad = multiPolygoon(
+    [lokaal([[0, 0], [30, 0], [30, 100], [0, 100]])],
+    [lokaal([[0, 100.005], [30, 100.005], [30, 150], [0, 150]])],
+  );
+  for (const [perceel, aantal, lengte] of [[paal, 20, 88], [naad, 10, 138]] as const) {
+    const rijen = genereerRijen(perceel, params({ richtingGraden: 0 }), { stukken: 'alle' });
+    assert.strictEqual(rijen.length, aantal);
+    for (const r of rijen) {
+      assert.strictEqual(r.controleren, false);
+      assert.strictEqual(r.aantalStukken, 1);
+      dichtbij(r.lengteM, lengte, CM, 'lengte');
+    }
+  }
+});
+
+test("'langste' blijft identiek op alle bestaande vormen (met en zonder opties)", () => {
+  const vormen: [PerceelRD, number][] = [
+    [polygoon(rechthoek(30, 100, 60)), 30],
+    [uVorm(), 90],
+    [uVorm(), 0],
+    [multiPolygoon(
+      [lokaal([[0, 0], [30, 0], [30, 100], [0, 100]])],
+      [lokaal([[0, 102], [30, 102], [30, 150], [0, 150]])],
+    ), 0],
+    [polygoon(
+      lokaal([[0, 0], [60, 0], [60, 100], [0, 100]]),
+      lokaal([[20, 30], [40, 30], [40, 50], [20, 50]]),
+    ), 17],
+  ];
+  for (const [perceel, theta] of vormen) {
+    const p = params({ richtingGraden: theta });
+    const a = genereerRijen(perceel, p);
+    assert.deepStrictEqual(genereerRijen(perceel, p, { stukken: 'langste' }), a);
+    assert.deepStrictEqual(genereerRijen(perceel, p, { minLengteM: 5 }), a);
+    // langste = per lijn het langste stuk van 'alle'
+    const alle = perLijn(genereerRijen(perceel, p, { stukken: 'alle' }));
+    assert.strictEqual(alle.size, a.length);
+    for (const r of a) {
+      const stukken = alle.get(r.offsetM)!;
+      const max = Math.max(...stukken.map(x => x.lengteM));
+      dichtbij(r.lengteM, max, 1e-9, 'langste stuk');
+      assert.strictEqual(r.aantalStukken, stukken.length);
+    }
+  }
+});
+
+test('rijLangs: midden langs d, gelijk aan langsM (ook na de WGS-omweg)', () => {
+  const perceel = polygoon(rechthoek(30, 100, 60));
+  const rijen = genereerRijen(perceel, params({ richtingGraden: 30, kopakkerBeginM: 2, kopakkerEindM: 10 }));
+  for (const r of rijen) {
+    // begin aan de +d-kant: 2 m eraf aan de +d-kant, 10 m aan de −d-kant → midden 4 m langs d
+    dichtbij(r.langsM!, 4, CM, 'langsM');
+    dichtbij(rijLangs(perceel, 30, r.coordsRD), r.langsM!, 1e-9, 'rijLangs RD');
+    dichtbij(rijLangs(perceel, 210, [r.coordsRD[1], r.coordsRD[0]]), r.langsM!, 1e-9, 'θ + 180 en omgedraaid');
+    dichtbij(rijLangs(perceel, 30, r.coordinates.map(naarRD)), r.langsM!, 0.002, 'rijLangs via WGS');
+  }
+  assert.throws(() => rijLangs(perceel, 30, []));
+});
+
+// ---- Koppelen met stukken ----
+
+console.log('\nKoppelen met stukken:');
+
+/** Bestaande rijen zoals de UI ze aanlevert: offset/langs van de opgeslagen geometrie (7 decimalen) */
+function alsBestaand(perceel: PerceelRD, theta: number, rijen: GegenereerdeRij[], ruis = false) {
+  return rijen.map((r, i) => {
+    const rd = ruis ? r.coordinates.map(rond7).map(naarRD) : r.coordsRD;
+    return {
+      id: `rij-${i}`,
+      offsetM: rijOffset(perceel, theta, rd),
+      langsM: rijLangs(perceel, theta, rd),
+      lengteM: r.lengteM,
+    };
+  });
+}
+
+test("verschuiving 0,1 m behoudt alle id's, ook als twee stukken dezelfde offset hebben", () => {
+  const perceel = uVorm();
+  const oud = genereerRijen(perceel, params({ richtingGraden: 90, faseM: 1.5 }), { stukken: 'alle' });
+  const nieuw = genereerRijen(perceel, params({ richtingGraden: 90, faseM: 1.6 }), { stukken: 'alle' });
+  assert.strictEqual(nieuw.length, oud.length);
+  assert.ok(oud.some(r => r.aantalStukken === 2));
+  for (const ruis of [false, true]) {
+    // omgekeerd aanleveren: de invoervolgorde mag niet uitmaken
+    const bestaand = alsBestaand(perceel, 90, oud, ruis).reverse();
+    const k = koppelRijenOpPositie(bestaand, nieuw, 1.5);
+    assert.strictEqual(k.paren.length, oud.length, `paren (ruis ${ruis})`);
+    assert.deepStrictEqual(k.nieuweIndexen, []);
+    assert.deepStrictEqual(k.vervallenIds, []);
+    k.paren.forEach(p => assert.strictEqual(p.id, `rij-${p.index}`, `kruiskoppeling (ruis ${ruis})`));
+  }
+});
+
+test('zonder langsM/lengteM: oud gedrag, met kruiskoppeling bij stukken op dezelfde offset', () => {
+  const perceel = uVorm();
+  const oud = genereerRijen(perceel, params({ richtingGraden: 90, faseM: 1.5 }), { stukken: 'alle' });
+  const nieuw = genereerRijen(perceel, params({ richtingGraden: 90, faseM: 1.6 }), { stukken: 'alle' });
+  const bestaand = alsBestaand(perceel, 90, oud).reverse().map(({ id, offsetM }) => ({ id, offsetM }));
+  const k = koppelRijenOpPositie(bestaand, nieuw.map(r => ({ offsetM: r.offsetM })), 1.5);
+  assert.strictEqual(k.paren.length, oud.length);
+  assert.ok(k.paren.some(p => p.id !== `rij-${p.index}`), 'zonder langs is er kruiskoppeling');
+  // langs aan maar één kant: ook oud gedrag
+  const eenKant = koppelRijenOpPositie(bestaand, nieuw, 1.5);
+  assert.deepStrictEqual(eenKant, k);
+});
+
+test("van 'langste' naar 'alle': het bestaande langste stuk houdt zijn id, de rest is nieuw", () => {
+  const perceel = uVorm();
+  const oud = genereerRijen(perceel, params({ richtingGraden: 90 }));
+  const nieuw = genereerRijen(perceel, params({ richtingGraden: 90 }), { stukken: 'alle' });
+  const k = koppelRijenOpPositie(alsBestaand(perceel, 90, oud, true), nieuw, 1.5);
+  assert.strictEqual(k.paren.length, oud.length);
+  assert.deepStrictEqual(k.vervallenIds, []);
+  for (const p of k.paren) assert.strictEqual(nieuw[p.index].stukIndex, 0, 'gekoppeld aan het westelijke stuk');
+  assert.strictEqual(k.nieuweIndexen.length, 20);
+  for (const i of k.nieuweIndexen) assert.strictEqual(nieuw[i].stukIndex, 1);
+  // en terug: de oostelijke stukken vervallen
+  const terug = koppelRijenOpPositie(alsBestaand(perceel, 90, nieuw, true), oud, 1.5);
+  assert.strictEqual(terug.paren.length, oud.length);
+  assert.strictEqual(terug.vervallenIds.length, 20);
+});
+
+test('overlap < 50% van het kortste stuk → geen paar', () => {
+  const b = [{ id: 'a', offsetM: 0, langsM: 0, lengteM: 10 }];
+  const weinig = koppelRijenOpPositie(b, [{ offsetM: 0.1, langsM: 6, lengteM: 10 }], 1.5);
+  assert.deepStrictEqual(weinig.paren, []);
+  assert.deepStrictEqual(weinig.vervallenIds, ['a']);
+  assert.deepStrictEqual(weinig.nieuweIndexen, [0]);
+  const genoeg = koppelRijenOpPositie(b, [{ offsetM: 0.1, langsM: 5, lengteM: 10 }], 1.5);
+  assert.deepStrictEqual(genoeg.paren, [{ id: 'a', index: 0 }]);
+  // kort stuk helemaal binnen een lang stuk: 100% van het kortste
+  const binnen = koppelRijenOpPositie(b, [{ offsetM: 0, langsM: -40, lengteM: 100 }], 1.5);
+  assert.deepStrictEqual(binnen.paren, [{ id: 'a', index: 0 }]);
+  // lang stuk dat het korte niet raakt
+  const ernaast = koppelRijenOpPositie(b, [{ offsetM: 0, langsM: 60, lengteM: 100 }], 1.5);
+  assert.deepStrictEqual(ernaast.paren, []);
+  // |Δoffset| > max blijft uitsluiten
+  assert.deepStrictEqual(koppelRijenOpPositie(b, [{ offsetM: 1.6, langsM: 0, lengteM: 10 }], 1.5).paren, []);
+});
+
+test('lange bestaande rij over twee nieuwe stukken: het stuk met de kleinste |Δlangs| wint', () => {
+  const k = koppelRijenOpPositie(
+    [{ id: 'lang', offsetM: 0, langsM: 0, lengteM: 100 }],
+    [{ offsetM: 0.1, langsM: -30, lengteM: 40 }, { offsetM: 0.1, langsM: 25, lengteM: 50 }],
+    1.5,
+  );
+  assert.deepStrictEqual(k.paren, [{ id: 'lang', index: 1 }]);
+  assert.deepStrictEqual(k.nieuweIndexen, [0]);
+});
+
+test('twee bestaande stukken met afrondingsruis op één lijn: |Δlangs| beslist, niet de ruis', () => {
+  // 'a' ligt 3 mm dichterbij, maar 'b' past langs de rij beter
+  const k = koppelRijenOpPositie(
+    [{ id: 'a', offsetM: 0.003, langsM: -30, lengteM: 40 }, { id: 'b', offsetM: -0.004, langsM: 25, lengteM: 50 }],
+    [{ offsetM: 0, langsM: 0, lengteM: 100 }],
+    1.5,
+  );
+  assert.deepStrictEqual(k.paren, [{ id: 'b', index: 0 }]);
+  assert.deepStrictEqual(k.vervallenIds, ['a']);
+});
+
+// ---- Nummering met stukken ----
+
+console.log('\nNummering met stukken:');
+
+test('bepaalNummers met langs: stukken op dezelfde offset op langs oplopend', () => {
+  const offsets = [0, 0, 3, 3];
+  const langs = [10, -10, -10, 10];
+  assert.deepStrictEqual(bepaalNummers(offsets, 1, 1, langs), [2, 1, 3, 4]);
+  // zonder langs: op invoerindex (index 0 komt dan vóór de startrij)
+  assert.deepStrictEqual(bepaalNummers(offsets, 1, 1), [0, 1, 2, 3]);
+  // ongeldige start → laagste lijn, kleinste langs
+  assert.deepStrictEqual(bepaalNummers(offsets, -1, 1, langs), [2, 1, 3, 4]);
+  // afrondingsruis (< 10 cm) telt als dezelfde lijn
+  assert.deepStrictEqual(bepaalNummers([0.004, -0.003, 3.002, 2.996], 1, 1, langs), [2, 1, 3, 4]);
+});
+
+test('bepaalNummers met langs: start aan de hoge kant, vanaf beide stukken', () => {
+  const offsets = [0, 0, 3, 3];
+  const langs = [10, -10, -10, 10];
+  // startrij = grootste langs van zijn lijn → op elke lijn eerst de grote langs
+  assert.deepStrictEqual(bepaalNummers(offsets, 3, 1, langs), [3, 4, 2, 1]);
+  // startrij = kleinste langs → die krijgt 1, geen nummer 0 voor het andere stuk
+  assert.deepStrictEqual(bepaalNummers(offsets, 2, 1, langs), [4, 3, 1, 2]);
+  assert.deepStrictEqual(bepaalNummers(offsets, 2, 10, langs), [13, 12, 10, 11]);
+});
+
+test('bepaalNummers met langs: zonder gelijke offsets identiek aan zonder langs', () => {
+  for (const [offsets, start, nr] of [
+    [[5, -1, 3, 1], 1, 1],
+    [[5, -1, 3, 1], 0, 1],
+    [[0, 3, 6, 9, 12], 2, 10],
+    [[0, 3, 6, 9, 12], 3, 10],
+  ] as [number[], number, number][]) {
+    const langs = offsets.map((_, i) => (i * 37) % 11);
+    assert.deepStrictEqual(bepaalNummers(offsets, start, nr, langs), bepaalNummers(offsets, start, nr));
+  }
+  // langs met een andere lengte wordt genegeerd
+  assert.deepStrictEqual(bepaalNummers([0, 0, 3], 1, 1, [5]), bepaalNummers([0, 0, 3], 1, 1));
+  assert.deepStrictEqual(bepaalNummers([], 0, 1, []), []);
+});
+
+test('vindStartIndex met langs: kleinste langs op de uiterste lijn', () => {
+  const offsets = [0, 0.004, 3, 3];
+  const langs = [5, -5, 8, -8];
+  assert.strictEqual(vindStartIndex(offsets, 0, 270), 0);
+  assert.strictEqual(vindStartIndex(offsets, 0, 270, langs), 1);
+  assert.strictEqual(vindStartIndex(offsets, 0, 90), 2);
+  assert.strictEqual(vindStartIndex(offsets, 0, 90, langs), 3);
+  assert.strictEqual(vindStartIndex(offsets, 0, 90, [1]), 2);
+});
+
+test("'alle' op de U-vorm: nummers 1..N uniek vanaf beide kanten, elke lijn in dezelfde richting", () => {
+  const perceel = uVorm();
+  const theta = 90;
+  const rijen = genereerRijen(perceel, params({ richtingGraden: theta }), { stukken: 'alle' });
+  // zoals opgeslagen (ruis) en in willekeurige volgorde
+  const bestaand = alsBestaand(perceel, theta, rijen, true).reverse();
+  const offsets = bestaand.map(r => r.offsetM);
+  const langs = bestaand.map(r => r.langsM);
+  for (const oplopend of [true, false]) {
+    const start = vindStartIndex(offsets, theta, startzijdeGraden(theta, oplopend), langs);
+    const nummers = bepaalNummers(offsets, start, 1, langs);
+    assert.strictEqual(nummers[start], 1);
+    assert.deepStrictEqual([...nummers].sort((a, b) => a - b), rijen.map((_, i) => i + 1));
+    // op elke onderbroken lijn heeft het westelijke stuk het lagere nummer
+    const opId = new Map(bestaand.map((r, i) => [r.id, nummers[i]]));
+    for (const stukken of perLijn(rijen).values()) {
+      if (stukken.length < 2) continue;
+      const [west, oost] = stukken.map(r => opId.get(`rij-${rijen.indexOf(r)}`)!);
+      assert.strictEqual(oost - west, 1, `west ${west}, oost ${oost}`);
+    }
+  }
+});
+
+test('bepaalNummers met langs: drie stukken, start op het middelste stuk', () => {
+  const offsets = [0, 0, 0, 3];
+  const langs = [-50, 0, 50, 0];
+  // middelste stuk = start: lijn oplopend op langs, het eerste stuk krijgt startnummer − 1
+  assert.deepStrictEqual(bepaalNummers(offsets, 1, 1, langs), [0, 1, 2, 3]);
+  // buitenste stuk aan de hoge-langskant: die lijn (en elke lijn) telt aflopend op langs
+  assert.deepStrictEqual(bepaalNummers(offsets, 2, 1, langs), [3, 2, 1, 4]);
+});
+
+// ---- Robuustheid: willekeurige vormen (vaste seed) ----
+
+console.log('\nRobuustheid stukken (willekeurige vormen):');
+
+test("willekeurige vormen: 'alle' binnen het perceel, 'langste' ⊂ 'alle', koppelen en nummeren zonder kruisingen", () => {
+  let seed = 20261007;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  const vormen: (() => PerceelRD)[] = [
+    () => {
+      // stervorm met inhammen
+      const n = 6 + Math.floor(rnd() * 10);
+      const pts: [number, number][] = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * 2 * Math.PI;
+        const r = 30 + rnd() * 90;
+        pts.push([r * Math.cos(a), r * Math.sin(a)]);
+      }
+      return polygoon(lokaal(pts));
+    },
+    () => {
+      const w = 40 + rnd() * 80;
+      const h = 60 + rnd() * 120;
+      const x0 = w * (0.2 + rnd() * 0.3);
+      const x1 = x0 + 3 + rnd() * w * 0.3;
+      const y0 = h * (0.1 + rnd() * 0.6);
+      return polygoon(lokaal([[0, 0], [w, 0], [w, h], [x1, h], [x1, y0], [x0, y0], [x0, h], [0, h]]));
+    },
+    () => {
+      const w = 60 + rnd() * 80;
+      const h = 60 + rnd() * 120;
+      const gx = 5 + rnd() * (w - 30);
+      const gy = 5 + rnd() * (h - 30);
+      const gw = 2 + rnd() * 20;
+      const gh = 2 + rnd() * 20;
+      return polygoon(
+        lokaal([[0, 0], [w, 0], [w, h], [0, h]]),
+        lokaal([[gx, gy], [gx + gw, gy], [gx + gw, gy + gh], [gx, gy + gh]]),
+      );
+    },
+    () => {
+      const w = 30 + rnd() * 60;
+      const h1 = 30 + rnd() * 80;
+      const gat = rnd() < 0.3 ? rnd() * 1.5 : 1 + rnd() * 10;
+      const h2 = 10 + rnd() * 50;
+      const dx = (rnd() - 0.5) * 20;
+      return multiPolygoon(
+        [lokaal([[0, 0], [w, 0], [w, h1], [0, h1]])],
+        [lokaal([[dx, h1 + gat], [dx + w, h1 + gat], [dx + w, h1 + gat + h2], [dx, h1 + gat + h2]])],
+      );
+    },
+  ];
+  let onderbroken = 0;
+  for (let it = 0; it < 120; it++) {
+    const perceel = vormen[it % vormen.length]();
+    const theta = rnd() * 180;
+    const s = 2.5 + rnd() * 2;
+    const p = params({
+      richtingGraden: theta,
+      rijafstandM: s,
+      faseM: rnd() * s,
+      kopakkerBeginM: rnd() * 8,
+      kopakkerEindM: rnd() * 8,
+      beginkantGraden: rnd() < 0.5 ? null : rnd() * 360,
+    });
+    const langste = genereerRijen(perceel, p);
+    const alle = genereerRijen(perceel, p, { stukken: 'alle' });
+    controleerSortering(alle);
+    const lijnen = perLijn(alle);
+    assert.strictEqual(lijnen.size, langste.length, `lijnen (it ${it})`);
+    for (const stukken of lijnen.values()) {
+      stukken.forEach((r, i) => {
+        assert.strictEqual(r.stukIndex, i);
+        assert.strictEqual(r.aantalStukken, stukken.length);
+        assert.strictEqual(r.controleren, stukken.length > 1);
+        // midden (of, in een overbrugde opening < 1 m, een punt 0,6 m ernaast) ligt in het perceel
+        const op = (f: number): XY => [
+          r.coordsRD[0][0] + f * (r.coordsRD[1][0] - r.coordsRD[0][0]),
+          r.coordsRD[0][1] + f * (r.coordsRD[1][1] - r.coordsRD[0][1]),
+        ];
+        const f = 0.6 / r.lengteM;
+        assert.ok(
+          [0.5, 0.5 - f, 0.5 + f].some(x => puntInPerceel(op(x), perceel)),
+          `midden buiten het perceel (it ${it})`,
+        );
+        if (i > 0) {
+          const v = stukken[i - 1];
+          assert.ok(v.langsM! + v.lengteM / 2 <= r.langsM! - r.lengteM / 2 + 1e-6, `stukken overlappen (it ${it})`);
+        }
+      });
+      if (stukken.length > 1) onderbroken++;
+    }
+    for (const r of langste) {
+      const stukken = lijnen.get(r.offsetM)!;
+      assert.ok(stukken.some(x => x.coordsRD[0][0] === r.coordsRD[0][0] && x.coordsRD[1][1] === r.coordsRD[1][1]));
+      assert.strictEqual(r.aantalStukken, stukken.length);
+    }
+
+    // Opnieuw genereren na een kleine verschuiving, bestaande rijen met afrondingsruis en geschud
+    const delta = 0.02 + rnd() * 0.3;
+    const verschoven = genereerRijen(perceel, { ...p, faseM: p.faseM + delta }, { stukken: 'alle' });
+    const bestaand = alsBestaand(perceel, theta, alle, true);
+    for (let i = bestaand.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [bestaand[i], bestaand[j]] = [bestaand[j], bestaand[i]];
+    }
+    const k = koppelRijenOpPositie(bestaand, verschoven, s / 2);
+    const opId = new Map(bestaand.map(b => [b.id, b] as const));
+    for (const paar of k.paren) {
+      const b = opId.get(paar.id)!;
+      const x = verschoven[paar.index];
+      const overlap =
+        Math.min(b.langsM + b.lengteM / 2, x.langsM! + x.lengteM / 2) -
+        Math.max(b.langsM - b.lengteM / 2, x.langsM! - x.lengteM / 2);
+      assert.ok(overlap >= 0.5 * Math.min(b.lengteM, x.lengteM) - 1e-6, `kruiskoppeling (it ${it})`);
+    }
+    const vorm = (rs: GegenereerdeRij[], d0: number) =>
+      rs.map(r => `${(r.offsetM - d0).toFixed(4)}:${r.stukIndex}/${r.aantalStukken}`).join(',');
+    if (vorm(alle, 0) === vorm(verschoven, delta)) {
+      assert.strictEqual(k.paren.length, alle.length, `alle id's behouden (it ${it})`);
+      for (const paar of k.paren) {
+        assert.strictEqual(verschoven[paar.index].stukIndex, alle[Number(paar.id.slice(4))].stukIndex);
+      }
+    }
+
+    // Nummering op de opgeslagen rijen: 1..N, stukken van één lijn opeenvolgend en in één richting
+    if (bestaand.length === 0) continue;
+    const offs = bestaand.map(b => b.offsetM);
+    const langs = bestaand.map(b => b.langsM);
+    for (const oplopend of [true, false]) {
+      const start = vindStartIndex(offs, theta, startzijdeGraden(theta, oplopend), langs);
+      const nummers = bepaalNummers(offs, start, 1, langs);
+      assert.strictEqual(nummers[start], 1);
+      assert.deepStrictEqual([...nummers].sort((a, b) => a - b), bestaand.map((_, i) => i + 1));
+      const richtingen = new Set<number>();
+      const perOffset = new Map<number, number[]>();
+      bestaand.forEach((b, i) => {
+        const o = alle[Number(b.id.slice(4))].offsetM;
+        perOffset.set(o, [...(perOffset.get(o) ?? []), i]);
+      });
+      for (const idx of perOffset.values()) {
+        if (idx.length < 2) continue;
+        idx.sort((a, b) => langs[a] - langs[b]);
+        for (let j = 1; j < idx.length; j++) {
+          const stap = nummers[idx[j]] - nummers[idx[j - 1]];
+          assert.strictEqual(Math.abs(stap), 1, `stukken van één lijn opeenvolgend (it ${it})`);
+          richtingen.add(stap);
+        }
+      }
+      assert.ok(richtingen.size <= 1, `alle lijnen in dezelfde richting (it ${it})`);
+    }
+  }
+  assert.ok(onderbroken > 100, `te weinig onderbroken lijnen getest: ${onderbroken}`);
+});
+
+// ---- Opslaan-plan na opnieuw genereren (maakOpslaanPlan) ----
+
+console.log('\nOpslaan-plan (ID-mapping, nummering, opties):');
+
+const BRON = { methode: 'handmatig' as const, confidence: null, bronBeeld: null };
+
+/** Plan → opgeslagen rijen (zoals rijen_toepassen ze teruggeeft), met vaste id's per concept-index */
+function slaPlanOp(
+  plan: ReturnType<typeof maakOpslaanPlan>,
+  concept: GegenereerdeRij[],
+  oud: Rij[],
+): { rijen: Rij[]; indexVan: Map<string, number> } {
+  const perId = new Map(oud.map(r => [r.id, r] as const));
+  const indexVan = new Map<string, number>();
+  const rijen: Rij[] = [];
+  for (const w of plan.rijen) {
+    const index = w.coordinates ? concept.findIndex(c => c.coordinates === w.coordinates) : -1;
+    const basis = w.id ? perId.get(w.id)! : null;
+    const id = w.id ?? `nieuw-${w.sleutel}`;
+    const coordinates = w.coordinates ?? basis!.coordinates;
+    rijen.push({
+      id, perceelId: 'p', blokId: null, blokNaam: null, nummer: w.nummer ?? basis!.nummer, label: null, rol: 'hoofd',
+      ras: null, rasEffectief: null, plantjaar: null, plantjaarEffectief: null, onderstam: null, rijafstandM: 3,
+      boomafstandM: null, lengteM: index >= 0 ? concept[index].lengteM : basis!.lengteM, aantalBomen: null,
+      aantalBomenEffectief: null, geomBron: w.geomBron ?? basis?.geomBron ?? 'gegenereerd', nauwkeurigheidM: null,
+      controleren: false, status: 'actief', geplantOp: null, gerooidOp: null, opmerking: null, coordinates, subParcelId: null,
+    });
+    if (index >= 0) indexVan.set(id, index);
+  }
+  return { rijen, indexVan };
+}
+
+function instellingenVan(plan: ReturnType<typeof maakOpslaanPlan>, startRijId: string | null = null): RijInstellingen {
+  const i = plan.instellingen;
+  return {
+    perceelId: 'p', rijrichtingGraden: i.rijrichtingGraden ?? null, rijafstandM: i.rijafstandM ?? null, boomafstandM: null,
+    faseM: i.faseM ?? null, kopakkerBeginM: i.kopakkerBeginM ?? 6, kopakkerEindM: i.kopakkerEindM ?? 6,
+    beginkantGraden: i.beginkantGraden ?? null, nummeringStartzijdeGraden: i.nummeringStartzijdeGraden ?? null,
+    nummeringStartRijId: startRijId, startnummer: i.startnummer ?? 1, bronBeeld: null, detectieMethode: 'handmatig',
+    detectieConfidence: null, laatstGegenereerdOp: null,
+  };
+}
+
+function eersteOpslag(perceel: PerceelRD, p: RijParameters) {
+  const concept = genereerRijen(perceel, p);
+  const plan = maakOpslaanPlan({ perceel, params: p, conceptRijen: concept, bestaand: [], instellingen: null, gekoppeld: new Set(), bron: BRON });
+  return { concept, plan, ...slaPlanOp(plan, concept, []) };
+}
+
+test('draaien om het zwaartepunt: elke rij houdt zijn eigen rijlijn (geen koppeling aan de buurrij)', () => {
+  // Lang, smal perceel (400 m langs de rij): rijen ver van het zwaartepunt verschoven bij het midden al bij 0,5°
+  const theta = 12.3;
+  const perceel = polygoon(rechthoek(theta + 7, 400, 150));
+  const s = 3;
+  const fase = 0.7;
+  const p0 = params({ richtingGraden: theta, rijafstandM: s, faseM: fase });
+  const eerst = eersteOpslag(perceel, p0);
+  const kVan = (offset: number) => Math.round((offset - fase) / s);
+  for (const delta of [0.5, 1, 2, 3]) {
+    const p1 = { ...p0, richtingGraden: theta + delta };
+    const concept = genereerRijen(perceel, p1);
+    const plan = maakOpslaanPlan({
+      perceel, params: p1, conceptRijen: concept, bestaand: eerst.rijen, instellingen: instellingenVan(eerst.plan),
+      gekoppeld: new Set(), bron: BRON,
+    });
+    let verkeerd = 0;
+    for (const w of plan.rijen) {
+      if (!w.id) continue;
+      const kOud = kVan(eerst.concept[eerst.indexVan.get(w.id)!].offsetM);
+      const kNieuw = kVan(concept[concept.findIndex(c => c.coordinates === w.coordinates)].offsetM);
+      if (kOud !== kNieuw) verkeerd++;
+    }
+    assert.strictEqual(verkeerd, 0, `δ=${delta}°: ${verkeerd} rijen aan de buurrij gekoppeld`);
+  }
+});
+
+/** 100 × 61 m, θ = 0, s = 3, fase 1,5 → 20 rijen; fase 2,6 → 21 rijen (extra rij aan de lage kant) */
+function randrijScenario() {
+  const perceel = polygoon(rechthoek(0, 100, 61));
+  const p0 = params({ richtingGraden: 0, rijafstandM: 3, faseM: 1.5 });
+  const eerst = eersteOpslag(perceel, p0);
+  const p1 = { ...p0, faseM: 2.6 };
+  const concept = genereerRijen(perceel, p1);
+  return { perceel, p1, concept, eerst };
+}
+
+test('extra rij aan de startzijde zonder vaste startrij: hernummering wordt geteld (bevestiging)', () => {
+  const { perceel, p1, concept, eerst } = randrijScenario();
+  assert.strictEqual(eerst.rijen.length, 20);
+  assert.strictEqual(concept.length, 21);
+  const plan = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: concept, bestaand: eerst.rijen, instellingen: instellingenVan(eerst.plan),
+    gekoppeld: new Set(), bron: BRON,
+  });
+  assert.strictEqual(plan.aantalNieuw, 1);
+  assert.strictEqual(plan.aantalVervallen, 0);
+  assert.strictEqual(plan.aantalHernummerd, 20);
+  assert.deepStrictEqual(plan.voorbeeldHernummerd, { van: 1, naar: 2 });
+  assert.strictEqual(plan.aantalOnderStart, 0);
+});
+
+test('extra rij vóór de aangewezen rij 1: nummer onder het startnummer wordt geteld (bevestiging)', () => {
+  const { perceel, p1, concept, eerst } = randrijScenario();
+  const rij1 = eerst.rijen.find(r => r.nummer === 1)!;
+  const plan = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: concept, bestaand: eerst.rijen, instellingen: instellingenVan(eerst.plan, rij1.id),
+    gekoppeld: new Set(), bron: BRON,
+  });
+  assert.strictEqual(plan.aantalHernummerd, 0);
+  assert.strictEqual(plan.aantalOnderStart, 1);
+  assert.ok(plan.rijen.some(w => !w.id && w.nummer === 0), 'nieuwe rij krijgt nummer 0');
+});
+
+test('alleenBestaande: geen nieuwe rijen, nummers blijven, alleen de ligging verandert', () => {
+  const { perceel, p1, concept, eerst } = randrijScenario();
+  const plan = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: concept, bestaand: eerst.rijen, instellingen: instellingenVan(eerst.plan),
+    gekoppeld: new Set(), bron: BRON, alleenBestaande: true,
+  });
+  assert.strictEqual(plan.aantalNieuw, 0);
+  assert.strictEqual(plan.aantalNieuwOvergeslagen, 1);
+  assert.strictEqual(plan.aantalHernummerd, 0);
+  assert.strictEqual(plan.rijen.length, 20);
+  const perId = new Map(eerst.rijen.map(r => [r.id, r] as const));
+  for (const w of plan.rijen) {
+    assert.ok(w.id, 'alleen bestaande rijen');
+    assert.strictEqual(w.nummer, perId.get(w.id!)!.nummer);
+    assert.ok(w.coordinates, 'ligging wordt bijgewerkt');
+  }
+});
+
+test('behoudGetekend: versleepte rij houdt haar ligging; zonder optie wordt ze overschreven', () => {
+  const { perceel, p1, concept, eerst } = randrijScenario();
+  const bestaand = eerst.rijen.map((r, i) => (i === 5 ? { ...r, geomBron: 'getekend' as const } : r));
+  const gewoon = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: concept, bestaand, instellingen: instellingenVan(eerst.plan), gekoppeld: new Set(), bron: BRON,
+  });
+  assert.strictEqual(gewoon.aantalGetekendOverschreven, 1);
+  assert.strictEqual(gewoon.aantalGetekendBehouden, 0);
+  const behoud = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: concept, bestaand, instellingen: instellingenVan(eerst.plan), gekoppeld: new Set(), bron: BRON,
+    behoudGetekend: true,
+  });
+  assert.strictEqual(behoud.aantalGetekendOverschreven, 0);
+  assert.strictEqual(behoud.aantalGetekendBehouden, 1);
+  const w = behoud.rijen.find(x => x.id === bestaand[5].id)!;
+  assert.strictEqual(w.coordinates, undefined);
+  assert.strictEqual(w.geomBron, undefined);
+  assert.strictEqual(typeof w.nummer, 'number');
+});
+
+test('verschuiven zonder randeffect: niets hernummerd, geen bevestiging nodig', () => {
+  const perceel = polygoon(rechthoek(0, 100, 60));
+  const p0 = params({ richtingGraden: 0, rijafstandM: 3, faseM: 1.5 });
+  const eerst = eersteOpslag(perceel, p0);
+  const p1 = { ...p0, faseM: 1.6 };
+  const plan = maakOpslaanPlan({
+    perceel, params: p1, conceptRijen: genereerRijen(perceel, p1), bestaand: eerst.rijen, instellingen: instellingenVan(eerst.plan),
+    gekoppeld: new Set(), bron: BRON,
+  });
+  assert.strictEqual(plan.aantalGekoppeld, 20);
+  assert.strictEqual(plan.aantalHernummerd, 0);
+  assert.strictEqual(plan.aantalOnderStart, 0);
+  assert.strictEqual(plan.aantalVervallen, 0);
 });
 
 // ---- Summary ----
