@@ -163,3 +163,11 @@ interface RijenkaartMapProps {
 - `veldnotitie`: `rijen` + `positie_m`.
 - `bespuitingen`/`veldnotities`: show rows.
 - New tool `rijen` (perceel → blocks, ranges, pollinators, area).
+
+## 6. Aanpassingen na review
+
+- **Notitieposities volgen de rij** (migratie 095): een `AFTER UPDATE OF geom`-trigger op `rijen` legt elke `veldnotitie_rijen.positie_m` opnieuw op de nieuwe lijn (oud punt → dichtstbijzijnde punt op de nieuwe lijn, in RD). Dat dekt eindpunt slepen, opnieuw genereren en omdraaien. `rijen_zet_beginkant` spiegelt daarom niet meer zelf. 095 beperkt ook de DELETE in `rijen_toepassen` tot actieve rijen.
+- **Opnieuw genereren** (beslissing 9): bestaande rijen worden gekoppeld op de positie van hun rijlijn bij het draaipunt (`rijPositiesBijDraaipunt`), niet op hun midden, zodat draaien nooit aan de buurrij koppelt. Het plan telt `aantalHernummerd` en `aantalOnderStart`; bij > 0 volgt een bevestiging. Er zijn twee opties: "alleen de ligging van bestaande rijen bijwerken" (geen nieuwe rijen, nummers blijven) en "handmatig aangepaste rijen laten liggen".
+- **Percelen samenvoegen** (`/api/parcels/reorganize`): heeft precies één perceel rijen, dan wordt dat het doel. Hebben er meer, dan weigert de route (409, Nederlandse melding), anders zouden de rijen via ON DELETE CASCADE verdwijnen.
+- **Bespuiting bewerken op de web** (`updateSpuitschriftEntryAction`): gaat er een subperceel uit, dan vervalt de rijkoppeling van de rijen daarin. Dat is dezelfde regel als `bespuiting_aanpassen` in de MCP.
+- **MCP registreer_bespuiting, tekst**: alleen "rij(en) + nummer" wordt gelezen en "blok …" nooit. Er wordt niet gelezen als direct ervoor een getal staat ("4 rijen" = subperceelnaam), en niet bij gestructureerde percelen. Rijen tellen alleen als het herkende hoofdperceel zelf actieve rijen heeft; anders wordt de oorspronkelijke tekst gelezen.

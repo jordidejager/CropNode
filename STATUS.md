@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-07 — 🌳 Rijenkaart (beta): elke boomrij als object, detectie uit PDOK-luchtfoto
+- ✅ Percelen › **Rijen (beta)**: rijen automatisch detecteren (PDOK 8 cm, client-side) of referentierij tekenen, corrigeren, nummeren, blokken, bestuivers; bespuiting en notitie op rijen (web + MCP 1.3.0, tool `rijen`); GeoJSON-export. Zie `docs/rijenkaart/STATUS.md` (testscript + open keuzes).
+- ✅ Migraties 092–095 gedraaid (PostGIS aan; alleen nieuwe tabellen/functies/policies). Bestaande functies zonder rijen ongewijzigd (regressiereview + MCP-diff).
+- ⏳ Jordi: veldtest op iPhone (§5 in docs/rijenkaart/STATUS.md); beslissen of "alle rijen" als hele perceel moet tellen; genereren per blok (percelen met 2 rijrichtingen) is volgende stap.
+
 ### 2026-10-02 — ⏱️ Uren via MCP: klussen, werkschema, oogstvoortgang + v_storenode_uren
 - ✅ MCP v1.2.0: `klussen`, `klus_starten`, `klus_wijzigen` (ziek/later/eerder/niet gewerkt per dag, `personen_vanaf`), `klus_stoppen` (→ task_logs per dag), `werkschema(_wijzigen)`, `oogst_voortgang` (StoreNode-pluk per perceel + kg/manuur); `uren_registreren` zonder uren = werkschema per dag. Getest met testklus (opgeruimd).
 - ✅ Migratie 091: `public.v_storenode_uren` + `werkschema_netto_uren()` (contract StoreNode); totaal view = totaal task_logs.

@@ -363,7 +363,7 @@ connectors in één chat werken ("personal fruitteelt-assistent").
   (`rebuildSprayDerivedRecords`), ook bij wijzigen via de web-app. Spuituren rekenen ook met het gespoten oppervlak
   (`removeSprayTaskLogs`/`createSprayTaskLogs` in `spray-hours.ts`). Migraties 089 (kolommen + `spuitschrift.notes`) en 090
   (trigger: `parcel_history.harvest_year` uit datum — tot 2026-10-02 faalde elke historie-insert sinds april stil; teruggevuld).
-- **Uren via klussen** (`src/lib/mcp/klussen.ts`, v1.2.0): klus = `active_task_sessions` (taak × (deel)perceel × man vanaf
+- **Uren via klussen** (`src/lib/mcp/klussen.ts`, sinds v1.2.0): klus = `active_task_sessions` (taak × (deel)perceel × man vanaf
   starttijd). Uren per dag = `day_overrides` [{date, hoursPerPerson, peopleCount}] (zelfde formaat als de web-app) of werkschema
   (eerste dag vanaf starttijd, vandaag tot nu, afgerond op 0,5 u). Tools: `klussen`, `klus_starten`, `klus_wijzigen`
   (dag-afwijking, `personen_vanaf` zet eerdere dagen vast, start corrigeren), `klus_stoppen` (→ `task_logs` per dag, of
@@ -377,6 +377,29 @@ connectors in één chat werken ("personal fruitteelt-assistent").
   `buildProductInfoText`, `inventory-stock.ts`.
 - **Testen zonder Claude**: `npx tsx scripts/test-mcp.ts --user <uuid> <tool> '<json>'` (direct) of
   `--http <url-met-sleutel> tools/list` (JSON-RPC). Migratie `087_claude_koppelsleutels.sql`.
+- **Rijen** (v1.3.0, 28 tools, `src/lib/mcp/rijen.ts`): tool `rijen`; optioneel `rijen` bij `registreer_bespuiting`
+  (per perceel-item of topniveau bij één perceel; ook "rij 1 t/m 20" in tekst als het perceel rijen heeft) en
+  `rijen` + `positie_m` bij `veldnotitie`; `percelen`/`bespuitingen`/`veldnotities` tonen rijen. Zonder rijen identieke uitvoer.
+
+## Rijenkaart (beta) (`/percelen/rijen`, `src/lib/rijen/`, `src/components/rijenkaart/`)
+
+Elke boomrij als eigen object (PostGIS, migraties 092–095). Docs: `docs/rijenkaart/PLAN.md` (beslissingen/contracten)
+en `docs/rijenkaart/STATUS.md` (oplevering, testscript, open punten).
+
+- **Tabellen**: `blokken` (optioneel `sub_parcel_id` → koppeling naar spuitschrift-plots), `rijen` (`geom LineString(4326)`,
+  `lengte_m` generated in RD, nummer uniek onder actieve rijen — deferred, `status actief|gerooid`, gerooid nooit
+  verwijderen), `perceel_rijinstellingen` (1:1, richting/afstand/fase/kopakkers/beginkant in kompasgraden),
+  `bespuiting_rijen`, `veldnotitie_rijen` (`positie_m` volgt de rij via trigger). RLS op eigendom (094).
+- **Lezen** via `v_rijen` (GeoJSON + effectieve waarden + `sub_parcel_id`), `v_blokken`, `v_rijen_per_perceel`,
+  `rijen_status()`; **schrijven** via `rijen_toepassen()` (transactie; verwijderen = gerooid als er koppelingen zijn) en
+  `rijen_zet_beginkant()`. Export: `rijen_geojson()` / `GET /api/parcels/[id]/rijen-geojson?download=1`.
+- **Rekenen in TS** (`geo.ts` = proj4 met exact de PostGIS-28992-definitie; `generatie.ts`, `selectie.ts` "1-20, 24",
+  `detectie.ts` + `pdok.ts` = client-side detectie op PDOK WMS, kenmerk 'minst groen', altijd orthoHR).
+  Server: `store.ts`/`koppelingen.ts` (admin + user_id), actions in `src/app/rijen-actions.ts` — toon fouten met
+  `rijenFoutmelding(err)` (digest-truc voor NL-meldingen in productie), hooks in `src/hooks/use-rijen.ts`.
+- **Bespuiting op rijen**: plots = subpercelen van de rijen, `plot_areas` = Σ(lengte × rijafstand)/10 000 (alleen nieuwe
+  registraties met rijselectie); `addManualSprayEntry({rijIds})` en `confirmRegistration({rijIds})` koppelen (met rollback).
+- **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`.
 
 ## Weather Hub (`/weer`)
 
