@@ -199,3 +199,5 @@ Alles is optioneel en bestaande aanroepen werken exact hetzelfde.
 6. Jager Core: de GeoJSON-export staat klaar. Later kunnen RTK/LiDAR-gemeten rijen (`geom_bron = 'gemeten'`, `nauwkeurigheid_m`) de gegenereerde vervangen met behoud van ID.
 
 ---
+
+**Deploy:** live op productie (Vercel, `main`) sinds 7 oktober 2026, ±02:15, commit `c74e512` (de code staat in `985a280`). Beide Production-deploys geslaagd. Live gecontroleerd: `/percelen/rijen` bestaat (achter login), de MCP antwoordt met versie 1.3.0 en 28 tools, en `rijen` werkt. Rijen-tabellen in productie: leeg, klaar voor de eerste echte rijen.
