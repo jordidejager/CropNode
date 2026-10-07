@@ -19,7 +19,10 @@ import { PDOK_ATTRIBUTIE, PDOK_LAGEN, PDOK_WMS_URL, pdokWmtsUrl } from './pdok-l
 import type { PdokLaag } from './pdok-lagen';
 import { detecteerRijen, maakMasker, naarGrijs, naarGroenindex } from './detectie';
 import type { RijKenmerk } from './detectie';
-import type { DetectieResultaat, PerceelRD, XY } from './types';
+import type { DetectieResultaat, LngLat, PerceelRD, XY } from './types';
+import { naarRD } from './geo';
+import { verfijnRijen } from './verfijning';
+import type { VerfijnResultaat } from './verfijning';
 
 export { PDOK_ATTRIBUTIE, PDOK_LAGEN, pdokWmtsUrl };
 export type { PdokLaag };
@@ -343,4 +346,168 @@ export async function detecteerVoorPerceel(
       pixelM: venster.pixelM,
     },
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Verfijning: fijn beeld (±10 cm/px, in tegels) en rijen per rij op de foto leggen
+// ---------------------------------------------------------------------------
+
+/** Rijkenmerk-raster (groenindex) voor de verfijning */
+export interface FijnBeeld {
+  waarden: Float32Array;
+  breedte: number;
+  hoogte: number;
+  pixelM: number;
+  origineRD: XY;
+}
+
+/** Tegelgrootte voor de WMS (onder de limiet van 2500 px) */
+const TEGEL_PX = 2000;
+/** Maximaal aantal pixels voor de verfijning (geheugen op de iPhone: ±4 bytes per pixel) */
+const MAX_FIJN_PIXELS = 16_000_000;
+
+/** Venster rond een RD-bbox op ±doelPixelM (standaard 0,10 m/px), groter pixel als het te groot wordt. */
+export function fijnVenster(
+  bbox: [number, number, number, number],
+  opties?: { margeM?: number; doelPixelM?: number; maxPixels?: number },
+): BeeldVenster {
+  const marge = opties?.margeM ?? 6;
+  const doel = opties?.doelPixelM ?? 0.1;
+  const maxPx = opties?.maxPixels ?? MAX_FIJN_PIXELS;
+  const minX = bbox[0] - marge;
+  const maxY = bbox[3] + marge;
+  const b = bbox[2] + marge - minX;
+  const h = maxY - (bbox[1] - marge);
+  let pixelM = Math.max(doel, Math.sqrt((b * h) / maxPx));
+  pixelM = Math.ceil(pixelM * 1000 - 1e-9) / 1000;
+  const breedte = Math.max(1, Math.ceil(b / pixelM - 1e-9));
+  const hoogte = Math.max(1, Math.ceil(h / pixelM - 1e-9));
+  return {
+    bbox: [minX, maxY - hoogte * pixelM, minX + breedte * pixelM, maxY],
+    breedte,
+    hoogte,
+    pixelM,
+    origineRD: [minX, maxY],
+  };
+}
+
+/** Haal de luchtfoto voor een (groot) venster in tegels op en geef direct de groenindex terug (browser). */
+export async function haalGroenBeeldOp(
+  venster: BeeldVenster,
+  opties?: {
+    laag?: PdokLaag | string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    onTegel?: (klaar: number, totaal: number) => void;
+  },
+): Promise<FijnBeeld> {
+  const laag = opties?.laag ?? PDOK_LAGEN.orthoHR;
+  const { breedte, hoogte, pixelM, origineRD } = venster;
+  const waarden = new Float32Array(breedte * hoogte);
+  const tegels: { x0: number; y0: number; b: number; h: number }[] = [];
+  for (let y0 = 0; y0 < hoogte; y0 += TEGEL_PX) {
+    for (let x0 = 0; x0 < breedte; x0 += TEGEL_PX) {
+      tegels.push({ x0, y0, b: Math.min(TEGEL_PX, breedte - x0), h: Math.min(TEGEL_PX, hoogte - y0) });
+    }
+  }
+  let klaar = 0;
+  let volgende = 0;
+  const werker = async () => {
+    while (volgende < tegels.length) {
+      const tg = tegels[volgende++];
+      if (opties?.signal?.aborted) throw afgebroken();
+      const minX = origineRD[0] + tg.x0 * pixelM;
+      const maxY = origineRD[1] - tg.y0 * pixelM;
+      const sub: BeeldVenster = {
+        bbox: [minX, maxY - tg.h * pixelM, minX + tg.b * pixelM, maxY],
+        breedte: tg.b,
+        hoogte: tg.h,
+        pixelM,
+        origineRD: [minX, maxY],
+      };
+      const foto = await haalLuchtfotoOp(sub, laag, { signal: opties?.signal, timeoutMs: opties?.timeoutMs });
+      const groen = naarGroenindex(foto.rgba, foto.breedte, foto.hoogte);
+      for (let j = 0; j < tg.h; j++) {
+        waarden.set(groen.subarray(j * tg.b, (j + 1) * tg.b), (tg.y0 + j) * breedte + tg.x0);
+      }
+      klaar++;
+      opties?.onTegel?.(klaar, tegels.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, tegels.length) }, () => werker()));
+  return { waarden, breedte, hoogte, pixelM, origineRD };
+}
+
+export interface VerfijnInvoerRij {
+  id: string;
+  nummer: number;
+  coordinates: LngLat[];
+}
+
+/**
+ * Rijen van een perceel per rij precies op de luchtfoto leggen (browser): fijn beeld (±10 cm/px, voorjaar
+ * 8 cm-laag) rond de rijen ophalen → groenindex → verfijnRijen. Met `beeld` kan een eerder opgehaald beeld
+ * hergebruikt worden (bv. om één rij opnieuw te leggen); het gebruikte beeld komt terug in de uitkomst.
+ */
+export async function verfijnVoorPerceel(
+  perceel: PerceelRD,
+  rijen: VerfijnInvoerRij[],
+  opties: {
+    richtingGraden: number;
+    rijafstandM: number;
+    beeld?: FijnBeeld | null;
+    onVoortgang?: (stap: string) => void;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  },
+): Promise<{ resultaat: VerfijnResultaat; beeld: FijnBeeld; bronBeeld: string; ophaalMs: number }> {
+  const start = nu();
+  const coordsRD = rijen.map(r => r.coordinates.map(c => naarRD(c)));
+  let beeld = opties.beeld ?? null;
+  const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const lijn of coordsRD) {
+    for (const [x, y] of lijn) {
+      bbox[0] = Math.min(bbox[0], x);
+      bbox[1] = Math.min(bbox[1], y);
+      bbox[2] = Math.max(bbox[2], x);
+      bbox[3] = Math.max(bbox[3], y);
+    }
+  }
+  if (!bbox.every(Number.isFinite)) throw new Error('Geen rijen om op de foto te leggen.');
+  const marge = opties.rijafstandM + 3;
+  const dekt = (b: FijnBeeld) =>
+    b.origineRD[0] <= bbox[0] - marge + 0.5 &&
+    b.origineRD[1] >= bbox[3] + marge - 0.5 &&
+    b.origineRD[0] + b.breedte * b.pixelM >= bbox[2] + marge - 0.5 &&
+    b.origineRD[1] - b.hoogte * b.pixelM <= bbox[1] - marge + 0.5;
+  if (!beeld || !dekt(beeld)) {
+    const venster = fijnVenster(bbox, { margeM: marge });
+    opties.onVoortgang?.('Scherpe luchtfoto ophalen…');
+    await pauze();
+    if (opties.signal?.aborted) throw afgebroken();
+    beeld = await haalGroenBeeldOp(venster, {
+      signal: opties.signal,
+      timeoutMs: opties.timeoutMs,
+      onTegel: (k, t) => {
+        if (t > 1) opties.onVoortgang?.(`Scherpe luchtfoto ophalen… (${k}/${t})`);
+      },
+    });
+  }
+  const ophaalMs = nu() - start;
+  opties.onVoortgang?.('Rijen op de foto leggen…');
+  await pauze();
+  if (opties.signal?.aborted) throw afgebroken();
+  const resultaat = verfijnRijen({
+    waarden: beeld.waarden,
+    breedte: beeld.breedte,
+    hoogte: beeld.hoogte,
+    pixelM: beeld.pixelM,
+    origineRD: beeld.origineRD,
+    richtingGraden: opties.richtingGraden,
+    rijafstandM: opties.rijafstandM,
+    zwaartepunt: perceel.zwaartepunt,
+    rijen: rijen.map((r, i) => ({ id: r.id, nummer: r.nummer, coordsRD: coordsRD[i] })),
+  });
+  return { resultaat, beeld, bronBeeld: `PDOK ${PDOK_LAGEN.orthoHR}`, ophaalMs: Math.round(ophaalMs) };
 }

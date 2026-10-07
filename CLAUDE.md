@@ -399,7 +399,10 @@ en `docs/rijenkaart/STATUS.md` (oplevering, testscript, open punten).
   `rijenFoutmelding(err)` (digest-truc voor NL-meldingen in productie), hooks in `src/hooks/use-rijen.ts`.
 - **Bespuiting op rijen**: plots = subpercelen van de rijen, `plot_areas` = Σ(lengte × rijafstand)/10 000 (alleen nieuwe
   registraties met rijselectie); `addManualSprayEntry({rijIds})` en `confirmRegistration({rijIds})` koppelen (met rollback).
-- **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`.
+- **Verfijning** (`verfijning.ts`, `use-rij-verfijning.ts`): rijen per rij op de luchtfoto leggen (10 cm-beeld in tegels via
+  `haalGroenBeeldOp`/`verfijnVoorPerceel`), boog bij significante kromming, of fijnafgesteld raster (aanbevolen als de rest
+  ≤ 10 cm, GPS-aanplant). Oppervlak bij rijselectie = lengte × *werkelijke* rijafstand (`effectieveRijafstanden`, uit de buren).
+- **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`, `npm run rijen:verfijning-echt`.
 
 ## Weather Hub (`/weer`)
 

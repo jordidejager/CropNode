@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { PenLine, RotateCcw, RotateCw, ScanSearch, Undo2, Wand2 } from 'lucide-react';
+import { Crosshair, PenLine, RotateCcw, RotateCw, ScanSearch, Undo2, Wand2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,6 +94,8 @@ export function GenererenPaneel() {
       concept.wis();
       // Alleen naar Rijen als de gebruiker intussen niet zelf een ander tabblad koos
       if (gemount.current) ctx.zetTab('rijen');
+      // Direct daarna elke rij precies op de foto leggen (voorstel op de kaart; de gebruiker beslist)
+      ctx.verfijning.planStart();
     } catch (e) {
       ctx.meldFout(e, 'Opslaan mislukt');
       // De beginkant kan al gewisseld zijn (eerste stap) terwijl het opslaan van de rijen mislukte
@@ -272,6 +274,29 @@ export function GenererenPaneel() {
           </div>
         )}
       </Sectie>
+
+      {heeftRijen && !basis && (
+        <Sectie
+          titel="Precies op de foto leggen"
+          uitleg="Met de hand geplante (oudere) percelen liggen niet in een perfect raster: elke rij wijkt een paar cm af en dat telt op. Hiermee wordt elke rij apart op de boomstrook gelegd (scherpe voorjaarsfoto, 10 cm), met een boog als een rij buigt. Nummers en registraties blijven gewoon staan."
+        >
+          <Knop
+            vol
+            soort="accent"
+            icoon={<Crosshair className="h-4 w-4" />}
+            bezig={ctx.verfijning.status === 'bezig'}
+            disabled={!ctx.perceelRD}
+            onClick={() => void ctx.verfijning.start()}
+          >
+            Rijen precies op de foto leggen
+          </Knop>
+          {aantalGetekend > 0 && (
+            <p className="text-[12px] text-white/45">
+              {aantalGetekend} handmatig getekende of versleepte {aantalGetekend === 1 ? 'rij blijft' : 'rijen blijven'} liggen.
+            </p>
+          )}
+        </Sectie>
+      )}
 
       {basis && (
         <Sectie

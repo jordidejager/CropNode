@@ -38,8 +38,14 @@ export function RijenPaneel() {
   const tikSelectieAan = ctx.kaartDoel?.soort === 'tik-selectie';
   const selectieRijen = useMemo(() => rijen.filter(r => geselecteerd.has(r.id)), [rijen, geselecteerd]);
   const selectieHa = useMemo(
-    () => rijOppervlakHa(selectieRijen.filter(r => r.status === 'actief'), kaart.instellingen?.rijafstandM ?? null),
-    [selectieRijen, kaart.instellingen?.rijafstandM],
+    () =>
+      rijOppervlakHa(
+        selectieRijen
+          .filter(r => r.status === 'actief')
+          .map(r => ({ lengteM: r.lengteM, rijafstandM: ctx.effectieveAfstand.get(r.id) ?? r.rijafstandM })),
+        kaart.instellingen?.rijafstandM ?? null,
+      ),
+    [selectieRijen, kaart.instellingen?.rijafstandM, ctx.effectieveAfstand],
   );
 
   // ---- Rij toevoegen ------------------------------------------------------

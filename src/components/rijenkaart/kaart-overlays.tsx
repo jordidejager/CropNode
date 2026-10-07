@@ -6,14 +6,15 @@
  * kaart er geen rijnummers onder plaatst.
  */
 
-import type { ReactNode } from 'react';
-import { CheckSquare, Flower2, Move, RotateCcw, RotateCw, StickyNote, Trash2, TreePine, X } from 'lucide-react';
-import { windstreek } from '@/lib/rijen/geo';
-import { boomnummer } from '@/lib/rijen/generatie';
+import { useState, type ReactNode } from 'react';
+import { CheckSquare, Crosshair, Flower2, Loader2, Move, RotateCcw, RotateCw, StickyNote, Trash2, TreePine, X } from 'lucide-react';
+import { naarRD, windstreek } from '@/lib/rijen/geo';
+import { rijenToepassenAction } from '@/app/rijen-actions';
+import { boomnummer, rijOffset, verschuifRij } from '@/lib/rijen/generatie';
 import { cn } from '@/lib/utils';
 import { useRijenkaartCtx } from './rijenkaart-context';
 import { fmt, fmtDatum, fmtLengte, pijl, verschuifKnoppen } from './rijen-hulp';
-import { Knop } from './ui';
+import { Knop, Segment } from './ui';
 import { nummeringTekst, useNummering } from './indeling-paneel';
 
 const KAART_STIJL =
@@ -84,6 +85,19 @@ export function RijDetailKaart({ rijId }: { rijId: string }) {
     rij.aantalBomenEffectief !== null ? `${rij.aantalBomen === null ? '≈ ' : ''}${fmt(rij.aantalBomenEffectief, 0)} bomen` : null,
     `${aantalNotities} ${aantalNotities === 1 ? 'notitie' : 'notities'}`,
     rij.geomBron !== 'gegenereerd' ? rij.geomBron : null,
+  ].filter(Boolean);
+  // Afwijking t.o.v. het (fijnafgestelde) raster uit de instellingen
+  const inst = ctx.kaart.instellingen;
+  let afwijkingCm: number | null = null;
+  if (ctx.perceelRD && inst?.rijrichtingGraden != null && inst.rijafstandM && inst.faseM != null && rij.coordinates.length >= 2) {
+    const o = rijOffset(ctx.perceelRD, inst.rijrichtingGraden, rij.coordinates.map(c => naarRD(c)));
+    const k = Math.round((o - inst.faseM) / inst.rijafstandM);
+    afwijkingCm = Math.round((o - (inst.faseM + k * inst.rijafstandM)) * 100);
+  }
+  const ligging = [
+    afwijkingCm !== null ? `${afwijkingCm > 0 ? '+' : ''}${afwijkingCm} cm t.o.v. raster` : null,
+    rij.nauwkeurigheidM !== null ? `±${Math.round(rij.nauwkeurigheidM * 100)} cm` : null,
+    rij.coordinates.length > 2 ? `gebogen (${rij.coordinates.length} punten)` : null,
   ].filter(Boolean);
   const bespuiting = st?.laatsteBespuitingDatum
     ? `${fmtDatum(st.laatsteBespuitingDatum)}${st.laatsteBespuitingMiddelen ? ` · ${st.laatsteBespuitingMiddelen}` : ''}${
@@ -163,10 +177,133 @@ export function RijDetailKaart({ rijId }: { rijId: string }) {
           </p>
           <p className="truncate text-[12px] text-white/55">{feiten.join(' · ')}</p>
           <p className="truncate text-[12px] text-white/55">Laatste bespuiting: {bespuiting}</p>
+          {ligging.length > 0 && <p className="truncate text-[12px] text-white/45">Ligging: {ligging.join(' · ')}</p>}
         </div>
         <SluitKnop onClick={sluit} />
       </div>
       <div className="mt-2 grid auto-cols-fr grid-flow-col gap-[3px]">{acties}</div>
+      {!gerooid && <RijLiggingKnoppen rijId={rijId} />}
+    </div>
+  );
+}
+
+/** Eén rij 10 cm evenwijdig verschuiven of opnieuw precies op de foto leggen */
+function RijLiggingKnoppen({ rijId }: { rijId: string }) {
+  const ctx = useRijenkaartCtx();
+  const [bezig, setBezig] = useState(false);
+  const rij = ctx.rijPerId.get(rijId);
+  if (!rij || ctx.richting === null) return null;
+  const knoppen = verschuifKnoppen(ctx.richting);
+  const verschuif = async (delta: number) => {
+    if (bezig) return;
+    setBezig(true);
+    try {
+      await rijenToepassenAction(ctx.perceelId, {
+        rijen: [{ id: rijId, coordinates: verschuifRij(rij.coordinates, delta, ctx.richting), geomBron: 'getekend' }],
+      });
+      await ctx.verversen();
+    } catch (e) {
+      ctx.meldFout(e, 'Verschuiven mislukt');
+    } finally {
+      setBezig(false);
+    }
+  };
+  const knop =
+    'flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.06] text-[12px] font-semibold tabular-nums text-white/85 active:bg-white/[0.12] disabled:opacity-45';
+  return (
+    <div className="mt-[3px] grid grid-cols-3 gap-[3px]">
+      <button type="button" className={knop} disabled={bezig} onClick={() => void verschuif(0.1 * knoppen[0].teken)} aria-label={`Rij ${rij.nummer} 10 cm naar het ${windstreek(knoppen[0].graden)}`}>
+        {pijl(knoppen[0].graden)} 10 cm
+      </button>
+      <button
+        type="button"
+        className={knop}
+        disabled={bezig || ctx.verfijning.status === 'bezig'}
+        onClick={() => {
+          ctx.zetDetailRijId(null);
+          void ctx.verfijning.start({ rijIds: [rijId] });
+        }}
+        aria-label={`Rij ${rij.nummer} opnieuw op de luchtfoto leggen`}
+      >
+        {bezig ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Crosshair className="h-3.5 w-3.5" />} Op foto
+      </button>
+      <button type="button" className={knop} disabled={bezig} onClick={() => void verschuif(0.1 * knoppen[1].teken)} aria-label={`Rij ${rij.nummer} 10 cm naar het ${windstreek(knoppen[1].graden)}`}>
+        10 cm {pijl(knoppen[1].graden)}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rijen precies op de luchtfoto leggen: voortgang en voorstel
+// ---------------------------------------------------------------------------
+
+export function VerfijningBalk() {
+  const ctx = useRijenkaartCtx();
+  const v = ctx.verfijning;
+  if (v.status === 'bezig') {
+    return (
+      <div data-rk-overlay="" className={cn(KAART_STIJL, 'flex items-center gap-3 border-cyan-300/30 p-2 pl-3')} role="status">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-200" aria-hidden="true" />
+        <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-cyan-50">{v.voortgang ?? 'Bezig…'}</p>
+        <Knop klein onClick={v.annuleren}>
+          Stop
+        </Knop>
+      </div>
+    );
+  }
+  const vs = v.voorstel;
+  if (!vs) return null;
+  const r = vs.resultaat;
+  const st = vs.modus === 'raster' ? r.rasterStat : r.perRij;
+  const aantal = vs.rijen.length;
+  const krom = vs.modus === 'per-rij' ? vs.rijen.filter(x => x.punten > 2).length : 0;
+  const controleren = vs.rijen.filter(x => x.controleren).length;
+  const titel = vs.rijIds
+    ? `Rij ${vs.rijen.map(x => x.nummer).join(', ')} opnieuw op de foto`
+    : vs.modus === 'raster'
+      ? 'Raster fijnafgesteld op de foto'
+      : 'Rijen per rij op de foto gelegd';
+  const uitleg = vs.rijIds
+    ? null
+    : r.aanbevolen === 'raster'
+      ? `De rijen liggen regelmatig (±${Math.round(r.raster.restStdM * 100)} cm): een fijnafgesteld raster (rijafstand ${fmt(r.raster.rijafstandM, 3)} m) is genoeg.`
+      : `De rijen wijken per rij af (±${Math.round(r.raster.restStdM * 100)} cm rond een regelmatig raster): per rij aanbevolen.`;
+  return (
+    <div data-rk-overlay="" className={cn(KAART_STIJL, 'max-h-[80%] space-y-1.5 overflow-y-auto border-cyan-300/30 p-2.5')} role="group" aria-label="Rijen op de foto leggen">
+      <div>
+        <p className="text-[13px] font-semibold leading-snug text-cyan-50">{titel}</p>
+        <p className="text-[12px] leading-snug text-white/70">
+          {aantal} {aantal === 1 ? 'rij' : 'rijen'} · gem. {fmt(st.gemiddeldCm, 0)} cm verschoven, max {fmt(st.maxCm, 0)} cm
+          {krom > 0 ? ` · ${krom} gebogen` : ''}
+          {controleren > 0 ? <span className="text-orange-200"> · {controleren} controleren</span> : null}
+        </p>
+        {uitleg && <p className="text-[12px] leading-snug text-white/50">{uitleg}</p>}
+        {vs.overgeslagen > 0 && (
+          <p className="text-[12px] leading-snug text-white/45">
+            {vs.overgeslagen} handmatig getekende of versleepte {vs.overgeslagen === 1 ? 'rij blijft' : 'rijen blijven'} liggen.
+          </p>
+        )}
+      </div>
+      {!vs.rijIds && (
+        <Segment
+          label="Variant"
+          waarde={vs.modus}
+          onChange={v.zetModus}
+          opties={[
+            { waarde: 'per-rij', label: r.aanbevolen === 'per-rij' ? 'Per rij ★' : 'Per rij' },
+            { waarde: 'raster', label: r.aanbevolen === 'raster' ? 'Raster ★' : 'Raster' },
+          ]}
+        />
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Knop klein onClick={v.annuleren} disabled={v.bezigOpslaan}>
+          Niet toepassen
+        </Knop>
+        <Knop klein soort="primair" bezig={v.bezigOpslaan} disabled={aantal === 0} onClick={() => void v.opslaan()}>
+          Opslaan ({aantal})
+        </Knop>
+      </div>
     </div>
   );
 }

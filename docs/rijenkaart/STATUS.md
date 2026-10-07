@@ -198,6 +198,51 @@ Alles is optioneel en bestaande aanroepen werken exact hetzelfde.
 5. Een detail van de rijenkaart op de perceeldetailpagina: alleen kijken, met de laatste bespuiting per rij als kleur.
 6. Jager Core: de GeoJSON-export staat klaar. Later kunnen RTK/LiDAR-gemeten rijen (`geom_bron = 'gemeten'`, `nauwkeurigheid_m`) de gegenereerde vervangen met behoud van ID.
 
+## 9. Per rij op de foto leggen (verfijning) — 7 oktober 2026
+
+**Waarom:** de generatie legt een regelmatig raster (vaste rijafstand). Dat klopt op GPS-geplante percelen, maar bij
+met de hand uitgezette (oudere) aanplant wijkt elke rij een paar cm af en dat telt op. Jordi's Murre (niet op GPS):
+rijen tot ~1 m naast het raster.
+
+**Wat het doet** (`src/lib/rijen/verfijning.ts`, knop *Genereren → Rijen precies op de foto leggen*, en automatisch na
+het opslaan van gegenereerde rijen):
+1. Haalt een scherp beeld op (PDOK 8 cm-voorjaarsfoto op 10 cm/px, in tegels).
+2. Legt elke rij per stuk van ~20 m op de boomstrook (vergelijking met het gemiddelde rijprofiel van het perceel,
+   zoekvenster ±⅓ rijafstand: een rij kan nooit naar de buurrij of de grasbaan springen). Per rij een rechte lijn
+   (mag iets scheef), en een **gladde boog met extra punten** als de rij aantoonbaar buigt (parabool-toets: significant
+   en ≥ 6 cm, of meer bij een ruisig beeld). Rijen waar de foto te zwak is volgen hun buren en krijgen 'controleren'.
+3. Fit daarnaast een **fijnafgesteld regelmatig raster** (rijafstand, positie, kleine draaiing). Liggen de rijen daar
+   binnen ±10 cm omheen (GPS-aanplant), dan is *Raster* de aanbeveling; anders *Per rij*. Je kunt wisselen.
+4. Voorbeeld op de kaart (gele stippellijnen) met cijfers; **Opslaan** wijzigt alleen de ligging: nummers, ID's,
+   bespuitingen en notities blijven (notitieposities schuiven mee). Handmatig getekende/versleepte rijen blijven liggen.
+5. Per rij in het rijkaartje: *Ligging* (afwijking t.o.v. het raster, nauwkeurigheid, gebogen), **← 10 cm / 10 cm →**
+   en **Op foto** (alleen die rij opnieuw leggen).
+6. **Oppervlak per rij** = lengte × de *werkelijke* afstand tot de buurrijen (gemiddelde van beide kanten; randrij: de
+   ene buur; begrensd op 0,5–1,5 × de rijafstand). Geldt voor nieuwe bespuitingen op rijen (web en Claude). Bij een
+   regelmatig raster is dat precies hetzelfde als voorheen.
+
+**Gemeten op jouw percelen** (alleen gelezen; dezelfde uitkomst als twee onafhankelijke prototypes):
+
+| Perceel | Aanbeveling | Rest rond regelmatig raster | Verschuiving per rij | Gebogen rijen | Opmerking |
+|---|---|---|---|---|---|
+| Murre (niet GPS) | **Per rij** | 50 cm | gem. 36 cm, max 116 cm | 5 (24–36 cm boog) | rij 1–4: −0,7…−1 m, rij 15: +48 cm, rij 36: −1,16 m; rij 1–10 krijgt +3,2 % oppervlak |
+| Schele | **Per rij** | 28 cm | gem. 22 cm, max 61 cm | 3 | twee blokken met een bredere tussenbaan (zaagtand) |
+| Spoor (GPS) | **Raster** | 8,5 cm | raster: gem. 9 cm, max 25 cm | – | opgeslagen rijafstand 3,303 → 3,3008 m (scheelde ~30 cm aan de westkant) |
+
+Beelden: `img/verfijning-murre-randrijen.jpg` en `img/verfijning-murre-gebogen.jpg` (2,5 cm/px, geel = huidig,
+cyaan = per rij), `img/verfijning-murre-overzicht.jpg`, `img/verfijning-schele.jpg`, `img/verfijning-spoor.jpg`
+(magenta = fijnafgesteld raster). Opnieuw meten: `npm run rijen:verfijning-echt -- Murre Spoor`.
+
+**Rekentijd:** ophalen 0,6–0,8 s + rekenen 0,1–0,5 s per perceel (node); op de iPhone naar schatting 1–3 s.
+
+**Grenzen:** waar geen duidelijke herbicidestrook op de foto staat (bv. het oude blok van Jachthoek, Kloetinge
+Plantsoen) meldt de app "niet precies te leggen" en blijven de rijen zoals ze zijn. Randrijen zijn onzekerder
+(greppel/schaduw in beeld) en krijgen sneller 'controleren'. Een S-vormige rij wordt als één boog benaderd.
+
+**Testen (5 min):** Murre openen → Genereren → *Rijen precies op de foto leggen* → je ziet "Per rij ★", gem. ~36 cm
+verschoven → inzoomen op rij 1 en 36: de gele lijnen liggen op de stroken → *Opslaan (36)* → tik rij 1: "Ligging:
+… t.o.v. raster". Spoor: zelfde knop → "Raster ★" (rijafstand 3,301).
+
 ---
 
 **Deploy:** live op productie (Vercel, `main`) sinds 7 oktober 2026, ±02:15, commit `c74e512` (de code staat in `985a280`). Beide Production-deploys geslaagd. Live gecontroleerd: `/percelen/rijen` bestaat (achter login), de MCP antwoordt met versie 1.3.0 en 28 tools, en `rijen` werkt. Rijen-tabellen in productie: leeg, klaar voor de eerste echte rijen.

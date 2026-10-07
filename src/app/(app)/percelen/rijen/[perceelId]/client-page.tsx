@@ -16,7 +16,7 @@ import { rijenFoutmelding, useInvalidateRijen, useRijenkaart } from '@/hooks/use
 import { useToast } from '@/hooks/use-toast';
 import { rijenToepassenAction } from '@/app/rijen-actions';
 import { afstand, naarRD, perceelNaarRD } from '@/lib/rijen/geo';
-import { positieOpRij, puntOpRij, rijOppervlakHa } from '@/lib/rijen/generatie';
+import { effectieveRijafstanden, positieOpRij, puntOpRij, rijOppervlakHa } from '@/lib/rijen/generatie';
 import { formatteerBereiken, parseRijSelectie } from '@/lib/rijen/selectie';
 import type { LngLat, Rij, Rijenkaart } from '@/lib/rijen/types';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ import {
   type RijenkaartCtxWaarde,
 } from '@/components/rijenkaart/rijenkaart-context';
 import { useRijenConcept } from '@/components/rijenkaart/use-rijen-concept';
+import { useRijVerfijning } from '@/components/rijenkaart/use-rij-verfijning';
 import {
   afgeleideRichting,
   fmt,
@@ -50,7 +51,7 @@ import { RijenPaneel } from '@/components/rijenkaart/rijen-paneel';
 import { GenererenPaneel } from '@/components/rijenkaart/genereren-paneel';
 import { IndelingPaneel } from '@/components/rijenkaart/indeling-paneel';
 import { ExportPaneel } from '@/components/rijenkaart/export-paneel';
-import { BewerkBalk, ConceptBalk, ModusBalk, NotitieDetailKaart, NummeringBalk, RijDetailKaart } from '@/components/rijenkaart/kaart-overlays';
+import { BewerkBalk, ConceptBalk, ModusBalk, NotitieDetailKaart, NummeringBalk, RijDetailKaart, VerfijningBalk } from '@/components/rijenkaart/kaart-overlays';
 import { SelectieBalkMobiel, SelectieBalkPaneel } from '@/components/rijenkaart/selectie-balk';
 import { useVersBijOpenen } from '@/components/rijenkaart/use-vers-bij-openen';
 import {
@@ -192,6 +193,14 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
     () => kaart.instellingen?.boomafstandM ?? gewogenAfstand(kaart.perceel.subpercelen, 'boom'),
     [kaart.instellingen?.boomafstandM, kaart.perceel.subpercelen],
   );
+  const effectieveAfstand = useMemo(
+    () =>
+      effectieveRijafstanden(
+        actieveRijen.map(r => ({ id: r.id, coordinates: r.coordinates, rijafstandM: r.rijafstandM ?? kaart.instellingen?.rijafstandM ?? null })),
+        { richtingGraden: richting },
+      ),
+    [actieveRijen, kaart.instellingen?.rijafstandM, richting],
+  );
 
   // ---- Staat ------------------------------------------------------------------
   const [tab, setTab] = useState<PaneelTab>(() => (kaart.rijen.some(r => r.status === 'actief') ? 'rijen' : 'genereren'));
@@ -246,6 +255,9 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
   const verversen = useCallback(async () => {
     await invalideerAlles();
   }, [invalideerAlles]);
+
+  const verfijning = useRijVerfijning({ perceelId, kaart, perceelRD, actieveRijen, richting, meld, meldFout, verversen });
+  const verfijningActief = verfijning.status !== 'leeg';
 
   // ---- Selectie -----------------------------------------------------------------
   const selectieNaarTekst = useCallback(
@@ -581,6 +593,8 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
     richting,
     gekoppeld,
     standaardBoomafstandM,
+    effectieveAfstand,
+    verfijning,
     tab,
     zetTab,
     geselecteerd,
@@ -614,16 +628,21 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
     meld,
   };
 
-  const rijOpp = rijOppervlakHa(actieveRijen, kaart.instellingen?.rijafstandM ?? null);
+  const rijOpp = rijOppervlakHa(
+    actieveRijen.map(r => ({ lengteM: r.lengteM, rijafstandM: effectieveAfstand.get(r.id) ?? r.rijafstandM })),
+    kaart.instellingen?.rijafstandM ?? null,
+  );
   const aantalControleren = actieveRijen.filter(r => r.controleren).length;
   const selectieBalkZichtbaar = geselecteerd.size > 0 && tab !== 'genereren' && !kaartDoel && !bewerkRijId && !rij1Kandidaat;
   // Mobiel (vast onderaan het scherm) niet tegelijk met de rij- of notitiekaart onderaan de kaart: op
   // een kleine iPhone valt de balk anders over de knoppen van die kaart (die heeft zelf 'Selecteer').
   const detailKaartOpen = !!notitieMarker || (!!detailRijId && rijPerId.has(detailRijId));
   const selectieBalkMobielZichtbaar = selectieBalkZichtbaar && !detailKaartOpen;
-  const kaartConcept = tab === 'genereren' ? concept.kaartConcept : null;
+  const kaartConcept = verfijning.kaartLijnen ?? (tab === 'genereren' ? concept.kaartConcept : null);
 
-  const onderOverlay = kaartDoel ? (
+  const onderOverlay = verfijningActief ? (
+    <VerfijningBalk />
+  ) : kaartDoel ? (
     <ModusBalk />
   ) : bewerkRijId ? (
     <BewerkBalk bezig={bewerkBezig} />

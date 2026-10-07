@@ -8,8 +8,9 @@
  * koppelBespuitingAanRijen de rijen vast in bespuiting_rijen.
  */
 
+import { effectieveRijafstanden } from './generatie';
 import { formatteerBereiken } from './selectie';
-import { allePaginas, beperktParallel, db, dbFout, getal, getalOf, inStukken, uniek, vereisUuids } from './store';
+import { allePaginas, beperktParallel, db, dbFout, getal, getalOf, inStukken, laadRijenVanPerceel, uniek, vereisUuids } from './store';
 import type { RijStatus } from './types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -164,6 +165,21 @@ export async function rijSelectieNaarPlots(userId: string, rijIds: string[]): Pr
   const meerderePercelen = perceelIds.length > 1;
   const naamVan = (pid: string) => (meerderePercelen ? percelen.get(pid)?.naam || 'onbekend perceel' : null);
 
+  // Werkelijke rijafstand per rij uit de ligging van de buren (met de hand geplante percelen liggen
+  // niet op één vaste afstand); valt terug op de opgegeven rijafstand van blok/perceel.
+  const effectief = new Map<string, number | null>();
+  for (const pid of perceelIds) {
+    const alle = (await laadRijenVanPerceel(userId, pid, { inclGerooid: false })).filter(r => r.status === 'actief');
+    const eff = effectieveRijafstanden(alle.map(r => ({ id: r.id, coordinates: r.coordinates, rijafstandM: r.rijafstandM })));
+    eff.forEach((v, k) => effectief.set(k, v));
+  }
+  const rijafstandVan = (r: DbRij): number | null => {
+    const e = effectief.get(r.id as string);
+    if (e !== undefined && e !== null && e > 0) return e;
+    const a = getal(r.rijafstand_m);
+    return a !== null && a > 0 ? a : null;
+  };
+
   // Controle: elke rij moet een subperceel en een rijafstand hebben
   const fouten: string[] = [];
   for (const pid of perceelIds) {
@@ -174,7 +190,7 @@ export async function rijSelectieNaarPlots(userId: string, rijIds: string[]): Pr
       fouten.push(`${tekst} ${meervoud ? 'horen' : 'hoort'} niet eenduidig bij een subperceel — koppel het blok aan een subperceel.`);
     }
     const zonderAfstand = vanPerceel
-      .filter(r => { const a = getal(r.rijafstand_m); return a === null || a <= 0; })
+      .filter(r => rijafstandVan(r) === null)
       .map(r => getalOf(r.nummer, 0));
     if (zonderAfstand.length > 0) {
       const { tekst, meervoud } = rijenOnderwerp(zonderAfstand, naamVan(pid));
@@ -198,7 +214,7 @@ export async function rijSelectieNaarPlots(userId: string, rijIds: string[]): Pr
   for (const sub of subIds) {
     const m2 = actief
       .filter(r => r.sub_parcel_id === sub)
-      .reduce((som, r) => som + getalOf(r.lengte_m, 0) * getalOf(r.rijafstand_m, 0), 0);
+      .reduce((som, r) => som + getalOf(r.lengte_m, 0) * (rijafstandVan(r) ?? 0), 0);
     // Begrens op het subperceeloppervlak; een subperceel zonder (geldig) oppervlak begrenst niet
     const max = subOppervlak.get(sub) ?? 0;
     const ha = max > 0 ? Math.min(m2 / 10000, max) : m2 / 10000;

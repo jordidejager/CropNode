@@ -308,13 +308,13 @@ async function main() {
     assert.deepEqual(await koppelingen.rijSelectieNaarPlots(USER_ID, []), { rijIds: [], plots: [], plotAreas: {}, oppervlakHa: 0, perPerceel: [] });
     await verwachtFout(() => koppelingen.rijSelectieNaarPlots(ANDERE_USER, ids), 'bestaan', 'selectie van andere gebruiker geweigerd');
 
-    // Zonder rijafstand (blok én perceel) → nette fout met rijnummers
+    // Zonder ingestelde rijafstand (blok én perceel): de werkelijke afstand volgt uit de ligging van de
+    // buurrijen (verfijning) → zelfde oppervlak als met 3 m ingesteld (de testrijen liggen 3 m uit elkaar)
     await store.rijenToepassen(USER_ID, PERCEEL_ID, { instellingen: { rijafstandM: null } });
-    await verwachtFout(
-      () => koppelingen.rijSelectieNaarPlots(USER_ID, ids),
-      'Rijen 1–5 hebben geen rijafstand',
-      'selectie zonder rijafstand',
-    );
+    const zonderAfstand = await koppelingen.rijSelectieNaarPlots(USER_ID, ids);
+    assert.ok(Math.abs(zonderAfstand.oppervlakHa - selectie.oppervlakHa) < 0.0002, `${zonderAfstand.oppervlakHa} vs ${selectie.oppervlakHa}`);
+    ok(`selectie zonder ingestelde rijafstand: afstand uit de buren → ${zonderAfstand.oppervlakHa} ha`);
+    // (een losse rij zonder buren en zonder rijafstand geeft een fout: zie src/__tests__/rijen-verfijning.test.ts)
     await store.rijenToepassen(USER_ID, PERCEEL_ID, { instellingen: { rijafstandM: 3 } });
 
     // ── Koppel-lookups zonder koppelingen ──────────────────────────────────

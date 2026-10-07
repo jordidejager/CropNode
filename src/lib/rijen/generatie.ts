@@ -560,3 +560,132 @@ export function rijAanRand(rand: LngLat[], buur: LngLat[]): LngLat[] {
   const eind: XY = [2 * rr[1][0] - rb[1][0], 2 * rr[1][1] - rb[1][1]];
   return [naarWGS(begin), naarWGS(eind)];
 }
+
+// ---------------------------------------------------------------------------
+// Werkelijke rijafstand per rij en een rij evenwijdig verschuiven
+// ---------------------------------------------------------------------------
+
+export interface RijMetLigging {
+  id: string;
+  /** begin → eind (WGS84); polylijn toegestaan */
+  coordinates: LngLat[];
+  /** Opgegeven rijafstand (blok/perceel); begrenst de gemeten afstand */
+  rijafstandM?: number | null;
+}
+
+/** Minimaal deel van de kortste rij dat langs de rij moet overlappen om als buur te tellen */
+const BUUR_OVERLAP_DEEL = 0.3;
+/** Afstand loodrecht waaronder twee rijen als dezelfde rijlijn (stukken) gelden */
+const BUUR_MIN_AFSTAND_M = 0.5;
+
+/** Ongerichte gemiddelde richting (graden [0,180)) van rij-koordes */
+function gemiddeldeAsRichting(lijnen: XY[][]): number | null {
+  let sx = 0;
+  let sy = 0;
+  for (const l of lijnen) {
+    if (l.length < 2) continue;
+    const a = kompasRichting(l[0], l[l.length - 1]) * RAD * 2;
+    const w = afstand(l[0], l[l.length - 1]);
+    sx += Math.sin(a) * w;
+    sy += Math.cos(a) * w;
+  }
+  if (sx === 0 && sy === 0) return null;
+  return asRichting(Math.atan2(sx, sy) / RAD / 2);
+}
+
+/**
+ * Werkelijke rijafstand per rij uit de ligging van de buren: het gemiddelde van de loodrechte afstand tot
+ * de dichtstbijzijnde rij aan elke kant (een randrij heeft één buur). Alleen rijen die langs de rij voor
+ * minstens 30 % van de kortste overlappen tellen als buur; de afstand wordt gemeten midden in die overlap
+ * (kromme rijen tellen dus goed mee). Elke afstand wordt begrensd op [0,5; 1,5] × de opgegeven rijafstand,
+ * zodat een ontbrekende rij of een brede tussenbaan niet volledig meetelt. Zonder buren: de opgegeven
+ * rijafstand (of null). Bij een regelmatig raster is de uitkomst precies de rijafstand.
+ */
+export function effectieveRijafstanden(
+  rijen: RijMetLigging[],
+  opties?: { richtingGraden?: number | null },
+): Map<string, number | null> {
+  const uit = new Map<string, number | null>();
+  const rd = rijen.map(r => r.coordinates.map(c => naarRD(c)));
+  const theta = opties?.richtingGraden ?? gemiddeldeAsRichting(rd);
+  const nominaal = (r: RijMetLigging) => (eindig(r.rijafstandM) && r.rijafstandM > 0 ? r.rijafstandM : null);
+  if (theta === null || rijen.length === 0) {
+    rijen.forEach(r => uit.set(r.id, nominaal(r)));
+    return uit;
+  }
+  const d = richtingVector(theta);
+  const n = normaalVector(theta);
+  const oorsprong = rd.find(l => l.length > 0)?.[0] ?? [0, 0];
+  const vorm = rd.map(l => {
+    const pts = l
+      .map(p => {
+        const rel = aftrekken(p, oorsprong);
+        return [inproduct(rel, d), inproduct(rel, n)] as [number, number];
+      })
+      .sort((a, b) => a[0] - b[0]);
+    return { pts, t0: pts.length ? pts[0][0] : 0, t1: pts.length ? pts[pts.length - 1][0] : 0 };
+  });
+  const offsetOp = (i: number, t: number): number => {
+    const { pts } = vorm[i];
+    if (pts.length === 0) return 0;
+    if (t <= pts[0][0]) return pts[0][1];
+    for (let k = 1; k < pts.length; k++) {
+      if (t <= pts[k][0]) {
+        const [ta, oa] = pts[k - 1];
+        const [tb, ob] = pts[k];
+        return tb === ta ? oa : oa + ((ob - oa) * (t - ta)) / (tb - ta);
+      }
+    }
+    return pts[pts.length - 1][1];
+  };
+  const midden = vorm.map((v, i) => offsetOp(i, (v.t0 + v.t1) / 2));
+  const volgorde = rijen.map((_, i) => i).filter(i => vorm[i].pts.length >= 2).sort((a, b) => midden[a] - midden[b]);
+
+  // Eerst ruwe afstanden per kant, daarna begrenzen (rijen zonder opgegeven afstand: mediaan van alle afstanden)
+  const ruw = new Map<number, number[]>();
+  const alle: number[] = [];
+  volgorde.forEach((i, p) => {
+    const gaps: number[] = [];
+    for (const richting of [-1, 1]) {
+      for (let q = p + richting; q >= 0 && q < volgorde.length; q += richting) {
+        const j = volgorde[q];
+        if (Math.abs(midden[j] - midden[i]) > 25) break; // ver weg: geen buur meer te verwachten
+        const lo = Math.max(vorm[i].t0, vorm[j].t0);
+        const hi = Math.min(vorm[i].t1, vorm[j].t1);
+        const kortste = Math.min(vorm[i].t1 - vorm[i].t0, vorm[j].t1 - vorm[j].t0);
+        if (hi - lo < BUUR_OVERLAP_DEEL * kortste) continue;
+        const tc = (lo + hi) / 2;
+        const gap = Math.abs(offsetOp(j, tc) - offsetOp(i, tc));
+        if (gap < BUUR_MIN_AFSTAND_M) continue; // stuk op dezelfde rijlijn
+        gaps.push(gap);
+        alle.push(gap);
+        break;
+      }
+    }
+    ruw.set(i, gaps);
+  });
+  const mediaanAlle = alle.length ? [...alle].sort((a, b) => a - b)[alle.length >> 1] : null;
+  rijen.forEach((r, i) => {
+    const nom = nominaal(r) ?? mediaanAlle;
+    const gaps = ruw.get(i) ?? [];
+    if (gaps.length === 0 || nom === null) {
+      uit.set(r.id, nom);
+      return;
+    }
+    const begrensd = gaps.map(g => Math.min(1.5 * nom, Math.max(0.5 * nom, g)));
+    uit.set(r.id, begrensd.reduce((a, b) => a + b, 0) / begrensd.length);
+  });
+  return uit;
+}
+
+/**
+ * Verschuif een rij evenwijdig over deltaM meter langs de normaal n van de rijrichting θ (positief = naar
+ * θ + 90°). Zonder θ: loodrecht op de koorde van de rij (naar rechts gezien van begin naar eind).
+ */
+export function verschuifRij(coordinates: LngLat[], deltaM: number, richtingGraden?: number | null): LngLat[] {
+  if (coordinates.length < 2) throw new Error('Een rij heeft minstens twee punten nodig');
+  const rd = coordinates.map(c => naarRD(c));
+  const theta = eindig(richtingGraden) ? richtingGraden : asRichting(kompasRichting(rd[0], rd[rd.length - 1]));
+  const n = normaalVector(theta);
+  return rd.map(p => naarWGS([p[0] + n[0] * deltaM, p[1] + n[1] * deltaM]));
+}

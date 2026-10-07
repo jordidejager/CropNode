@@ -12,6 +12,11 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-07 — 🎯 Rijenkaart: rijen per rij precies op de foto (oudere, niet-GPS-percelen)
+- ✅ Genereren › "Rijen precies op de foto leggen" (+ automatisch na opslaan): elke rij apart op de boomstrook (10 cm-beeld), gladde boog bij kromme rijen, of fijnafgesteld raster bij GPS-aanplant; nummers/koppelingen blijven. Rijkaartje: afwijking t.o.v. raster, ±10 cm, "Op foto".
+- ✅ Oppervlak bij spuiten op rijen = lengte × werkelijke afstand tot de buurrijen. Gemeten: Murre gem. 36 cm/max 1,16 m verschoven (per rij), Spoor raster 3,303 → 3,3008 m. Zie `docs/rijenkaart/STATUS.md` §9.
+- ⏳ Jordi: Murre en Spoor (al opgeslagen) eenmalig "precies op de foto leggen" en opslaan; op iPhone testen.
+
 ### 2026-10-07 — 🌳 Rijenkaart (beta): elke boomrij als object, detectie uit PDOK-luchtfoto
 - ✅ Percelen › **Rijen (beta)**: rijen automatisch detecteren (PDOK 8 cm, client-side) of referentierij tekenen, corrigeren, nummeren, blokken, bestuivers; bespuiting en notitie op rijen (web + MCP 1.3.0, tool `rijen`); GeoJSON-export. Zie `docs/rijenkaart/STATUS.md` (testscript + open keuzes).
 - ✅ Migraties 092–095 gedraaid (PostGIS aan; alleen nieuwe tabellen/functies/policies). Bestaande functies zonder rijen ongewijzigd (regressiereview + MCP-diff).

@@ -9,6 +9,7 @@
 import { createContext, useContext } from 'react';
 import type { PerceelRD, Rij, Rijenkaart } from '@/lib/rijen/types';
 import type { RijenConcept } from './use-rijen-concept';
+import type { RijVerfijning } from './use-rij-verfijning';
 
 export type PaneelTab = 'rijen' | 'genereren' | 'indeling' | 'export';
 
@@ -52,6 +53,10 @@ export interface RijenkaartCtxWaarde {
   gekoppeld: ReadonlySet<string>;
   /** Boomafstand voor boomnummers (instellingen, anders perceelprofiel) */
   standaardBoomafstandM: number | null;
+  /** Werkelijke rijafstand per actieve rij (uit de ligging van de buren), voor het rij-oppervlak */
+  effectieveAfstand: ReadonlyMap<string, number | null>;
+  /** Rijen precies op de luchtfoto leggen (voorstel, opslaan) */
+  verfijning: RijVerfijning;
 
   tab: PaneelTab;
   zetTab: (t: PaneelTab) => void;
