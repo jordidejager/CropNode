@@ -235,6 +235,22 @@ cyaan = per rij), `img/verfijning-murre-overzicht.jpg`, `img/verfijning-schele.j
 
 **Rekentijd:** ophalen 0,6–0,8 s + rekenen 0,1–0,5 s per perceel (node); op de iPhone naar schatting 1–3 s.
 
+**Uiteinden uit de foto (8 oktober):** de standaard-kopakker van 6 m klopte niet: bij de meeste van jouw percelen
+staan de bomen tot vlak bij de RVO-grens (Kloetinge Spoor, Steketee, Murre), bij andere ligt er een kopakker binnen het
+perceel (Busje, ~10 m). Nu volgt de verfijning elke rij vanaf het midden naar buiten tot waar de bomen ophouden:
+- **waar staan bomen** = de **zomerfoto** (25 cm, kronen het duidelijkst) — jouw idee; rijen die nog niet op de
+  zomerfoto staan (jonge aanplant, bv. Jachthoek) via de 8 cm-voorjaarsfoto. De **ligging** blijft uit de 8 cm-foto;
+- het uiteinde ligt waar "meestal bomen" overgaat in "meestal niet" (ontbrekende bomen en wielsporen in de kopakker
+  verschuiven het nauwelijks); lopen de bomen tot binnen 2,5 m van de grens, dan tot de grens;
+- een echt einde (kopakker, **laadplek**, inham) geldt voor een groep buurrijen; een losse rij die afwijkt van zijn buren
+  volgt de buren (jonge aanplant met een zwak signaal);
+- nooit buiten de perceelgrens. De uitkomst hangt niet meer af van de kopakker waarmee gegenereerd is (getest: start
+  met 0 m of 6 m → zelfde uiteinden, mediaan 0,02–0,25 m; Jachthoek 1,6 m).
+De standaard-kopakker bij genereren is daarom nu **0 m**; het voorbeeld na opslaan toont "N rijen langer/korter".
+Beelden: `img/uiteinden-kloetinge-spoor.jpg`, `img/uiteinden-busje.jpg` (rood = korter dan het voorstel,
+geel = voorstel tot de grens), `img/uiteinden-jachthoek-laadplek.jpg`. Een gat midden in een rij (laadplek midden in
+het perceel) splitst de rij nog niet: teken die met *Rij tekenen* of zet de rij op 'controleren'.
+
 **Grenzen:** waar geen duidelijke herbicidestrook op de foto staat (bv. het oude blok van Jachthoek, Kloetinge
 Plantsoen) meldt de app "niet precies te leggen" en blijven de rijen zoals ze zijn. Randrijen zijn onzekerder
 (greppel/schaduw in beeld) en krijgen sneller 'controleren'. Een S-vormige rij wordt als één boog benaderd.

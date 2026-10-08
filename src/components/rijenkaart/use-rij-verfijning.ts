@@ -64,6 +64,7 @@ export function useRijVerfijning(args: {
   const [bezigOpslaan, setBezigOpslaan] = useState(false);
   const [gepland, setGepland] = useState(0);
   const beeldRef = useRef<FijnBeeld | null>(null);
+  const zomerRef = useRef<FijnBeeld | null | undefined>(undefined);
   const afbreker = useRef<AbortController | null>(null);
 
   // Laatste stand voor callbacks die na een await lopen
@@ -74,6 +75,7 @@ export function useRijVerfijning(args: {
   // Ander perceel of nieuwe geometrie: beeld niet hergebruiken
   useEffect(() => {
     beeldRef.current = null;
+    zomerRef.current = undefined;
   }, [perceelId, perceelRD]);
 
   const start = useCallback(
@@ -100,19 +102,21 @@ export function useRijVerfijning(args: {
       setVoorstel(null);
       setVoortgang('Scherpe luchtfoto ophalen…');
       try {
-        const { resultaat, beeld } = await verfijnVoorPerceel(
+        const { resultaat, beeld, zomer } = await verfijnVoorPerceel(
           rd,
           bruikbaar.map(r => ({ id: r.id, nummer: r.nummer, coordinates: r.coordinates })),
           {
             richtingGraden: theta,
             rijafstandM: rijafstand,
             beeld: beeldRef.current,
+            zomer: zomerRef.current,
             signal: ac.signal,
             onVoortgang: stap => setVoortgang(stap),
           },
         );
         if (ac.signal.aborted) return;
         beeldRef.current = beeld;
+        zomerRef.current = zomer;
         if (!resultaat.betrouwbaar) {
           setStatus('leeg');
           setVoortgang(null);

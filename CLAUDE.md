@@ -402,6 +402,8 @@ en `docs/rijenkaart/STATUS.md` (oplevering, testscript, open punten).
 - **Verfijning** (`verfijning.ts`, `use-rij-verfijning.ts`): rijen per rij op de luchtfoto leggen (10 cm-beeld in tegels via
   `haalGroenBeeldOp`/`verfijnVoorPerceel`), boog bij significante kromming, of fijnafgesteld raster (aanbevolen als de rest
   ≤ 10 cm, GPS-aanplant). Oppervlak bij rijselectie = lengte × *werkelijke* rijafstand (`effectieveRijafstanden`, uit de buren).
+  Uiteinden uit de foto: zomerfoto (25 cm, grijs) = waar staan bomen, voorjaar 8 cm als terugval; change-point vanaf het
+  rijmidden, regularisatie met buren (mediaan 5 / kant), snap naar de grens binnen 2,5 m. Standaard-kopakker = 0 m.
 - **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`, `npm run rijen:verfijning-echt`.
 
 ## Weather Hub (`/weer`)

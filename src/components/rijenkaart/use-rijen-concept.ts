@@ -40,7 +40,12 @@ import {
 
 /** Een referentierij moet minstens zo lang zijn (korte lijn → grote hoekfout aan het eind van de rij) */
 export const MIN_REFERENTIE_M = 20;
-const STANDAARD_KOPAKKER_M = 6;
+/**
+ * Standaard geen kopakker binnen de perceelgrens: bij de meeste (BRP-)percelen staan de bomen tot vlak bij de
+ * grens. Na opslaan legt de verfijning per rij de uiteinden uit de foto (tot waar de bomen staan), dus een
+ * kopakker binnen het perceel (of een laadplek) wordt daar alsnog weggehaald.
+ */
+const STANDAARD_KOPAKKER_M = 0;
 
 export type DetectieStatus = 'idle' | 'bezig' | 'klaar' | 'fout';
 

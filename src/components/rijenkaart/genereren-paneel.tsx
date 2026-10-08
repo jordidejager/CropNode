@@ -183,6 +183,10 @@ export function GenererenPaneel() {
               />
             </Veld>
           </div>
+          <p className="text-[12px] leading-snug text-white/45">
+            Na opslaan bepaalt CropNode per rij uit de luchtfoto waar de bomen echt ophouden (kopakker, laadplek, inham).
+            Een kopakker hier is dus alleen nodig als je een vaste afstand wilt.
+          </p>
         </div>
       </Sectie>
 

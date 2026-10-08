@@ -12,6 +12,10 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-08 — 🌳 Rijenkaart: uiteinden van rijen uit de foto (kopakker, laadplek)
+- ✅ Verfijning bepaalt per rij waar de bomen ophouden (zomerfoto 25 cm = kronen, voorjaar 8 cm als terugval), samenhang met buurrijen, nooit buiten de grens; standaard-kopakker bij genereren 0 m. Consistent ongeacht start-kopakker (Steketee/Busje/Kloetinge Spoor mediaan ≤ 0,25 m).
+- ⏳ Gat midden in een rij (laadplek midden in perceel) splitst nog niet; Jachthoek (jonge aanplant, niet op zomerfoto) blijft wat onrustiger aan de uiteinden.
+
 ### 2026-10-07 — 🎯 Rijenkaart: rijen per rij precies op de foto (oudere, niet-GPS-percelen)
 - ✅ Genereren › "Rijen precies op de foto leggen" (+ automatisch na opslaan): elke rij apart op de boomstrook (10 cm-beeld), gladde boog bij kromme rijen, of fijnafgesteld raster bij GPS-aanplant; nummers/koppelingen blijven. Rijkaartje: afwijking t.o.v. raster, ±10 cm, "Op foto".
 - ✅ Oppervlak bij spuiten op rijen = lengte × werkelijke afstand tot de buurrijen. Gemeten: Murre gem. 36 cm/max 1,16 m verschoven (per rij), Spoor raster 3,303 → 3,3008 m. Zie `docs/rijenkaart/STATUS.md` §9.

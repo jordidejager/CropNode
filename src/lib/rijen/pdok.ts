@@ -392,17 +392,23 @@ export function fijnVenster(
   };
 }
 
-/** Haal de luchtfoto voor een (groot) venster in tegels op en geef direct de groenindex terug (browser). */
+/**
+ * Haal de luchtfoto voor een (groot) venster in tegels op en geef direct per pixel een kenmerk terug (browser):
+ * 'groen' = groenindex (standaard; voorjaar: de herbicidestrook is het minst groen), 'grijs' = helderheid
+ * (zomer: kronen tegen gras).
+ */
 export async function haalGroenBeeldOp(
   venster: BeeldVenster,
   opties?: {
     laag?: PdokLaag | string;
+    kenmerk?: 'groen' | 'grijs';
     signal?: AbortSignal;
     timeoutMs?: number;
     onTegel?: (klaar: number, totaal: number) => void;
   },
 ): Promise<FijnBeeld> {
   const laag = opties?.laag ?? PDOK_LAGEN.orthoHR;
+  const omzetten = opties?.kenmerk === 'grijs' ? naarGrijs : naarGroenindex;
   const { breedte, hoogte, pixelM, origineRD } = venster;
   const waarden = new Float32Array(breedte * hoogte);
   const tegels: { x0: number; y0: number; b: number; h: number }[] = [];
@@ -427,7 +433,7 @@ export async function haalGroenBeeldOp(
         origineRD: [minX, maxY],
       };
       const foto = await haalLuchtfotoOp(sub, laag, { signal: opties?.signal, timeoutMs: opties?.timeoutMs });
-      const groen = naarGroenindex(foto.rgba, foto.breedte, foto.hoogte);
+      const groen = omzetten(foto.rgba, foto.breedte, foto.hoogte);
       for (let j = 0; j < tg.h; j++) {
         waarden.set(groen.subarray(j * tg.b, (j + 1) * tg.b), (tg.y0 + j) * breedte + tg.x0);
       }
@@ -457,15 +463,19 @@ export async function verfijnVoorPerceel(
     richtingGraden: number;
     rijafstandM: number;
     beeld?: FijnBeeld | null;
+    /** Zomerfoto (helderheid) uit een eerdere aanroep; undefined = ophalen, null = niet gebruiken */
+    zomer?: FijnBeeld | null;
     onVoortgang?: (stap: string) => void;
     signal?: AbortSignal;
     timeoutMs?: number;
   },
-): Promise<{ resultaat: VerfijnResultaat; beeld: FijnBeeld; bronBeeld: string; ophaalMs: number }> {
+): Promise<{ resultaat: VerfijnResultaat; beeld: FijnBeeld; zomer: FijnBeeld | null; bronBeeld: string; ophaalMs: number }> {
   const start = nu();
   const coordsRD = rijen.map(r => r.coordinates.map(c => naarRD(c)));
   let beeld = opties.beeld ?? null;
-  const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  let zomer = opties.zomer ?? null;
+  // Venster: rijen én perceel (een rij kan tot de perceelgrens doorlopen)
+  const bbox: [number, number, number, number] = [...perceel.bbox];
   for (const lijn of coordsRD) {
     for (const [x, y] of lijn) {
       bbox[0] = Math.min(bbox[0], x);
@@ -474,40 +484,59 @@ export async function verfijnVoorPerceel(
       bbox[3] = Math.max(bbox[3], y);
     }
   }
-  if (!bbox.every(Number.isFinite)) throw new Error('Geen rijen om op de foto te leggen.');
+  if (!bbox.every(Number.isFinite) || coordsRD.length === 0) throw new Error('Geen rijen om op de foto te leggen.');
   const marge = opties.rijafstandM + 3;
   const dekt = (b: FijnBeeld) =>
     b.origineRD[0] <= bbox[0] - marge + 0.5 &&
     b.origineRD[1] >= bbox[3] + marge - 0.5 &&
     b.origineRD[0] + b.breedte * b.pixelM >= bbox[2] + marge - 0.5 &&
     b.origineRD[1] - b.hoogte * b.pixelM <= bbox[1] - marge + 0.5;
-  if (!beeld || !dekt(beeld)) {
-    const venster = fijnVenster(bbox, { margeM: marge });
+  const ophalenVoorjaar = !beeld || !dekt(beeld);
+  const ophalenZomer = opties.zomer === undefined || (zomer !== null && !dekt(zomer));
+  if (ophalenVoorjaar || ophalenZomer) {
     opties.onVoortgang?.('Scherpe luchtfoto ophalen…');
     await pauze();
     if (opties.signal?.aborted) throw afgebroken();
-    beeld = await haalGroenBeeldOp(venster, {
-      signal: opties.signal,
-      timeoutMs: opties.timeoutMs,
-      onTegel: (k, t) => {
-        if (t > 1) opties.onVoortgang?.(`Scherpe luchtfoto ophalen… (${k}/${t})`);
-      },
-    });
+    const [v, z] = await Promise.all([
+      ophalenVoorjaar
+        ? haalGroenBeeldOp(fijnVenster(bbox, { margeM: marge }), {
+            signal: opties.signal,
+            timeoutMs: opties.timeoutMs,
+            onTegel: (k, t) => {
+              if (t > 1) opties.onVoortgang?.(`Scherpe luchtfoto ophalen… (${k}/${t})`);
+            },
+          })
+        : Promise.resolve(beeld as FijnBeeld),
+      // Zomerfoto (25 cm): waar staan bomen (kronen). Mislukt die, dan alleen de voorjaarsfoto.
+      ophalenZomer
+        ? haalGroenBeeldOp(fijnVenster(bbox, { margeM: marge, doelPixelM: 0.25 }), {
+            laag: PDOK_LAGEN.ortho25,
+            kenmerk: 'grijs',
+            signal: opties.signal,
+            timeoutMs: opties.timeoutMs,
+          }).catch(() => null)
+        : Promise.resolve(zomer),
+    ]);
+    beeld = v;
+    zomer = z;
   }
   const ophaalMs = nu() - start;
   opties.onVoortgang?.('Rijen op de foto leggen…');
   await pauze();
   if (opties.signal?.aborted) throw afgebroken();
+  const b = beeld as FijnBeeld;
   const resultaat = verfijnRijen({
-    waarden: beeld.waarden,
-    breedte: beeld.breedte,
-    hoogte: beeld.hoogte,
-    pixelM: beeld.pixelM,
-    origineRD: beeld.origineRD,
+    waarden: b.waarden,
+    breedte: b.breedte,
+    hoogte: b.hoogte,
+    pixelM: b.pixelM,
+    origineRD: b.origineRD,
     richtingGraden: opties.richtingGraden,
     rijafstandM: opties.rijafstandM,
     zwaartepunt: perceel.zwaartepunt,
+    perceel,
+    aanwezigheid: zomer,
     rijen: rijen.map((r, i) => ({ id: r.id, nummer: r.nummer, coordsRD: coordsRD[i] })),
   });
-  return { resultaat, beeld, bronBeeld: `PDOK ${PDOK_LAGEN.orthoHR}`, ophaalMs: Math.round(ophaalMs) };
+  return { resultaat, beeld: b, zomer, bronBeeld: `PDOK ${PDOK_LAGEN.orthoHR}`, ophaalMs: Math.round(ophaalMs) };
 }

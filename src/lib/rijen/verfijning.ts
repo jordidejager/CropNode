@@ -22,7 +22,8 @@
  *  7. Oordeel per perceel: te zwak rijkenmerk of te veel zwakke/springende rijen → niet betrouwbaar (raster houden).
  */
 
-import type { XY } from './types';
+import { puntInPerceel } from './geo';
+import type { PerceelRD, XY } from './types';
 
 export type VerfijnModus = 'raster' | 'per-rij';
 
@@ -54,22 +55,41 @@ export interface VerfijnOpties {
   rasterGrensM?: number;
   /** Bemonstering langs de rij (m); standaard pixelM */
   langsStapM?: number;
+  /** Uiteinden van de rijen uit de foto bepalen (standaard aan) */
+  eindenUitFoto?: boolean;
+  /** Maximaal verlengen per uiteinde (m, standaard 30) */
+  maxVerlengingM?: number;
+  /** Lengte van het meetvenster langs de rij bij het zoeken van de uiteinden (m, standaard 3) */
+  eindVensterM?: number;
+  /** Minimale correlatie met het rijprofiel om 'hier staan bomen' te zeggen (standaard 0,45) */
+  eindMinCorrelatie?: number;
 }
 
-export interface VerfijnInvoer {
-  /** Rijkenmerk per pixel (lager = rij), rij voor rij vanaf linksboven */
+/** Beeldraster in RD New: waarden per pixel, rij voor rij vanaf linksboven */
+export interface VerfijnRaster {
   waarden: Float32Array;
   breedte: number;
   hoogte: number;
   pixelM: number;
   /** RD van de linkerbovenhoek [minX, maxY] */
   origineRD: XY;
+}
+
+export interface VerfijnInvoer extends VerfijnRaster {
+  /** (VerfijnRaster) rijkenmerk voor de ligging: lager = rij (groenindex van de 8 cm-voorjaarsfoto) */
   /** Rijrichting θ (kompasgraden RD, [0,180)) en rijafstand van de basis */
   richtingGraden: number;
   rijafstandM: number;
   /** Referentiepunt voor offsets (zwaartepunt perceel) */
   zwaartepunt: XY;
   rijen: VerfijnBasisRij[];
+  /** Perceel: uiteinden worden nooit buiten de perceelgrens gelegd */
+  perceel?: PerceelRD | null;
+  /**
+   * Tweede beeld om te zien wáár bomen staan (25 cm-zomerfoto, helderheid): de kronen zijn daar het duidelijkst.
+   * Het rijpatroon wordt uit het beeld zelf geleerd (sjabloon op de gevonden rijen), dus het teken maakt niet uit.
+   */
+  aanwezigheid?: VerfijnRaster | null;
   opties?: VerfijnOpties;
 }
 
@@ -99,6 +119,8 @@ export interface VerfijndeRij {
   /** Aantal gebruikte / totale segmenten */
   segmentenGebruikt: number;
   segmentenTotaal: number;
+  /** Nieuwe lengte − huidige lengte (m): uiteinden uit de foto */
+  lengteVerschilM: number;
 }
 
 export interface VerfijnStatistiek {
@@ -131,6 +153,8 @@ export interface VerfijnResultaat {
   zwak: number;
   controleren: number;
   krom: number;
+  /** Uiteinden uit de foto: hoeveel rijen verlengd/ingekort (> 1 m) en gemiddeld lengteverschil */
+  einden: { bepaald: boolean; metZomerfoto: boolean; verlengd: number; ingekort: number; gemVerlengingM: number };
   duurMs: number;
   diagnostiek: Record<string, number | string | boolean>;
 }
@@ -162,7 +186,7 @@ function parabool(a: number, b: number, c: number): number {
   return Math.max(-0.5, Math.min(0.5, d));
 }
 
-function bemonster(inv: VerfijnInvoer, x: number, y: number): number {
+function bemonster(inv: VerfijnRaster, x: number, y: number): number {
   const fi = (x - inv.origineRD[0]) / inv.pixelM - 0.5;
   const fj = (inv.origineRD[1] - y) / inv.pixelM - 0.5;
   const i0 = Math.floor(fi);
@@ -243,13 +267,12 @@ interface Profiel {
   B: number;
 }
 
-function segmentProfiel(inv: VerfijnInvoer, d: XY, n: XY, l: BasisLijn, ta: number, tb: number,
+function segmentProfiel(inv: VerfijnRaster, c: XY, d: XY, n: XY, l: BasisLijn, ta: number, tb: number,
   centrum: (t: number) => number, halfM: number, langsStap: number): Profiel {
   const B = Math.ceil(halfM / DU);
   const nb = 2 * B + 1;
   const som = new Float64Array(nb);
   const tel = new Float64Array(nb);
-  const c = inv.zwaartepunt;
   const stappen = Math.max(1, Math.round((tb - ta) / langsStap));
   for (let s = 0; s < stappen; s++) {
     const t = ta + ((s + 0.5) * (tb - ta)) / stappen;
@@ -337,6 +360,39 @@ function schatSjabloon(pr: Profiel, sjabloon: Float64Array, S: number, vensterM:
   const d = parabool(-rs[i - 1], -rs[i], -rs[i + 1]);
   if (best < minR) return { u: null, r: best };
   return { u: (bestK + d) * DU, r: best };
+}
+
+/**
+ * Staat hier een rij? Kruiscorrelatie met het sjabloon binnen ±venster (r ≥ minR) én voldoende contrast:
+ * de versterking (regressie van het profiel op het sjabloon) moet ≥ minVersterking zijn. Wielsporen of
+ * maaibanen in een kopakker lopen in het verlengde van de rijpaden door en lijken op het patroon, maar zijn veel
+ * zwakker dan bomen.
+ */
+function rijAanwezig(pr: Profiel, sjabloon: Float64Array, S: number, vensterM: number, minR: number, minVersterking: number): boolean {
+  const W = Math.floor(vensterM / DU);
+  let sy = 0, syy = 0;
+  for (let i = -S; i <= S; i++) { sy += sjabloon[i + S]; syy += sjabloon[i + S] ** 2; }
+  let beste: { r: number; versterking: number; k: number } | null = null;
+  for (let k = -W; k <= W; k++) {
+    let sx = 0, sxx = 0, sxy = 0, ty = 0, tyy = 0, m = 0;
+    for (let i = -S; i <= S; i++) {
+      const idx = pr.B + k + i;
+      if (idx < 0 || idx >= pr.p.length) continue;
+      const v = pr.p[idx];
+      if (v !== v) continue;
+      const t = sjabloon[i + S];
+      sx += v; sxx += v * v; sxy += v * t; ty += t; tyy += t * t; m++;
+    }
+    if (m <= S) continue;
+    const cov = sxy - (sx * ty) / m;
+    const vx = sxx - (sx * sx) / m;
+    const vy = tyy - (ty * ty) / m;
+    if (!(vx > 0 && vy > 0)) continue;
+    const r = cov / Math.sqrt(vx * vy);
+    if (!beste || r > beste.r) beste = { r, versterking: cov / vy, k };
+  }
+  if (!beste || beste.k === -W || beste.k === W) return false;
+  return beste.r >= minR && beste.versterking >= minVersterking;
 }
 
 interface Segment {
@@ -448,6 +504,7 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
     zwak: 0,
     controleren: 0,
     krom: 0,
+    einden: { bepaald: false, metZomerfoto: false, verlengd: 0, ingekort: 0, gemVerlengingM: 0 },
     duurMs: nu() - start,
     diagnostiek: diag,
   });
@@ -487,7 +544,7 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
 
   for (let ronde = 0; ronde < 2; ronde++) {
     const profielen: Profiel[][] = lijnen.map((l, li) =>
-      segGrenzen[li].map(([ta, tb]) => segmentProfiel(inv, d, n, l, ta, tb,
+      segGrenzen[li].map(([ta, tb]) => segmentProfiel(inv, c, d, n, l, ta, tb,
         t => centra[li].a + centra[li].b * t, halfProfiel, langsStap)));
 
     if (ronde === 0) {
@@ -739,17 +796,201 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
   diag.ruisSegmentM = Number(ruisM.toFixed(3));
   diag.krommeGrensM = Number(krommeGrens.toFixed(3));
 
-  // ---- uitvoer per rij
   const punt = (t: number, oAbs: number): XY => [c[0] + t * d[0] + oAbs * n[0], c[1] + t * d[1] + oAbs * n[1]];
+
+  // ---- uiteinden uit de foto: tot waar de bomen echt staan, nooit buiten het perceel.
+  // Bomen = het rijpatroon is aanwezig in de zomerfoto (kronen het duidelijkst; sjabloon geleerd op de
+  // middenstukken van de gevonden rijen). Rijen die nog niet op de zomerfoto staan (jonge aanplant): de
+  // 8 cm-voorjaarsfoto. Vanaf het huidige uiteinde naar buiten zolang er
+  // bomen staan (2 lege meters achter elkaar = einde); staat er bij het uiteinde niets, dan naar binnen inkorten.
+  const eindenAan = (o.eindenUitFoto ?? true) && betrouwbaar && sjabloon !== null;
+  const eindVenster = o.eindVensterM ?? 3;
+  const eindStap = 1;
+  /** Stap bij het volgen van een rij naar zijn uiteinden (m) */
+  const LOOP_STAP = 2;
+  const eindMinR = o.eindMinCorrelatie ?? 0.45;
+  const maxVerlenging = o.maxVerlengingM ?? 30;
+  const dwarsZoek = Math.min(venster, 0.6);
+  const zomer = inv.aanwezigheid ?? null;
+  let zomerSjabloon: Float64Array | null = null;
+  if (eindenAan && zomer) {
+    const som = new Float64Array(2 * S + 1);
+    const tel = new Float64Array(2 * S + 1);
+    lijnen.forEach((l, li) => {
+      const f = fits[li];
+      if (f.zwak) return;
+      const g = segGrenzen[li];
+      g.forEach(([ta, tb], si) => {
+        if (g.length > 2 && (si === 0 || si === g.length - 1)) return; // middenstukken: daar staan zeker bomen
+        const pr = segmentProfiel(zomer, c, d, n, l, ta, tb, t => offsetFit(f, l, t), halfProfiel, Math.max(zomer.pixelM, 0.08));
+        for (let i = -S; i <= S; i++) {
+          const v = pr.p[pr.B + i];
+          if (v === v) { som[i + S] += v; tel[i + S]++; }
+        }
+      });
+    });
+    const sj = new Float64Array(2 * S + 1);
+    for (let i = 0; i < sj.length; i++) sj[i] = tel[i] > 0 ? som[i] / tel[i] : 0;
+    const bereik = Math.max(...sj) - Math.min(...sj);
+    if (bereik > 1e-6) zomerSjabloon = sj;
+    diag.zomerSjabloonBereik = Number(bereik.toFixed(3));
+  }
+  const patroonOp = (raster: VerfijnRaster, sj: Float64Array, li: number, t: number) => {
+    const l = lijnen[li];
+    const f = fits[li];
+    const pr = segmentProfiel(raster, c, d, n, l, t - eindVenster / 2, t + eindVenster / 2, tt => offsetFit(f, l, tt), halfProfiel,
+      Math.max(raster.pixelM, 0.08));
+    return rijAanwezig(pr, sj, S, dwarsZoek, eindMinR, 0.4);
+  };
+  // Per rij: is de rij op de zomerfoto goed te zien (middenstukken)? Dan bepaalt alléén de zomerfoto waar de
+  // bomen staan (kronen; voorjaarsstrook loopt soms door in een pad of tussen geparkeerde wagens). Anders
+  // (jonge aanplant, nog niet op de zomerfoto) de voorjaarsfoto.
+  const zomerLeidend = lijnen.map((l, li) => {
+    if (!eindenAan || zomer === null || zomerSjabloon === null || fits[li].zwak) return false;
+    const g = segGrenzen[li];
+    const midden = g.length > 2 ? g.slice(1, -1) : g;
+    const ok = midden.filter(([ta, tb]) => patroonOp(zomer, zomerSjabloon!, li, (ta + tb) / 2)).length;
+    return midden.length > 0 && ok >= 0.5 * midden.length;
+  });
+  diag.rijenZomerLeidend = zomerLeidend.filter(Boolean).length;
+  const bomenOp = (li: number, t: number) =>
+    zomerLeidend[li] ? patroonOp(zomer!, zomerSjabloon!, li, t) : patroonOp(inv, sjabloon!, li, t);
+  const binnenOp = (li: number, t: number) =>
+    !inv.perceel || puntInPerceel(punt(t, offsetOp(lijnen[li], t) + offsetFit(fits[li], lijnen[li], t)), inv.perceel);
+  // Ruwe uiteinden per rij (lo = kleinste t, hi = grootste t), als verlenging t.o.v. de huidige uiteinden
+  // (positief = langer). Zwakke rijen en rijen zonder uiteindebepaling: 0.
+  const ruw = lijnen.map((l, li) => {
+    const f = fits[li];
+    const lo = Math.min(l.t0, l.t1);
+    const hi = Math.max(l.t0, l.t1);
+    if (!eindenAan || f.zwak) return { lo: 0, hi: 0, meten: false };
+    const geldig = (cc: number) => binnenOp(li, cc) && bomenOp(li, cc);
+    // Fijn: vanaf een geldig punt in stappen van 25 cm naar buiten tot het laatste geldige punt, zodat
+    // verlengen en inkorten op hetzelfde uiteinde uitkomen (het midden van het laatste venster met bomen).
+    const fijn = (laatste: number, uit: 1 | -1): number => {
+      let t = laatste;
+      for (let k = 1; k <= 7; k++) {
+        const cc = laatste + uit * 0.25 * k;
+        if (!geldig(cc)) break;
+        t = cc;
+      }
+      return t;
+    };
+    // Van het midden van de rij (daar staan zeker bomen) naar buiten tot de perceelgrens: per 2 m 'staan hier
+    // bomen?'. Het uiteinde ligt waar 'meestal bomen' overgaat in 'meestal niet': het maximum van de cumulatieve
+    // som van (aanwezig − ½). Ontbrekende bomen, een vlekkerig beeld (jonge aanplant) of wielsporen in de kopakker
+    // verschuiven dat punt nauwelijks, en het hangt niet af van de kopakker waarmee gegenereerd is. Daarna fijn (25 cm).
+    const gebruiktT = f.segs.filter(sg => sg.gebruikt && sg.e !== null).map(sg => sg.tM);
+    const midden = gebruiktT.length ? gebruiktT.reduce((a, b) => a + b, 0) / gebruiktT.length : (lo + hi) / 2;
+    const zoek = (tEind: number, uit: 1 | -1): number => {
+      const posities: number[] = [];
+      const aanwezig: number[] = [];
+      const maxT = Math.abs(tEind - midden) + maxVerlenging;
+      for (let k = 0; k * LOOP_STAP <= maxT; k++) {
+        const cc = midden + uit * k * LOOP_STAP;
+        if (!binnenOp(li, cc)) break;
+        posities.push(cc);
+        aanwezig.push(bomenOp(li, cc) ? 1 : 0);
+      }
+      if (posities.length === 0) return tEind;
+      // te weinig bomen gezien in de binnenste helft: onbetrouwbaar, huidig uiteinde houden
+      const helft = aanwezig.slice(0, Math.max(1, Math.ceil(aanwezig.length / 2)));
+      if (helft.reduce((a, v) => a + v, 0) < 0.3 * helft.length) return tEind;
+      let som = 0;
+      let besteSom = -Infinity;
+      let beste = 0;
+      aanwezig.forEach((v, i) => {
+        som += v - 0.5;
+        if (som > besteSom) {
+          besteSom = som;
+          beste = i;
+        }
+      });
+      let eind = fijn(posities[beste], uit);
+      // Bomen tot (bijna) de perceelgrens: het meetvenster valt daar half buiten het perceel en stopt ~1,5 m te
+      // vroeg. Ligt de grens binnen 2,5 m, dan lopen de bomen door tot de grens (uiteinde 0,5 m binnen de grens).
+      if (inv.perceel) {
+        for (let stap = 0.25; stap <= 2.5; stap += 0.25) {
+          if (!binnenOp(li, eind + uit * stap)) {
+            eind = eind + uit * Math.max(0, stap - 0.5);
+            break;
+          }
+        }
+      }
+      return eind;
+    };
+    return { lo: lo - zoek(lo, -1), hi: zoek(hi, 1) - hi, meten: true };
+  });
+
+  // Samenhang met de buren: een echt einde (kopakker, laadplek, inham, pad) geldt voor een groep buurrijen.
+  // Een rij houdt zijn eigen (preciezere) uiteinde als de verlenging binnen ±2,5 m klopt met de lopende mediaan
+  // over 5 rijen, of met de mediaan van 3 buren aan één kant (rand van een laadplek/inham van ≥ 3 rijen), of
+  // (alleen bij de buitenste rijen) met de directe buur. Anders is het ruis (bv. jonge aanplant met een zwakke
+  // strook; ook twee ruisrijen naast elkaar) en krijgt de rij de mediaan van 5. Zwakke rijen: mediaan van hun buren.
+  const EIND_TOL = 2.5;
+  const regulariseer = (kant: 'lo' | 'hi'): number[] => {
+    const gemeten = volgorde.filter(li => ruw[li].meten);
+    const plek = new Map(gemeten.map((li, i) => [li, i] as const));
+    return lijnen.map((_, li) => {
+      const eigen = ruw[li][kant];
+      let i = plek.get(li);
+      if (i === undefined) {
+        // niet gemeten (zwak): dichtstbijzijnde gemeten rij in de volgorde als middelpunt
+        if (!eindenAan || !fits[li].zwak || gemeten.length === 0) return eigen;
+        const p = pos.get(li)!;
+        let beste = 0;
+        let afst = Infinity;
+        gemeten.forEach((g, gi) => {
+          const dd = Math.abs(pos.get(g)! - p);
+          if (dd < afst) { afst = dd; beste = gi; }
+        });
+        i = beste;
+        const venster = gemeten.slice(Math.max(0, i - 2), Math.min(gemeten.length, i + 3)).map(g => ruw[g][kant]);
+        return mediaan(venster);
+      }
+      const venster = gemeten.slice(Math.max(0, i - 2), Math.min(gemeten.length, i + 3)).map(g => ruw[g][kant]);
+      const m = mediaan(venster);
+      const links = gemeten.slice(Math.max(0, i - 3), i).reverse().map(g => ruw[g][kant]);
+      const rechts = gemeten.slice(i + 1, i + 4).map(g => ruw[g][kant]);
+      const klopt = (v: number) => Math.abs(eigen - v) <= EIND_TOL;
+      // rand van een groep (laadplek): klopt met de mediaan van 3 buren aan één kant
+      const kantKlopt = [links, rechts].some(b => b.length === 3 && klopt(mediaan(b)));
+      // buitenste rijen (minder dan 3 buren aan een kant): de directe buur telt ook
+      const rand = links.length < 3 || rechts.length < 3;
+      const buurKlopt = rand && [links, rechts].some(b => b.length > 0 && klopt(b[0]));
+      return klopt(m) || kantKlopt || buurKlopt ? eigen : m;
+    });
+  };
+  const regLo = eindenAan ? regulariseer('lo') : ruw.map(() => 0);
+  const regHi = eindenAan ? regulariseer('hi') : ruw.map(() => 0);
+  diag.eindenGeregulariseerd = ruw.filter((r, li) => r.meten && (Math.abs(r.lo - regLo[li]) > 1e-6 || Math.abs(r.hi - regHi[li]) > 1e-6)).length;
+
+  const einden = lijnen.map((l, li) => {
+    const lo = Math.min(l.t0, l.t1);
+    const hi = Math.max(l.t0, l.t1);
+    let nLo = lo - regLo[li];
+    let nHi = hi + regHi[li];
+    // uiteinden binnen het perceel houden
+    for (let i = 0; i < 80 && inv.perceel && nHi - nLo > 5 && !binnenOp(li, nHi); i++) nHi -= 0.25;
+    for (let i = 0; i < 80 && inv.perceel && nHi - nLo > 5 && !binnenOp(li, nLo); i++) nLo += 0.25;
+    if (!(nHi - nLo >= 5)) {
+      nLo = lo;
+      nHi = hi;
+    }
+    return l.t0 <= l.t1 ? { t0: nLo, t1: nHi } : { t0: nHi, t1: nLo };
+  });
+
+  // ---- uitvoer per rij
   let nKrom = 0;
   const rijen: VerfijndeRij[] = fits.map((f, li) => {
     const l = lijnen[li];
     const tm = (l.t0 + l.t1) / 2;
+    const { t0: e0, t1: e1 } = einden[li];
     // per rij: recht, of een gladde boog als de rij aantoonbaar buigt. Toets: parabool-fit door de
     // segmentposities; krom als de kromming significant is (t ≥ 3, met minstens de meetruis als σ) én de
     // uitbuiging t.o.v. de koorde ≥ krommeGrens. De boog komt bovenop de (geregulariseerde) rechte lijn,
     // zonder die te verschuiven (alleen het kromme deel van de parabool, gemiddeld 0 over de metingen).
-    let coords: XY[] = [punt(l.t0, l.o0 + f.eB), punt(l.t1, l.o1 + f.eE)];
+    let coords: XY[] = [punt(e0, offsetOp(l, e0) + offsetFit(f, l, e0)), punt(e1, offsetOp(l, e1) + offsetFit(f, l, e1))];
     let kromming = 0;
     if (!f.zwak) {
       const gebruikt = f.segs.filter(sg => sg.gebruikt && sg.e !== null);
@@ -758,7 +999,7 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
         const es = gebruikt.map(sg => sg.e as number);
         const kw = kwadratischeFit(xs, es);
         if (kw) {
-          const L = Math.abs(l.t1 - l.t0);
+          const L = Math.abs(e1 - e0);
           const sigma = Math.max(ruisM, kw.sigma);
           const tWaarde = Math.abs(kw.c) / (sigma * Math.sqrt(kw.varC));
           const uitbuiging = (Math.abs(kw.c) * L * L) / 4;
@@ -779,7 +1020,7 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
             const stappen = 8;
             const pts: [number, number][] = [];
             for (let i = 0; i <= stappen; i++) {
-              const t = l.t0 + ((l.t1 - l.t0) * i) / stappen;
+              const t = e0 + ((e1 - e0) * i) / stappen;
               pts.push([t, offsetFit(f, l, t) + boog(t)]);
             }
             const eenvoud = vereenvoudig(pts, vereenvoudigGrens);
@@ -792,7 +1033,7 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
         }
       }
     }
-    const rasterCoords: XY[] = [punt(l.t0, rasterOffset(li, l.t0)), punt(l.t1, rasterOffset(li, l.t1))];
+    const rasterCoords: XY[] = [punt(e0, rasterOffset(li, e0)), punt(e1, rasterOffset(li, e1))];
     const verschuiving = offsetFit(f, l, tm);
     const rasterVerschuiving = rasterOffset(li, tm) - offsetOp(l, tm);
     const dt = l.t1 - l.t0;
@@ -814,8 +1055,10 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
       controleren: f.zwak || f.begrensd || sprong[li],
       segmentenGebruikt: f.gebruikt,
       segmentenTotaal: f.segs.length,
+      lengteVerschilM: Math.round((Math.abs(e1 - e0) - Math.abs(l.t1 - l.t0)) * 100) / 100,
     };
   });
+  const verschillen = rijen.map(r => r.lengteVerschilM);
 
   diag.restStdM = Number(restStd.toFixed(3));
   diag.metingen = meting.length;
@@ -836,6 +1079,13 @@ export function verfijnRijen(inv: VerfijnInvoer): VerfijnResultaat {
     zwak: nZwak,
     controleren: rijen.filter(r => r.controleren).length,
     krom: nKrom,
+    einden: {
+      bepaald: eindenAan,
+      metZomerfoto: zomerSjabloon !== null,
+      verlengd: verschillen.filter(v => v > 1).length,
+      ingekort: verschillen.filter(v => v < -1).length,
+      gemVerlengingM: verschillen.length ? Math.round((verschillen.reduce((a, b) => a + b, 0) / verschillen.length) * 10) / 10 : 0,
+    },
     duurMs: Math.round(nu() - start),
     diagnostiek: diag,
   };

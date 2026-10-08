@@ -8,7 +8,7 @@
 import assert from 'node:assert';
 import { verfijnRijen } from '../lib/rijen/verfijning';
 import { effectieveRijafstanden, verschuifRij } from '../lib/rijen/generatie';
-import { naarRD, naarWGS } from '../lib/rijen/geo';
+import { naarRD, naarWGS, perceelNaarRD } from '../lib/rijen/geo';
 import type { LngLat, XY } from '../lib/rijen/types';
 
 let passed = 0;
@@ -55,6 +55,8 @@ interface Scenario {
   seed: number;
   /** rijen zonder zichtbare strook */
   onzichtbaar?: Set<number>;
+  /** echte lengte per rij [tBegin, tEind] (standaard ±lengte/2 + 2) */
+  bereik?: (k: number) => [number, number];
 }
 
 /** Synthetisch groenindex-beeld: strook van 0,8 m breed (waarde 0) rond elke echte rij, gras 15, ruis */
@@ -83,10 +85,12 @@ function maakBeeld(sc: Scenario, pixelM = 0.1) {
       const t = (x - C[0]) * d[0] + (y - C[1]) * d[1];
       const o = (x - C[0]) * n[0] + (y - C[1]) * n[1];
       let v = 15;
-      if (Math.abs(t) <= sc.lengte / 2 + 2) {
+      {
         const kGuess = Math.round(o / sc.s - k0);
         for (let kk = kGuess - 1; kk <= kGuess + 1; kk++) {
           if (kk < 0 || kk >= sc.rijen || sc.onzichtbaar?.has(kk)) continue;
+          const [ta, tb] = sc.bereik ? sc.bereik(kk) : [-sc.lengte / 2 - 2, sc.lengte / 2 + 2];
+          if (t < ta || t > tb) continue;
           if (Math.abs(o - sc.echt(kk, t)) < 0.4) v = 0;
         }
       }
@@ -247,6 +251,72 @@ console.log('\nVerfijning — zwakke rijen en onbruikbaar beeld:');
     });
     assert.strictEqual(res3.rijen.length, 0);
     assert.strictEqual(res3.betrouwbaar, false);
+  });
+}
+
+console.log('\nVerfijning — uiteinden uit de foto (kopakker, laadplek, ruis):');
+{
+  const s = 3.0;
+  const rijen = 20;
+  const k0 = -(rijen - 1) / 2;
+  const theta = 30;
+  // bomen staan van −80 tot +80 m; rijen 12–17 stoppen bij +50 m (laadplek); rij 4 mist aan het eind 12 m (ruis)
+  const bereik = (k: number): [number, number] => [-80, k >= 12 && k <= 17 ? 50 : k === 4 ? 68 : 80];
+  const echt = (k: number) => (k + k0) * s;
+  const sc: Scenario = { theta, s, rijen, lengte: 160, echt, ruis: 3, seed: 21, bereik };
+  const b = maakBeeld(sc);
+  // basis: rijen van −70 tot +70 (alsof er 10 m kopakker was aangenomen)
+  const basis = b.basis.map(r => {
+    const o = (Number(r.id.slice(1)) + k0) * s;
+    const p = (t: number): XY => [C[0] + t * b.d[0] + o * b.n[0], C[1] + t * b.d[1] + o * b.n[1]];
+    return { ...r, coordsRD: [p(-70), p(70)] };
+  });
+  // perceel: rechthoek tot ±82 m langs de rij, ruim over alle rijen
+  const hoek = (t: number, o: number): LngLat => naarWGS([C[0] + t * b.d[0] + o * b.n[0], C[1] + t * b.d[1] + o * b.n[1]]);
+  const breed = (rijen * s) / 2 + 3;
+  const perceel = perceelNaarRD({ type: 'Polygon', coordinates: [[hoek(-82, -breed), hoek(82, -breed), hoek(82, breed), hoek(-82, breed), hoek(-82, -breed)]] });
+  const res = verfijnRijen({
+    waarden: b.waarden, breedte: b.breedte, hoogte: b.hoogte, pixelM: b.pixelM, origineRD: b.origineRD,
+    richtingGraden: theta, rijafstandM: s, zwaartepunt: C, rijen: basis, perceel,
+  });
+  const einde = (v: (typeof res.rijen)[number]) => {
+    const ts = v.coordsRD.map(p => (p[0] - C[0]) * b.d[0] + (p[1] - C[1]) * b.d[1]);
+    return [Math.min(...ts), Math.max(...ts)];
+  };
+
+  test('rijen worden verlengd tot waar de bomen staan (±2 m), niet buiten het perceel', () => {
+    for (const v of res.rijen) {
+      const k = v.nummer - 1;
+      if ((k >= 12 && k <= 17) || k === 4) continue;
+      const [lo, hi] = einde(v);
+      assert.ok(Math.abs(lo + 80) <= 2 && Math.abs(hi - 80) <= 2, `rij ${v.nummer}: ${lo.toFixed(1)}…${hi.toFixed(1)}`);
+      assert.ok(hi <= 82 && lo >= -82);
+    }
+  });
+
+  test('laadplek: de groep rijen 13–18 eindigt bij de laadplek (±2 m)', () => {
+    for (const v of res.rijen.filter(x => x.nummer >= 13 && x.nummer <= 18)) {
+      const [, hi] = einde(v);
+      assert.ok(Math.abs(hi - 50) <= 2, `rij ${v.nummer}: eind ${hi.toFixed(1)}`);
+    }
+  });
+
+  test('één rij met een gat aan het eind (ruis) volgt de buren', () => {
+    const [, hi] = einde(res.rijen[4]);
+    assert.ok(hi > 76, `rij 5: eind ${hi.toFixed(1)}`);
+  });
+
+  {
+    const fout = res.rijen.filter(v => !((v.nummer - 1 >= 12 && v.nummer - 1 <= 17) || v.nummer - 1 === 4)).flatMap(v => {
+      const [lo, hi] = einde(v);
+      return [-80 - lo, hi - 80];
+    });
+    const gem = fout.reduce((a, b) => a + b, 0) / fout.length;
+    console.log(`    → uiteinden t.o.v. de echte boom-uiteinden: gem ${gem.toFixed(2)} m (+ = te lang), min ${Math.min(...fout).toFixed(2)}, max ${Math.max(...fout).toFixed(2)}`);
+  }
+  test('statistiek uiteinden', () => {
+    assert.strictEqual(res.einden.bepaald, true);
+    assert.ok(res.einden.verlengd >= 12, `verlengd ${res.einden.verlengd}`);
   });
 }
 

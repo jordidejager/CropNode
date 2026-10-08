@@ -279,6 +279,18 @@ export function VerfijningBalk() {
           {controleren > 0 ? <span className="text-orange-200"> · {controleren} controleren</span> : null}
         </p>
         {uitleg && <p className="text-[12px] leading-snug text-white/50">{uitleg}</p>}
+        {r.einden.bepaald && (r.einden.verlengd > 0 || r.einden.ingekort > 0) && (
+          <p className="text-[12px] leading-snug text-white/50">
+            Uiteinden uit de foto{r.einden.metZomerfoto ? ' (zomerfoto: waar staan bomen)' : ''}:{' '}
+            {[
+              r.einden.verlengd > 0 ? `${r.einden.verlengd} ${r.einden.verlengd === 1 ? 'rij' : 'rijen'} langer` : null,
+              r.einden.ingekort > 0 ? `${r.einden.ingekort} korter` : null,
+            ]
+              .filter(Boolean)
+              .join(', ')}
+            .
+          </p>
+        )}
         {vs.overgeslagen > 0 && (
           <p className="text-[12px] leading-snug text-white/45">
             {vs.overgeslagen} handmatig getekende of versleepte {vs.overgeslagen === 1 ? 'rij blijft' : 'rijen blijven'} liggen.

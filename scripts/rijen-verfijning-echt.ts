@@ -97,6 +97,7 @@ async function main() {
       console.log(`  per rij:  gem ${r.perRij.gemiddeldCm} cm · std ${r.perRij.stdCm} · max ${r.perRij.maxCm} · >15: ${r.perRij.boven15} · >30: ${r.perRij.boven30}`);
       console.log(`  raster:   gem ${r.rasterStat.gemiddeldCm} cm · std ${r.rasterStat.stdCm} · max ${r.rasterStat.maxCm} · >15: ${r.rasterStat.boven15} · >30: ${r.rasterStat.boven30}`);
       console.log(`  zwak ${r.zwak} · controleren ${r.controleren} · krom ${r.krom} · diag ${JSON.stringify(r.diagnostiek)}`);
+      console.log(`  uiteinden: ${JSON.stringify(r.einden)} · per rij Δlengte (m): ${r.rijen.map(v => `${v.nummer}:${v.lengteVerschilM > 0 ? '+' : ''}${v.lengteVerschilM.toFixed(1)}`).join(' ')}`);
       console.log('  per rij (nr: verschuiving cm / punten / kromming cm / ±nauwk cm' + ' / afwijking raster cm):');
       console.log('   ' + r.rijen.map(v => `${v.nummer}:${(v.verschuivingM * 100).toFixed(0)}/${v.punten}${v.krommingM ? `/k${(v.krommingM * 100).toFixed(0)}` : ''}${v.zwak ? 'z' : ''}${v.controleren ? '!' : ''}`).join(' '));
 
@@ -113,7 +114,7 @@ async function main() {
 
       if (geenImg) continue;
       // uitsneden rond de uiteinden van de rijen met de grootste verschuiving + midden
-      const kandidaten = [...r.rijen].sort((a, b) => Math.abs(b.verschuivingM) - Math.abs(a.verschuivingM)).slice(0, 2);
+      const kandidaten = [...r.rijen].sort((a, b) => Math.abs(b.lengteVerschilM) - Math.abs(a.lengteVerschilM)).slice(0, 2);
       const krom = r.rijen.find(v => v.punten > 2);
       if (krom) kandidaten.push(krom);
       const tegels: Buffer[] = [];
@@ -128,10 +129,13 @@ async function main() {
           const px = (q: [number, number]) => { const rr = naarRD(q); return `${((rr[0] - bbox[0]) / Z).toFixed(1)},${((bbox[3] - rr[1]) / Z).toFixed(1)}`; };
           const pxRD = (rr: [number, number]) => `${((rr[0] - bbox[0]) / Z).toFixed(1)},${((bbox[3] - rr[1]) / Z).toFixed(1)}`;
           const lijnen: string[] = [];
+          const grens = (p.geometry && parseGeometrie(p.geometry)) as any;
+          const ringen: [number, number][][] = grens?.type === 'Polygon' ? grens.coordinates : grens?.type === 'MultiPolygon' ? grens.coordinates.flat() : [];
+          for (const ring of ringen) lijnen.push(`<polyline points="${ring.map(px).join(' ')}" stroke="#34d399" stroke-width="2" fill="none"/>`);
           for (const x of rijen) lijnen.push(`<polyline points="${x.coordinates.map(px).join(' ')}" stroke="#facc15" stroke-width="2" stroke-dasharray="8 6" fill="none"/>`);
           for (const x of r.rijen) lijnen.push(`<polyline points="${x.rasterCoordsRD.map(q => pxRD(q as [number, number])).join(' ')}" stroke="#e879f9" stroke-width="1.5" fill="none"/>`);
           for (const x of r.rijen) lijnen.push(`<polyline points="${x.coordsRD.map(q => pxRD(q as [number, number])).join(' ')}" stroke="#22d3ee" stroke-width="2.5" fill="none"/>`);
-          const svg = `<svg width="${B}" height="${H}" xmlns="http://www.w3.org/2000/svg">${lijnen.join('')}<rect x="0" y="0" width="${B}" height="22" fill="rgba(0,0,0,0.65)"/><text x="6" y="16" font-family="Helvetica" font-size="13" fill="#fff">${p.name} rij ${v.nummer} ${eind === 0 ? 'begin' : 'eind'} · per rij ${(v.verschuivingM * 100).toFixed(0)} cm${v.punten > 2 ? ` · ${v.punten} punten` : ''} · geel=huidig cyaan=per rij magenta=raster</text></svg>`;
+          const svg = `<svg width="${B}" height="${H}" xmlns="http://www.w3.org/2000/svg">${lijnen.join('')}<rect x="0" y="0" width="${B}" height="22" fill="rgba(0,0,0,0.65)"/><text x="6" y="16" font-family="Helvetica" font-size="13" fill="#fff">${p.name} rij ${v.nummer} ${eind === 0 ? 'begin' : 'eind'} · ${v.lengteVerschilM > 0 ? '+' : ''}${v.lengteVerschilM.toFixed(1)} m${v.punten > 2 ? ` · ${v.punten} punten` : ''} · geel=huidig cyaan=per rij magenta=raster groen=perceel</text></svg>`;
           tegels.push(await sharp(jpeg).composite([{ input: Buffer.from(svg) }]).jpeg({ quality: 72 }).toBuffer());
         }
       }
