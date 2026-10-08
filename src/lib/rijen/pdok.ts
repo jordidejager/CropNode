@@ -465,6 +465,8 @@ export async function verfijnVoorPerceel(
     beeld?: FijnBeeld | null;
     /** Zomerfoto (helderheid) uit een eerdere aanroep; undefined = ophalen, null = niet gebruiken */
     zomer?: FijnBeeld | null;
+    /** Uiteinden uit de foto bepalen (standaard aan); uit = de huidige uiteinden houden */
+    eindenUitFoto?: boolean;
     onVoortgang?: (stap: string) => void;
     signal?: AbortSignal;
     timeoutMs?: number;
@@ -537,6 +539,7 @@ export async function verfijnVoorPerceel(
     perceel,
     aanwezigheid: zomer,
     rijen: rijen.map((r, i) => ({ id: r.id, nummer: r.nummer, coordsRD: coordsRD[i] })),
+    opties: { eindenUitFoto: opties.eindenUitFoto ?? true },
   });
   return { resultaat, beeld: b, zomer, bronBeeld: `PDOK ${PDOK_LAGEN.orthoHR}`, ophaalMs: Math.round(ophaalMs) };
 }

@@ -689,3 +689,97 @@ export function verschuifRij(coordinates: LngLat[], deltaM: number, richtingGrad
   const n = normaalVector(theta);
   return rd.map(p => naarWGS([p[0] + n[0] * deltaM, p[1] + n[1] * deltaM]));
 }
+
+// ---------------------------------------------------------------------------
+// Uiteinden uit de foto in het voorstel
+// ---------------------------------------------------------------------------
+
+/** Bereik [vanM, totM] langs d (t.o.v. het zwaartepunt) van één rij(stuk) op rijlijn offsetM */
+export interface RijBereik {
+  offsetM: number;
+  vanM: number;
+  totM: number;
+}
+
+function bereikLangs(coordsRD: XY[], c: XY, d: XY): [number, number] {
+  const ts = coordsRD.map(p => inproduct(aftrekken(p, c), d));
+  return [Math.min(...ts), Math.max(...ts)];
+}
+
+/**
+ * Uiteinden van verfijnde rijen (uit de foto) als bereik langs de rijrichting, per rij van het voorstel.
+ * `verfijnd` hoort bij `rijen` via id = index ('0', '1', …); rijen zonder verfijnde tegenhanger tellen niet mee.
+ */
+export function bereikUitVerfijning(
+  perceel: PerceelRD,
+  richtingGraden: number,
+  rijen: readonly GegenereerdeRij[],
+  verfijnd: readonly { id: string; coordsRD: XY[] }[],
+): RijBereik[] {
+  const d = richtingVector(asRichting(richtingGraden));
+  const c = perceel.zwaartepunt;
+  const uit: RijBereik[] = [];
+  for (const v of verfijnd) {
+    const r = rijen[Number(v.id)];
+    if (!r || v.coordsRD.length < 2) continue;
+    const [vanM, totM] = bereikLangs(v.coordsRD, c, d);
+    if (eindig(vanM) && eindig(totM)) uit.push({ offsetM: r.offsetM, vanM, totM });
+  }
+  return uit;
+}
+
+/**
+ * Kort de rijen van het voorstel in tot het bereik uit de foto (laadplek, kopakker, inham binnen de perceelgrens).
+ * Alleen inkorten: het voorstel (perceelgrens min de kopakkers) is de maximale lengte. Per rij geldt het bereik
+ * van de dichtstbijzijnde rijlijn (binnen een halve rijafstand) dat het meest met de rij overlapt, zodat het na
+ * een kleine correctie (10 cm, ½°) blijft passen tot het opnieuw is bepaald. Een rij wordt nooit korter dan
+ * minLengteM; het begin blijft aan dezelfde kant.
+ */
+export function kortRijenIn(
+  perceel: PerceelRD,
+  params: Pick<RijParameters, 'richtingGraden' | 'rijafstandM'>,
+  rijen: readonly GegenereerdeRij[],
+  bereik: readonly RijBereik[],
+  opties?: { minLengteM?: number },
+): GegenereerdeRij[] {
+  const s = params.rijafstandM;
+  if (bereik.length === 0 || !(s > 0)) return [...rijen];
+  const minLengte = opties?.minLengteM ?? 5;
+  const d = richtingVector(asRichting(params.richtingGraden));
+  const c = perceel.zwaartepunt;
+  return rijen.map(r => {
+    if (r.coordsRD.length !== 2) return r;
+    const [lo, hi] = bereikLangs(r.coordsRD, c, d);
+    let beste: RijBereik | null = null;
+    let besteOverlap = 0;
+    for (const b of bereik) {
+      if (Math.abs(b.offsetM - r.offsetM) >= s / 2) continue;
+      const overlap = Math.min(hi, b.totM) - Math.max(lo, b.vanM);
+      if (overlap > besteOverlap) {
+        besteOverlap = overlap;
+        beste = b;
+      }
+    }
+    if (!beste) return r;
+    const van = Math.max(lo, beste.vanM);
+    const tot = Math.min(hi, beste.totM);
+    if (tot - van < minLengte || (van - lo < 0.01 && hi - tot < 0.01)) return r;
+    // Punten op de rij zelf (zelfde lijn), begin blijft begin
+    const [p0, p1] = r.coordsRD;
+    const t0 = inproduct(aftrekken(p0, c), d);
+    const t1 = inproduct(aftrekken(p1, c), d);
+    const op = (t: number): XY => {
+      const f = (t - t0) / (t1 - t0);
+      return [p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * f];
+    };
+    const begin = t0 <= t1 ? op(van) : op(tot);
+    const eind = t0 <= t1 ? op(tot) : op(van);
+    return {
+      ...r,
+      coordsRD: [begin, eind],
+      coordinates: [naarWGS(begin), naarWGS(eind)],
+      lengteM: afstand(begin, eind),
+      langsM: (van + tot) / 2,
+    };
+  });
+}

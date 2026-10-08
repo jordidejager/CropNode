@@ -1,13 +1,14 @@
 /**
  * Tests voor de rijverfijning (src/lib/rijen/verfijning.ts) en de werkelijke rijafstand per rij
- * (generatie.effectieveRijafstanden / verschuifRij) op synthetische beelden met bekende ligging.
+ * (generatie.effectieveRijafstanden / verschuifRij) op synthetische beelden met bekende ligging, en het inkorten
+ * van het voorstel tot de uiteinden uit de foto (generatie.kortRijenIn).
  *
  * Run: npx tsx src/__tests__/rijen-verfijning.test.ts
  */
 
 import assert from 'node:assert';
 import { verfijnRijen } from '../lib/rijen/verfijning';
-import { effectieveRijafstanden, verschuifRij } from '../lib/rijen/generatie';
+import { bereikUitVerfijning, effectieveRijafstanden, genereerRijen, kortRijenIn, verschuifRij } from '../lib/rijen/generatie';
 import { naarRD, naarWGS, perceelNaarRD } from '../lib/rijen/geo';
 import type { LngLat, XY } from '../lib/rijen/types';
 
@@ -373,6 +374,68 @@ console.log('\nWerkelijke rijafstand per rij:');
       const dd = (b[0] - a[0]) * n[0] + (b[1] - a[1]) * n[1];
       assert.ok(Math.abs(dd - 0.1) < 0.002, `punt ${i}: ${dd}`);
     });
+  });
+}
+
+console.log('\nVoorstel inkorten tot de uiteinden uit de foto:');
+{
+  const theta = 30;
+  const s = 3;
+  const d: XY = [Math.sin(theta * RAD), Math.cos(theta * RAD)];
+  const n: XY = [Math.cos(theta * RAD), -Math.sin(theta * RAD)];
+  const hoek = (t: number, o: number): LngLat => naarWGS([C[0] + t * d[0] + o * n[0], C[1] + t * d[1] + o * n[1]]);
+  // rechthoek ±80 m langs de rij, ±15 m opzij; zwaartepunt = C
+  const perceel = perceelNaarRD({ type: 'Polygon', coordinates: [[hoek(-80, -15), hoek(80, -15), hoek(80, 15), hoek(-80, 15), hoek(-80, -15)]] });
+  const params = { richtingGraden: theta, rijafstandM: s, faseM: 0.5, kopakkerBeginM: 0, kopakkerEindM: 0 };
+  const rijen = genereerRijen(perceel, params);
+  const langs = (p: XY) => (p[0] - perceel.zwaartepunt[0]) * d[0] + (p[1] - perceel.zwaartepunt[1]) * d[1];
+  // 'verfijnd': rij 3 stopt bij +50 (laadplek), de rest loopt door tot de grens (0,5 m binnen)
+  const verfijnd = rijen.map((r, i) => {
+    const [a, b] = [langs(r.coordsRD[0]), langs(r.coordsRD[1])];
+    const lo = Math.min(a, b) + 0.5;
+    const hi = i === 3 ? 50 : Math.max(a, b) - 0.5;
+    const o = r.offsetM + 0.04; // per rij iets naast het raster
+    return { id: String(i), coordsRD: [lo, hi].map(t => [perceel.zwaartepunt[0] + t * d[0] + o * n[0], perceel.zwaartepunt[1] + t * d[1] + o * n[1]] as XY) };
+  });
+  const bereik = bereikUitVerfijning(perceel, theta, rijen, verfijnd);
+
+  test('rij met laadplek wordt ingekort, begin blijft aan dezelfde kant, ligging dwars blijft', () => {
+    const uit = kortRijenIn(perceel, params, rijen, bereik);
+    assert.strictEqual(uit.length, rijen.length);
+    const r = uit[3];
+    const ts = r.coordsRD.map(langs);
+    assert.ok(Math.abs(Math.max(...ts) - 50) < 0.01, `eind ${Math.max(...ts)}`);
+    assert.ok(Math.abs(Math.min(...ts) - (Math.min(...rijen[3].coordsRD.map(langs)) + 0.5)) < 0.01);
+    // begin aan dezelfde kant als in het raster
+    assert.ok(Math.sign(langs(r.coordsRD[1]) - langs(r.coordsRD[0])) === Math.sign(langs(rijen[3].coordsRD[1]) - langs(rijen[3].coordsRD[0])));
+    // offset onveranderd (raster), lengte en langsM bijgewerkt
+    const off = (p: XY) => (p[0] - perceel.zwaartepunt[0]) * n[0] + (p[1] - perceel.zwaartepunt[1]) * n[1];
+    r.coordsRD.forEach(p => assert.ok(Math.abs(off(p) - rijen[3].offsetM) < 1e-6));
+    assert.ok(Math.abs(r.lengteM - (Math.max(...ts) - Math.min(...ts))) < 0.01);
+    assert.ok(Math.abs((r.langsM ?? 0) - (Math.max(...ts) + Math.min(...ts)) / 2) < 0.01);
+    assert.strictEqual(r.coordinates.length, 2);
+  });
+
+  test('alleen inkorten: een ruimer bereik verlengt niets', () => {
+    const ruim = bereik.map(b => ({ ...b, vanM: -1000, totM: 1000 }));
+    const uit = kortRijenIn(perceel, params, rijen, ruim);
+    uit.forEach((r, i) => assert.ok(Math.abs(r.lengteM - rijen[i].lengteM) < 1e-9, `rij ${i}`));
+  });
+
+  test('na 10 cm verschuiven en ½° draaien past het bereik nog op dezelfde rij', () => {
+    const verschoven = genereerRijen(perceel, { ...params, faseM: params.faseM + 0.1, richtingGraden: theta + 0.5 });
+    const uit = kortRijenIn(perceel, { ...params, richtingGraden: theta + 0.5 }, verschoven, bereik);
+    const korter = uit.map((r, i) => verschoven[i].lengteM - r.lengteM);
+    const i3 = verschoven.findIndex(r => Math.abs(r.offsetM - (rijen[3].offsetM + 0.1)) < 1);
+    assert.ok(korter[i3] > 25, `rij 4 ${korter[i3].toFixed(1)} m korter`);
+    korter.forEach((k, i) => i !== i3 && assert.ok(k < 2, `rij ${i}: ${k.toFixed(1)} m korter`));
+  });
+
+  test('nooit korter dan 5 m; zonder bereik onveranderd', () => {
+    const kort = bereik.map((b, i) => (i === 0 ? { ...b, totM: b.vanM + 2 } : b));
+    const uit = kortRijenIn(perceel, params, rijen, kort);
+    assert.ok(Math.abs(uit[0].lengteM - rijen[0].lengteM) < 1e-9);
+    assert.deepStrictEqual(kortRijenIn(perceel, params, rijen, []), rijen);
   });
 }
 

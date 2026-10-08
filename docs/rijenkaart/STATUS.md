@@ -251,6 +251,20 @@ Beelden: `img/uiteinden-kloetinge-spoor.jpg`, `img/uiteinden-busje.jpg` (rood = 
 geel = voorstel tot de grens), `img/uiteinden-jachthoek-laadplek.jpg`. Een gat midden in een rij (laadplek midden in
 het perceel) splitst de rij nog niet: teken die met *Rij tekenen* of zet de rij op 'controleren'.
 
+**Uiteinden al in het voorstel (8 oktober, middag):** Jordi zag bij Jachthoek in het voorstel nog rijen over de laadplek
+— de uiteinden kwamen pas ná *Opslaan* uit de foto. Nu kort het voorstel zelf de rijen in tot waar de bomen staan
+(`useConceptEinden`: zelfde uiteindebepaling op de voorgestelde rijen, alleen inkorten, ligging dwars blijft het raster;
+opnieuw na elke correctie, tot dan blijven de vorige uiteinden per rijlijn staan). Schakelaar *Uiteinden uit de luchtfoto*
+bij de kopakkers; de verfijning na opslaan doet dan alleen nog de ligging. Het scherpe beeld wordt gedeeld
+(`fijn-beeld-cache.ts`), dus maar één keer opgehaald. Beeld: `img/voorstel-jachthoek-laadplek.jpg` (links voorheen,
+rechts nu). Tegelijk de bepaling robuuster gemaakt (jonge aanplant zonder zichtbare strook kortte ten onrechte in):
+- zomerfoto alleen als ≥ 30% van de rijen erop staat (Jachthoek is na de zomerfoto geplant: 9 rijen 'zagen' toevallig
+  grondbewerkingssporen);
+- per 2 m-cel meerderheid met de buurrijen (een vlek of gat in één rij valt weg, een schuine laadplekrand blijft);
+- alleen inkorten bij een duidelijke overgang (≥ 80% bomen vlak ervoor, ≥ 60 procentpunt minder erna) en alleen bij
+  rijen met een goed gemeten ligging; anders blijft het uiteinde staan. Jachthoek: laadplek-rijen 13–33 m korter, de rest
+  stopt ±5 m voor de grens (pad); de noordwesthoek (zwak beeld) blijft tot de grens.
+
 **Grenzen:** waar geen duidelijke herbicidestrook op de foto staat (bv. het oude blok van Jachthoek, Kloetinge
 Plantsoen) meldt de app "niet precies te leggen" en blijven de rijen zoals ze zijn. Randrijen zijn onzekerder
 (greppel/schaduw in beeld) en krijgen sneller 'controleren'. Een S-vormige rij wordt als één boog benaderd.

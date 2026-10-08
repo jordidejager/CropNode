@@ -73,6 +73,7 @@ export function GenererenPaneel() {
   const slaOp = async () => {
     if (!plan) return;
     setBevestigOpen(false);
+    const eindenNaOpslaan = concept.eindenUitFoto && concept.einden.status !== 'klaar';
     try {
       const r = await concept.slaOp(plan);
       const delen = [
@@ -94,8 +95,9 @@ export function GenererenPaneel() {
       concept.wis();
       // Alleen naar Rijen als de gebruiker intussen niet zelf een ander tabblad koos
       if (gemount.current) ctx.zetTab('rijen');
-      // Direct daarna elke rij precies op de foto leggen (voorstel op de kaart; de gebruiker beslist)
-      ctx.verfijning.planStart();
+      // Direct daarna elke rij precies op de foto leggen (voorstel op de kaart; de gebruiker beslist). Kwamen de
+      // uiteinden al uit de foto (of wilde de gebruiker dat niet), dan alleen de ligging.
+      ctx.verfijning.planStart({ eindenUitFoto: eindenNaOpslaan });
     } catch (e) {
       ctx.meldFout(e, 'Opslaan mislukt');
       // De beginkant kan al gewisseld zijn (eerste stap) terwijl het opslaan van de rijen mislukte
@@ -183,10 +185,17 @@ export function GenererenPaneel() {
               />
             </Veld>
           </div>
-          <p className="text-[12px] leading-snug text-white/45">
-            Na opslaan bepaalt CropNode per rij uit de luchtfoto waar de bomen echt ophouden (kopakker, laadplek, inham).
-            Een kopakker hier is dus alleen nodig als je een vaste afstand wilt.
-          </p>
+          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+            <span className="text-[13px] text-white/75">
+              Uiteinden uit de luchtfoto
+              <span className="block text-[12px] leading-snug text-white/45">
+                {concept.eindenUitFoto
+                  ? 'Rijen stoppen waar de bomen op de foto ophouden (kopakker, laadplek, inham). Een kopakker hierboven is dan alleen nodig als je een vaste afstand wilt.'
+                  : 'Uit: rijen lopen tot de perceelgrens, min de kopakker.'}
+              </span>
+            </span>
+            <Switch checked={concept.eindenUitFoto} onCheckedChange={concept.setEindenUitFoto} aria-label="Uiteinden uit de luchtfoto" />
+          </label>
         </div>
       </Sectie>
 
@@ -305,7 +314,7 @@ export function GenererenPaneel() {
       {basis && (
         <Sectie
           titel="Voorstel"
-          uitleg="Gele stippellijnen op de kaart; oranje = rij door een inham of pad (controleren)."
+          uitleg="Gele stippellijnen op de kaart; oranje = rij door een inham of pad (controleren). Nog niet opgeslagen."
           actie={
             <Knop klein soort="stil" onClick={concept.wis}>
               Wissen
@@ -319,7 +328,11 @@ export function GenererenPaneel() {
             {concept.statistiek.aantalControleren > 0 && (
               <Chip toon="amber">{concept.statistiek.aantalControleren} controleren</Chip>
             )}
+            {concept.eindenUitFoto && concept.einden.status === 'klaar' && concept.einden.ingekort > 0 && (
+              <Chip>{concept.einden.ingekort} ingekort</Chip>
+            )}
           </div>
+          <EindenStatus />
           <p className="text-[13px] text-white/55">
             Richting {richtingTekst(basis.richtingGraden)} · rijafstand {fmt(basis.rijafstandM, 2)} m
             {concept.bron?.methode === 'auto' && concept.bron.confidence !== null
@@ -560,6 +573,36 @@ export function GenererenPaneel() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** Hoe ver de uiteinden uit de foto zijn (voorstel) */
+function EindenStatus() {
+  const { concept } = useRijenkaartCtx();
+  const e = concept.einden;
+  if (!concept.eindenUitFoto || e.status === 'uit') return null;
+  if (e.status === 'bezig') {
+    return (
+      <p className="flex items-center gap-2 text-[13px] text-emerald-100/80" role="status">
+        <ScanSearch className="h-4 w-4 shrink-0 animate-pulse text-emerald-300" aria-hidden="true" />
+        {e.voortgang ?? 'Uiteinden uit de foto bepalen…'}
+      </p>
+    );
+  }
+  if (e.status === 'klaar') {
+    return (
+      <p className="text-[13px] text-white/55" role="status">
+        {e.ingekort > 0
+          ? `Uiteinden uit de foto: ${e.ingekort} ${e.ingekort === 1 ? 'rij stopt' : 'rijen stoppen'} eerder, waar de bomen ophouden (kopakker, laadplek).`
+          : 'Uiteinden uit de foto: de bomen staan tot de perceelgrens.'}
+      </p>
+    );
+  }
+  return (
+    <p className="text-[13px] text-amber-200/80" role="status">
+      Uiteinden niet uit de foto te halen{e.reden ? `: ${e.reden.replace(/^Niet betrouwbaar: /, '')}` : '.'} De rijen lopen tot de
+      perceelgrens (min de kopakker); kort ze zo nodig zelf in.
+    </p>
   );
 }
 

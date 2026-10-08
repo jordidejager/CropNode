@@ -25,6 +25,7 @@ import type {
 } from '@/lib/rijen/types';
 import { rijenToepassenAction, zetBeginkantAction } from '@/app/rijen-actions';
 import type { Basislaag, ConceptRij } from './rijenkaart-map';
+import { useConceptEinden } from './use-concept-einden';
 import {
   basisUitInstellingen,
   beginkantBijRichting,
@@ -42,8 +43,8 @@ import {
 export const MIN_REFERENTIE_M = 20;
 /**
  * Standaard geen kopakker binnen de perceelgrens: bij de meeste (BRP-)percelen staan de bomen tot vlak bij de
- * grens. Na opslaan legt de verfijning per rij de uiteinden uit de foto (tot waar de bomen staan), dus een
- * kopakker binnen het perceel (of een laadplek) wordt daar alsnog weggehaald.
+ * grens. Het voorstel kort de rijen daarna in tot waar de bomen op de foto ophouden (useConceptEinden), dus een
+ * kopakker binnen het perceel (of een laadplek) valt alsnog weg.
  */
 const STANDAARD_KOPAKKER_M = 0;
 
@@ -95,6 +96,8 @@ export function useRijenConcept({
   // Bij corrigeren van een bestaande set: alleen ligging bijwerken / handmatig aangepaste rijen laten liggen
   const [alleenBestaande, setAlleenBestaande] = useState(false);
   const [behoudGetekend, setBehoudGetekend] = useState(false);
+  // Uiteinden van de rijen uit de luchtfoto (laadplek, kopakker, inham); uit = tot de perceelgrens min de kopakkers
+  const [eindenUitFoto, setEindenUitFoto] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
 
   // Lopende detectie afbreken bij verlaten van de pagina
@@ -107,7 +110,7 @@ export function useRijenConcept({
     [basis, kopakkerBegin, kopakkerEind],
   );
 
-  const conceptRijen: GegenereerdeRij[] = useMemo(() => {
+  const rasterRijen: GegenereerdeRij[] = useMemo(() => {
     if (!params || !perceelRD) return [];
     try {
       return genereerRijen(perceelRD, params, { stukken });
@@ -115,6 +118,9 @@ export function useRijenConcept({
       return [];
     }
   }, [params, perceelRD, stukken]);
+  // Het voorstel = het raster, ingekort tot waar de bomen op de foto staan
+  const einden = useConceptEinden({ perceelId, perceelRD, params, rijen: rasterRijen, aan: eindenUitFoto });
+  const conceptRijen = einden.rijen;
 
   const kaartConcept: ConceptRij[] | null = useMemo(
     () => (basis ? conceptRijen.map(r => ({ coordinates: r.coordinates, controleren: r.controleren })) : null),
@@ -338,12 +344,15 @@ export function useRijenConcept({
     setAlleenBestaande,
     behoudGetekend,
     setBehoudGetekend,
+    eindenUitFoto,
+    setEindenUitFoto,
     rijafstandVoorReferentie,
     // concept
     basis,
     bron,
     params,
     conceptRijen,
+    einden,
     kaartConcept,
     statistiek,
     plan,

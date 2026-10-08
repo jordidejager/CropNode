@@ -15,9 +15,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { rijenToepassenAction } from '@/app/rijen-actions';
 import { naarWGS } from '@/lib/rijen/geo';
-import { verfijnVoorPerceel, type FijnBeeld } from '@/lib/rijen/pdok';
+import { verfijnVoorPerceel } from '@/lib/rijen/pdok';
 import type { VerfijndeRij, VerfijnModus, VerfijnResultaat } from '@/lib/rijen/verfijning';
 import type { LngLat, PerceelRD, Rij, Rijenkaart, RijWijziging } from '@/lib/rijen/types';
+import { bewaarFijnBeeld, leesFijnBeeld } from './fijn-beeld-cache';
 
 export interface VerfijningVoorstel {
   resultaat: VerfijnResultaat;
@@ -30,6 +31,13 @@ export interface VerfijningVoorstel {
   overgeslagen: number;
 }
 
+export interface VerfijnStartOpties {
+  /** Alleen deze rij(en) opnieuw leggen (ook handmatig gelegde) */
+  rijIds?: string[];
+  /** Uiteinden uit de foto (standaard aan); uit = alleen de ligging, de uiteinden blijven */
+  eindenUitFoto?: boolean;
+}
+
 export interface RijVerfijning {
   status: 'leeg' | 'bezig' | 'voorstel';
   voortgang: string | null;
@@ -37,9 +45,9 @@ export interface RijVerfijning {
   bezigOpslaan: boolean;
   /** Voorbeeldlijnen voor de kaart (concept-laag) */
   kaartLijnen: { coordinates: LngLat[]; controleren: boolean }[] | null;
-  start: (opties?: { rijIds?: string[] }) => Promise<void>;
+  start: (opties?: VerfijnStartOpties) => Promise<void>;
   /** Start zodra de verse rijen geladen zijn (na het opslaan van een gegenereerde set) */
-  planStart: () => void;
+  planStart: (opties?: VerfijnStartOpties) => void;
   zetModus: (m: VerfijnModus) => void;
   opslaan: () => Promise<void>;
   annuleren: () => void;
@@ -63,8 +71,7 @@ export function useRijVerfijning(args: {
   const [voorstel, setVoorstel] = useState<VerfijningVoorstel | null>(null);
   const [bezigOpslaan, setBezigOpslaan] = useState(false);
   const [gepland, setGepland] = useState(0);
-  const beeldRef = useRef<FijnBeeld | null>(null);
-  const zomerRef = useRef<FijnBeeld | null | undefined>(undefined);
+  const geplandOpties = useRef<VerfijnStartOpties | undefined>(undefined);
   const afbreker = useRef<AbortController | null>(null);
 
   // Laatste stand voor callbacks die na een await lopen
@@ -72,14 +79,9 @@ export function useRijVerfijning(args: {
   actueel.current = { perceelRD, actieveRijen, richting, kaart };
 
   useEffect(() => () => afbreker.current?.abort(), []);
-  // Ander perceel of nieuwe geometrie: beeld niet hergebruiken
-  useEffect(() => {
-    beeldRef.current = null;
-    zomerRef.current = undefined;
-  }, [perceelId, perceelRD]);
 
   const start = useCallback(
-    async (opties?: { rijIds?: string[] }) => {
+    async (opties?: VerfijnStartOpties) => {
       const { perceelRD: rd, actieveRijen: rijen, richting: theta, kaart: k } = actueel.current;
       const rijafstand = k.instellingen?.rijafstandM ?? null;
       if (!rd) {
@@ -102,21 +104,23 @@ export function useRijVerfijning(args: {
       setVoorstel(null);
       setVoortgang('Scherpe luchtfoto ophalen…');
       try {
+        // Zelfde beeld als het voorstel (uiteinden) als dat er nog is
+        const cache = leesFijnBeeld(perceelId);
         const { resultaat, beeld, zomer } = await verfijnVoorPerceel(
           rd,
           bruikbaar.map(r => ({ id: r.id, nummer: r.nummer, coordinates: r.coordinates })),
           {
             richtingGraden: theta,
             rijafstandM: rijafstand,
-            beeld: beeldRef.current,
-            zomer: zomerRef.current,
+            beeld: cache.beeld,
+            zomer: cache.zomer,
+            eindenUitFoto: opties?.eindenUitFoto ?? true,
             signal: ac.signal,
             onVoortgang: stap => setVoortgang(stap),
           },
         );
         if (ac.signal.aborted) return;
-        beeldRef.current = beeld;
-        zomerRef.current = zomer;
+        bewaarFijnBeeld(perceelId, beeld, zomer);
         if (!resultaat.betrouwbaar) {
           setStatus('leeg');
           setVoortgang(null);
@@ -146,16 +150,19 @@ export function useRijVerfijning(args: {
         meldFout(e, 'Rijen op de foto leggen mislukt');
       }
     },
-    [meld, meldFout],
+    [perceelId, meld, meldFout],
   );
 
   // planStart: na een render met de verse rijen starten (de ref heeft dan de nieuwe rijen)
-  const planStart = useCallback(() => setGepland(n => n + 1), []);
+  const planStart = useCallback((opties?: VerfijnStartOpties) => {
+    geplandOpties.current = opties;
+    setGepland(n => n + 1);
+  }, []);
   const afgehandeld = useRef(0);
   useEffect(() => {
     if (gepland > afgehandeld.current) {
       afgehandeld.current = gepland;
-      void start();
+      void start(geplandOpties.current);
     }
   }, [gepland, start]);
 

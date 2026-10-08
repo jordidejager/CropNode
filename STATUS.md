@@ -12,6 +12,9 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-10-08 (middag) — 🌳 Rijenkaart: uiteinden al in het voorstel (laadplek Jachthoek)
+- ✅ Het voorstel kort rijen vóór opslaan in tot waar de bomen staan (laadplek, kopakker, inham); schakelaar "Uiteinden uit de luchtfoto". Bepaling robuuster voor jonge aanplant (zomerfoto-drempel, meerderheid met buurrijen, alleen bij duidelijke overgang). Zie `docs/rijenkaart/STATUS.md` §9.
+
 ### 2026-10-08 — 🌳 Rijenkaart: uiteinden van rijen uit de foto (kopakker, laadplek)
 - ✅ Verfijning bepaalt per rij waar de bomen ophouden (zomerfoto 25 cm = kronen, voorjaar 8 cm als terugval), samenhang met buurrijen, nooit buiten de grens; standaard-kopakker bij genereren 0 m. Consistent ongeacht start-kopakker (Steketee/Busje/Kloetinge Spoor mediaan ≤ 0,25 m).
 - ⏳ Gat midden in een rij (laadplek midden in perceel) splitst nog niet; Jachthoek (jonge aanplant, niet op zomerfoto) blijft wat onrustiger aan de uiteinden.

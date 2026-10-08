@@ -339,6 +339,10 @@ export function ConceptBalk() {
           <span className="text-orange-200"> · {concept.statistiek.aantalControleren} controleren</span>
         )}
         <span className="text-white/50"> · {fmt(basis.rijafstandM, 2)} m · {fmt(basis.richtingGraden, 1)}°</span>
+        {concept.eindenUitFoto && concept.einden.status === 'bezig' && <span className="text-emerald-200/80"> · uiteinden bepalen…</span>}
+        {concept.eindenUitFoto && concept.einden.status === 'klaar' && concept.einden.ingekort > 0 && (
+          <span className="text-white/50"> · {concept.einden.ingekort} ingekort</span>
+        )}
       </p>
       <div className="grid grid-cols-5 gap-1">
         <button type="button" className={knop} onClick={() => concept.verschuif(0.1 * knoppen[0].teken)} aria-label={`Voorstel 10 cm naar het ${windstreek(knoppen[0].graden)}`}>
