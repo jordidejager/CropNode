@@ -1,12 +1,14 @@
 'use client';
 
 /**
- * Rijenkaart (beta) — paneel "Export": GeoJSON van de rijen downloaden (Jager Core, GIS).
+ * Rijenkaart (beta) — paneel "Export": de perceelkaart (grens + rijen + machinematen, Jager Core) en de
+ * GeoJSON van alleen de rijen (GIS).
  */
 
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { PerceelkaartDownload } from './perceelkaart-download';
 import { useRijenkaartCtx } from './rijenkaart-context';
 import { Chip, Sectie } from './ui';
 
@@ -21,6 +23,7 @@ export function ExportPaneel() {
 
   return (
     <div className="space-y-6">
+      <PerceelkaartDownload perceelId={ctx.perceelId} weergave="paneel" />
       <Sectie
         titel="GeoJSON"
         uitleg="Alle rijen als lijnen (WGS84) met nummer, ras, blok, rol, lengte, rij- en boomafstand en aantal bomen. Te gebruiken in Jager Core (taakkaarten, rijgeleiding) en in GIS-programma's als QGIS."

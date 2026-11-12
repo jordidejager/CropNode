@@ -380,6 +380,9 @@ connectors in één chat werken ("personal fruitteelt-assistent").
 - **Rijen** (v1.3.0, 28 tools, `src/lib/mcp/rijen.ts`): tool `rijen`; optioneel `rijen` bij `registreer_bespuiting`
   (per perceel-item of topniveau bij één perceel; ook "rij 1 t/m 20" in tekst als het perceel rijen heeft) en
   `rijen` + `positie_m` bij `veldnotitie`; `percelen`/`bespuitingen`/`veldnotities` tonen rijen. Zonder rijen identieke uitvoer.
+- **Perceelkaart** (v1.4.0, 29 tools, `src/lib/mcp/perceelkaart.ts`): tool `perceelkaart(perceel, deel?, rijen?)` =
+  zelfde GeoJSON als de knop (alleen lezen, geen bevestig); > 50.000 tekens → grens + `metadata.vervolg` met de
+  aanroepen per rijenstuk.
 
 ## Rijenkaart (beta) (`/percelen/rijen`, `src/lib/rijen/`, `src/components/rijenkaart/`)
 
@@ -407,7 +410,12 @@ en `docs/rijenkaart/STATUS.md` (oplevering, testscript, open punten).
   regularisatie met buren (mediaan 5 / kant), snap naar de grens binnen 2,5 m. Standaard-kopakker = 0 m.
   Het **voorstel** past dit al vóór opslaan toe (`use-concept-einden.ts` + `kortRijenIn`, alleen inkorten); de verfijning na
   opslaan krijgt dan `eindenUitFoto: false`. Scherp beeld gedeeld via `fijn-beeld-cache.ts` (één perceel).
-- **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`, `npm run rijen:verfijning-echt`.
+- **Perceelkaart** (`perceelkaart.ts` puur, `perceelkaart-store.ts`, route `/api/parcels/[id]/perceelkaart`, knop
+  `perceelkaart-download.tsx` op de perceelpagina en in Export, MCP `perceelkaart`): perceelgrens + actieve rijen +
+  machinematen (buren links/rechts in de rijrichting, afstand hart op hart per 1 m en profiel per 10 m, kop_begin/eind_m
+  tot de grens) + controles, voor de Jager Core-simulatie. RD via PostGIS (`perceelkaart_geometrie`, migratie 096,
+  alleen lezen). Bestaande velden van de rijen-export ongewijzigd; onbekend = null. Velden: `docs/rijenkaart/PERCEELKAART.md`.
+- **Tests**: `npm run test:rijen` (pure modules), `npm run test:rijen-store` (DB, ruimt op), `npm run rijen:detectie-echt`, `npm run rijen:verfijning-echt`, `npm run rijen:perceelkaart-echt`.
 
 ## Weather Hub (`/weer`)
 

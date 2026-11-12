@@ -273,6 +273,9 @@ Plantsoen) meldt de app "niet precies te leggen" en blijven de rijen zoals ze zi
 verschoven → inzoomen op rij 1 en 36: de gele lijnen liggen op de stroken → *Opslaan (36)* → tik rij 1: "Ligging:
 … t.o.v. raster". Spoor: zelfde knop → "Raster ★" (rijafstand 3,301).
 
+**Perceelkaart (12 november):** export van perceelgrens + rijen + machinematen voor de Jager Core-simulatie (knop,
+API en MCP-tool `perceelkaart`). Zie [PERCEELKAART.md](PERCEELKAART.md).
+
 ---
 
 **Deploy:** live op productie (Vercel, `main`) sinds 7 oktober 2026, ±02:15, commit `c74e512` (de code staat in `985a280`). Beide Production-deploys geslaagd. Live gecontroleerd: `/percelen/rijen` bestaat (achter login), de MCP antwoordt met versie 1.3.0 en 28 tools, en `rijen` werkt. Rijen-tabellen in productie: leeg, klaar voor de eerste echte rijen.

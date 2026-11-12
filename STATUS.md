@@ -12,6 +12,10 @@
 
 ## Recent activity (nieuwste boven)
 
+### 2026-11-12 — 🗺️ Perceelkaart downloaden (Jager Core-simulatie)
+- ✅ Knop "Perceelkaart downloaden" (perceelpagina + Rijenkaart › Export) en MCP-tool `perceelkaart` (v1.4.0): perceelgrens + rijen + machinematen (buren, rijafstand langs de rij, ruimte tot de grens) in WGS84 + RD, met controles. Migratie 096 (alleen een leesfunctie). Murre en Spoor: alle controles in orde. Velden + wat nog null is: `docs/rijenkaart/PERCEELKAART.md`.
+- ⏳ Murre en Spoor staan nog op het eerste raster (kopakker 6 m, niet per rij op de foto) — opnieuw genereren voor een realistische simulatie. Boomafstand, GPS-aanplant, BRP-id, opnamedatum: niet geregistreerd (null).
+
 ### 2026-10-08 (middag) — 🌳 Rijenkaart: uiteinden al in het voorstel (laadplek Jachthoek)
 - ✅ Het voorstel kort rijen vóór opslaan in tot waar de bomen staan (laadplek, kopakker, inham); schakelaar "Uiteinden uit de luchtfoto". Bepaling robuuster voor jonge aanplant (zomerfoto-drempel, meerderheid met buurrijen, alleen bij duidelijke overgang). Zie `docs/rijenkaart/STATUS.md` §9.
 

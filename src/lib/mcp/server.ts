@@ -31,6 +31,7 @@ const INSTRUCTIONS =
   'RIJEN (beta): percelen kunnen rijen hebben; de tool rijen toont per perceel de blokken, rijnummers, bestuiverrijen en het rij-oppervlak (percelen toont een korte regel). ' +
   'Alleen een deel van de rijen gespoten → registreer_bespuiting met percelen[{naam, rijen:"1-20, 24"}] (of rijen op topniveau als het om één perceel gaat), niet samen met deel/ha; rijen mag ook een bloknaam zijn ("blok Conference 2018"), "bestuivers" of "alle behalve 5". ' +
   'Notitie bij een rij → veldnotitie met percelen [precies één perceel], rijen "12" en optioneel positie_m (meters vanaf het begin van de rij). Geen rijen bekend → gewoon zonder rijen werken. ' +
+  'PERCEELKAART: perceelkaart(perceel) geeft perceelgrens + rijen + machinematen (buurrijen, rijafstand langs de rij, ruimte tot de grens) als GeoJSON, voor de Jager Core-simulatie; alleen lezen, geen bevestiging. Te groot → volg metadata.vervolg (deel/rijen). ' +
   'Spuituren worden automatisch uit het spuitschrift berekend; registreer die niet apart. Verbruik door bespuitingen wordt automatisch van de voorraad afgeboekt; voorraad_bijwerken is voor leveringen en tellingen. ' +
   'Oogst, kisten, koelcellen, verladingen en sortering horen bij StoreNode (aparte connector), niet bij CropNode.';
 
@@ -46,7 +47,7 @@ export async function handleRpc(userId: string, verzoek: RpcVerzoek): Promise<un
         result: {
           protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : MCP_PROTOCOL,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'CropNode', version: '1.3.0' },
+          serverInfo: { name: 'CropNode', version: '1.4.0' },
           instructions: INSTRUCTIONS,
         },
       };

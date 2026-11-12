@@ -35,6 +35,7 @@ import {
   type RijenResolutie,
 } from './rijen';
 import { koppelNotitieAanRijen } from '@/lib/rijen/koppelingen';
+import { PERCEELKAART_TOOLS, perceelkaartTool } from './perceelkaart';
 import {
   normaliseer,
   percelenVanNaam,
@@ -192,6 +193,7 @@ export const TOOLS: ToolDefinitie[] = [
   ...EXTRA_TOOLS,
   ...KLUS_TOOLS,
   ...RIJEN_TOOLS,
+  ...PERCEELKAART_TOOLS,
 ];
 
 // ── Uitvoering ───────────────────────────────────────────────────────────
@@ -232,6 +234,7 @@ export async function voerToolUit(userId: string, naam: string, args: Args): Pro
     case 'verwijder_concept': return verwijderConcept(userId, args);
     case 'registreer_bespuiting': return registreerBespuiting(await laadContext(userId), args);
     case 'rijen': return rijenTool(await laadContext(userId), args);
+    case 'perceelkaart': return perceelkaartTool(await laadContext(userId), args);
     default:
       return { tekst: `Onbekende tool: ${naam}`, fout: true };
   }

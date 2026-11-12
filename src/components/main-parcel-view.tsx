@@ -59,6 +59,7 @@ import { format, differenceInYears } from "date-fns"
 import { nl } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { CompositionSection } from "@/components/domain/dashboard/composition-section"
+import { PerceelkaartDownload } from "@/components/rijenkaart/perceelkaart-download"
 
 interface MainParcelViewProps {
     parcel: Parcel
@@ -285,12 +286,14 @@ export function MainParcelView({
 
             {/* Rijenkaart (beta): eigen regel onder de kop, zodat de bestaande knoppen in de kop niet verschuiven */}
             {rijenkaartPerceelId && (
-                <div className="-mt-3 flex">
+                <div className="-mt-3 flex flex-wrap gap-2">
                     <Button asChild variant="outline" className="min-h-[44px] bg-white/5 border-white/10 text-white font-bold rounded-full gap-2">
                         <Link href={`/percelen/rijen/${encodeURIComponent(rijenkaartPerceelId)}`}>
                             <Rows3 className="h-4 w-4" /> Rijenkaart (beta)
                         </Link>
                     </Button>
+                    {/* Perceelgrens + rijen + machinematen in één bestand (Jager Core) */}
+                    <PerceelkaartDownload perceelId={rijenkaartPerceelId} weergave="knop" />
                 </div>
             )}
 
