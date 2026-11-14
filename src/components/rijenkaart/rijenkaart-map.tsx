@@ -41,7 +41,7 @@ import {
 // Publieke types
 // ---------------------------------------------------------------------------
 
-export type KaartModus = 'bekijken' | 'selecteren' | 'referentielijn' | 'positie';
+export type KaartModus = 'bekijken' | 'selecteren' | 'referentielijn' | 'positie' | 'polylijn';
 export type Basislaag = 'orthoHR' | 'ortho25';
 
 /** Voorvertoning van een (nog niet opgeslagen) rij */
@@ -89,6 +89,10 @@ export interface RijenkaartMapProps {
    * wordt hergebruikt (bv. een nieuwe rij tekenen).
    */
   lijnHints?: { eerste: string; tweede: string } | null;
+  /** Modus 'polylijn': elke tik is een volgend punt van de rij die getekend wordt */
+  onPolylijnPunt?: (punt: LngLat) => void;
+  /** De punten van de rij die nu getekend wordt (modus 'polylijn') */
+  tekenLijn?: LngLat[] | null;
   /** Na slepen van een eindpunt; alleen dat eindpunt is gewijzigd */
   onEindpuntVerplaatst?: (rijId: string, coordinates: LngLat[]) => void;
   /** Verhogen als een gesleept eindpunt niet opgeslagen kon worden: grepen terug naar de opgeslagen ligging */
@@ -720,6 +724,10 @@ function referentiePunt(s: KaartStaat, p: RijenkaartMapProps, latlng: L.LatLng):
 }
 
 function verwerkKlik(s: KaartStaat, p: RijenkaartMapProps, latlng: L.LatLng, raakId: string | null): void {
+  if (p.modus === 'polylijn') {
+    p.onPolylijnPunt?.(naarLngLat(latlng));
+    return;
+  }
   if (p.modus === 'referentielijn') {
     referentiePunt(s, p, latlng);
     return;
@@ -1126,8 +1134,33 @@ export function RijenkaartMap(props: RijenkaartMapProps) {
     // Dubbeltik-zoom zit snelle tikken (selecteren, twee referentiepunten) in de weg
     if (modus === 'bekijken') s.map.doubleClickZoom.enable();
     else s.map.doubleClickZoom.disable();
-    s.map.getContainer().style.cursor = modus === 'referentielijn' || modus === 'positie' ? 'crosshair' : '';
+    s.map.getContainer().style.cursor = modus === 'referentielijn' || modus === 'positie' || modus === 'polylijn' ? 'crosshair' : '';
   }, [modus]);
+
+  // ---- Rij tekenen met meerdere punten (modus 'polylijn') -----------------
+  const tekenLijn = props.tekenLijn;
+  useEffect(() => {
+    const s = staatRef.current;
+    if (!s) return;
+    s.referentieGroep.clearLayers();
+    if (modus !== 'polylijn' || !tekenLijn || tekenLijn.length === 0) return;
+    const lls = tekenLijn.map(naarLatLng);
+    const opties = { interactive: false, bubblingMouseEvents: false } as const;
+    if (lls.length >= 2) {
+      L.polyline(lls, { ...opties, color: '#000000', weight: 6, opacity: 0.6 }).addTo(s.referentieGroep);
+      L.polyline(lls, { ...opties, color: KLEUR_CONCEPT, weight: 3.5 }).addTo(s.referentieGroep);
+    }
+    lls.forEach((ll, i) =>
+      L.circleMarker(ll, {
+        ...opties,
+        radius: i === 0 ? 7 : 5,
+        color: '#000000',
+        weight: 2,
+        fillColor: i === 0 ? '#ffffff' : KLEUR_CONCEPT,
+        fillOpacity: 1,
+      }).addTo(s.referentieGroep),
+    );
+  }, [modus, tekenLijn]);
 
   // ---- Opnieuw inzoomen op verzoek ---------------------------------------
   const vorigeFitSleutel = useRef(fitSleutel);
@@ -1237,7 +1270,11 @@ export function RijenkaartMap(props: RijenkaartMapProps) {
 
   const lijnHints = props.lijnHints;
   const hint =
-    modus === 'referentielijn'
+    modus === 'polylijn'
+      ? (tekenLijn?.length ?? 0) === 0
+        ? 'Tik het begin van de rij'
+        : 'Tik volgende punten langs de rij; kies Klaar bij het eind'
+      : modus === 'referentielijn'
       ? refStap === 0
         ? lijnHints?.eerste ?? 'Referentielijn: tik op een rij (punt 1)'
         : lijnHints?.tweede ?? 'Tik een tweede punt verderop langs dezelfde rij'

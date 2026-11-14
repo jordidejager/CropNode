@@ -7,6 +7,7 @@
 import assert from 'node:assert';
 import { naarWGS, perceelNaarRD } from '../lib/rijen/geo';
 import { controleerRijen, type ControleRij } from '../lib/rijen/controle';
+import { beperkTotAantal, faseVoorEersteRij, genereerRijen, kantRichting, langsteRanden } from '../lib/rijen/generatie';
 import type { XY } from '../lib/rijen/types';
 
 let passed = 0;
@@ -113,6 +114,33 @@ test('info: ras onbekend en controleren; stukken op één lijn zijn geen fout', 
   assert.ok(b.some(x => x.regel === 'ras' && x.tekst === 'Ras onbekend bij rij 1.'));
   assert.ok(b.some(x => x.regel === 'controleren' && x.rijIds.length === 2));
 });
+
+console.log('\nRijen zonder foto (zelf ingevuld):');
+{
+  const xVan = (r: { coordsRD: XY[] }) => Math.round((r.coordsRD[0][0] - O[0]) * 100) / 100;
+  const maak = (kant: -1 | 1, aantal: number | null) => {
+    const faseM = faseVoorEersteRij(perceel, 0, 3.4, 1.7, kant);
+    const alle = genereerRijen(perceel, { richtingGraden: 0, rijafstandM: 3.4, faseM, kopakkerBeginM: 0, kopakkerEindM: 0 });
+    return beperkTotAantal(alle, aantal, kant);
+  };
+  test('eerste rij 1,7 m van de westgrens, 5 rijen', () => {
+    const rs = maak(-1, 5);
+    assert.deepStrictEqual(rs.map(xVan).sort((a, b) => a - b), [1.7, 5.1, 8.5, 11.9, 15.3]);
+  });
+  test('vanaf de oostkant; zonder aantal tot de grens', () => {
+    const rs = maak(1, 3);
+    assert.deepStrictEqual(rs.map(xVan).sort((a, b) => a - b), [51.5, 54.9, 58.3]);
+    assert.strictEqual(maak(-1, null).length, 18);
+  });
+  test('kantRichting en langsteRanden', () => {
+    assert.strictEqual(kantRichting(0, -1), 270);
+    assert.strictEqual(kantRichting(142, 1), 232);
+    const r = langsteRanden(perceel);
+    assert.strictEqual(r[0].lengteM, 100);
+    assert.ok(r[0].richtingGraden < 0.5 || r[0].richtingGraden > 179.5, JSON.stringify(r));
+    assert.strictEqual(r.length, 2);
+  });
+}
 
 console.log(`\nResults: ${passed} passed, ${failed} failed, ${passed + failed} total`);
 if (failed > 0) process.exit(1);

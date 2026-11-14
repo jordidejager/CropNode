@@ -148,7 +148,7 @@ export function RijenPaneel() {
 
       <Sectie
         titel="Rij toevoegen"
-        uitleg="Selecteer twee naast elkaar gelegen rijen (nieuwe rij ertussen) of één buitenste rij (nieuwe rij ernaast). Of teken een rij: tik begin en eind."
+        uitleg="Selecteer twee naast elkaar gelegen rijen (nieuwe rij ertussen) of één buitenste rij (nieuwe rij ernaast). Of teken een rij: tik punten langs de rij (een bocht = extra punt) en kies Klaar."
       >
         <Knop
           vol

@@ -429,6 +429,32 @@ export function NotitieDetailKaart({ markerId, onSluit }: { markerId: string; on
 // Modusbalk (tik-modi) en bewerkbalk
 // ---------------------------------------------------------------------------
 
+/** Rij tekenen: tik punten langs de rij (recht = 2 punten, krom of verspringend = meer), dan Klaar */
+function TekenBalk({ nummer }: { nummer: number | null }) {
+  const ctx = useRijenkaartCtx();
+  const n = ctx.tekenPunten.length;
+  return (
+    <div data-rk-overlay="" className={cn(KAART_STIJL, 'space-y-2 border-yellow-300/30 p-2 pl-3')} role="status">
+      <p className="text-[13px] font-medium leading-snug text-yellow-50">
+        {n === 0
+          ? `Nieuwe rij${nummer !== null ? ` ${nummer}` : ''}: tik het begin`
+          : `${n} ${n === 1 ? 'punt' : 'punten'} — tik verder langs de rij (bij een bocht een extra punt), dan Klaar`}
+      </p>
+      <div className="flex gap-2">
+        <Knop klein soort="secundair" onClick={() => ctx.zetKaartDoel(null)}>
+          Annuleren
+        </Knop>
+        <Knop klein soort="secundair" disabled={n === 0} onClick={ctx.tekenPuntTerug}>
+          Punt terug
+        </Knop>
+        <Knop klein soort="primair" disabled={n < 2} onClick={ctx.tekenKlaar} className="ml-auto">
+          Klaar
+        </Knop>
+      </div>
+    </div>
+  );
+}
+
 export function ModusBalk() {
   const ctx = useRijenkaartCtx();
   const doel = ctx.kaartDoel;
@@ -449,8 +475,7 @@ export function ModusBalk() {
       tekst = 'Tik twee punten op één boomrij, zo ver mogelijk uit elkaar (minimaal 20 m)';
       break;
     case 'rij-tekenen':
-      tekst = `Tik begin en eind van de nieuwe rij${doel.nummer !== null ? ` (nummer ${doel.nummer})` : ''}`;
-      break;
+      return <TekenBalk nummer={doel.nummer} />;
     case 'rij1':
       tekst = `Tik op de rij die nummer ${ctx.startnummerInvoer} moet worden`;
       break;

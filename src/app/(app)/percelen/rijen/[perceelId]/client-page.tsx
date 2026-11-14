@@ -74,11 +74,6 @@ const RijenkaartMap = dynamic(() => import('@/components/rijenkaart/rijenkaart-m
 const MIN_RIJ_M = 5;
 /** Tik voor een notitiepositie mag hooguit zo ver naast de rij liggen */
 const MAX_POSITIE_AFSTAND_M = 5;
-/** Kaarthints als de referentielijn-modus voor 'Rij tekenen' gebruikt wordt */
-const RIJ_TEKENEN_HINTS = {
-  eerste: 'Nieuwe rij: tik het begin van de rij',
-  tweede: 'Tik het eind van de rij (minimaal 5 m verder)',
-};
 
 const TABS: { waarde: PaneelTab; label: string }[] = [
   { waarde: 'rijen', label: 'Rijen' },
@@ -221,6 +216,11 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
   const [notitieConcept, setNotitieConcept] = useState<NotitieConcept | null>(null);
   const kaartRef = useRef<HTMLDivElement>(null);
   const tekenBezig = useRef(false);
+  // Punten van de rij die nu getekend wordt (kaartDoel 'rij-tekenen'); leeg bij een ander doel
+  const [tekenPunten, setTekenPunten] = useState<LngLat[]>([]);
+  useEffect(() => {
+    setTekenPunten([]);
+  }, [kaartDoel]);
 
   const concept = useRijenConcept({ perceelId, kaart, perceelRD, basislaag, gekoppeld });
   const heeftConcept = !!concept.basis;
@@ -499,10 +499,11 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
   );
 
   const tekenRij = useCallback(
-    async (a: LngLat, b: LngLat, gewenst: number | null) => {
+    async (punten: LngLat[], gewenst: number | null) => {
       if (tekenBezig.current) return;
-      const lengte = afstand(naarRD(a), naarRD(b));
-      if (lengte < MIN_RIJ_M) {
+      const rd = punten.map(p => naarRD(p));
+      const lengte = rd.slice(1).reduce((som, q, i) => som + afstand(rd[i], q), 0);
+      if (punten.length < 2 || lengte < MIN_RIJ_M) {
         meld('Rij te kort', `Een rij moet minimaal ${MIN_RIJ_M} m lang zijn. Tik begin en eind verder uit elkaar.`);
         return;
       }
@@ -515,7 +516,7 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
       tekenBezig.current = true;
       try {
         const r = await rijenToepassenAction(perceelId, {
-          rijen: [{ sleutel: 'getekend', nummer, coordinates: [a, b], geomBron: 'getekend' }],
+          rijen: [{ sleutel: 'getekend', nummer, coordinates: punten, geomBron: 'getekend' }],
         });
         meld(`Rij ${nummer} getekend`, fmtLengte(lengte));
         setKaartDoel(null);
@@ -543,10 +544,20 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
         setTab('genereren');
         return;
       }
-      if (kaartDoel?.soort === 'rij-tekenen') void tekenRij(a, b, kaartDoel.nummer);
     },
     [kaartDoel, concept, meld, tekenRij],
   );
+
+  const onPolylijnPunt = useCallback((punt: LngLat) => setTekenPunten(ps => [...ps, punt]), []);
+  const tekenPuntTerug = useCallback(() => setTekenPunten(ps => ps.slice(0, -1)), []);
+  const tekenKlaar = useCallback(() => {
+    if (kaartDoel?.soort !== 'rij-tekenen') return;
+    if (tekenPunten.length < 2) {
+      meld('Rij tekenen', 'Tik minstens het begin en het eind van de rij.');
+      return;
+    }
+    void tekenRij(tekenPunten, kaartDoel.nummer);
+  }, [kaartDoel, tekenPunten, tekenRij, meld]);
 
   const onEindpuntVerplaatst = useCallback(
     async (rijId: string, coordinates: LngLat[]) => {
@@ -574,7 +585,9 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
   const modus: KaartModus =
     kaartDoel?.soort === 'tik-selectie' || kaartDoel?.soort === 'rij1'
       ? 'selecteren'
-      : kaartDoel?.soort === 'referentierij' || kaartDoel?.soort === 'rij-tekenen'
+      : kaartDoel?.soort === 'rij-tekenen'
+        ? 'polylijn'
+        : kaartDoel?.soort === 'referentierij'
         ? 'referentielijn'
         : kaartDoel?.soort === 'notitie-positie'
           ? 'positie'
@@ -606,6 +619,9 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
     wisSelectie,
     kaartDoel,
     zetKaartDoel,
+    tekenPunten,
+    tekenPuntTerug,
+    tekenKlaar,
     detailRijId,
     zetDetailRijId: setDetailRijId,
     bewerkRijId,
@@ -733,7 +749,8 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
                 onRijKlik={onRijKlik}
                 onKaartKlik={onKaartKlik}
                 onReferentielijn={onReferentielijn}
-                lijnHints={kaartDoel?.soort === 'rij-tekenen' ? RIJ_TEKENEN_HINTS : null}
+                onPolylijnPunt={onPolylijnPunt}
+                tekenLijn={kaartDoel?.soort === 'rij-tekenen' ? tekenPunten : null}
                 onEindpuntVerplaatst={(id, coords) => void onEindpuntVerplaatst(id, coords)}
                 herstelSleutel={herstelTeller}
                 onNotitieKlik={onNotitieKlik}

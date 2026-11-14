@@ -783,3 +783,77 @@ export function kortRijenIn(
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Rijen zonder foto: zelf ingevuld (richting, rijafstand, eerste rij, aantal)
+// ---------------------------------------------------------------------------
+
+/** Kant van het perceel dwars op de rijen: -1 = de −n-kant (kompas θ + 270°), +1 = de +n-kant (θ + 90°) */
+export type RijKant = -1 | 1;
+
+/** Kompasrichting waar een kant naartoe wijst (voor de tekst "westkant" enz.) */
+export function kantRichting(richtingGraden: number, kant: RijKant): number {
+  return normaliseerGraden(asRichting(richtingGraden) + (kant === 1 ? 90 : 270));
+}
+
+/**
+ * Fase waarbij de eerste rij op `eersteAfstandM` van de perceelgrens ligt, gemeten dwars op de rijen vanaf het
+ * buitenste punt van de grens aan die kant.
+ */
+export function faseVoorEersteRij(
+  perceel: PerceelRD,
+  richtingGraden: number,
+  rijafstandM: number,
+  eersteAfstandM: number,
+  kant: RijKant,
+): number {
+  const n = normaalVector(asRichting(richtingGraden));
+  const c = perceel.zwaartepunt;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const poly of perceel.polygonen) {
+    for (const ring of poly) {
+      for (const p of ring) {
+        const o = inproduct(aftrekken(p, c), n);
+        min = Math.min(min, o);
+        max = Math.max(max, o);
+      }
+    }
+  }
+  if (!eindig(min) || !eindig(max)) return 0;
+  const eerste = kant === -1 ? min + eersteAfstandM : max - eersteAfstandM;
+  return normaliseerFase(eerste, rijafstandM);
+}
+
+/**
+ * Alleen de eerste `aantal` rijlijnen vanaf een kant (stukken op dezelfde lijn tellen als één rij). Zo blijft
+ * het aantal gelijk als het voorstel daarna nog verschoven of gedraaid wordt.
+ */
+export function beperkTotAantal(rijen: readonly GegenereerdeRij[], aantal: number | null, kant: RijKant): GegenereerdeRij[] {
+  if (aantal === null || !(aantal > 0)) return [...rijen];
+  const lijnen = [...new Set(rijen.map(r => Math.round(r.offsetM * 1000) / 1000))].sort((a, b) => (kant === -1 ? a - b : b - a));
+  const houd = new Set(lijnen.slice(0, Math.floor(aantal)));
+  return rijen.filter(r => houd.has(Math.round(r.offsetM * 1000) / 1000));
+}
+
+/** De langste randen van het perceel met hun richting [0, 180), voor "rijen evenwijdig aan deze rand" */
+export function langsteRanden(perceel: PerceelRD, max = 4): { lengteM: number; richtingGraden: number }[] {
+  const randen: { lengteM: number; richtingGraden: number }[] = [];
+  for (const poly of perceel.polygonen) {
+    const ring = poly[0];
+    if (!ring) continue;
+    for (let i = 1; i < ring.length; i++) {
+      const l = afstand(ring[i - 1], ring[i]);
+      if (l >= 5) randen.push({ lengteM: l, richtingGraden: asRichting(kompasRichting(ring[i - 1], ring[i])) });
+    }
+  }
+  randen.sort((a, b) => b.lengteM - a.lengteM);
+  const uit: { lengteM: number; richtingGraden: number }[] = [];
+  for (const r of randen) {
+    const dicht = uit.find(u => Math.min(Math.abs(u.richtingGraden - r.richtingGraden), 180 - Math.abs(u.richtingGraden - r.richtingGraden)) < 1);
+    if (dicht) continue;
+    uit.push({ lengteM: Math.round(r.lengteM), richtingGraden: Math.round(r.richtingGraden * 10) / 10 });
+    if (uit.length >= max) break;
+  }
+  return uit;
+}

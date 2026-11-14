@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Crosshair, PenLine, RotateCcw, RotateCw, ScanSearch, Undo2, Wand2 } from 'lucide-react';
+import { Crosshair, PenLine, RotateCcw, RotateCw, ScanSearch, SlidersHorizontal, Undo2, Wand2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,11 +23,13 @@ import { cn } from '@/lib/utils';
 import { useRijenkaartCtx } from './rijenkaart-context';
 import { fmt, fmtHa, fmtLengte, kantNaam, pijl, richtingTekst, verschuifKnoppen } from './rijen-hulp';
 import { Chip, GetalVeld, Knop, Melding, Sectie, Segment, Stapper, Veld } from './ui';
+import { ZelfInvullen } from './zelf-invullen';
 
 export function GenererenPaneel() {
   const ctx = useRijenkaartCtx();
   const { concept, actieveRijen, kaart } = ctx;
   const [bevestigOpen, setBevestigOpen] = useState(false);
+  const [zelfOpen, setZelfOpen] = useState(false);
   const gemount = useRef(true);
   useEffect(() => {
     gemount.current = true;
@@ -201,7 +203,7 @@ export function GenererenPaneel() {
 
       <Sectie
         titel="Rijen vinden"
-        uitleg="De detectie zoekt het rijpatroon op de PDOK-luchtfoto (8 cm, voorjaar). Lukt dat niet, teken dan één rij na op de kaart."
+        uitleg="De detectie zoekt het rijpatroon op de PDOK-luchtfoto (8 cm, voorjaar). Lukt dat niet, teken dan één rij na op de kaart, of vul de maten zelf in."
       >
         {concept.detectie.status === 'bezig' ? (
           <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
@@ -226,8 +228,19 @@ export function GenererenPaneel() {
             >
               Teken referentierij
             </Knop>
+            <Knop
+              soort={zelfOpen ? 'accent' : 'secundair'}
+              aria-expanded={zelfOpen}
+              icoon={<SlidersHorizontal className="h-4 w-4" />}
+              onClick={() => setZelfOpen(v => !v)}
+              disabled={!ctx.perceelRD}
+              className="sm:col-span-2 lg:col-span-1"
+            >
+              Zelf invullen (zonder foto)
+            </Knop>
           </div>
         )}
+        {zelfOpen && concept.detectie.status !== 'bezig' && <ZelfInvullen onKlaar={() => setZelfOpen(false)} />}
 
         {concept.detectie.status === 'fout' && (
           <Melding soort="fout" titel="Detectie mislukt">

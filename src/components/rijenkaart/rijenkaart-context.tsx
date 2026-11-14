@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext } from 'react';
-import type { PerceelRD, Rij, Rijenkaart } from '@/lib/rijen/types';
+import type { LngLat, PerceelRD, Rij, Rijenkaart } from '@/lib/rijen/types';
 import type { RijenConcept } from './use-rijen-concept';
 import type { RijVerfijning } from './use-rij-verfijning';
 
@@ -71,6 +71,11 @@ export interface RijenkaartCtxWaarde {
 
   kaartDoel: KaartDoel | null;
   zetKaartDoel: (d: KaartDoel | null) => void;
+  /** Punten van de rij die nu getekend wordt ('rij-tekenen'), begin → eind */
+  tekenPunten: LngLat[];
+  tekenPuntTerug: () => void;
+  /** Getekende rij opslaan (minstens 2 punten) */
+  tekenKlaar: () => void;
   detailRijId: string | null;
   zetDetailRijId: (id: string | null) => void;
   bewerkRijId: string | null;

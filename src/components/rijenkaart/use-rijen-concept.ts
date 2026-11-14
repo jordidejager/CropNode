@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { afstand, naarRD } from '@/lib/rijen/geo';
-import { genereerRijen, referentielijnNaarParameters } from '@/lib/rijen/generatie';
+import { beperkTotAantal, faseVoorEersteRij, genereerRijen, referentielijnNaarParameters, type RijKant } from '@/lib/rijen/generatie';
 import { detecteerVoorPerceel } from '@/lib/rijen/pdok';
 import { PDOK_LAGEN } from '@/lib/rijen/pdok-lagen';
 import type {
@@ -98,6 +98,8 @@ export function useRijenConcept({
   const [behoudGetekend, setBehoudGetekend] = useState(false);
   // Uiteinden van de rijen uit de luchtfoto (laadplek, kopakker, inham); uit = tot de perceelgrens min de kopakkers
   const [eindenUitFoto, setEindenUitFoto] = useState(true);
+  // Zelf ingevuld (zonder foto): alleen de eerste N rijlijnen vanaf een kant (null = tot de grens)
+  const [beperking, setBeperking] = useState<{ aantal: number | null; kant: RijKant } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Lopende detectie afbreken bij verlaten van de pagina
@@ -113,11 +115,12 @@ export function useRijenConcept({
   const rasterRijen: GegenereerdeRij[] = useMemo(() => {
     if (!params || !perceelRD) return [];
     try {
-      return genereerRijen(perceelRD, params, { stukken });
+      const alle = genereerRijen(perceelRD, params, { stukken });
+      return beperking ? beperkTotAantal(alle, beperking.aantal, beperking.kant) : alle;
     } catch {
       return [];
     }
-  }, [params, perceelRD, stukken]);
+  }, [params, perceelRD, stukken, beperking]);
   // Het voorstel = het raster, ingekort tot waar de bomen op de foto staan
   const einden = useConceptEinden({ perceelId, perceelRD, params, rijen: rasterRijen, aan: eindenUitFoto });
   const conceptRijen = einden.rijen;
@@ -206,6 +209,7 @@ export function useRijenConcept({
           beginkantGraden: beginkantBijRichting(oud?.beginkantGraden ?? instellingen?.beginkantGraden ?? theta, theta),
         }));
         setBron({ methode: 'auto', confidence: res.confidence, bronBeeld: res.bronBeeld });
+        setBeperking(null);
       }
       return res.voldoende ? 'voldoende' : 'onzeker';
     } catch (e) {
@@ -248,9 +252,38 @@ export function useRijenConcept({
         ),
       }));
       setBron({ methode: 'handmatig', confidence: null, bronBeeld: `PDOK ${PDOK_LAGEN[basislaag]}` });
+      setBeperking(null);
       return null;
     },
     [perceelRD, rijafstandVoorReferentie, instellingen?.beginkantGraden, basislaag],
+  );
+
+  /**
+   * Zonder foto: rijrichting, rijafstand, afstand van de eerste rij tot de grens (dwars op de rijen, vanaf het
+   * buitenste punt aan die kant) en optioneel het aantal rijen. Geeft een foutmelding terug, of null.
+   */
+  const maakZelfIngevuld = useCallback(
+    (v: { richtingGraden: number; rijafstandM: number; eersteAfstandM: number; kant: RijKant; aantal: number | null }): string | null => {
+      if (!perceelRD) return 'Dit perceel heeft geen perceelgrens.';
+      if (!(v.rijafstandM >= 0.5 && v.rijafstandM <= 20)) return 'Vul een rijafstand tussen 0,5 en 20 m in.';
+      if (!Number.isFinite(v.richtingGraden)) return 'Vul de rijrichting in (graden).';
+      if (!(v.eersteAfstandM >= 0)) return 'De afstand van de eerste rij tot de grens kan niet negatief zijn.';
+      if (v.aantal !== null && !(Number.isInteger(v.aantal) && v.aantal >= 1)) return 'Het aantal rijen moet een heel getal van 1 of meer zijn.';
+      const richtingGraden = ((v.richtingGraden % 180) + 180) % 180;
+      const faseM = faseVoorEersteRij(perceelRD, richtingGraden, v.rijafstandM, v.eersteAfstandM, v.kant);
+      abortRef.current?.abort();
+      setDetectie({ status: 'idle', voortgang: null, resultaat: null, fout: null });
+      setBasis(oud => ({
+        richtingGraden,
+        rijafstandM: v.rijafstandM,
+        faseM,
+        beginkantGraden: beginkantBijRichting(oud?.beginkantGraden ?? instellingen?.beginkantGraden ?? richtingGraden, richtingGraden),
+      }));
+      setBron({ methode: 'handmatig', confidence: null, bronBeeld: 'zelf ingevuld' });
+      setBeperking({ aantal: v.aantal, kant: v.kant });
+      return null;
+    },
+    [perceelRD, instellingen?.beginkantGraden],
   );
 
   // ---- Bestaande set corrigeren --------------------------------------------
@@ -261,6 +294,7 @@ export function useRijenConcept({
     const b = basisUitInstellingen(perceelRD, kaart.rijen, instellingen, gewogenRijafstand);
     if (!b) return false;
     setBasis(b);
+    setBeperking(null);
     // Set met losse stukken per rijlijn → ook zo corrigeren, anders vervallen die stukken bij opslaan
     setStukken(heeftStukkenOpEenLijn(perceelRD, b.richtingGraden, kaart.rijen) ? 'alle' : 'langste');
     setKopakkerBegin(instellingen?.kopakkerBeginM ?? STANDAARD_KOPAKKER_M);
@@ -305,6 +339,7 @@ export function useRijenConcept({
     abortRef.current = null;
     setBasis(null);
     setBron(null);
+    setBeperking(null);
     setAlleenBestaande(false);
     setBehoudGetekend(false);
     setDetectie({ status: 'idle', voortgang: null, resultaat: null, fout: null });
@@ -361,6 +396,8 @@ export function useRijenConcept({
     detecteer,
     breekDetectieAf,
     verwerkReferentielijn,
+    maakZelfIngevuld,
+    beperking,
     laadUitInstellingen,
     // correcties
     verschuif,
