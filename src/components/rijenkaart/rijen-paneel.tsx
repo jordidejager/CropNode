@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { rijOppervlakHa } from '@/lib/rijen/generatie';
 import type { Rij } from '@/lib/rijen/types';
 import { cn } from '@/lib/utils';
+import { ControleSectie } from './controle-sectie';
 import { useRijenkaartCtx } from './rijenkaart-context';
 import { fmt, fmtDatum, fmtHa, fmtLengte, volgendNummer } from './rijen-hulp';
 import { useRijToevoegen } from './use-rij-toevoegen';
@@ -95,6 +96,8 @@ export function RijenPaneel() {
           </label>
         )}
       </div>
+
+      <ControleSectie />
 
       {actieveRijen.length === 0 && (
         <Melding soort="info" titel="Nog geen rijen">
