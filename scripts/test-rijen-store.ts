@@ -349,8 +349,13 @@ async function main() {
     assert.equal(upd.bijgewerkt, 1);
     assert.equal(upd.verwijderd, 1);
     assert.equal(upd.gerooid, 0);
-    assert.equal(await tel('rijen'), 4);
-    ok('rijenToepassen: eindpunt verplaatst + rij zonder koppelingen echt verwijderd');
+    // 097: nooit echt weggooien — de rij blijft bestaan met status 'verwijderd', maar is nergens meer te zien
+    assert.equal(await tel('rijen'), 5);
+    const { data: weg } = await admin.from('rijen').select('status, gewijzigd_op').eq('id', ids[3]).single();
+    assert.equal(weg?.status, 'verwijderd');
+    assert.equal((await store.laadRijenVanPerceel(USER_ID, PERCEEL_ID)).length, 4);
+    assert.ok(!(await store.laadRijenVanPerceel(USER_ID, PERCEEL_ID)).some(r => r.id === ids[3]));
+    ok('rijenToepassen: eindpunt verplaatst + rij zonder koppelingen op verwijderd (bewaard, niet zichtbaar)');
 
     assert.equal(await store.zetRijAttributen(USER_ID, PERCEEL_ID, [ids[1]], { status: 'gerooid' }), 1);
     const naRooien = await store.laadRijenVanPerceel(USER_ID, PERCEEL_ID);
