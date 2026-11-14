@@ -149,7 +149,7 @@ function mapBlok(b: DbRij): McpBlok {
 /** Rijen (incl. gerooide) van de gebruiker, optioneel alleen voor deze hoofdpercelen. */
 export async function laadMcpRijen(userId: string, perceelIds?: string[]): Promise<McpRij[]> {
   const bouw = (ids: string[] | null) => (van: number, tot: number) => {
-    let q = db().from('v_rijen').select(RIJ_KOLOMMEN).eq('user_id', userId);
+    let q = db().from('v_rijen').select(RIJ_KOLOMMEN).eq('user_id', userId).neq('status', 'verwijderd');
     if (ids) q = q.in('perceel_id', ids);
     return q
       .order('perceel_id', { ascending: true })

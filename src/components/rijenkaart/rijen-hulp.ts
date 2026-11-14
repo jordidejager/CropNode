@@ -182,7 +182,8 @@ export function rasSuggesties(kaart: Rijenkaart): string[] {
 
 /**
  * Rijen waar een bespuiting of notitie expliciet aan gekoppeld is. Zulke rijen worden bij
- * verwijderen niet weggegooid maar als 'gerooid' bewaard (rpc rijen_toepassen).
+ * verwijderen als 'gerooid' bewaard; andere rijen krijgen status 'verwijderd' (rpc rijen_toepassen, migratie 097).
+ * Rijen worden nooit echt weggegooid.
  */
 export function gekoppeldeRijen(kaart: Rijenkaart): Set<string> {
   const uit = new Set<string>();

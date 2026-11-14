@@ -652,8 +652,8 @@ export function VerwijderDialoog({ rijIds, onSluit }: { rijIds: string[]; onSlui
             <span className="block">{rijenOmschrijving(rijen)}.</span>
             <span className="block">
               {metKoppeling > 0
-                ? `${metKoppeling} ${metKoppeling === 1 ? 'rij heeft' : 'rijen hebben'} een bespuiting of notitie en ${metKoppeling === 1 ? 'blijft' : 'blijven'} als gerooid bewaard; de rest wordt definitief verwijderd.`
-                : 'Deze rijen hebben geen registraties en worden definitief verwijderd.'}
+                ? `${metKoppeling} ${metKoppeling === 1 ? 'rij heeft' : 'rijen hebben'} een bespuiting of notitie en ${metKoppeling === 1 ? 'blijft' : 'blijven'} als gerooid bewaard; de rest verdwijnt uit de rijenkaart.`
+                : 'Deze rijen verdwijnen uit de rijenkaart. Ze worden bewaard als verwijderd, zodat hun id niet terugkomt bij een andere rij.'}
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>

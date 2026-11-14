@@ -64,7 +64,7 @@ t('prefix-match op woordgrens', () => {
 
 const rij = (o: Partial<Rij>): Rij => ({
   id: Math.random().toString(36).slice(2), perceelId: 'p', blokId: null, blokNaam: null, nummer: 1, label: null, rol: 'hoofd',
-  ras: null, rasEffectief: null, plantjaar: null, plantjaarEffectief: null, onderstam: null, rijafstandM: 3, boomafstandM: 1,
+  ras: null, rasEffectief: null, plantjaar: null, plantjaarEffectief: null, onderstam: null, onderstamEigen: null, onderstamEffectief: null, gewas: null, gewasEffectief: null, gewijzigdOp: null, rijafstandM: 3, boomafstandM: 1,
   lengteM: 100, aantalBomen: null, aantalBomenEffectief: null, geomBron: 'gegenereerd', nauwkeurigheidM: null, controleren: false,
   status: 'actief', geplantOp: null, gerooidOp: null, opmerking: null, coordinates: [[4, 51], [4.001, 51]], subParcelId: null, ...o,
 });

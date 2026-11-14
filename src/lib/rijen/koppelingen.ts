@@ -93,7 +93,7 @@ async function laadRijenOpId(userId: string, ids: string[]): Promise<DbRij[]> {
   // Stukken van 100 id's (≤ 100 rijen per verzoek, dus onder de PostgREST-limiet), een paar tegelijk
   const stukken = await beperktParallel(
     inStukken(uniek(ids)).map(stuk => async () => {
-      const { data, error } = await db().from('v_rijen').select(RIJ_KOLOMMEN).eq('user_id', userId).in('id', stuk);
+      const { data, error } = await db().from('v_rijen').select(RIJ_KOLOMMEN).eq('user_id', userId).neq('status', 'verwijderd').in('id', stuk);
       if (error) throw dbFout(error, 'Rijen ophalen');
       return (data ?? []) as DbRij[];
     }),

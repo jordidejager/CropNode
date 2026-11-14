@@ -1269,7 +1269,7 @@ function slaPlanOp(
     const coordinates = w.coordinates ?? basis!.coordinates;
     rijen.push({
       id, perceelId: 'p', blokId: null, blokNaam: null, nummer: w.nummer ?? basis!.nummer, label: null, rol: 'hoofd',
-      ras: null, rasEffectief: null, plantjaar: null, plantjaarEffectief: null, onderstam: null, rijafstandM: 3,
+      ras: null, rasEffectief: null, plantjaar: null, plantjaarEffectief: null, onderstam: null, onderstamEigen: null, onderstamEffectief: null, gewas: null, gewasEffectief: null, gewijzigdOp: null, rijafstandM: 3,
       boomafstandM: null, lengteM: index >= 0 ? concept[index].lengteM : basis!.lengteM, aantalBomen: null,
       aantalBomenEffectief: null, geomBron: w.geomBron ?? basis?.geomBron ?? 'gegenereerd', nauwkeurigheidM: null,
       controleren: false, status: 'actief', geplantOp: null, gerooidOp: null, opmerking: null, coordinates, subParcelId: null,

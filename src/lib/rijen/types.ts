@@ -33,7 +33,18 @@ export interface Rij {
   rasEffectief: string | null;
   plantjaar: number | null;
   plantjaarEffectief: number | null;
+  /** Onderstam van het blok (v_rijen.onderstam) */
   onderstam: string | null;
+  /** Onderstam op de rij zelf (override) */
+  onderstamEigen: string | null;
+  /** coalesce(rij.onderstam, blok.onderstam) */
+  onderstamEffectief: string | null;
+  /** Gewas op de rij zelf (override) */
+  gewas: string | null;
+  /** coalesce(rij.gewas, blok.gewas, subperceel, perceel) */
+  gewasEffectief: string | null;
+  /** Laatste wijziging van lijn, nummer of status (niet ras/opmerking); Fleet kijkt hiernaar */
+  gewijzigdOp: string | null;
   /** coalesce(blok.rijafstand_m, instellingen.rijafstand_m) */
   rijafstandM: number | null;
   /** coalesce(blok.boomafstand_m, instellingen.boomafstand_m) */

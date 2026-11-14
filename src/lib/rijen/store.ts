@@ -197,6 +197,11 @@ export function mapRij(r: DbRij): Rij {
     plantjaar: getal(r.plantjaar),
     plantjaarEffectief: getal(r.plantjaar_effectief),
     onderstam: r.onderstam ?? null,
+    onderstamEigen: r.onderstam_eigen ?? null,
+    onderstamEffectief: r.onderstam_effectief ?? r.onderstam ?? null,
+    gewas: r.gewas ?? null,
+    gewasEffectief: r.gewas_effectief ?? null,
+    gewijzigdOp: r.gewijzigd_op ?? null,
     rijafstandM: getal(r.rijafstand_m),
     boomafstandM: getal(r.boomafstand_m),
     lengteM: getalOf(r.lengte_m, 0),
@@ -330,7 +335,9 @@ export async function laadRijenVanPerceel(
       .from('v_rijen')
       .select('*')
       .eq('user_id', userId)
-      .eq('perceel_id', perceelId);
+      .eq('perceel_id', perceelId)
+      // Verwijderde rijen (097) blijven alleen in de database bestaan (vaste id's voor Fleet), nooit in de app
+      .neq('status', 'verwijderd');
     if (!inclGerooid) q = q.eq('status', 'actief');
     return q
       .order('nummer', { ascending: true })
@@ -833,6 +840,7 @@ export async function zetRijAttributen(
       .update(upd)
       .eq('user_id', userId)
       .eq('perceel_id', perceelId)
+      .neq('status', 'verwijderd')
       .in('id', stuk)
       .select('id');
     if (error) throw dbFout(error, 'Rijen bijwerken');
