@@ -64,6 +64,7 @@ import {
   VerwijderDialoog,
   type NotitieConcept,
 } from '@/components/rijenkaart/rij-dialogen';
+import { RijgegevensDialoog } from '@/components/rijenkaart/rijgegevens-dialoog';
 
 const RijenkaartMap = dynamic(() => import('@/components/rijenkaart/rijenkaart-map').then(m => m.RijenkaartMap), {
   ssr: false,
@@ -171,13 +172,16 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
     [rijen, subRas, herstelTeller],
   );
   const kleurVoorRas = useMemo(() => maakKleurVoorRas(kaartRijen.map(r => r.rasEffectief)), [kaartRijen]);
+  const blokRasPerId = useMemo(() => new Map(kaart.blokken.map(b => [b.id, b.ras?.trim() || null])), [kaart.blokken]);
   const rasInfo = useCallback(
     (rij: Rij): RasInfo => {
-      if (rij.rasEffectief) return { ras: rij.rasEffectief, vanSubperceel: false };
+      // v_rijen.ras_effectief valt (sinds 098) zelf terug op het subperceel; zonder eigen of blok-ras komt hij daarvandaan
+      const blokRas = rij.blokId ? blokRasPerId.get(rij.blokId) ?? null : null;
+      if (rij.rasEffectief) return { ras: rij.rasEffectief, vanSubperceel: !rij.ras && !blokRas };
       const ras = rij.subParcelId ? subRas.get(rij.subParcelId) ?? null : null;
       return { ras, vanSubperceel: ras !== null };
     },
-    [subRas],
+    [subRas, blokRasPerId],
   );
   const richting = useMemo(
     () => kaart.instellingen?.rijrichtingGraden ?? afgeleideRichting(rijen),
@@ -792,6 +796,7 @@ function RijenkaartDetail({ perceelId, kaart }: { perceelId: string; kaart: Rije
       {dialoog?.soort === 'blok' && <BlokDialoog blokId={dialoog.blokId} rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
       {dialoog?.soort === 'blok-toekennen' && <BlokToekennenDialoog rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
       {dialoog?.soort === 'bestuiver' && <BestuiverDialoog rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
+      {dialoog?.soort === 'rijgegevens' && <RijgegevensDialoog rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
       {dialoog?.soort === 'rooien' && <RooienDialoog rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
       {dialoog?.soort === 'verwijderen' && <VerwijderDialoog rijIds={dialoog.rijIds} onSluit={sluitDialoog} />}
       {dialoog?.soort === 'blok-verwijderen' && <BlokVerwijderDialoog blokId={dialoog.blokId} onSluit={sluitDialoog} />}

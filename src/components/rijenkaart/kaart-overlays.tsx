@@ -7,7 +7,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { CheckSquare, Crosshair, Flower2, Loader2, Move, RotateCcw, RotateCw, StickyNote, Trash2, TreePine, X } from 'lucide-react';
+import { CheckSquare, ClipboardList, Crosshair, Loader2, Move, RotateCcw, RotateCw, StickyNote, Trash2, TreePine, X } from 'lucide-react';
 import { naarRD, windstreek } from '@/lib/rijen/geo';
 import { rijenToepassenAction } from '@/app/rijen-actions';
 import { boomnummer, rijOffset, verschuifRij } from '@/lib/rijen/generatie';
@@ -80,6 +80,11 @@ export function RijDetailKaart({ rijId }: { rijId: string }) {
   const geselecteerd = ctx.geselecteerd.has(rijId);
   const aantalNotities = st?.aantalNotities ?? ctx.kaart.notities.filter(n => n.rijId === rijId).length;
   const sluit = () => ctx.zetDetailRijId(null);
+  const teelt = [
+    rij.gewasEffectief,
+    rij.plantjaarEffectief !== null ? `geplant ${rij.plantjaarEffectief}` : null,
+    rij.onderstamEffectief ? `onderstam ${rij.onderstamEffectief}` : null,
+  ].filter(Boolean);
   const feiten = [
     fmtLengte(rij.lengteM),
     rij.aantalBomenEffectief !== null ? `${rij.aantalBomen === null ? '≈ ' : ''}${fmt(rij.aantalBomenEffectief, 0)} bomen` : null,
@@ -123,11 +128,10 @@ export function RijDetailKaart({ rijId }: { rijId: string }) {
   if (!gerooid) {
     acties.push(
       <ActieKnop
-        key="best"
-        icoon={<Flower2 className="h-4 w-4" />}
-        label="Bestuiver"
-        actief={rij.rol === 'bestuiver'}
-        onClick={() => ctx.openDialoog({ soort: 'bestuiver', rijIds: [rijId] })}
+        key="gegevens"
+        icoon={<ClipboardList className="h-4 w-4" />}
+        label="Gegevens"
+        onClick={() => ctx.openDialoog({ soort: 'rijgegevens', rijIds: [rijId] })}
       />,
     );
   }
@@ -175,6 +179,7 @@ export function RijDetailKaart({ rijId }: { rijId: string }) {
             {rij.blokNaam ?? 'geen blok'}
             {rij.rol === 'bestuiver' ? ' · bestuiver' : ''}
           </p>
+          {teelt.length > 0 && <p className="truncate text-[12px] text-white/55">{teelt.join(' · ')}</p>}
           <p className="truncate text-[12px] text-white/55">{feiten.join(' · ')}</p>
           <p className="truncate text-[12px] text-white/55">Laatste bespuiting: {bespuiting}</p>
           {ligging.length > 0 && <p className="truncate text-[12px] text-white/45">Ligging: {ligging.join(' · ')}</p>}

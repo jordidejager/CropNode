@@ -31,7 +31,7 @@ import {
   zetRijAttributenAction,
 } from '@/app/rijen-actions';
 import { useRijenkaartCtx } from './rijenkaart-context';
-import { fmt, fmtLengte, kantNaam, rasSuggesties, vandaagISO } from './rijen-hulp';
+import { fmt, fmtLengte, gewasSuggesties, kantNaam, rasSuggesties, vandaagISO } from './rijen-hulp';
 import { GetalVeld, Knop, Melding, Veld, tekstVeldStijl } from './ui';
 
 const DIALOOG_STIJL = 'max-h-[90dvh] overflow-y-auto border-white/10 bg-slate-950/95 backdrop-blur-xl sm:max-w-md';
@@ -183,7 +183,9 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
   const rijen = useRijen(rijIds);
   const subpercelen = ctx.kaart.perceel.subpercelen;
   const suggesties = useMemo(() => rasSuggesties(ctx.kaart), [ctx.kaart]);
+  const gewasLijst = useMemo(() => gewasSuggesties(ctx.kaart), [ctx.kaart]);
   const lijstId = useId();
+  const gewasLijstId = useId();
   const systeemLijstId = useId();
 
   // Ras voorstellen: het gemeenschappelijke ras van de selectie (ook van het subperceel)
@@ -194,6 +196,7 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
   }, [rijen, rasInfo]);
 
   const [naam, setNaam] = useState(blok?.naam ?? '');
+  const [gewas, setGewas] = useState(blok?.gewas ?? '');
   const [ras, setRas] = useState(blok?.ras ?? selectieRas);
   const [plantjaar, setPlantjaar] = useState<number | null>(blok?.plantjaar ?? null);
   const [onderstam, setOnderstam] = useState(blok?.onderstam ?? '');
@@ -238,6 +241,7 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
         {
           ...(blokId ? { id: blokId } : {}),
           naam: naam.trim() || standaardNaam || null,
+          gewas: gewas.trim() || null,
           ras: ras.trim() || null,
           plantjaar,
           onderstam: onderstam.trim() || null,
@@ -278,6 +282,19 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
             <input value={naam} onChange={e => setNaam(e.target.value)} placeholder={standaardNaam || 'bijv. Conference 2015'} className={tekstVeldStijl} />
           </Veld>
           <div className="grid grid-cols-2 gap-3">
+            <Veld label="Gewas">
+              <input value={gewas} onChange={e => setGewas(e.target.value)} list={gewasLijstId} placeholder="bijv. Peer" className={tekstVeldStijl} />
+              <datalist id={gewasLijstId}>
+                {gewasLijst.map(s => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </Veld>
+            <Veld label="Plantjaar" fout={plantjaarFout ?? undefined}>
+              <GetalVeld label="Plantjaar" waarde={plantjaar} onChange={setPlantjaar} decimalen={0} invoerModus="numeric" placeholder="2015" />
+            </Veld>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <Veld label="Ras">
               <input value={ras} onChange={e => setRas(e.target.value)} list={lijstId} placeholder="bijv. Conference" className={tekstVeldStijl} />
               <datalist id={lijstId}>
@@ -286,8 +303,8 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
                 ))}
               </datalist>
             </Veld>
-            <Veld label="Plantjaar" fout={plantjaarFout ?? undefined}>
-              <GetalVeld label="Plantjaar" waarde={plantjaar} onChange={setPlantjaar} decimalen={0} invoerModus="numeric" placeholder="2015" />
+            <Veld label="Onderstam">
+              <input value={onderstam} onChange={e => setOnderstam(e.target.value)} placeholder="bijv. Kwee MC" className={tekstVeldStijl} />
             </Veld>
           </div>
           <Veld label="Subperceel" hint="Bespuitingen op rijen van dit blok komen bij dit subperceel in het spuitschrift.">
@@ -315,10 +332,7 @@ export function BlokDialoog({ blokId, rijIds, onSluit }: { blokId: string | null
               <GetalVeld label="Boomafstand van het blok in meter" waarde={boomafstand} onChange={setBoomafstand} achtervoegsel="m" min={0.1} max={20} placeholder={ctx.standaardBoomafstandM ? fmt(ctx.standaardBoomafstandM, 2) : undefined} />
             </Veld>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Veld label="Onderstam">
-              <input value={onderstam} onChange={e => setOnderstam(e.target.value)} placeholder="bijv. Kwee MC" className={tekstVeldStijl} />
-            </Veld>
+          <div>
             <Veld label="Teeltsysteem">
               <input value={teeltsysteem} onChange={e => setTeeltsysteem(e.target.value)} list={systeemLijstId} placeholder="bijv. Spil" className={tekstVeldStijl} />
               <datalist id={systeemLijstId}>

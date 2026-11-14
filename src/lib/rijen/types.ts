@@ -70,6 +70,8 @@ export interface Blok {
   perceelId: string;
   subParcelId: string | null;
   naam: string | null;
+  /** Gewas van het blok (leeg = gewas van subperceel/perceel) */
+  gewas: string | null;
   ras: string | null;
   plantjaar: number | null;
   onderstam: string | null;
@@ -85,6 +87,7 @@ export interface BlokInvoer {
   id?: string;
   naam?: string | null;
   subParcelId?: string | null;
+  gewas?: string | null;
   ras?: string | null;
   plantjaar?: number | null;
   onderstam?: string | null;
@@ -227,8 +230,12 @@ export interface RijenToepassenResultaat {
 export interface RijAttributen {
   label?: string | null;
   rol?: RijRol;
+  /** Eigen gewas van de rij (null = van blok/subperceel/perceel) */
+  gewas?: string | null;
   ras?: string | null;
   plantjaar?: number | null;
+  /** Eigen onderstam van de rij (null = van het blok) */
+  onderstam?: string | null;
   aantalBomen?: number | null;
   status?: RijStatus;
   gerooidOp?: string | null;

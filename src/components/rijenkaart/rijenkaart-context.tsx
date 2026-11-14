@@ -26,6 +26,7 @@ export type DialoogVerzoek =
   | { soort: 'blok'; blokId: string | null; rijIds: string[] }
   | { soort: 'blok-toekennen'; rijIds: string[] }
   | { soort: 'bestuiver'; rijIds: string[] }
+  | { soort: 'rijgegevens'; rijIds: string[] }
   | { soort: 'rooien'; rijIds: string[] }
   | { soort: 'verwijderen'; rijIds: string[] }
   | { soort: 'bespuiting'; rijIds: string[] }

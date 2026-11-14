@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Droplets, Flower2, Layers, Plus, StickyNote, Trash2, TreePine, X } from 'lucide-react';
+import { ClipboardList, Droplets, Layers, Plus, StickyNote, Trash2, TreePine, X } from 'lucide-react';
 import { rijOppervlakHa } from '@/lib/rijen/generatie';
 import { formatteerBereiken } from '@/lib/rijen/selectie';
 import { cn } from '@/lib/utils';
@@ -87,10 +87,10 @@ function BalkInhoud() {
           }
         />
         <BalkKnop
-          icoon={<Flower2 className="h-4 w-4" />}
-          label="Bestuiver"
+          icoon={<ClipboardList className="h-4 w-4" />}
+          label="Gegevens"
           disabled={actiefIds.length === 0}
-          onClick={() => ctx.openDialoog({ soort: 'bestuiver', rijIds: actiefIds })}
+          onClick={() => ctx.openDialoog({ soort: 'rijgegevens', rijIds: actiefIds })}
         />
         <BalkKnop icoon={<StickyNote className="h-4 w-4" />} label="Notitie" onClick={() => ctx.openDialoog({ soort: 'notitie', rijIds: ids })} />
         <BalkKnop

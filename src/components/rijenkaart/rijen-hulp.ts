@@ -721,3 +721,39 @@ export function rijenMetSubperceelRas(rijen: readonly Rij[], subRas: ReadonlyMap
     return ras ? { ...r, rasEffectief: ras } : r;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Rijgegevens (gewas, ras, plantjaar, onderstam, bestuiver, blok) voor een selectie
+// ---------------------------------------------------------------------------
+
+/** Eén waarde als alle rijen hem delen ('gelijk'), anders 'verschillend'. Lege selectie = gelijk aan null. */
+export type Gemeenschappelijk<T> = { soort: 'gelijk'; waarde: T } | { soort: 'verschillend' };
+
+export function gemeenschappelijk<T>(waarden: readonly T[]): Gemeenschappelijk<T | null> {
+  if (waarden.length === 0) return { soort: 'gelijk', waarde: null };
+  const sleutel = (v: T) => (typeof v === 'string' ? v.trim().toLowerCase() : v);
+  const eerste = sleutel(waarden[0]);
+  return waarden.every(v => sleutel(v) === eerste) ? { soort: 'gelijk', waarde: waarden[0] } : { soort: 'verschillend' };
+}
+
+/** Gewassen om uit te kiezen: Appel en Peer, plus wat al op dit perceel voorkomt. */
+export function gewasSuggesties(kaart: Rijenkaart): string[] {
+  const uit: string[] = [];
+  const gezien = new Set<string>();
+  const voeg = (g: string | null | undefined) => {
+    const t = g?.trim();
+    if (!t || gezien.has(t.toLowerCase())) return;
+    gezien.add(t.toLowerCase());
+    uit.push(t);
+  };
+  ['Appel', 'Peer'].forEach(voeg);
+  kaart.blokken.forEach(b => voeg(b.gewas));
+  kaart.rijen.forEach(r => voeg(r.gewasEffectief));
+  return uit;
+}
+
+/** Tekstveld uit het formulier → waarde voor de server: getrimd, leeg = null (overnemen van blok/perceel). */
+export function tekstOfNull(v: string): string | null {
+  const t = v.trim();
+  return t === '' ? null : t;
+}

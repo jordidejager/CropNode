@@ -236,6 +236,7 @@ export function mapBlok(b: DbRij): Blok {
     perceelId: b.perceel_id,
     subParcelId: b.sub_parcel_id ?? null,
     naam: b.naam ?? null,
+    gewas: b.gewas ?? null,
     ras: b.ras ?? null,
     plantjaar: getal(b.plantjaar),
     onderstam: b.onderstam ?? null,
@@ -793,6 +794,15 @@ async function vereisBlok(userId: string, perceelId: string, blokId: string): Pr
  * status 'gerooid' zonder gerooidOp → vandaag; status 'actief' zonder gerooidOp → gerooid_op leeg.
  * Geeft het aantal bijgewerkte rijen.
  */
+/** Tekstveld (gewas, ras, onderstam): getrimd, leeg → null, maximaal 100 tekens. */
+function korteTekst(v: string | null, naam: string): string | null {
+  if (v === null) return null;
+  if (typeof v !== 'string') throw new Error(`Ongeldige ${naam}.`);
+  const t = v.trim();
+  if (t.length > 100) throw new Error(`De ${naam} is te lang (maximaal 100 tekens).`);
+  return t === '' ? null : t;
+}
+
 export async function zetRijAttributen(
   userId: string,
   perceelId: string,
@@ -810,8 +820,10 @@ export async function zetRijAttributen(
     if (attrs.rol !== 'hoofd' && attrs.rol !== 'bestuiver') throw new Error('Ongeldige rol.');
     upd.rol = attrs.rol;
   }
-  if (attrs.ras !== undefined) upd.ras = attrs.ras === '' ? null : attrs.ras;
+  if (attrs.gewas !== undefined) upd.gewas = korteTekst(attrs.gewas, 'gewas');
+  if (attrs.ras !== undefined) upd.ras = korteTekst(attrs.ras, 'ras');
   if (attrs.plantjaar !== undefined) upd.plantjaar = geldigPlantjaar(attrs.plantjaar);
+  if (attrs.onderstam !== undefined) upd.onderstam = korteTekst(attrs.onderstam, 'onderstam');
   if (attrs.aantalBomen !== undefined) {
     const n = attrs.aantalBomen;
     if (n !== null && (!Number.isInteger(n) || n < 0 || n > INT_MAX)) throw new Error('Aantal bomen moet een geheel getal van 0 of meer zijn.');
@@ -874,6 +886,7 @@ export async function slaBlokOp(userId: string, perceelId: string, blok: BlokInv
   const leegNaarNull = (v: string | null | undefined) => (v === '' ? null : v);
   if (blok.naam !== undefined) rij.naam = leegNaarNull(blok.naam);
   if (blok.subParcelId !== undefined) rij.sub_parcel_id = leegNaarNull(blok.subParcelId);
+  if (blok.gewas !== undefined) rij.gewas = korteTekst(blok.gewas, 'gewas');
   if (blok.ras !== undefined) rij.ras = leegNaarNull(blok.ras);
   if (blok.plantjaar !== undefined) rij.plantjaar = geldigPlantjaar(blok.plantjaar);
   if (blok.onderstam !== undefined) rij.onderstam = leegNaarNull(blok.onderstam);

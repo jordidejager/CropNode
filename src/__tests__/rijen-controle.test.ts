@@ -9,6 +9,7 @@ import { naarWGS, perceelNaarRD } from '../lib/rijen/geo';
 import { controleerRijen, type ControleRij } from '../lib/rijen/controle';
 import { beperkTotAantal, faseVoorEersteRij, genereerRijen, kantRichting, langsteRanden } from '../lib/rijen/generatie';
 import type { XY } from '../lib/rijen/types';
+import { gemeenschappelijk, tekstOfNull } from '../components/rijenkaart/rijen-hulp';
 
 let passed = 0;
 let failed = 0;
@@ -141,6 +142,16 @@ console.log('\nRijen zonder foto (zelf ingevuld):');
     assert.strictEqual(r.length, 2);
   });
 }
+
+console.log('\nRijgegevens voor een selectie:');
+test('gemeenschappelijk en tekstOfNull', () => {
+  assert.deepStrictEqual(gemeenschappelijk(['Conference', ' conference ']), { soort: 'gelijk', waarde: 'Conference' });
+  assert.deepStrictEqual(gemeenschappelijk(['Conference', null]), { soort: 'verschillend' });
+  assert.deepStrictEqual(gemeenschappelijk([2015, 2015]), { soort: 'gelijk', waarde: 2015 });
+  assert.deepStrictEqual(gemeenschappelijk([]), { soort: 'gelijk', waarde: null });
+  assert.strictEqual(tekstOfNull('  '), null);
+  assert.strictEqual(tekstOfNull(' M9 '), 'M9');
+});
 
 console.log(`\nResults: ${passed} passed, ${failed} failed, ${passed + failed} total`);
 if (failed > 0) process.exit(1);

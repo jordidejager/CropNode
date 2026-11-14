@@ -206,6 +206,34 @@ async function main() {
     );
     assert.equal(await store.zetRijAttributen(USER_ID, PERCEEL_ID, [ids[4]], { geplantOp: '2016-03-15T00:00:00Z' }), 1);
 
+    // ── Rijgegevens (098): gewas/onderstam per rij en per blok; gewijzigd_op blijft staan ──
+    const rijVan = async (id: string) => (await store.laadRijenkaart(USER_ID, PERCEEL_ID))!.rijen.find(r => r.id === id)!;
+    const voorGegevens = await rijVan(ids[1]);
+    await store.slaBlokOp(USER_ID, PERCEEL_ID, { id: blok.id, gewas: 'Peer', onderstam: 'Kwee MC' });
+    assert.equal(await store.zetRijAttributen(USER_ID, PERCEEL_ID, [ids[1]], { gewas: ' Appel ', onderstam: 'M9', plantjaar: 2019 }), 1);
+    const metEigen = await rijVan(ids[1]);
+    const vanBlok = await rijVan(ids[0]);
+    assert.equal(metEigen.gewas, 'Appel', 'gewas getrimd');
+    assert.equal(metEigen.gewasEffectief, 'Appel');
+    assert.equal(metEigen.onderstamEigen, 'M9');
+    assert.equal(metEigen.onderstamEffectief, 'M9');
+    assert.equal(metEigen.plantjaarEffectief, 2019);
+    assert.equal(vanBlok.gewasEffectief, 'Peer', 'gewas van het blok');
+    assert.equal(vanBlok.onderstamEffectief, 'Kwee MC', 'onderstam van het blok');
+    assert.equal(metEigen.gewijzigdOp, voorGegevens.gewijzigdOp, 'rijgegevens veranderen gewijzigd_op niet');
+    assert.equal(await store.zetRijAttributen(USER_ID, PERCEEL_ID, [ids[1]], { gewas: '', onderstam: null, plantjaar: null }), 1);
+    const overgenomen = await rijVan(ids[1]);
+    assert.equal(overgenomen.gewas, null);
+    assert.equal(overgenomen.gewasEffectief, 'Peer', 'leeg = weer van het blok');
+    assert.equal(overgenomen.onderstamEffectief, 'Kwee MC');
+    assert.equal(overgenomen.plantjaarEffectief, 2015);
+    await verwachtFout(
+      () => store.zetRijAttributen(USER_ID, PERCEEL_ID, [ids[1]], { onderstam: 'x'.repeat(101) }),
+      'te lang',
+      'onderstam van 101 tekens geweigerd',
+    );
+    ok('rijgegevens: gewas/onderstam/plantjaar per rij gaan vóór het blok, leeg = van het blok, gewijzigd_op blijft');
+
     // ── Beginkant + nummeringstart ─────────────────────────────────────────
     assert.equal(await store.zetBeginkant(USER_ID, PERCEEL_ID, 180), 0, 'begin ligt al zuid');
     assert.equal(await store.zetBeginkant(USER_ID, PERCEEL_ID, 0), 5, 'alle rijen omgedraaid naar noord');

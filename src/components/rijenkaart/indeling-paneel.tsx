@@ -279,7 +279,7 @@ function BlokRegel({ blok, nummers }: { blok: Blok; nummers: number[] }) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{blok.naam || 'Naamloos blok'}</p>
           <p className="text-[12px] text-white/50">
-            {[blok.ras, blok.plantjaar, blok.onderstam].filter(Boolean).join(' · ') || 'Geen ras'}
+            {[blok.gewas, blok.ras, blok.plantjaar, blok.onderstam].filter(Boolean).join(' · ') || 'Geen ras'}
           </p>
           <p className="text-[12px] text-white/50">
             {nummers.length > 0 ? `Rij ${formatteerBereiken(nummers)} · ${nummers.length} rijen` : 'Geen rijen'}
