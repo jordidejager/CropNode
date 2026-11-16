@@ -63,6 +63,8 @@ export type SubParcel = {
   parcelId: string;
   name?: string; // e.g. "V-haag", "Nieuw"
   synonyms?: string[]; // Alternative names for Smart Input matching
+  /** Bestuiverrassen in dit blok (geen eigen oppervlakte); StoreNode boekt hun oogst als eigen partij */
+  pollinatorVarieties?: string[];
   crop: string;
   variety: string;
   varietyMutant?: string; // Legacy/Fallback

@@ -17,7 +17,7 @@ import {
     SpuitschriftEntry,
     WeightedValue
 } from "@/lib/types"
-import { updateSubParcel, updateParcelSynonyms } from "@/lib/supabase-store"
+import { updateSubParcel, updateParcelSynonyms, getPollinatorVarieties, updatePollinatorVarieties } from "@/lib/supabase-store"
 import { useInvalidateQueries } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -80,6 +80,8 @@ export function ParcelDetailView({
     const [isSaving, setIsSaving] = React.useState(false)
     const [synonyms, setSynonyms] = React.useState<string[]>(subParcel.synonyms || [])
     const [synonymInput, setSynonymInput] = React.useState('')
+    const [bestuivers, setBestuivers] = React.useState<string[]>(subParcel.pollinatorVarieties || [])
+    const [bestuiverInput, setBestuiverInput] = React.useState('')
     const { invalidateParcels } = useInvalidateQueries()
     const { toast } = useToast()
 
@@ -100,6 +102,20 @@ export function ParcelDetailView({
         setFormData(initialized)
         setSynonyms(subParcel.synonyms || [])
     }, [subParcel])
+
+    // Bestuivers apart laden: niet elke perceellijst haalt deze kolom op
+    React.useEffect(() => {
+        let actief = true
+        getPollinatorVarieties(subParcel.id).then(r => { if (actief) setBestuivers(r) }).catch(() => {})
+        return () => { actief = false }
+    }, [subParcel.id])
+
+    const slaBestuiversOp = (rassen: string[]) => {
+        setBestuivers(rassen)
+        updatePollinatorVarieties(subParcel.id, rassen)
+            .then(r => { setBestuivers(r); invalidateParcels() })
+            .catch(() => toast({ variant: 'destructive', title: 'Fout bij opslaan', description: 'Kon de bestuivers niet bijwerken.' }))
+    }
 
     const treesPerHa = React.useMemo(() => {
         const distances = formData.plantingDistances || []
@@ -122,7 +138,9 @@ export function ParcelDetailView({
     const handleSave = async () => {
         setIsSaving(true)
         try {
-            await updateSubParcel(formData)
+            // Bestuivers en synoniemen worden los opgeslagen; niet met een oude waarde overschrijven
+            const { pollinatorVarieties: _b, synonyms: _s, ...gegevens } = formData
+            await updateSubParcel(gegevens)
             toast({ title: 'Opgeslagen', description: 'Stamgegevens succesvol bijgewerkt.' })
             invalidateParcels()
             setIsEditing(false)
@@ -425,6 +443,35 @@ export function ParcelDetailView({
 
                                         <EditField label="Oppervlakte (ha)" field="area" type="number" />
 
+                                        {/* Bestuivers (rassen tussen het hoofdras, zonder eigen oppervlakte) */}
+                                        <div className="px-5 py-4 space-y-2">
+                                            <Label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Bestuivers (rassen in dit blok)</Label>
+                                            <p className="text-[11px] text-white/35">Bijv. Golden Delicious tussen de Tessa. Geen eigen oppervlakte; in StoreNode boek je de oogst als &quot;{'<perceel>'} – Bestuivers&quot;.</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {bestuivers.map((s, i) => (
+                                                    <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-xs text-white/60">
+                                                        {s}
+                                                        <button aria-label={`${s} verwijderen`} onClick={() => slaBestuiversOp(bestuivers.filter((_, idx) => idx !== i))} className="hover:text-rose-400 transition-colors">
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <Input
+                                                value={bestuiverInput}
+                                                onChange={(e) => setBestuiverInput(e.target.value)}
+                                                placeholder="Typ ras en druk Enter..."
+                                                className="h-8 text-sm bg-black/40 border-white/10"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && bestuiverInput.trim()) {
+                                                        e.preventDefault()
+                                                        slaBestuiversOp([...bestuivers, bestuiverInput.trim()])
+                                                        setBestuiverInput('')
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+
                                         {/* Synonyms editor */}
                                         <div className="px-5 py-4 space-y-2">
                                             <Label className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Synoniemen (alternatieve namen voor Slimme Invoer)</Label>
@@ -481,6 +528,12 @@ export function ParcelDetailView({
                                             icon={Thermometer}
                                         />
                                         <DisplayField label="Oppervlakte" value={`${formData.area.toFixed(2)} ha`} icon={MapIcon} />
+                                        {bestuivers.length > 0 && (
+                                            <div className="px-5 py-3">
+                                                <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Bestuivers</span>
+                                                <p className="text-xs text-white/60 mt-0.5">{bestuivers.join(', ')}</p>
+                                            </div>
+                                        )}
                                         {synonyms.length > 0 && (
                                             <div className="px-5 py-3">
                                                 <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Synoniemen</span>

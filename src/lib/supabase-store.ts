@@ -3053,6 +3053,31 @@ export async function updateParcelGroupName(id: string, name: string): Promise<v
 // PARCEL SYNONYMS
 // ============================================================================
 
+/** Bestuiverrassen van een blok (sub_parcels.pollinator_varieties, migratie 099). */
+export async function getPollinatorVarieties(subParcelId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('sub_parcels')
+    .select('pollinator_varieties')
+    .eq('id', subParcelId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.pollinator_varieties as string[] | null) ?? [];
+}
+
+/** Bestuiverrassen van een blok opslaan (getrimd, zonder dubbele). */
+export async function updatePollinatorVarieties(subParcelId: string, rassen: string[]): Promise<string[]> {
+  const gezien = new Set<string>();
+  const schoon = rassen
+    .map(r => r.trim())
+    .filter(r => r && r.length <= 100 && !gezien.has(r.toLowerCase()) && (gezien.add(r.toLowerCase()), true));
+  const { error } = await supabase
+    .from('sub_parcels')
+    .update({ pollinator_varieties: schoon })
+    .eq('id', subParcelId);
+  if (error) throw new Error(error.message);
+  return schoon;
+}
+
 /**
  * Update synonyms for a sub_parcel
  */
